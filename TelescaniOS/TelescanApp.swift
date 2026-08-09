@@ -44,5 +44,6 @@ struct Telescan: App {
         WindowGroup {
             coordinator.start()
         }
+        
     }
 }

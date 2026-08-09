@@ -35,6 +35,10 @@
 		B9173DA72F009B4C0066695D /* Exceptions for "TelescaniOS" folder in "Telescan" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Configuration/Configs/Debug.example.xcconfig,
+				Configuration/Configs/Debug.xcconfig,
+				Configuration/Configs/Release.example.xcconfig,
+				Configuration/Configs/Release.xcconfig,
 				Configuration/Info.plist,
 			);
 			target = B9559D572EBC4A0200FC3377 /* Telescan */;
@@ -165,7 +169,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastSwiftUpdateCheck = 2610;
-				LastUpgradeCheck = 2610;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					B9559D572EBC4A0200FC3377 = {
 						CreatedOnToolsVersion = 16.4;
@@ -182,6 +186,7 @@
 			knownRegions = (
 				en,
 				ru,
+				Base,
 			);
 			mainGroup = B9559D4F2EBC4A0100FC3377;
 			minimizedProjectReferenceProxies = 1;
@@ -273,6 +278,7 @@
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				API_ORIGIN = "";
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -330,6 +336,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				TELESCAN_BOT = "https://t.me/tgtelescan_bot";
@@ -344,6 +351,7 @@
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				API_ORIGIN = "";
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -394,6 +402,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				TELESCAN_BOT = "https://t.me/tgtelescan_bot";
 				VALIDATE_PRODUCT = YES;
@@ -405,7 +414,7 @@
 			baseConfigurationReferenceAnchor = B9559D5A2EBC4A0200FC3377 /* TelescaniOS */;
 			baseConfigurationReferenceRelativePath = Configuration/Configs/Debug.xcconfig;
 			buildSettings = {
-				API_ORIGIN = "https://sjsej-2a00-1370-8182-21d9-4167-a27f-a00d-b877.a.free.pinggy.link";
+				API_ORIGIN = "https://telescan.space";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
@@ -450,7 +459,7 @@
 			baseConfigurationReferenceAnchor = B9559D5A2EBC4A0200FC3377 /* TelescaniOS */;
 			baseConfigurationReferenceRelativePath = Configuration/Configs/Release.xcconfig;
 			buildSettings = {
-				API_ORIGIN = "https://sjsej-2a00-1370-8182-21d9-4167-a27f-a00d-b877.a.free.pinggy.link";
+				API_ORIGIN = "https://telescan.space";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;

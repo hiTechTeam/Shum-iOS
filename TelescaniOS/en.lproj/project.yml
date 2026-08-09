@@ -27,17 +27,22 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: 16.0
+    
     sources:
       - path: App
         excludes:
           - "**/.*"
       - path: Configuration
-      - path: Resources
       - path: TelescanApp.swift
       - path: LaunchScreen.storyboard
+      
+     resources:
+      - path: Resources
+      
     dependencies:
       - package: Kingfisher
       - package: SwiftLog
+      
     settings:
       base:
         PRODUCT_NAME: Telescan
@@ -48,13 +53,16 @@ targets:
         SWIFT_VERSION: 5.9
         ENABLE_BITCODE: NO
         SWIFT_OPTIMIZATION_LEVEL: -Onone
+        
       configs:
         Debug:
           base:
             SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+            
         Release:
           base:
             SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
+            
     prebuildScripts:
       - name: SwiftLint
         script: |
@@ -64,6 +72,7 @@ targets:
             echo "warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint"
           fi
         basedOnDependencyAnalysis: false
+        
     postCompileScripts:
       - name: SwiftFormat
         script: |

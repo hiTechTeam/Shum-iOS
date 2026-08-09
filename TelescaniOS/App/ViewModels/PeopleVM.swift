@@ -1,46 +1,57 @@
 import Foundation
 import SwiftUI
-import CoreBluetooth
 
-final class PeopleViewModel: ObservableObject, BLEManagerDelegate {
-    
-    @Published var devices: [String: Int] = [:]
-    @Published var distances: [String: Int] = [:]
-    @Published var userCache: [String: NearbyUser] = [:]
-    
+@MainActor
+final class PeopleViewModel: ObservableObject {
+
+    @Published private(set) var devices: [String: Int] = [:]
+    @Published private(set) var distances: [String: Int] = [:]
+    @Published private(set) var userCache: [String: NearbyUser] = [:]
+
     private var distanceTimer: Timer?
-    private let validIDPattern = #"^\d+$"#
-    
+
+    private static let validIDPattern = #"^\d+$"#
+
     init() {
         BLEManager.shared.delegate = self
         startDistanceUpdater()
     }
-    
+
     deinit {
         distanceTimer?.invalidate()
     }
-    
+
     func loadUserIfNeeded(tgID: String) async {
-        guard userCache[tgID] == nil else { return }
-        
-        if let intID = Int(tgID) {
-            do {
-                let data = try await FetchService.fetch.fetchUserDataByTGID(for: intID)
-                let user = NearbyUser(
-                    id: tgID,
-                    tgName: data.tgName,
-                    tgUsername: data.tgUsername,
-                    photoURL: data.photoS3URL
-                )
-                Task { @MainActor in
-                    self.userCache[tgID] = user
-                }
-            } catch {
-                print("Failed to load user: \(error)")
+        guard userCache[tgID] == nil else {
+            return
+        }
+
+        guard let numericTGID = Int(tgID) else {
+            print("Invalid Telegram ID: \(tgID)")
+            return
+        }
+
+        do {
+            let data = try await FetchService.fetch
+                .fetchUserDataByTGID(for: numericTGID)
+
+            guard userCache[tgID] == nil else {
+                return
             }
+
+            userCache[tgID] = NearbyUser(
+                id: tgID,
+                tgName: data.tgName,
+                tgUsername: data.tgUsername,
+                photoURL: data.photoS3URL
+            )
+        } catch {
+            print(
+                "Failed to load user \(tgID): \(error.localizedDescription)"
+            )
         }
     }
-    
+
     func toggleScanning(_ enabled: Bool) {
         if enabled {
             BLEManager.shared.startScanning()
@@ -49,61 +60,143 @@ final class PeopleViewModel: ObservableObject, BLEManagerDelegate {
             clearDevices()
         }
     }
-    
-    // MARK: - Расстояния
-    private func startDistanceUpdater() {
-        distanceTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            self?.recalculateDistances()
+
+    func startAdvertising(tgID: String) {
+        guard isValidTelegramID(tgID) else {
+            print("Cannot advertise invalid Telegram ID: \(tgID)")
+            return
         }
+
+        BLEManager.shared.startAdvertising(id: tgID)
     }
-    
-    private func recalculateDistances() {
-        Task { @MainActor in
-            for (id, rssi) in devices {
-                distances[id] = distanceFromRSSI(rssi)
+
+    func restartAdvertising(tgID: String) {
+        guard isValidTelegramID(tgID) else {
+            print("Cannot advertise invalid Telegram ID: \(tgID)")
+            return
+        }
+
+        BLEManager.shared.restartAdvertising(id: tgID)
+    }
+
+    func stopAdvertising() {
+        BLEManager.shared.stopAdvertising()
+    }
+
+    func stopAllBluetoothActivity() {
+        BLEManager.shared.stopScanning()
+        BLEManager.shared.stopAdvertising()
+        clearDevices()
+    }
+
+    private func startDistanceUpdater() {
+        distanceTimer?.invalidate()
+
+        distanceTimer = Timer.scheduledTimer(
+            withTimeInterval: 5,
+            repeats: true
+        ) { [weak self] _ in
+            guard let self else {
+                return
+            }
+
+            Task { @MainActor in
+                self.recalculateDistances()
             }
         }
     }
-    
+
+    private func recalculateDistances() {
+        var updatedDistances: [String: Int] = [:]
+
+        for (id, rssi) in devices {
+            updatedDistances[id] = distanceFromRSSI(rssi)
+        }
+
+        distances = updatedDistances
+    }
+
     func distanceFromRSSI(
         _ rssi: Int,
         txPower: Int = -59,
         pathLossExponent: Double = 2
     ) -> Int {
-        let ratio = Double(txPower - rssi) / (10 * pathLossExponent)
-        let distance = pow(10.0, ratio)
+        guard rssi < 0 else {
+            return 1
+        }
+
+        let exponent = Double(txPower - rssi)
+            / (10.0 * pathLossExponent)
+
+        let distance = pow(10.0, exponent)
+
         return max(1, Int(distance.rounded()))
     }
-    
-    func didDiscoverDevice(id: String, rssi: Int) {
-        guard id.range(of: validIDPattern, options: .regularExpression) != nil else { return }
-        Task { @MainActor in
-            self.devices[id] = rssi
+
+    func clearDevices() {
+        devices.removeAll()
+        distances.removeAll()
+    }
+
+    private func isValidTelegramID(_ id: String) -> Bool {
+        id.range(
+            of: Self.validIDPattern,
+            options: .regularExpression
+        ) != nil
+    }
+
+    private func receiveDevice(
+        id: String,
+        rssi: Int
+    ) {
+        guard isValidTelegramID(id) else {
+            print("Ignored invalid BLE identity: \(id)")
+            return
+        }
+
+        devices[id] = rssi
+        distances[id] = distanceFromRSSI(rssi)
+    }
+}
+
+extension PeopleViewModel: BLEManagerDelegate {
+
+    nonisolated func didDiscoverDevice(
+        id: String,
+        rssi: Int
+    ) {
+        Task { @MainActor [weak self] in
+            self?.receiveDevice(
+                id: id,
+                rssi: rssi
+            )
         }
     }
-    
-    func didUpdateDevice(id: String, rssi: Int) {
-        guard id.range(of: validIDPattern, options: .regularExpression) != nil else { return }
-        Task { @MainActor in
-            self.devices[id] = rssi
+
+    nonisolated func didUpdateDevice(
+        id: String,
+        rssi: Int
+    ) {
+        Task { @MainActor [weak self] in
+            self?.receiveDevice(
+                id: id,
+                rssi: rssi
+            )
         }
     }
-    
-    func didLoseDevice(id: String) {
-        Task { @MainActor in
+
+    nonisolated func didLoseDevice(id: String) {
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
             self.devices.removeValue(forKey: id)
             self.distances.removeValue(forKey: id)
         }
     }
-    
-    func didFail(with error: Error) {
-        print("BLE error: \(error)")
-    }
-    
-    func clearDevices() {
-        Task { @MainActor in
-            self.devices.removeAll()
-            self.distances.removeAll()
-        }
+
+    nonisolated func didFail(with error: Error) {
+        print("BLE error: \(error.localizedDescription)")
     }
 }
