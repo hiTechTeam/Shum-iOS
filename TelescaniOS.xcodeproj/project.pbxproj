@@ -7,11 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		B94FA5632EF8336C0024A510 /* InMemoryLogging in Frameworks */ = {isa = PBXBuildFile; productRef = B94FA5622EF8336C0024A510 /* InMemoryLogging */; };
 		B94FA5652EF8336C0024A510 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = B94FA5642EF8336C0024A510 /* Logging */; };
 		B94FA5682EF833760024A510 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = B94FA5672EF833760024A510 /* Kingfisher */; };
-		B98E8FD42F00949B00D882A0 /* Testing in Frameworks */ = {isa = PBXBuildFile; productRef = B98E8FD32F00949B00D882A0 /* Testing */; };
-		B98E8FD62F00949B00D882A0 /* _TestDiscovery in Frameworks */ = {isa = PBXBuildFile; productRef = B98E8FD52F00949B00D882A0 /* _TestDiscovery */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,16 +37,28 @@
 				Configuration/Configs/Release.example.xcconfig,
 				Configuration/Configs/Release.xcconfig,
 				Configuration/Info.plist,
+				Configuration/Release.xcconfig,
 			);
 			target = B9559D572EBC4A0200FC3377 /* Telescan */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		B92AB0BE3028A82500E39757 /* Exceptions for "TelescaniOS" folder in "Compile Sources" phase from "Telescan" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = B9559D542EBC4A0200FC3377 /* Sources */;
+			membershipExceptions = (
+				Configuration/Release.xcconfig,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B9559D5A2EBC4A0200FC3377 /* TelescaniOS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				B9173DA72F009B4C0066695D /* Exceptions for "TelescaniOS" folder in "Telescan" target */,
+				B92AB0BE3028A82500E39757 /* Exceptions for "TelescaniOS" folder in "Compile Sources" phase from "Telescan" target */,
 			);
 			explicitFileTypes = {
 				Configuration/Info.plist = text.xml;
@@ -70,10 +79,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B94FA5682EF833760024A510 /* Kingfisher in Frameworks */,
-				B98E8FD42F00949B00D882A0 /* Testing in Frameworks */,
 				B94FA5652EF8336C0024A510 /* Logging in Frameworks */,
-				B98E8FD62F00949B00D882A0 /* _TestDiscovery in Frameworks */,
-				B94FA5632EF8336C0024A510 /* InMemoryLogging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -128,11 +134,8 @@
 			);
 			name = Telescan;
 			packageProductDependencies = (
-				B94FA5622EF8336C0024A510 /* InMemoryLogging */,
 				B94FA5642EF8336C0024A510 /* Logging */,
 				B94FA5672EF833760024A510 /* Kingfisher */,
-				B98E8FD32F00949B00D882A0 /* Testing */,
-				B98E8FD52F00949B00D882A0 /* _TestDiscovery */,
 			);
 			productName = TelescaniOS;
 			productReference = B9559D582EBC4A0200FC3377 /* Telescan.app */;
@@ -621,11 +624,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		B94FA5622EF8336C0024A510 /* InMemoryLogging */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = B94FA5612EF8336C0024A510 /* XCRemoteSwiftPackageReference "swift-log" */;
-			productName = InMemoryLogging;
-		};
 		B94FA5642EF8336C0024A510 /* Logging */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = B94FA5612EF8336C0024A510 /* XCRemoteSwiftPackageReference "swift-log" */;
@@ -635,16 +633,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B94FA5662EF833760024A510 /* XCRemoteSwiftPackageReference "Kingfisher" */;
 			productName = Kingfisher;
-		};
-		B98E8FD32F00949B00D882A0 /* Testing */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = B98E8FD22F00949B00D882A0 /* XCRemoteSwiftPackageReference "swift-testing" */;
-			productName = Testing;
-		};
-		B98E8FD52F00949B00D882A0 /* _TestDiscovery */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = B98E8FD22F00949B00D882A0 /* XCRemoteSwiftPackageReference "swift-testing" */;
-			productName = _TestDiscovery;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

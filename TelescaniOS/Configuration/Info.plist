@@ -5,13 +5,13 @@
 <plist version="1.0">
 <dict>
     <key>API_ORIGIN</key>
-    <string>https://telescan.space</string>
+    <string>$(API_ORIGIN)</string>
 
     <key>LOCALHOST</key>
-    <string>http://127.0.0.1:8080</string>
+    <string></string>
 
     <key>TELESCAN_BOT</key>
-    <string>https://t.me/tgtelescan_bot</string>
+    <string></string>
 
     <key>CFBundleDisplayName</key>
     <string>$(PRODUCT_NAME)</string>
@@ -33,6 +33,12 @@
 
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>Bluetooth is used to discover nearby Telescan users</string>
+    
+    <key>NSCameraUsageDescription</key>
+    <string>Camera access is used to select a profile photo</string>
+    
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
 
     <key>UIBackgroundModes</key>
     <array>

@@ -9,6 +9,7 @@ final class PeopleViewModel: ObservableObject {
     @Published private(set) var userCache: [String: NearbyUser] = [:]
 
     private var distanceTimer: Timer?
+    private var loadingUserIDs: Set<String> = []
 
     private static let validIDPattern = #"^\d+$"#
 
@@ -26,16 +27,30 @@ final class PeopleViewModel: ObservableObject {
             return
         }
 
+        await refreshUser(tgID: tgID)
+    }
+
+    func refreshUser(tgID: String) async {
         guard let numericTGID = Int(tgID) else {
             print("Invalid Telegram ID: \(tgID)")
             return
+        }
+
+        guard !loadingUserIDs.contains(tgID) else {
+            return
+        }
+
+        loadingUserIDs.insert(tgID)
+
+        defer {
+            loadingUserIDs.remove(tgID)
         }
 
         do {
             let data = try await FetchService.fetch
                 .fetchUserDataByTGID(for: numericTGID)
 
-            guard userCache[tgID] == nil else {
+            guard devices[tgID] != nil else {
                 return
             }
 
@@ -47,8 +62,16 @@ final class PeopleViewModel: ObservableObject {
             )
         } catch {
             print(
-                "Failed to load user \(tgID): \(error.localizedDescription)"
+                "Failed to refresh user \(tgID): \(error.localizedDescription)"
             )
+        }
+    }
+
+    func refreshVisibleUsers() async {
+        let visibleIDs = Array(devices.keys)
+
+        for id in visibleIDs {
+            await refreshUser(tgID: id)
         }
     }
 
@@ -136,6 +159,7 @@ final class PeopleViewModel: ObservableObject {
     func clearDevices() {
         devices.removeAll()
         distances.removeAll()
+        userCache.removeAll()
     }
 
     private func isValidTelegramID(_ id: String) -> Bool {
@@ -191,8 +215,9 @@ extension PeopleViewModel: BLEManagerDelegate {
                 return
             }
 
-            self.devices.removeValue(forKey: id)
-            self.distances.removeValue(forKey: id)
+            devices.removeValue(forKey: id)
+            distances.removeValue(forKey: id)
+            userCache.removeValue(forKey: id)
         }
     }
 
