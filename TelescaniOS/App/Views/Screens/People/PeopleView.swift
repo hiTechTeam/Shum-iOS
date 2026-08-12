@@ -146,7 +146,12 @@ struct PeopleRowContent: View {
             Spacer()
 
             if let meters = peopleViewModel.distances[id] {
-                Text("\(meters) m")
+                Text(
+                    String.localizedStringWithFormat(
+                        Inc.Common.distanceMetersFormat.localized,
+                        meters
+                    )
+                )
                     .font(.system(size: 12))
                     .foregroundColor(.gray)
                     .padding(.trailing, 20)
@@ -229,7 +234,12 @@ struct ProfileSheetView: View {
                                 .foregroundColor(.gray)
 
                             if let meters = peopleViewModel.distances[id] {
-                                Text("\(meters) m")
+                                Text(
+                                    String.localizedStringWithFormat(
+                                        Inc.Common.distanceMetersFormat.localized,
+                                        meters
+                                    )
+                                )
                                     .font(.system(size: 12))
                                     .foregroundColor(.gray)
                             }

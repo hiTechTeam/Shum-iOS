@@ -417,7 +417,7 @@
 			baseConfigurationReferenceAnchor = B9559D5A2EBC4A0200FC3377 /* TelescaniOS */;
 			baseConfigurationReferenceRelativePath = Configuration/Configs/Debug.xcconfig;
 			buildSettings = {
-				API_ORIGIN = "https://telescan.space";
+				API_ORIGIN = "https://api.tgtelescan.ru";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
@@ -462,7 +462,7 @@
 			baseConfigurationReferenceAnchor = B9559D5A2EBC4A0200FC3377 /* TelescaniOS */;
 			baseConfigurationReferenceRelativePath = Configuration/Configs/Release.xcconfig;
 			buildSettings = {
-				API_ORIGIN = "https://telescan.space";
+				API_ORIGIN = "https://api.tgtelescan.ru";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;

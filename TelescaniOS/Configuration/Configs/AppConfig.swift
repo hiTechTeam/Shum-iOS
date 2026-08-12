@@ -3,6 +3,8 @@ import Foundation
 /// Application runtime configuration loaded from Info.plist
 enum AppConfig {
 
+    static let skipRegistration = false
+
     /// Base API origin
     static let apiOrigin: String = {
         guard let value = Bundle.main.object(

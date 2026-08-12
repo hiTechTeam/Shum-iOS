@@ -2,7 +2,7 @@ import SwiftUI
 
 struct BotButton: View {
     
-    @StateObject private var viewModel = BotButtonViewModel()
+    @Environment(\.openURL) private var openURL
     
     private let title: String = Inc.Profile.telescanBot
     private let fontSize: CGFloat = 14
@@ -11,7 +11,13 @@ struct BotButton: View {
     private let cornerRadius: CGFloat = 13
     
     private func onTap() {
-        viewModel.openBot()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
+        guard let url = URL(string: Links.telescanBot) else {
+            return
+        }
+
+        openURL(url)
     }
     
     private var buttonText: some View {
@@ -26,6 +32,8 @@ struct BotButton: View {
         Button(action: onTap) {
             buttonText
         }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
     
     // MARK: - Body

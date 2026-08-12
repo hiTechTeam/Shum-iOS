@@ -58,6 +58,9 @@ struct ProfileDataView: View {
                     .padding(.top, 40)
             }
         }
+        .refreshable {
+            await authCodeViewModel.refreshProfile()
+        }
     }
 
     private var deleteAccountButton: some View {
@@ -112,6 +115,7 @@ struct ProfileDataView: View {
         ZStack {
             Color.tsBackground
                 .ignoresSafeArea()
+
             scrollContent
         }
         .onChange(of: authCodeViewModel.photoS3URL) { _, newValue in

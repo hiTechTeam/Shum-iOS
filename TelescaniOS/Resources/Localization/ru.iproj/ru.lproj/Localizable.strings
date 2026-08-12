@@ -7,6 +7,7 @@
 "cancel" = "Отмена";
 "copied_sheet" = "Скопированно";
 "nearby" = "Рядом";
+"distanceMetersFormat" = "%d м";
 
 /* Tabs */
 "peopleNearby" = "Люди рядом";

@@ -9,7 +9,11 @@ final class PeopleViewModel: ObservableObject {
     @Published private(set) var userCache: [String: NearbyUser] = [:]
 
     private var distanceTimer: Timer?
+    private var rssiSamples: [String: [Int]] = [:]
     private var loadingUserIDs: Set<String> = []
+
+    private let distanceUpdateInterval: TimeInterval = 3
+    private let maximumRSSISamples = 30
 
     private static let validIDPattern = #"^\d+$"#
 
@@ -115,8 +119,8 @@ final class PeopleViewModel: ObservableObject {
     private func startDistanceUpdater() {
         distanceTimer?.invalidate()
 
-        distanceTimer = Timer.scheduledTimer(
-            withTimeInterval: 5,
+        let timer = Timer(
+            timeInterval: distanceUpdateInterval,
             repeats: true
         ) { [weak self] _ in
             guard let self else {
@@ -127,15 +131,27 @@ final class PeopleViewModel: ObservableObject {
                 self.recalculateDistances()
             }
         }
+
+        RunLoop.main.add(timer, forMode: .common)
+        distanceTimer = timer
     }
 
     private func recalculateDistances() {
         var updatedDistances: [String: Int] = [:]
 
         for (id, rssi) in devices {
-            updatedDistances[id] = distanceFromRSSI(rssi)
+            let samples = rssiSamples[id] ?? [rssi]
+            let sortedSamples = samples.sorted()
+            let medianRSSI = sortedSamples[
+                sortedSamples.count / 2
+            ]
+
+            updatedDistances[id] = distanceFromRSSI(
+                medianRSSI
+            )
         }
 
+        rssiSamples.removeAll(keepingCapacity: true)
         distances = updatedDistances
     }
 
@@ -160,6 +176,7 @@ final class PeopleViewModel: ObservableObject {
         devices.removeAll()
         distances.removeAll()
         userCache.removeAll()
+        rssiSamples.removeAll()
     }
 
     private func isValidTelegramID(_ id: String) -> Bool {
@@ -178,8 +195,19 @@ final class PeopleViewModel: ObservableObject {
             return
         }
 
+        let isNewDevice = devices[id] == nil
+
         devices[id] = rssi
-        distances[id] = distanceFromRSSI(rssi)
+        rssiSamples[id, default: []].append(rssi)
+
+        if rssiSamples[id, default: []].count
+            > maximumRSSISamples {
+            rssiSamples[id]?.removeFirst()
+        }
+
+        if isNewDevice {
+            distances[id] = distanceFromRSSI(rssi)
+        }
     }
 }
 
@@ -218,6 +246,7 @@ extension PeopleViewModel: BLEManagerDelegate {
             devices.removeValue(forKey: id)
             distances.removeValue(forKey: id)
             userCache.removeValue(forKey: id)
+            rssiSamples.removeValue(forKey: id)
         }
     }
 

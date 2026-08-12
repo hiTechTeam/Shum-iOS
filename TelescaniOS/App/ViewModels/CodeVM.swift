@@ -73,6 +73,55 @@ final class CodeViewModel: ObservableObject {
         UserDefaults.standard.set(self.code, forKey: Keys.cleanCodeKey.rawValue)
     }
 
+    func refreshProfile() async {
+        let savedTGID = UserDefaults.standard.object(
+            forKey: Keys.tgIdKey.rawValue
+        ) as? Int
+
+        guard let profileTGID = tgID ?? savedTGID else {
+            return
+        }
+
+        isLoading = true
+
+        defer {
+            isLoading = false
+        }
+
+        do {
+            let profile = try await FetchService.fetch
+                .fetchUserDataByTGID(for: profileTGID)
+
+            tgID = profileTGID
+            tgName = profile.tgName
+            tgUsername = profile.tgUsername
+            photoS3URL = profile.photoS3URL
+            isUsernameConfirmed = true
+
+            UserDefaults.standard.set(
+                profileTGID,
+                forKey: Keys.tgIdKey.rawValue
+            )
+            UserDefaults.standard.set(
+                profile.tgName,
+                forKey: Keys.tgNameKey.rawValue
+            )
+            UserDefaults.standard.set(
+                profile.tgUsername,
+                forKey: Keys.usernameKey.rawValue
+            )
+            UserDefaults.standard.set(
+                profile.photoS3URL,
+                forKey: Keys.photoS3URLKey.rawValue
+            )
+        } catch {
+            print(
+                "Failed to refresh profile:",
+                error.localizedDescription
+            )
+        }
+    }
+
     func clearProfile() {
         tgID = nil
         code = ""

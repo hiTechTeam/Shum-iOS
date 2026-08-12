@@ -5,7 +5,6 @@ struct UpButton: View {
     @ObservedObject var viewModel: CodeViewModel
     
     @State private var showSheet = false
-    @FocusState private var isFocused: Bool
     
     var onUp: () -> Void
     
@@ -78,9 +77,6 @@ struct UpButton: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .onTapGesture {
-            isFocused = false
-        }
     }
     
     // MARK: - Body

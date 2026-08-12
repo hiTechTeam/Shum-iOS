@@ -25,6 +25,7 @@ struct Inc {
         // RU: Скопировано
         
         static let nearby: String = "nearby"
+        static let distanceMetersFormat: String = "distanceMetersFormat"
         // EN: Nearby
         // RU: Рядом
         
@@ -266,8 +267,8 @@ struct Links {
     static let telescanApiUpdatePhoto = origin + "/v1/users/update-photo"
     static let telescanApiDeletePhoto = origin + "/v1/users/delete-photo"
     static let telescanApiDeleteAccount = origin + "/v1/users/"
-    static let privacyPolicy = "https://telescan.space/privacy"
-    static let termsOfService = "https://telescan.space/terms"
+    static let privacyPolicy = "https://tgtelescan.ru/privacy"
+    static let termsOfService = "https://tgtelescan.ru/terms"
 }
 
 enum SelectedTab: Int {

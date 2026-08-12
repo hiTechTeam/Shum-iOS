@@ -33,6 +33,13 @@ struct Profile: View {
                 }
         }
         .onAppear {
+            if let tgID = UserDefaults.standard.object(
+                forKey: Keys.tgIdKey.rawValue
+            ) as? Int {
+                authVM.tgID = tgID
+                authVM.isUsernameConfirmed = true
+            }
+
             if let tgName = UserDefaults.standard.string(forKey: Keys.tgNameKey.rawValue) {
                 authVM.tgName = tgName
             }
@@ -43,6 +50,12 @@ struct Profile: View {
             
             if let username = UserDefaults.standard.string(forKey: Keys.usernameKey.rawValue) {
                 authVM.tgUsername = username
+            }
+
+            if let photoURL = UserDefaults.standard.string(
+                forKey: Keys.photoS3URLKey.rawValue
+            ) {
+                authVM.photoS3URL = photoURL
             }
         }
         .tabItem { Label(profileInc, systemImage: IncLogos.personFillViewwfinder) }

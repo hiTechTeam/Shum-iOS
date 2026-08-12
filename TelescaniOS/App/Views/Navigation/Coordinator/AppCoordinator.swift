@@ -26,7 +26,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     
     // MARK: - Initialization
     init() {
-        self.isRegistered = UserDefaults.standard.bool(forKey: regKey)
+        self.isRegistered = AppConfig.skipRegistration
+            || UserDefaults.standard.bool(forKey: regKey)
         self.isScaning = UserDefaults.standard.bool(forKey: isScaningKey)
     }
     

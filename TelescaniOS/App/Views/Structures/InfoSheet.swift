@@ -10,14 +10,16 @@ struct InfoSheetView: View {
     private let boxWidth: CGFloat = 360
     private let boxHeight: CGFloat = 52
     private let cornerRadius: CGFloat = 13
+    private let blockSpacing: CGFloat = 16
+    private let verticalContentMargin: CGFloat = 24
     
     private let githubURL = URL(string: "https://github.com/orgs/hiTechTeam/repositories")!
     private let githubURLString = "https://github.com/orgs/hiTechTeam/repositories"
     
     // MARK: - Components
     private var headerSection: some View {
-        VStack(spacing: 20) {
-            VStack(spacing: 16) {
+        VStack(spacing: blockSpacing) {
+            VStack(spacing: blockSpacing) {
                 Text(Inc.Info.Telescan)
                     .font(.system(size: 24, weight: .medium))
                     .multilineTextAlignment(.center)
@@ -29,7 +31,7 @@ struct InfoSheetView: View {
             
             Divider()
             
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: blockSpacing) {
                 InfoItem(
                     icon: boltFill,
                     title: Inc.Info.instantExchangeTitle.localized,
@@ -56,7 +58,7 @@ struct InfoSheetView: View {
     }
     
     private var openSourceSection: some View {
-        VStack {
+        VStack(spacing: blockSpacing) {
             HStack(spacing: 12) {
                 Image.tsIconGraySmall
                     .resizable()
@@ -84,7 +86,8 @@ struct InfoSheetView: View {
                 header: Text(Inc.Info.openSourceText.localized)
                     .font(.system(size: 12))
                     .multilineTextAlignment(.leading)
-                    .foregroundColor(.gray),
+                    .foregroundColor(.gray)
+                    .textCase(nil),
                 footer: Text(Inc.Info.licenseMIT.localized)
                     .font(.system(size: 12, weight: .light))
                     .foregroundColor(.gray)
@@ -94,6 +97,12 @@ struct InfoSheetView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(blockSpacing)
+        .contentMargins(
+            .vertical,
+            verticalContentMargin,
+            for: .scrollContent
+        )
     }
     
     // MARK: - Body
