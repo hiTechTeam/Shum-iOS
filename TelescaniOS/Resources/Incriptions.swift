@@ -124,6 +124,11 @@ struct Inc {
         // RU: Применить
         
         static let poweredByTG: String = "poweredByTG"
+
+        static let legalAgreement: String = "legalAgreement"
+        static let privacyPolicy: String = "privacyPolicy"
+        static let termsOfService: String = "termsOfService"
+        static let continueHint: String = "continueHint"
     }
     
     // MARK: - Scanning
@@ -261,6 +266,8 @@ struct Links {
     static let telescanApiUpdatePhoto = origin + "/v1/users/update-photo"
     static let telescanApiDeletePhoto = origin + "/v1/users/delete-photo"
     static let telescanApiDeleteAccount = origin + "/v1/users/"
+    static let privacyPolicy = "https://telescan.space/privacy"
+    static let termsOfService = "https://telescan.space/terms"
 }
 
 enum SelectedTab: Int {

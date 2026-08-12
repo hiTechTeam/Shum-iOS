@@ -32,8 +32,12 @@
 "welcome_title" = "Welcome to";
 "poweredByTG" = "Powered by Telegram";
 "aboutOnBoardingMsg" = "Telescan lets you instantly find and share Telegram profiles with people nearby.";
-"shortOnboardingMsg" = "Share your Telegram with people around you.";
-"start" = "Get started with Telegram";
+"shortOnboardingMsg" = "Share your Telegram profile with\npeople nearby using Bluetooth";
+"start" = "Continue";
+"legalAgreement" = "By continuing, you agree to Telescan’s\n%@ and %@";
+"privacyPolicy" = "Privacy Policy";
+"termsOfService" = "Terms of Service";
+"continueHint" = "Opens the Telegram registration code screen";
 "goNext" = "Next";
 "go" = "Go";
 "confirmButton" = "Confirm";

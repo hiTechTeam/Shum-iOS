@@ -32,8 +32,12 @@
 "welcome_title" = "Добро пожаловать в";
 "poweredByTG" = "Работает от Telegram";
 "aboutOnBoardingMsg" = "Telescan позволяет быстро находить и обмениваться Telegram-профилями.";
-"shortOnboardingMsg" = "Делитесь вашим Telegram с людьми рядом.";
-"start" = "Начать с Telegram";
+"shortOnboardingMsg" = "Делитесь профилем Telegram с людьми\nрядом с помощью Bluetooth";
+"start" = "Продолжить";
+"legalAgreement" = "Продолжая, вы соглашаетесь с документами\n«%@» и «%@»";
+"privacyPolicy" = "Политика конфиденциальности";
+"termsOfService" = "Условия использования";
+"continueHint" = "Открывает экран ввода кода регистрации Telegram";
 "goNext" = "Далее";
 "go" = "Начать";
 "confirmButton" = "Применить";

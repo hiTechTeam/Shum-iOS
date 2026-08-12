@@ -1,69 +1,66 @@
 import SwiftUI
 
-struct StartButton: View {
-    
-    // MARK: - Inputs
-    var title: String
-    
-    var onStart: () -> Void
-    
-    private let fontSize: CGFloat = 14
-    private let buttonWidth: CGFloat = 360
-    private let buttonHeight: CGFloat = 60
-    private let cornerRadius: CGFloat = 13
-    private let paddingBottom: CGFloat = 16
-    private let tracking: CGFloat = 1.0
-    private let shadowOpacity: CGFloat = 0.15
-    private let shadowRadius: CGFloat = 8
-    private let shadowX: CGFloat = 0
-    private let shadowY: CGFloat = 4
-    private let iconWidth: CGFloat = 18
-    private let iconHeight: CGFloat = 21
-    
-    private func onTap() {
-        onStart()
+struct RegistrationPrimaryButton: View {
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    let title: String
+    var isEnabled = true
+    var accentColor: Color = .bl2
+    var enabledForegroundColor: Color = .white
+    let action: () -> Void
+
+    private var foregroundColor: Color {
+        guard !isEnabled else { return enabledForegroundColor }
+
+        return colorScheme == .dark
+            ? .white.opacity(0.4)
+            : .black.opacity(0.32)
     }
-    
-    private var titleView: some View {
-        Text(title)
-            .font(.system(size: fontSize, weight: .semibold))
-            .tracking(tracking)
-            .foregroundColor(.dark)
+
+    private var backgroundColor: Color {
+        guard !isEnabled else { return accentColor }
+
+        return colorScheme == .dark
+            ? .white.opacity(0.16)
+            : .black.opacity(0.12)
     }
-    
-    private var iconView: some View {
-        Image.tgIconDark
-            .resizable()
-            .scaledToFit()
-            .frame(width: iconWidth, height: iconHeight)
-    }
-    
-    private var buttonContent: some View {
-        HStack {
-            titleView
-            iconView
-        }
-        .frame(width: buttonWidth, height: buttonHeight)
-        .background(Color.white)
-        .cornerRadius(cornerRadius)
-        .shadow(
-            color: .black.opacity(shadowOpacity),
-            radius: shadowRadius,
-            x: shadowX,
-            y: shadowY
-        )
-        .padding(.bottom, paddingBottom)
-    }
-    
-    private var content: some View {
-        Button(action: onTap) {
-            buttonContent
-        }
-        .background(Color.clear)
-    }
-    
-    // MARK: - Body
+
     var body: some View {
-        content
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 17, weight: .regular))
+                .foregroundStyle(foregroundColor)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(backgroundColor)
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: 13,
+                        style: .continuous
+                    )
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+    }
+}
+
+struct StartButton: View {
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    let title: String
+    let accentColor: Color
+    let onStart: () -> Void
+
+    var body: some View {
+        RegistrationPrimaryButton(
+            title: title,
+            accentColor: colorScheme == .dark ? accentColor : .white,
+            enabledForegroundColor: colorScheme == .dark ? .white : accentColor,
+            action: onStart
+        )
+        .accessibilityHint(Inc.Onboarding.continueHint.localized)
     }
 }
