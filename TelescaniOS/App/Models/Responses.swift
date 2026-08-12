@@ -16,3 +16,8 @@ struct UploadProfileImageResponse: Codable {
     let tgId: Int
     let photoS3URL: String?
 }
+
+struct DeleteAccountRequest: Encodable {
+    let tgId: Int
+    let hashedCode: String
+}

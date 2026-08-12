@@ -181,6 +181,12 @@ struct Inc {
         static let profileSettingsDescription: String = "profileSettingsDescription"
         // EN: You can change profile data in Telegram settings.
         // RU: Вы можете изменить данные профиля в настройках Telegram.
+
+        static let deleteAccount: String = "deleteAccount"
+        static let deleteAccountTitle: String = "deleteAccountTitle"
+        static let deleteAccountMessage: String = "deleteAccountMessage"
+        static let deleteAccountFailed: String = "deleteAccountFailed"
+        static let deleteAccountFailedMessage: String = "deleteAccountFailedMessage"
     }
     
     struct Info {
@@ -254,6 +260,7 @@ struct Links {
     static let telescanApiUploadPhoto = origin + "/v1/users/upload-photo"
     static let telescanApiUpdatePhoto = origin + "/v1/users/update-photo"
     static let telescanApiDeletePhoto = origin + "/v1/users/delete-photo"
+    static let telescanApiDeleteAccount = origin + "/v1/users/"
 }
 
 enum SelectedTab: Int {

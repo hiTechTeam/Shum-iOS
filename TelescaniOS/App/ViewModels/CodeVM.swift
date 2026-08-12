@@ -72,4 +72,21 @@ final class CodeViewModel: ObservableObject {
         UserDefaults.standard.set(self.photoS3URL, forKey: Keys.photoS3URLKey.rawValue)
         UserDefaults.standard.set(self.code, forKey: Keys.cleanCodeKey.rawValue)
     }
+
+    func clearProfile() {
+        tgID = nil
+        code = ""
+        tgName = nil
+        tgUsername = nil
+        photoS3URL = nil
+        isUsernameConfirmed = false
+        codeStatus = nil
+        isLoading = false
+
+        tmpTgUsername = nil
+        tmpCode = ""
+        tmpTgId = nil
+        tmpTgName = nil
+        tmpPhotoS3URL = nil
+    }
 }

@@ -257,4 +257,49 @@ final class FetchService {
                 body: bodyData
             )
     }
+
+    /// Deletes the complete server-side profile.
+    /// Backend contract: DELETE /v1/users/ with account credentials.
+    func deleteAccount(
+        tgID: Int,
+        code: String
+    ) async throws {
+        guard let url = URL(
+            string: Links.telescanApiDeleteAccount
+        ) else {
+            throw URLError(.badURL)
+        }
+
+        let requestBody = DeleteAccountRequest(
+            tgId: tgID,
+            hashedCode: sha256(code)
+        )
+        let bodyData = try JSONEncoder().encode(requestBody)
+
+        var request = URLRequest(
+            url: url,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: 15
+        )
+
+        request.httpMethod = HTTPMethods.delete.rawValue
+        request.httpBody = bodyData
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+        request.setValue(
+            "no-cache",
+            forHTTPHeaderField: "Cache-Control"
+        )
+
+        let (_, response) = try await session.data(
+            for: request
+        )
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+    }
 }

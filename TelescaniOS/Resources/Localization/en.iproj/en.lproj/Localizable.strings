@@ -53,6 +53,11 @@
 "deletePhoto" = "Delete Photo";
 "shareUtg" = "Share your profile";
 "profileSettingsDescription" = "You can change profile data in Telegram settings.";
+"deleteAccount" = "Delete account";
+"deleteAccountTitle" = "Delete account?";
+"deleteAccountMessage" = "Your Telescan profile, photo, and local app data will be permanently deleted. This action cannot be undone.";
+"deleteAccountFailed" = "Account wasn't deleted";
+"deleteAccountFailedMessage" = "The server couldn't delete your account. Your profile data is unchanged. Please try again later.";
 
 
 /* Info Sheet */

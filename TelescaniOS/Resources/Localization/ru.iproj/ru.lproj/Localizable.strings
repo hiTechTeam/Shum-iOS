@@ -53,6 +53,11 @@
 "deletePhoto" = "Удалить фото";
 "shareUtg" = "Поделиться профилем";
 "profileSettingsDescription" = "Изменить данные профиля можно в настройках Telegram.";
+"deleteAccount" = "Удалить аккаунт";
+"deleteAccountTitle" = "Удалить аккаунт?";
+"deleteAccountMessage" = "Ваш профиль Telescan, фотография и локальные данные приложения будут удалены без возможности восстановления.";
+"deleteAccountFailed" = "Аккаунт не удалён";
+"deleteAccountFailedMessage" = "Сервер не смог удалить аккаунт. Данные профиля не изменены. Попробуйте ещё раз позже.";
 
 /* Info Sheet */
 "Telescan" = "Telescan";

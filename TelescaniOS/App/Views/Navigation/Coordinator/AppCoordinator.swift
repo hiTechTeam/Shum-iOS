@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Kingfisher
 
 @MainActor
 final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
@@ -54,6 +55,43 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         isRegistered = false
         UserDefaults.standard.set(false, forKey: regKey)
     }
+
+    /// Permanently deletes the remote profile before clearing local data.
+    func deleteAccount() async throws {
+        guard let telegramID = UserDefaults.standard.object(
+            forKey: Keys.tgIdKey.rawValue
+        ) as? Int else {
+            throw AccountDeletionError.missingTelegramID
+        }
+
+        guard let code = UserDefaults.standard.string(
+            forKey: Keys.cleanCodeKey.rawValue
+        ), !code.isEmpty else {
+            throw AccountDeletionError.missingCode
+        }
+
+        try await FetchService.fetch.deleteAccount(
+            tgID: telegramID,
+            code: code
+        )
+
+        peopleViewModel.stopAllBluetoothActivity()
+        BLEManager.shared.reset()
+        ProfileImageStorage.delete()
+        URLCache.shared.removeAllCachedResponses()
+        ImageCache.default.clearMemoryCache()
+        await ImageCache.default.clearDiskCache()
+        authCodeViewModel.clearProfile()
+
+        if let bundleID = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(
+                forName: bundleID
+            )
+        }
+
+        isScaning = false
+        isRegistered = false
+    }
     
     // MARK: - Private Methods
     /// Starts scanning and BLE advertising if conditions are met
@@ -66,4 +104,9 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             BLEManager.shared.startAdvertising(id: String(telegramID))
         }
     }
+}
+
+enum AccountDeletionError: Error {
+    case missingTelegramID
+    case missingCode
 }
