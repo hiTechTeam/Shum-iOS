@@ -1,0 +1,45 @@
+# Xcode user data and build products
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+build/
+DerivedData/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Swift Package Manager and local tooling
+.build/
+timeline.xctimeline
+playground.xcworkspace
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+iOSInjectionProject/
+
+# Local configuration and secrets
+*.xcconfig
+!*.example.xcconfig
+.env
+.env.local
+*.env
+*/Secrets/*
+*/Keys/*
+
+# Editor and macOS files
+.DS_Store
+*.swp
+*.lock
+*~
