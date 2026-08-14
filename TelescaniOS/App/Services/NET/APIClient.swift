@@ -90,6 +90,18 @@ actor APIClient {
         return try decoder.decode(ConfirmationRequestResponse.self, from: data)
     }
 
+    func logoutAllStatus(
+        confirmationID: UUID
+    ) async throws -> ConfirmationRequestResponse {
+        let request = try request(
+            path: "/api/v1/auth/logout-all/requests/"
+                + confirmationID.uuidString.lowercased(),
+            method: "GET"
+        )
+        let data = try await perform(request, authenticated: true)
+        return try decoder.decode(ConfirmationRequestResponse.self, from: data)
+    }
+
     func deleteAccount() async throws {
         let request = try request(path: "/api/v1/users/me", method: "DELETE")
         _ = try await perform(request, authenticated: true)

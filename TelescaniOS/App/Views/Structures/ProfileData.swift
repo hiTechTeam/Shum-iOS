@@ -16,13 +16,37 @@ struct ProfileDataView: View {
         self.authCodeViewModel = authCodeViewModel
     }
 
+    private var headerInfo: some View {
+        VStack(spacing: 8) {
+            Text(Inc.Registration.tgUsername.localized)
+                .font(.system(size: 12))
+                .frame(width: 350, alignment: .leading)
+
+            UsernamePlaceholderProfile(authVM: authCodeViewModel)
+        }
+    }
+
     private var profileSection: some View {
         VStack(spacing: 16) {
             ProfilePhotoView(viewModel: photoVM)
-            UsernamePlaceholderProfile(authVM: authCodeViewModel)
+            headerInfo
             ScanToggle(isScaning: $coordinator.isScaning)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var productDescription: some View {
+        VStack(spacing: 4) {
+            Text(Inc.Profile.telescanTelegramExtension.localized)
+                .font(.system(size: 12))
+            Text(Inc.Profile.poweredByBluetooth.localized)
+                .font(.system(size: 11))
+                .opacity(0.7)
+        }
+        .foregroundColor(.gray)
+        .frame(width: 280)
+        .multilineTextAlignment(.center)
+        .padding(.top, 40)
     }
 
     private var logoutButton: some View {
@@ -76,12 +100,7 @@ struct ProfileDataView: View {
         ScrollView {
             VStack(spacing: 0) {
                 profileSection
-                Text(Inc.Profile.profileSettingsDescription.localized)
-                    .font(.system(size: 12))
-                    .foregroundColor(.gray)
-                    .frame(width: 280)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 40)
+                productDescription
                 logoutButton.padding(.top, 40)
                 deleteAccountButton
             }
@@ -135,10 +154,9 @@ struct ProfileDataView: View {
         .onChange(of: authCodeViewModel.photoS3URL) { _, value in
             photoVM.loadPhotoFromURL(value)
         }
-        .confirmationDialog(
+        .alert(
             Inc.Profile.logoutTitle.localized,
-            isPresented: $showLogoutOptions,
-            titleVisibility: .visible
+            isPresented: $showLogoutOptions
         ) {
             Button(Inc.Profile.logoutCurrent.localized, action: logoutCurrent)
             Button(Inc.Profile.logoutAll.localized, role: .destructive, action: logoutAll)

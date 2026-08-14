@@ -21,7 +21,6 @@
 "codePlaceholder" = "Код";
 "code" = "Код";
 "enterCode" = "Введите код";
-"currentCode" = "Текущий код: ";
 "registration" = "Регистрация";
 "incorrectCode" = "Не удалось найти Telegram username";
 "warningCharactersEight" = "Максимум 8 символов";
@@ -48,7 +47,7 @@
 "justTurnScaning" = "Включите сканирование";
 "scanToggleDescription" = "Включите Bluetooth-сканирование, чтобы видеть людей рядом.";
 "turnedOffScaning" = "Сканирование отключено. Включите сканирование в приложении, чтобы видеть людей, находящихся поблизости. ";
-"noPeopleNearby" = "Сканирование запущено! Здесь будут отображаться люди, находящиеся поблизости. Оставьте приложение открытым. Фоновое сканирование будет доступно в новых версиях приложения.";
+"noPeopleNearby" = "Сканирование активно. Когда рядом появятся пользователи Telescan, они отобразятся на этом экране.";
 "scanAlertText" = "Для перехода необходимо включить режим сканирования.";
 
 /* Profile */
@@ -57,7 +56,8 @@
 "galleryPhoto" = "Выбрать из галереи";
 "deletePhoto" = "Удалить фото";
 "shareUtg" = "Поделиться профилем";
-"profileSettingsDescription" = "Изменить данные профиля можно в настройках Telegram.";
+"telescanTelegramExtension" = "Telescan — расширение для Telegram";
+"poweredByBluetooth" = "Powered by Bluetooth";
 "logout" = "Выйти";
 "logoutTitle" = "Выйти из Telescan";
 "logoutCurrent" = "Выйти на этом устройстве";

@@ -12,13 +12,17 @@ struct CodeSpace: View {
         VStack(spacing: 16) {
             VStack(spacing: 4) {
                 TitleField(text: Inc.Registration.enterCode.localized)
-                CodeField(text: $authCodeViewModel.tmpCode)
+                CodeField(
+                    text: $authCodeViewModel.tmpCode,
+                    isDisabled: authCodeViewModel.isLoading
+                        || authCodeViewModel.codeStatus == true
+                )
                     .focused($isCodeFocused)
                     .onTapGesture {
                         isCodeFocused = true
                     }
                     .onChange(of: authCodeViewModel.tmpCode) { _, newValue in
-                        authCodeViewModel.checkCode(newValue)
+                        authCodeViewModel.checkCode(newValue.uppercased())
                     }
             }
             VStack(spacing: 4) {

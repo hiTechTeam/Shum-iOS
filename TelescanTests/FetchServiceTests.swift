@@ -4,6 +4,194 @@ import Testing
 
 @Suite("Authenticated API client", .serialized)
 struct FetchServiceTests {
+    @Test("A complete code links immediately and exposes the username")
+    @MainActor
+    func completeCodeLinksImmediately() async {
+        clearStoredProfile()
+        defer { clearStoredProfile() }
+        let profileID = UUID()
+        let viewModel = CodeViewModel { code in
+            #expect(code == "AB12CD34")
+            return LinkDeviceResponse(
+                tokens: TokenResponse(
+                    accessToken: "access",
+                    refreshToken: "refresh",
+                    tokenType: "bearer",
+                    expiresIn: 900
+                ),
+                profile: TelescanProfileResponse(
+                    telescanId: profileID,
+                    name: "Ada",
+                    username: "ada",
+                    photoUrl: nil
+                )
+            )
+        }
+        viewModel.tmpCode = "ab12cd34"
+        viewModel.checkCode(viewModel.tmpCode)
+        await waitForCodeCheck(viewModel)
+
+        #expect(viewModel.codeStatus == true)
+        #expect(viewModel.tmpTgUsername == "@ada")
+        #expect(viewModel.telescanID == profileID)
+        #expect(await viewModel.confirmCode())
+        #expect(UserDefaults.standard.object(forKey: "cleanCode") == nil)
+        #expect(UserDefaults.standard.object(forKey: "userCode") == nil)
+    }
+
+    @Test("A rejected complete code exposes the visual error state")
+    @MainActor
+    func rejectedCodeShowsError() async {
+        struct RejectedCode: Error { }
+        let viewModel = CodeViewModel { _ in throw RejectedCode() }
+
+        viewModel.tmpCode = "BADCODE1"
+        viewModel.checkCode(viewModel.tmpCode)
+        await waitForCodeCheck(viewModel)
+
+        #expect(viewModel.codeStatus == false)
+        #expect(viewModel.tmpTgUsername == nil)
+        #expect(await !viewModel.confirmCode())
+    }
+
+    @Test("Logout-all status uses the authenticated confirmation endpoint")
+    func logoutAllStatusRequest() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        try sessions.save(
+            TokenResponse(
+                accessToken: "access-token",
+                refreshToken: "refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let confirmationID = UUID()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MockURLProtocol.handler = { request in
+            #expect(
+                request.url?.path
+                    == "/api/v1/auth/logout-all/requests/"
+                        + confirmationID.uuidString.lowercased()
+            )
+            #expect(
+                request.value(forHTTPHeaderField: "Authorization")
+                    == "Bearer access-token"
+            )
+            return (
+                200,
+                Data(
+                    """
+                    {"confirmationId":"\(confirmationID.uuidString)","status":"pending"}
+                    """.utf8
+                )
+            )
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        let result = try await client.logoutAllStatus(
+            confirmationID: confirmationID
+        )
+
+        #expect(result.confirmationId == confirmationID)
+        #expect(result.status == .pending)
+    }
+
+    @Test("A revoked session resolves logout-all as confirmed")
+    @MainActor
+    func revokedSessionCompletesLogoutAll() async {
+        let poller = LogoutAllStatusPoller(
+            retryDelay: .zero,
+            statusAction: { _ in
+                throw APIClientError.unauthenticated
+            }
+        )
+
+        let result = await poller.wait(for: UUID())
+
+        #expect(result == .confirmed)
+    }
+
+    @Test("A missing status endpoint falls back to the revoked session")
+    @MainActor
+    func missingLogoutStatusEndpointUsesSessionProbe() async {
+        var probeCount = 0
+        let poller = LogoutAllStatusPoller(
+            retryDelay: .zero,
+            maximumAttempts: 3,
+            sessionProbeAction: {
+                probeCount += 1
+                if probeCount == 2 {
+                    throw APIClientError.unauthenticated
+                }
+            },
+            statusAction: { _ in
+                throw APIClientError.httpStatus(404)
+            }
+        )
+
+        let result = await poller.wait(for: UUID())
+
+        #expect(result == .confirmed)
+        #expect(probeCount == 2)
+    }
+
+    @Test("A missing status endpoint does not sign out an active session")
+    @MainActor
+    func missingLogoutStatusEndpointPreservesActiveSession() async {
+        var probeCount = 0
+        let poller = LogoutAllStatusPoller(
+            retryDelay: .zero,
+            maximumAttempts: 3,
+            sessionProbeAction: {
+                probeCount += 1
+            },
+            statusAction: { _ in
+                throw APIClientError.httpStatus(404)
+            }
+        )
+
+        let result = await poller.wait(for: UUID())
+
+        #expect(result == .expired)
+        #expect(probeCount == 2)
+    }
+
+    @Test(
+        "Logout-all polling preserves cancelled and expired sessions",
+        arguments: [
+            (ConfirmationStatus.cancelled, LogoutAllResolution.cancelled),
+            (ConfirmationStatus.expired, LogoutAllResolution.expired),
+        ]
+    )
+    @MainActor
+    func terminalLogoutAllStatusDoesNotConfirm(
+        status: ConfirmationStatus,
+        expected: LogoutAllResolution
+    ) async {
+        let confirmationID = UUID()
+        let poller = LogoutAllStatusPoller(
+            retryDelay: .zero,
+            statusAction: { requestedID in
+                #expect(requestedID == confirmationID)
+                return ConfirmationRequestResponse(
+                    confirmationId: confirmationID,
+                    status: status
+                )
+            }
+        )
+
+        let result = await poller.wait(for: confirmationID)
+
+        #expect(result == expected)
+    }
+
     @Test("Installation device ID is stable and not hardware-derived")
     func stableInstallationID() throws {
         let store = MemorySecureStore()
@@ -125,6 +313,23 @@ struct FetchServiceTests {
         #expect(counters.refreshes == 1)
         #expect(counters.oldAccessRequests == 2)
     }
+}
+
+@MainActor
+private func waitForCodeCheck(_ viewModel: CodeViewModel) async {
+    for _ in 0..<100 where viewModel.isLoading {
+        await Task.yield()
+    }
+}
+
+private func clearStoredProfile() {
+    let defaults = UserDefaults.standard
+    defaults.removeObject(forKey: Keys.telescanIDKey.rawValue)
+    defaults.removeObject(forKey: Keys.tgNameKey.rawValue)
+    defaults.removeObject(forKey: Keys.usernameKey.rawValue)
+    defaults.removeObject(forKey: Keys.photoS3URLKey.rawValue)
+    defaults.removeObject(forKey: "cleanCode")
+    defaults.removeObject(forKey: "userCode")
 }
 
 private final class MemorySecureStore: SecureStoring {

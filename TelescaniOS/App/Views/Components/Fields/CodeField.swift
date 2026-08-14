@@ -4,6 +4,7 @@ import Combine
 struct CodeField: View {
     
     @Binding var text: String
+    var isDisabled = false
     
     @State private var showWarning = false
     @State private var warningCancellable: AnyCancellable?
@@ -63,6 +64,7 @@ struct CodeField: View {
         .font(.system(size: fontSizeCode))
         .tint(.blue)
         .textInputAutocapitalization(.characters)
+        .disabled(isDisabled)
         .onChange(of: text) { _, newValue in
             handleTextChange(newValue)
         }

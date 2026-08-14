@@ -16,6 +16,7 @@ struct UpButton: View {
     
     private func onTap() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        viewModel.resetCodeEntry()
         onUp()
         showSheet = true
     }

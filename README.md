@@ -29,17 +29,20 @@ templates in source control.
 2. The app submits the code and a random installation `device_id` directly to
    `POST /api/v1/auth/link`.
 3. The clear code is cleared from memory after the attempt and is never stored
-   locally.
+   locally or logged.
 4. Access and rotating refresh tokens are stored in the iOS Keychain.
 5. Protected requests automatically retry once after a coordinated token
    refresh; concurrent 401 responses share one refresh operation.
 
 Signing out on the current device revokes only its session and clears local
 tokens and caches. Signing out on every device requires confirmation through
-the Telegram bot. Account deletion is a separate authenticated operation that
-removes the server account, photos, sessions, link codes, confirmation requests,
-and local session and profile data. The installation `device_id` remains in
-Keychain as an unlinked per-installation identifier for a later registration.
+the Telegram bot. While confirmation is pending, the app polls its status and
+falls back to probing the authenticated session when connected to an older API
+deployment without the status endpoint. Account deletion is a separate
+authenticated operation that removes the server account, photos, sessions,
+link codes, confirmation requests, and local session and profile data. The
+installation `device_id` remains in Keychain as an unlinked per-installation
+identifier for a later registration.
 
 ## BLE identity
 
@@ -70,7 +73,8 @@ The clear link code and Telegram ID are not persisted by the current app.
 
 ## Verification
 
-Unit tests cover BLE manager state, stable installation identity, token refresh
+Unit tests cover BLE manager state, automatic link-code success/error UI state,
+logout-all confirmation monitoring, stable installation identity, token refresh
 and retry, and single-flight concurrent refresh. Example commands:
 
 ```sh

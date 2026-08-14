@@ -13,35 +13,92 @@ final class CodeViewModel: ObservableObject {
     @Published var tmpTgUsername: String?
     @Published var tmpCode = ""
 
+    private let linkAction: @MainActor (String) async throws -> LinkDeviceResponse
+    private var linkTask: Task<Void, Never>?
     private let codeCount = 8
 
+    init(
+        linkAction: @escaping @MainActor (String) async throws -> LinkDeviceResponse = {
+            try await FetchService.fetch.link(code: $0)
+        }
+    ) {
+        self.linkAction = linkAction
+    }
+
     func checkCode(_ input: String) {
-        let allowed = input.allSatisfy {
+        let normalizedCode = input.uppercased()
+        let allowed = normalizedCode.allSatisfy {
             $0.isASCII && ($0.isLetter || $0.isNumber)
         }
-        codeStatus = input.count == codeCount && allowed ? true : nil
+
+        guard normalizedCode.count == codeCount else {
+            linkTask?.cancel()
+            linkTask = nil
+            isLoading = false
+            codeStatus = nil
+            tmpTgUsername = nil
+            return
+        }
+
+        guard allowed else {
+            linkTask?.cancel()
+            linkTask = nil
+            isLoading = false
+            tmpTgUsername = nil
+            if codeStatus != false {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
+            codeStatus = false
+            return
+        }
+
+        guard !isLoading, codeStatus != true else { return }
+        isLoading = true
+        codeStatus = nil
         tmpTgUsername = nil
+
+        linkTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                isLoading = false
+                linkTask = nil
+            }
+
+            let feedback = UINotificationFeedbackGenerator()
+            do {
+                let response = try await linkAction(normalizedCode)
+                guard !Task.isCancelled,
+                      tmpCode.uppercased() == normalizedCode else { return }
+                apply(response.profile)
+                codeStatus = true
+                feedback.notificationOccurred(.success)
+            } catch is CancellationError {
+                return
+            } catch {
+                guard tmpCode.uppercased() == normalizedCode else { return }
+                tmpTgUsername = nil
+                codeStatus = false
+                feedback.notificationOccurred(.error)
+            }
+        }
     }
 
     @discardableResult
     func confirmCode() async -> Bool {
-        guard codeStatus == true, !isLoading else { return false }
-        isLoading = true
-        defer { isLoading = false }
-        let feedback = UINotificationFeedbackGenerator()
-        do {
-            let response = try await FetchService.fetch.link(code: tmpCode)
-            apply(response.profile)
-            tmpCode = ""
-            codeStatus = nil
-            feedback.notificationOccurred(.success)
-            return true
-        } catch {
-            tmpTgUsername = nil
-            codeStatus = false
-            feedback.notificationOccurred(.error)
+        guard codeStatus == true, !isLoading, isUsernameConfirmed else {
             return false
         }
+        resetCodeEntry()
+        return true
+    }
+
+    func resetCodeEntry() {
+        linkTask?.cancel()
+        linkTask = nil
+        codeStatus = nil
+        isLoading = false
+        tmpTgUsername = nil
+        tmpCode = ""
     }
 
     func refreshProfile() async {
@@ -66,6 +123,8 @@ final class CodeViewModel: ObservableObject {
     }
 
     func clearProfile() {
+        linkTask?.cancel()
+        linkTask = nil
         telescanID = nil
         tgName = nil
         tgUsername = nil

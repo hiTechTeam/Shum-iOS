@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AppCoordinatorView: View {
-    
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var coordinator: AppCoordinator
     
     var body: some View {
@@ -13,5 +13,10 @@ struct AppCoordinatorView: View {
             }
         }
         .environmentObject(coordinator)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                coordinator.resumePendingLogoutAllIfNeeded()
+            }
+        }
     }
 }

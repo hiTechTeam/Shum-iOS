@@ -18,8 +18,8 @@ struct PeopleView: View {
 
             VStack(alignment: .leading) {
                 if coordinator.isScaning {
-                    if peopleViewModel.devices.isEmpty {
-                        ScrollView {
+                    List {
+                        if peopleViewModel.devices.isEmpty {
                             VStack(
                                 alignment: .leading,
                                 spacing: 12
@@ -31,45 +31,43 @@ struct PeopleView: View {
                                     .foregroundColor(.gray)
 
                                 Text(Inc.Scanning.noPeopleNeaby.localized)
-                                    .font(
-                                        .system(
-                                            size: 14,
-                                            weight: .regular
-                                        )
-                                    )
+                                    .font(.system(size: 14, weight: .regular))
                                     .foregroundColor(.gray)
                             }
-                            .padding(.top, 20)
-                            .padding(.horizontal, 16)
-                            .frame(
-                                maxWidth: .infinity,
-                                alignment: .leading
+                            .padding(.top, 12)
+                            .listRowInsets(
+                                EdgeInsets(
+                                    top: 0,
+                                    leading: 16,
+                                    bottom: 0,
+                                    trailing: 16
+                                )
                             )
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         }
-                    } else {
-                        List {
-                            ForEach(
-                                Array(peopleViewModel.devices.keys),
-                                id: \.self
-                            ) { id in
-                                Button {
-                                    selectedID = id
-                                    showProfileSheet = true
-                                } label: {
-                                    PeopleRowContent(id: id)
-                                }
-                                .onAppear {
-                                    Task {
-                                        await peopleViewModel
-                                            .loadUserIfNeeded(telescanID: id)
-                                    }
+
+                        ForEach(
+                            Array(peopleViewModel.devices.keys),
+                            id: \.self
+                        ) { id in
+                            Button {
+                                selectedID = id
+                                showProfileSheet = true
+                            } label: {
+                                PeopleRowContent(id: id)
+                            }
+                            .onAppear {
+                                Task {
+                                    await peopleViewModel
+                                        .loadUserIfNeeded(telescanID: id)
                                 }
                             }
                         }
-                        .scrollContentBackground(.hidden)
-                        .refreshable {
-                            await peopleViewModel.refreshVisibleUsers()
-                        }
+                    }
+                    .scrollContentBackground(.hidden)
+                    .refreshable {
+                        await peopleViewModel.refreshNearbyPeople()
                     }
                 }
             }

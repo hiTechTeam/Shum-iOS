@@ -46,6 +46,12 @@ final class PeopleViewModel: ObservableObject {
         }
     }
 
+    func refreshNearbyPeople() async {
+        BLEManager.shared.stopScanning()
+        BLEManager.shared.startScanning()
+        await refreshVisibleUsers()
+    }
+
     func toggleScanning(_ enabled: Bool) {
         if enabled {
             BLEManager.shared.startScanning()

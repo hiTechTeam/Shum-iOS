@@ -70,10 +70,6 @@ struct Inc {
         // EN: Code
         // RU: Код
         
-        static let currentCode: String = "currentCode"
-        // EN: Current code:
-        // RU: Текущий код:
-        
         static let registration: String = "registration"
         // EN: Registration
         // RU: Регистрация
@@ -147,12 +143,12 @@ struct Inc {
         // RU: Включите Bluetooth-сканирование, чтобы видеть людей рядом.
         
         static let turnedOffScanning: String = "turnedOffScaning"
-        // EN: Scanning is turned off. Enable scanning in the app to see nearby people. Background scanning is not available.
-        // RU: Сканирование отключено. Включите сканирование в приложении, чтобы видеть людей, находящихся поблизости. Фоновое сканирование недоступно.
+        // EN: Scanning is turned off. Enable it to see nearby people.
+        // RU: Сканирование отключено. Включите его, чтобы видеть людей рядом.
         
         static let noPeopleNeaby: String = "noPeopleNearby"
-        // EN: Scanning is active… Nearby people will appear here. Keep the app open - background scanning is not available.
-        // Ru: Сканирование запущено… Здесь будут отображаться люди, находящиеся поблизости. Оставьте приложение открытым - фоновое сканирование недоступно.
+        // EN: Scanning is active. Nearby Telescan users will appear here.
+        // RU: Сканирование активно. Пользователи Telescan поблизости появятся здесь.
         
         static let scanAlertText: String = "scanAlertText"
         // EN: To switch over, you need to enable scanning mode.
@@ -184,9 +180,12 @@ struct Inc {
         // EN: Share your profile
         // RU: Поделиться профилем
         
-        static let profileSettingsDescription: String = "profileSettingsDescription"
-        // EN: You can change profile data in Telegram settings.
-        // RU: Вы можете изменить данные профиля в настройках Telegram.
+        static let telescanTelegramExtension: String = "telescanTelegramExtension"
+        // EN: Telescan is a Telegram extension
+        // RU: Telescan — расширение для Telegram
+
+        static let poweredByBluetooth: String = "poweredByBluetooth"
+        // EN/RU: Powered by Bluetooth
 
         static let logout: String = "logout"
         static let logoutTitle: String = "logoutTitle"
@@ -287,6 +286,7 @@ enum Keys: String {
     case photoS3URLKey = "photoS3Url"
     case isScaning = "isScaning"
     case isReg = "isReg"
+    case pendingLogoutAllConfirmation = "pendingLogoutAllConfirmation"
 }
 
 enum HTTPStatus: Int {
