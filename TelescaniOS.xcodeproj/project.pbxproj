@@ -32,33 +32,22 @@
 		B9173DA72F009B4C0066695D /* Exceptions for "TelescaniOS" folder in "Telescan" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				.gitignore,
 				Configuration/Configs/Debug.example.xcconfig,
 				Configuration/Configs/Debug.xcconfig,
 				Configuration/Configs/Release.example.xcconfig,
 				Configuration/Configs/Release.xcconfig,
 				Configuration/Info.plist,
-				Configuration/Release.xcconfig,
 			);
 			target = B9559D572EBC4A0200FC3377 /* Telescan */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-		B92AB0BE3028A82500E39757 /* Exceptions for "TelescaniOS" folder in "Compile Sources" phase from "Telescan" target */ = {
-			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
-			buildPhase = B9559D542EBC4A0200FC3377 /* Sources */;
-			membershipExceptions = (
-				Configuration/Release.xcconfig,
-			);
-		};
-/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B9559D5A2EBC4A0200FC3377 /* TelescaniOS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				B9173DA72F009B4C0066695D /* Exceptions for "TelescaniOS" folder in "Telescan" target */,
-				B92AB0BE3028A82500E39757 /* Exceptions for "TelescaniOS" folder in "Compile Sources" phase from "Telescan" target */,
 			);
 			explicitFileTypes = {
 				Configuration/Info.plist = text.xml;
@@ -123,7 +112,6 @@
 				B9559D542EBC4A0200FC3377 /* Sources */,
 				B9559D552EBC4A0200FC3377 /* Frameworks */,
 				B9559D562EBC4A0200FC3377 /* Resources */,
-				B94FA5212EF749CA0024A510 /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -225,27 +213,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		B94FA5212EF749CA0024A510 /* ShellScript */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "export PATH=\"$PATH:/opt/homebrew/bin\"\n\nif which swiftlint >/dev/null; then\n  swiftlint || echo \"SwiftLint failed, but build continues\"\nelse\n  echo \"warning: SwiftLint not installed\"\nfi\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		B9559D542EBC4A0200FC3377 /* Sources */ = {

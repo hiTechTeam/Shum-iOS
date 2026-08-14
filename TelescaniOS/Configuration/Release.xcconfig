@@ -1,3 +1,0 @@
-API_ORIGIN = https:/$()/telescan.space
-LOCALHOST = http:/$()/127.0.0.1:8080
-TELESCAN_BOT = https:/$()/t.me/tgtelescan_bot
