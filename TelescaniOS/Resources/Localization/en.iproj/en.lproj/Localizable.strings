@@ -58,6 +58,13 @@
 "deletePhoto" = "Delete Photo";
 "shareUtg" = "Share your profile";
 "profileSettingsDescription" = "You can change profile data in Telegram settings.";
+"logout" = "Sign out";
+"logoutTitle" = "Sign out of Telescan";
+"logoutCurrent" = "Sign out on this device";
+"logoutAll" = "Sign out on all devices";
+"logoutAllSent" = "Confirm in Telegram";
+"logoutAllSentMessage" = "Confirm signing out on all devices in the Telescan Telegram bot. All sessions remain active until you confirm.";
+"logoutFailed" = "Couldn't sign out. Please try again.";
 "deleteAccount" = "Delete account";
 "deleteAccountTitle" = "Delete account?";
 "deleteAccountMessage" = "Your Telescan profile, photo, and local app data will be permanently deleted. This action cannot be undone.";
@@ -73,10 +80,10 @@
 "info_instant_exchange_desc" = "Exchange contact information with other participants instantly.";
 
 "info_fast_offline_title" = "Fast and Offline";
-"info_fast_offline_desc" = "Uses Bluetooth for offline code hash exchange.";
+"info_fast_offline_desc" = "Uses Bluetooth to exchange permanent Telescan profile IDs nearby.";
 
 "info_data_protection_title" = "Data Protection";
-"info_data_protection_desc" = "All data is securely protected: code hashes are stored on the server, and only the account owner can link their Telegram.";
+"info_data_protection_desc" = "One-time codes expire quickly, and access is protected by per-device sessions.";
 
 "info_ideal_events_title" = "Ideal for Events";
 "info_ideal_events_desc" = "Perfect for conferences, business events, professional meetups, networking, dating and other meets.";

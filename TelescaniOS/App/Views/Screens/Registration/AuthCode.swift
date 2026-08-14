@@ -18,8 +18,11 @@ struct AuthCode: View {
                 }
                 
                 NextButton(codeStatus: $authCodeViewModel.codeStatus) {
-                    authCodeViewModel.confirmCode()
-                    goNext = true
+                    Task {
+                        if await authCodeViewModel.confirmCode() {
+                            goNext = true
+                        }
+                    }
                 }
                 
             }

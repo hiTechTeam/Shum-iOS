@@ -6,7 +6,9 @@ import Testing
 import CoreBluetooth
 @testable import Telescan
 
-@Suite("BLEManager — basic tests.")
+// These tests intentionally exercise the process-wide CoreBluetooth singleton.
+// Serial execution prevents one case from clearing another case's weak delegate.
+@Suite("BLEManager — basic tests.", .serialized)
 struct BLEManagerTests {
 
     @Test("Singleton returns the same instance.")
@@ -30,7 +32,7 @@ struct BLEManagerTests {
     func delegateCanBeNil() {
         BLEManager.shared.delegate = nil
         BLEManager.shared.startScanning()
-        BLEManager.shared.startAdvertising(id: "test")
+        BLEManager.shared.startAdvertising(id: UUID().uuidString)
         // If doesn't crash - test passes
         #expect(true)
     }
@@ -47,13 +49,13 @@ struct BLEManagerTests {
     func resetClearsActiveOperations() async throws {
         let manager = BLEManager.shared
         manager.startScanning()
-        manager.startAdvertising(id: "TestDevice")
+        manager.startAdvertising(id: UUID().uuidString)
         // We given a little time for the operations to start
         try await Task.sleep(for: .milliseconds(300))
         manager.reset()
         // After reset we can restart it again
         manager.startScanning()
-        manager.startAdvertising(id: "NewDevice")
+        manager.startAdvertising(id: UUID().uuidString)
         try await Task.sleep(for: .milliseconds(300))
         #expect(true) // If you got here, it didn't crash
     }
@@ -71,7 +73,7 @@ struct BLEManagerTests {
             BLEManager.shared.delegate = mockDelegate
             // We run both scanning and advertising — suddenly an error will come from peripheral
             BLEManager.shared.startScanning()
-            BLEManager.shared.startAdvertising(id: "TestError")
+            BLEManager.shared.startAdvertising(id: UUID().uuidString)
             // We're giving it more time for a possible callback.
             try await Task.sleep(for: .seconds(3))
         }
@@ -86,9 +88,9 @@ struct BLEManagerTests {
         try await Task.sleep(for: .milliseconds(100))
         manager.startScanning()
         try await Task.sleep(for: .milliseconds(200))
-        manager.startAdvertising(id: "Device1")
+        manager.startAdvertising(id: UUID().uuidString)
         try await Task.sleep(for: .milliseconds(200))
-        manager.restartAdvertising(id: "Device2")
+        manager.restartAdvertising(id: UUID().uuidString)
         try await Task.sleep(for: .milliseconds(500))
         manager.stopAdvertising()
         #expect(true)
@@ -98,7 +100,7 @@ struct BLEManagerTests {
     func simultaneousScanningAndAdvertising() async throws {
         let manager = BLEManager.shared
         manager.startScanning()
-        manager.startAdvertising(id: "MyDevice")
+        manager.startAdvertising(id: UUID().uuidString)
         try await Task.sleep(for: .milliseconds(500))
         manager.stopScanning()
         manager.stopAdvertising()

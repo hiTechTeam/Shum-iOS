@@ -15,7 +15,7 @@ struct ScanToggle: View {
     private let cornerRadius: CGFloat = 13
     private let paddingHorizontal: CGFloat = 14
     private let imageSize: CGFloat = 28
-    private let tgIdKey: String = GlobalVars.tgIdKey
+    private let telescanIDKey: String = GlobalVars.telescanIDKey
     private let bleManager = BLEManager.shared
     
     private var iconEye: some View {
@@ -34,11 +34,14 @@ struct ScanToggle: View {
                 coordinator.isScaning = newValue
                 UserDefaults.standard.set(newValue, forKey: Keys.isScaning.rawValue)
                 
-                guard let tgId = UserDefaults.standard.object(forKey: tgIdKey) as? Int else { return }
+                guard let value = UserDefaults.standard.string(forKey: telescanIDKey),
+                      let telescanID = UUID(uuidString: value) else { return }
                 
                 if newValue {
                     if bleManager.isBluetoothAvailable {
-                        bleManager.startAdvertising(id: String(tgId))
+                        bleManager.startAdvertising(
+                            id: telescanID.uuidString.lowercased()
+                        )
                     } else {
                         showBluetoothAlert = true
                     }

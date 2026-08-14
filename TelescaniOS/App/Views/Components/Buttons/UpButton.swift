@@ -21,16 +21,14 @@ struct UpButton: View {
     }
     
     private func onConfirm() {
-        viewModel.confirmCode()
-        
-        guard viewModel.codeStatus == true else { return }
-        
-        showSheet = false
-        
-        if let tgID = UserDefaults.standard.object(
-            forKey: Keys.tgIdKey.rawValue
-        ) as? Int {
-            BLEManager.shared.restartAdvertising(id: String(tgID))
+        Task {
+            guard await viewModel.confirmCode() else { return }
+            showSheet = false
+            if let telescanID = viewModel.telescanID {
+                BLEManager.shared.restartAdvertising(
+                    id: telescanID.uuidString.lowercased()
+                )
+            }
         }
     }
     

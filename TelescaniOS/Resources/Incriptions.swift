@@ -188,6 +188,14 @@ struct Inc {
         // EN: You can change profile data in Telegram settings.
         // RU: Вы можете изменить данные профиля в настройках Telegram.
 
+        static let logout: String = "logout"
+        static let logoutTitle: String = "logoutTitle"
+        static let logoutCurrent: String = "logoutCurrent"
+        static let logoutAll: String = "logoutAll"
+        static let logoutAllSent: String = "logoutAllSent"
+        static let logoutAllSentMessage: String = "logoutAllSentMessage"
+        static let logoutFailed: String = "logoutFailed"
+
         static let deleteAccount: String = "deleteAccount"
         static let deleteAccountTitle: String = "deleteAccountTitle"
         static let deleteAccountMessage: String = "deleteAccountMessage"
@@ -261,12 +269,7 @@ struct Links {
     static let local = AppConfig.localHost
     static let origin = AppConfig.apiOrigin
     
-    static let telescanApiTunnel =  origin + "/v1/code/"
-    static let telescanApiGetuser = origin + "/v1/users/"
-    static let telescanApiUploadPhoto = origin + "/v1/users/upload-photo"
-    static let telescanApiUpdatePhoto = origin + "/v1/users/update-photo"
-    static let telescanApiDeletePhoto = origin + "/v1/users/delete-photo"
-    static let telescanApiDeleteAccount = origin + "/v1/users/"
+    static let apiV1 = origin + "/api/v1"
     static let privacyPolicy = "https://tgtelescan.ru/privacy"
     static let termsOfService = "https://tgtelescan.ru/terms"
 }
@@ -278,13 +281,10 @@ enum SelectedTab: Int {
 }
 
 enum Keys: String {
-    case tgIdKey = "tg_id"
+    case telescanIDKey = "telescan_id"
     case tgNameKey = "tgName"
-    case userCodeKey = "userCode"
     case usernameKey = "username"
     case photoS3URLKey = "photoS3Url"
-    case hashedCodeKey = "hashedCode"
-    case cleanCodeKey = "cleanCode"
     case isScaning = "isScaning"
     case isReg = "isReg"
 }

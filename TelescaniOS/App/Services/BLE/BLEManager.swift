@@ -115,7 +115,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         queue.async { [weak self] in
             guard let self else { return }
 
-            self.logger.info("startAdvertising called with id: \(id)")
+            self.logger.info("startAdvertising called")
 
             self.currentIdentity = id
             self.shouldAdvertise = true
@@ -133,7 +133,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         queue.async { [weak self] in
             guard let self else { return }
 
-            self.logger.info("restartAdvertising called with id: \(id)")
+            self.logger.info("restartAdvertising called")
 
             self.currentIdentity = id
             self.shouldAdvertise = true
@@ -323,9 +323,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
                 )
             }
 
-            self.logger.info(
-                "Telescan device: id=\(identity), peripheral=\(peripheralID), rssi=\(rssi)"
-            )
+            self.logger.info("Telescan device identity received")
         }
     }
 
@@ -387,7 +385,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
 
             DispatchQueue.main.async { [weak self] in
                 self?.delegate?.didLoseDevice(id: identity)
-                self?.logger.info("Device lost: \(identity)")
+                self?.logger.info("Telescan device lost")
             }
         }
     }

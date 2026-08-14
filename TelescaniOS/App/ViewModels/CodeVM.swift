@@ -3,139 +3,93 @@ import SwiftUI
 
 @MainActor
 final class CodeViewModel: ObservableObject {
-    
-    @Published var tgID: Int?
-    @Published var code: String = ""
+    @Published var telescanID: UUID?
     @Published var tgName: String?
     @Published var tgUsername: String?
     @Published var photoS3URL: String?
-    @Published var isUsernameConfirmed: Bool = false
-    
+    @Published var isUsernameConfirmed = false
     @Published var codeStatus: Bool?
-    @Published var isLoading: Bool = false
-    
+    @Published var isLoading = false
     @Published var tmpTgUsername: String?
-    @Published var tmpCode: String = ""
-    private var tmpTgId: Int?
-    private var tmpTgName: String?
-    private var tmpPhotoS3URL: String?
-    
-    private let CODECOUNT: Int = 8
-    
+    @Published var tmpCode = ""
+
+    private let codeCount = 8
+
     func checkCode(_ input: String) {
-        guard input.count == CODECOUNT else {
-            codeStatus = nil
-            tmpTgUsername = nil
-            return
+        let allowed = input.allSatisfy {
+            $0.isASCII && ($0.isLetter || $0.isNumber)
         }
-        
-        isLoading = true
-        
-        Task {
-            let generator = UINotificationFeedbackGenerator()
-            do {
-                
-                let responseData: GetUserDataByHashedCodeResponse =
-                    try await FetchService.fetch
-                        .fetchUserDataByHashedCode(for: input)
-                
-                self.tmpTgId = responseData.tgId
-                self.tmpTgName = responseData.tgName
-                self.tmpTgUsername = responseData.tgUsername
-                self.tmpPhotoS3URL = responseData.photoS3URL
-                self.codeStatus = true
-                self.tmpCode = input
-                generator.notificationOccurred(.success)
-            } catch {
-                self.tmpTgName = nil
-                self.tmpTgUsername = nil
-                self.codeStatus = false
-                generator.notificationOccurred(.error)
-            }
-            
-            isLoading = false
-        }
+        codeStatus = input.count == codeCount && allowed ? true : nil
+        tmpTgUsername = nil
     }
-    
-    func confirmCode() {
-        
-        self.tgID = tmpTgId
-        self.code = tmpCode
-        self.tgName = tmpTgName
-        self.tgUsername = tmpTgUsername
-        self.photoS3URL = tmpPhotoS3URL
-        self.isUsernameConfirmed = true
-        
-        UserDefaults.standard.set(self.tgID, forKey: Keys.tgIdKey.rawValue)
-        UserDefaults.standard.set(self.tgName, forKey: Keys.tgNameKey.rawValue)
-        UserDefaults.standard.set(self.tgUsername, forKey: Keys.usernameKey.rawValue)
-        UserDefaults.standard.set(self.photoS3URL, forKey: Keys.photoS3URLKey.rawValue)
-        UserDefaults.standard.set(self.code, forKey: Keys.cleanCodeKey.rawValue)
+
+    @discardableResult
+    func confirmCode() async -> Bool {
+        guard codeStatus == true, !isLoading else { return false }
+        isLoading = true
+        defer { isLoading = false }
+        let feedback = UINotificationFeedbackGenerator()
+        do {
+            let response = try await FetchService.fetch.link(code: tmpCode)
+            apply(response.profile)
+            tmpCode = ""
+            codeStatus = nil
+            feedback.notificationOccurred(.success)
+            return true
+        } catch {
+            tmpTgUsername = nil
+            codeStatus = false
+            feedback.notificationOccurred(.error)
+            return false
+        }
     }
 
     func refreshProfile() async {
-        let savedTGID = UserDefaults.standard.object(
-            forKey: Keys.tgIdKey.rawValue
-        ) as? Int
-
-        guard let profileTGID = tgID ?? savedTGID else {
-            return
-        }
-
+        guard AuthSessionStore.shared.hasTokens else { return }
         isLoading = true
-
-        defer {
-            isLoading = false
-        }
-
-        do {
-            let profile = try await FetchService.fetch
-                .fetchUserDataByTGID(for: profileTGID)
-
-            tgID = profileTGID
-            tgName = profile.tgName
-            tgUsername = profile.tgUsername
-            photoS3URL = profile.photoS3URL
-            isUsernameConfirmed = true
-
-            UserDefaults.standard.set(
-                profileTGID,
-                forKey: Keys.tgIdKey.rawValue
-            )
-            UserDefaults.standard.set(
-                profile.tgName,
-                forKey: Keys.tgNameKey.rawValue
-            )
-            UserDefaults.standard.set(
-                profile.tgUsername,
-                forKey: Keys.usernameKey.rawValue
-            )
-            UserDefaults.standard.set(
-                profile.photoS3URL,
-                forKey: Keys.photoS3URLKey.rawValue
-            )
-        } catch {
-            print(
-                "Failed to refresh profile:",
-                error.localizedDescription
-            )
+        defer { isLoading = false }
+        if let profile = try? await FetchService.fetch.currentProfile() {
+            apply(profile)
         }
     }
 
+    func restoreLocalProfile() {
+        if let value = UserDefaults.standard.string(
+            forKey: Keys.telescanIDKey.rawValue
+        ) {
+            telescanID = UUID(uuidString: value)
+        }
+        tgName = UserDefaults.standard.string(forKey: Keys.tgNameKey.rawValue)
+        tgUsername = UserDefaults.standard.string(forKey: Keys.usernameKey.rawValue)
+        photoS3URL = UserDefaults.standard.string(forKey: Keys.photoS3URLKey.rawValue)
+        isUsernameConfirmed = telescanID != nil
+    }
+
     func clearProfile() {
-        tgID = nil
-        code = ""
+        telescanID = nil
         tgName = nil
         tgUsername = nil
         photoS3URL = nil
         isUsernameConfirmed = false
         codeStatus = nil
         isLoading = false
-
         tmpTgUsername = nil
         tmpCode = ""
-        tmpTgId = nil
-        tmpTgName = nil
-        tmpPhotoS3URL = nil
+    }
+
+    private func apply(_ profile: TelescanProfileResponse) {
+        telescanID = profile.telescanId
+        tgName = profile.name
+        tgUsername = profile.username.map { $0.hasPrefix("@") ? $0 : "@" + $0 }
+        photoS3URL = profile.photoUrl
+        tmpTgUsername = tgUsername
+        isUsernameConfirmed = true
+        UserDefaults.standard.set(
+            profile.telescanId.uuidString.lowercased(),
+            forKey: Keys.telescanIDKey.rawValue
+        )
+        UserDefaults.standard.set(profile.name, forKey: Keys.tgNameKey.rawValue)
+        UserDefaults.standard.set(tgUsername, forKey: Keys.usernameKey.rawValue)
+        UserDefaults.standard.set(profile.photoUrl, forKey: Keys.photoS3URLKey.rawValue)
     }
 }

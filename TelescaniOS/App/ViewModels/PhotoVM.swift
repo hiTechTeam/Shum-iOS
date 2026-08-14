@@ -5,19 +5,11 @@ final class ProfilePhotoViewModel: ObservableObject {
 
     @Published var profileImage: Image = .noPhoto
     @Published var uiImage: UIImage?
-    @Published var tgID: Int?
-
     private let photoS3UrlKey = "photoS3Url"
 
     private var photoLoadTask: Task<Void, Never>?
 
     init() {
-        if let storedTGID = UserDefaults.standard.object(
-            forKey: Keys.tgIdKey.rawValue
-        ) as? Int {
-            tgID = storedTGID
-        }
-
         loadPhotoIfNeeded()
     }
 
@@ -33,37 +25,6 @@ final class ProfilePhotoViewModel: ObservableObject {
         )
 
         loadPhotoFromURL(savedURL)
-    }
-
-    func setTGID(_ newTGID: Int?) {
-        guard tgID != newTGID else {
-            return
-        }
-
-        tgID = newTGID
-
-        if let newTGID {
-            UserDefaults.standard.set(
-                newTGID,
-                forKey: Keys.tgIdKey.rawValue
-            )
-        } else {
-            UserDefaults.standard.removeObject(
-                forKey: Keys.tgIdKey.rawValue
-            )
-        }
-
-        photoLoadTask?.cancel()
-        photoLoadTask = nil
-
-        uiImage = nil
-        profileImage = .noPhoto
-
-        ProfileImageStorage.delete()
-
-        UserDefaults.standard.removeObject(
-            forKey: photoS3UrlKey
-        )
     }
 
     func loadPhotoFromURL(_ urlString: String?) {
@@ -120,15 +81,14 @@ final class ProfilePhotoViewModel: ObservableObject {
 
     func updateProfileImage(with newImage: UIImage?) {
         Task { [weak self] in
-            guard let self,
-                  let tgID else {
+            guard let self else {
                 return
             }
 
             guard let originalImage = newImage else {
                 do {
                     try await FetchService.fetch
-                        .deleteProfileImage(tgID: tgID)
+                        .deleteProfileImage()
 
                     photoLoadTask?.cancel()
                     photoLoadTask = nil
@@ -166,10 +126,7 @@ final class ProfilePhotoViewModel: ObservableObject {
 
             do {
                 let photoURL = try await FetchService.fetch
-                    .updateProfileImage(
-                        tgID: tgID,
-                        image: compressedImage
-                    )
+                    .updateProfileImage(data: compressedData)
 
                 photoLoadTask?.cancel()
                 photoLoadTask = nil
@@ -182,7 +139,7 @@ final class ProfilePhotoViewModel: ObservableObject {
                 ProfileImageStorage.save(compressedImage)
 
                 UserDefaults.standard.set(
-                    photoURL,
+                    photoURL.photoUrl,
                     forKey: photoS3UrlKey
                 )
             } catch {

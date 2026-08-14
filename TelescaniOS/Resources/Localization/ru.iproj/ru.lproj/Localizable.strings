@@ -58,6 +58,13 @@
 "deletePhoto" = "Удалить фото";
 "shareUtg" = "Поделиться профилем";
 "profileSettingsDescription" = "Изменить данные профиля можно в настройках Telegram.";
+"logout" = "Выйти";
+"logoutTitle" = "Выйти из Telescan";
+"logoutCurrent" = "Выйти на этом устройстве";
+"logoutAll" = "Выйти на всех устройствах";
+"logoutAllSent" = "Подтвердите выход в Telegram-боте";
+"logoutAllSentMessage" = "До подтверждения в Telegram-боте все сессии останутся активными.";
+"logoutFailed" = "Не удалось выполнить выход. Попробуйте ещё раз.";
 "deleteAccount" = "Удалить аккаунт";
 "deleteAccountTitle" = "Удалить аккаунт?";
 "deleteAccountMessage" = "Ваш профиль Telescan, фотография и локальные данные приложения будут удалены без возможности восстановления.";
@@ -72,10 +79,10 @@
 "info_instant_exchange_desc" = "Мгновенно обменивайтесь контактной информацией с другими участниками.";
 
 "info_fast_offline_title" = "Быстро и офлайн";
-"info_fast_offline_desc" = "Использует Bluetooth для офлайн-обмена хэшами кода.";
+"info_fast_offline_desc" = "Использует Bluetooth для обмена постоянными идентификаторами профилей Telescan.";
 
 "info_data_protection_title" = "Защита данных";
-"info_data_protection_desc" = "Все данные надежно защищены: хэши кодов хранятся на сервере, и только владелец аккаунта может привязать свой Telegram.";
+"info_data_protection_desc" = "Одноразовые коды быстро истекают, а доступ защищён отдельными сессиями устройств.";
 
 "info_ideal_events_title" = "Идеально для мероприятий";
 "info_ideal_events_desc" = "Подходит для конференций, бизнес-встреч, профессиональных мероприятий, нетворкинга, дейтинга и остальных встреч.";

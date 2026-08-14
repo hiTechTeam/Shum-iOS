@@ -33,30 +33,7 @@ struct Profile: View {
                 }
         }
         .onAppear {
-            if let tgID = UserDefaults.standard.object(
-                forKey: Keys.tgIdKey.rawValue
-            ) as? Int {
-                authVM.tgID = tgID
-                authVM.isUsernameConfirmed = true
-            }
-
-            if let tgName = UserDefaults.standard.string(forKey: Keys.tgNameKey.rawValue) {
-                authVM.tgName = tgName
-            }
-            
-            if let code = UserDefaults.standard.string(forKey: Keys.cleanCodeKey.rawValue) {
-                authVM.code = code
-            }
-            
-            if let username = UserDefaults.standard.string(forKey: Keys.usernameKey.rawValue) {
-                authVM.tgUsername = username
-            }
-
-            if let photoURL = UserDefaults.standard.string(
-                forKey: Keys.photoS3URLKey.rawValue
-            ) {
-                authVM.photoS3URL = photoURL
-            }
+            authVM.restoreLocalProfile()
         }
         .tabItem { Label(profileInc, systemImage: IncLogos.personFillViewwfinder) }
         .tag(SelectedTab.profile)

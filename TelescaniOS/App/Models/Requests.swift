@@ -1,9 +1,10 @@
-struct UploadProfileImageRequest: Encodable, Decodable {
-    let tgId: Int
-    let img: String
+import Foundation
+
+struct LinkDeviceRequest: Encodable {
+    let code: String
+    let deviceId: UUID
 }
 
-struct UpdateUserPhotoRequestByTGID: Codable {
-    let tgId: Int
-    let img: String?
+struct RefreshTokenRequest: Encodable {
+    let refreshToken: String
 }

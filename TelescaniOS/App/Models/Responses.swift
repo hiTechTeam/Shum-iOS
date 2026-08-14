@@ -1,23 +1,25 @@
-struct GetUserDataByHashedCodeResponse: Codable {
-    let tgId: Int?
-    let tgName: String?
-    let tgUsername: String?
-    let photoS3URL: String?
-    let hashedCode: String?
+import Foundation
+
+struct TokenResponse: Codable, Equatable {
+    let accessToken: String
+    let refreshToken: String
+    let tokenType: String
+    let expiresIn: Int
 }
 
-struct GetUserDataByTGID: Codable {
-    let tgName: String?
-    let tgUsername: String?
-    let photoS3URL: String?
+struct TelescanProfileResponse: Codable, Equatable {
+    let telescanId: UUID
+    let name: String?
+    let username: String?
+    let photoUrl: String?
 }
 
-struct UploadProfileImageResponse: Codable {
-    let tgId: Int
-    let photoS3URL: String?
+struct LinkDeviceResponse: Codable, Equatable {
+    let tokens: TokenResponse
+    let profile: TelescanProfileResponse
 }
 
-struct DeleteAccountRequest: Encodable {
-    let tgId: Int
-    let hashedCode: String
+struct ConfirmationRequestResponse: Codable, Equatable {
+    let confirmationId: UUID
+    let status: String
 }

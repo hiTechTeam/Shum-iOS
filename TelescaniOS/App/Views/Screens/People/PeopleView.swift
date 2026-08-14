@@ -61,7 +61,7 @@ struct PeopleView: View {
                                 .onAppear {
                                     Task {
                                         await peopleViewModel
-                                            .loadUserIfNeeded(tgID: id)
+                                            .loadUserIfNeeded(telescanID: id)
                                     }
                                 }
                             }
@@ -129,14 +129,14 @@ struct PeopleRowContent: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(
-                    peopleViewModel.userCache[id]?.tgName
+                    peopleViewModel.userCache[id]?.name
                     ?? "Unknown"
                 )
                 .foregroundColor(.gray)
                 .font(.system(size: 14))
 
                 Text(
-                    peopleViewModel.userCache[id]?.tgUsername
+                    peopleViewModel.userCache[id]?.username
                     ?? ""
                 )
                 .font(.system(size: 17, weight: .semibold))
@@ -222,7 +222,7 @@ struct ProfileSheetView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(
-                            peopleViewModel.userCache[id]?.tgName
+                            peopleViewModel.userCache[id]?.name
                             ?? "Unknown"
                         )
                         .font(.title)
@@ -247,7 +247,7 @@ struct ProfileSheetView: View {
                     }
 
                     if let username =
-                        peopleViewModel.userCache[id]?.tgUsername {
+                        peopleViewModel.userCache[id]?.username {
                         CopyUsernameField(username: username)
                     }
                 }
@@ -274,7 +274,7 @@ struct ProfileSheetView: View {
             )
         }
         .task(id: id) {
-            await peopleViewModel.refreshUser(tgID: id)
+            await peopleViewModel.refreshUser(telescanID: id)
         }
     }
 }

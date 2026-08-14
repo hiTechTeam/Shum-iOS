@@ -1,15 +1,16 @@
+import Foundation
+
 struct ProfileInfo: Codable, Identifiable {
-    let id: String // telegram ID
-    let tgName: String?
-    let tgusername: String
-    let photoS3URL: String?
-    
-    var cachedLocalPhotoPath: String? // ???: May be it not need
+    let id: UUID
+    let name: String?
+    let username: String
+    let photoURL: String?
+    var cachedLocalPhotoPath: String?
 }
 
 struct NearbyUser: Identifiable {
-    let id: String          // TGID как строка, ключ словаря
-    let tgName: String?
-    let tgUsername: String?
+    let id: UUID
+    let name: String?
+    let username: String?
     let photoURL: String?
 }
