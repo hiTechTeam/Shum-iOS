@@ -54,142 +54,44 @@ struct FetchServiceTests {
         #expect(await !viewModel.confirmCode())
     }
 
-    @Test("Logout-all status uses the authenticated confirmation endpoint")
-    func logoutAllStatusRequest() async throws {
-        let store = MemorySecureStore()
-        let sessions = AuthSessionStore(store: store)
-        try sessions.save(
-            TokenResponse(
-                accessToken: "access-token",
-                refreshToken: "refresh-token-value-that-is-long-enough",
-                tokenType: "bearer",
-                expiresIn: 900
-            )
+    @Test("Session validation refreshes the current profile")
+    @MainActor
+    func activeSessionReturnsFreshProfile() async {
+        let profile = TelescanProfileResponse(
+            telescanId: UUID(),
+            name: "Fresh Ada",
+            username: "fresh_ada",
+            photoUrl: "https://cdn.example/fresh.jpg"
         )
-        let confirmationID = UUID()
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [MockURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        MockURLProtocol.handler = { request in
-            #expect(
-                request.url?.path
-                    == "/api/v1/auth/logout-all/requests/"
-                        + confirmationID.uuidString.lowercased()
-            )
-            #expect(
-                request.value(forHTTPHeaderField: "Authorization")
-                    == "Bearer access-token"
-            )
-            return (
-                200,
-                Data(
-                    """
-                    {"confirmationId":"\(confirmationID.uuidString)","status":"pending"}
-                    """.utf8
-                )
-            )
+        let validator = SessionValidator { profile }
+
+        let result = await validator.validate()
+
+        #expect(result == .active(profile))
+    }
+
+    @Test("Revoked and deleted sessions are invalid")
+    @MainActor
+    func revokedAndDeletedSessionsAreInvalid() async {
+        let revoked = SessionValidator {
+            throw APIClientError.unauthenticated
         }
-        let client = APIClient(
-            baseURL: URL(string: "https://api.example")!,
-            session: session,
-            sessionStore: sessions
-        )
+        let deleted = SessionValidator {
+            throw APIClientError.httpStatus(404)
+        }
 
-        let result = try await client.logoutAllStatus(
-            confirmationID: confirmationID
-        )
-
-        #expect(result.confirmationId == confirmationID)
-        #expect(result.status == .pending)
+        #expect(await revoked.validate() == .invalid)
+        #expect(await deleted.validate() == .invalid)
     }
 
-    @Test("A revoked session resolves logout-all as confirmed")
+    @Test("Temporary session validation failure keeps the local session")
     @MainActor
-    func revokedSessionCompletesLogoutAll() async {
-        let poller = LogoutAllStatusPoller(
-            retryDelay: .zero,
-            statusAction: { _ in
-                throw APIClientError.unauthenticated
-            }
-        )
+    func unavailableSessionValidationIsNonDestructive() async {
+        let validator = SessionValidator {
+            throw APIClientError.httpStatus(503)
+        }
 
-        let result = await poller.wait(for: UUID())
-
-        #expect(result == .confirmed)
-    }
-
-    @Test("A missing status endpoint falls back to the revoked session")
-    @MainActor
-    func missingLogoutStatusEndpointUsesSessionProbe() async {
-        var probeCount = 0
-        let poller = LogoutAllStatusPoller(
-            retryDelay: .zero,
-            maximumAttempts: 3,
-            sessionProbeAction: {
-                probeCount += 1
-                if probeCount == 2 {
-                    throw APIClientError.unauthenticated
-                }
-            },
-            statusAction: { _ in
-                throw APIClientError.httpStatus(404)
-            }
-        )
-
-        let result = await poller.wait(for: UUID())
-
-        #expect(result == .confirmed)
-        #expect(probeCount == 2)
-    }
-
-    @Test("A missing status endpoint does not sign out an active session")
-    @MainActor
-    func missingLogoutStatusEndpointPreservesActiveSession() async {
-        var probeCount = 0
-        let poller = LogoutAllStatusPoller(
-            retryDelay: .zero,
-            maximumAttempts: 3,
-            sessionProbeAction: {
-                probeCount += 1
-            },
-            statusAction: { _ in
-                throw APIClientError.httpStatus(404)
-            }
-        )
-
-        let result = await poller.wait(for: UUID())
-
-        #expect(result == .expired)
-        #expect(probeCount == 2)
-    }
-
-    @Test(
-        "Logout-all polling preserves cancelled and expired sessions",
-        arguments: [
-            (ConfirmationStatus.cancelled, LogoutAllResolution.cancelled),
-            (ConfirmationStatus.expired, LogoutAllResolution.expired),
-        ]
-    )
-    @MainActor
-    func terminalLogoutAllStatusDoesNotConfirm(
-        status: ConfirmationStatus,
-        expected: LogoutAllResolution
-    ) async {
-        let confirmationID = UUID()
-        let poller = LogoutAllStatusPoller(
-            retryDelay: .zero,
-            statusAction: { requestedID in
-                #expect(requestedID == confirmationID)
-                return ConfirmationRequestResponse(
-                    confirmationId: confirmationID,
-                    status: status
-                )
-            }
-        )
-
-        let result = await poller.wait(for: confirmationID)
-
-        #expect(result == expected)
+        #expect(await validator.validate() == .unavailable)
     }
 
     @Test("Installation device ID is stable and not hardware-derived")
@@ -253,6 +155,50 @@ struct FetchServiceTests {
         #expect(profile.telescanId == profileID)
         #expect(sessions.accessToken == "new-access-token")
         #expect(calls == 3)
+    }
+
+    @Test("A final 401 invalidates the refreshed session")
+    func finalUnauthorizedResponseClearsTokens() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        try sessions.save(
+            TokenResponse(
+                accessToken: "old-access-token",
+                refreshToken: "old-refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/api/v1/auth/refresh" {
+                return (
+                    200,
+                    Data(
+                        """
+                        {"accessToken":"new-access-token","refreshToken":"new-refresh-token-value-that-is-long-enough","tokenType":"bearer","expiresIn":900}
+                        """.utf8
+                    )
+                )
+            }
+            return (401, Data())
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        do {
+            let _: TelescanProfileResponse = try await client.currentProfile()
+            Issue.record("Expected an unauthenticated error")
+        } catch APIClientError.unauthenticated {
+            #expect(!sessions.hasTokens)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
     }
 
     @Test("Concurrent 401 responses share one refresh rotation")

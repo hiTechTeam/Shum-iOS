@@ -56,18 +56,16 @@
 "galleryPhoto" = "Choose from Gallery";
 "deletePhoto" = "Delete Photo";
 "shareUtg" = "Share your profile";
-"telescanTelegramExtension" = "Telescan is a Telegram extension";
-"poweredByBluetooth" = "Powered by Bluetooth";
+"creatorCredit" = "from Ruslan Chukavin";
 "logout" = "Sign out";
-"logoutTitle" = "Sign out of Telescan";
+"accountActionsTitle" = "Account actions";
 "logoutCurrent" = "Sign out on this device";
-"logoutAll" = "Sign out on all devices";
-"logoutAllSent" = "Confirm in Telegram";
-"logoutAllSentMessage" = "Confirm signing out on all devices in the Telescan Telegram bot. All sessions remain active until you confirm.";
+"logoutCurrentTitle" = "Sign out on this device?";
+"logoutCurrentMessage" = "You will need a new Telegram code to sign in again on this device.";
 "logoutFailed" = "Couldn't sign out. Please try again.";
 "deleteAccount" = "Delete account";
 "deleteAccountTitle" = "Delete account?";
-"deleteAccountMessage" = "Your Telescan profile, photo, and local app data will be permanently deleted. This action cannot be undone.";
+"deleteAccountMessage" = "Your Telescan profile, photo, and sessions on every device will be permanently deleted. Your Telegram account will not be affected.";
 "deleteAccountFailed" = "Account wasn't deleted";
 "deleteAccountFailedMessage" = "The server couldn't delete your account. Your profile data is unchanged. Please try again later.";
 
@@ -89,5 +87,6 @@
 "info_ideal_events_desc" = "Perfect for conferences, business events, professional meetups, networking, dating and other meets.";
 "copyUsername" = "Copy and past username in Telegram search field";
 "licenseMIT" = "License: MIT";
-"openSourceText" = "This is an open-source project developed in the open and driven by the community. If you’re interested in contributing, shaping the architecture, improving features, or sharing your ideas, you’re very welcome to join the development. Any contribution from feedback to pull requests, is appreciated and helps the project grow.";
+"openSourceText" = "This project is open source.";
+"rulesAndPrivacy" = "Rules and Privacy";
 "version" = "Version";

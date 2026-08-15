@@ -34,15 +34,23 @@ templates in source control.
 5. Protected requests automatically retry once after a coordinated token
    refresh; concurrent 401 responses share one refresh operation.
 
-Signing out on the current device revokes only its session and clears local
-tokens and caches. Signing out on every device requires confirmation through
-the Telegram bot. While confirmation is pending, the app polls its status and
-falls back to probing the authenticated session when connected to an older API
-deployment without the status endpoint. Account deletion is a separate
-authenticated operation that removes the server account, photos, sessions,
-link codes, confirmation requests, and local session and profile data. The
-installation `device_id` remains in Keychain as an unlinked per-installation
-identifier for a later registration.
+The profile exposes one system account-actions alert with **Sign out on this
+device**, **Delete account**, and **Cancel**. Sign-out and deletion each require
+a separate destructive confirmation. Current-device sign-out revokes only its
+session and clears local tokens and caches. Account deletion removes the server
+account, photos, every device session, link codes, confirmation requests, and
+local session and profile data. The installation `device_id` remains in
+Keychain as an unlinked per-installation identifier for a later registration.
+
+At launch and whenever the app returns to the foreground, it loads
+`GET /api/v1/users/me`. A valid response refreshes the locally displayed
+Telegram profile. A revoked or deleted account clears the local session and
+returns to registration; a temporary network failure leaves the session intact.
+Starting a new link clears local image and URL caches before applying the fresh
+Telegram profile returned by the API.
+
+The in-app information screen links directly to the current Terms of Service
+and Privacy Policy.
 
 ## BLE identity
 
@@ -74,8 +82,8 @@ The clear link code and Telegram ID are not persisted by the current app.
 ## Verification
 
 Unit tests cover BLE manager state, automatic link-code success/error UI state,
-logout-all confirmation monitoring, stable installation identity, token refresh
-and retry, and single-flight concurrent refresh. Example commands:
+session validation, stable installation identity, token refresh and retry, and
+single-flight concurrent refresh. Example commands:
 
 ```sh
 xcodebuild test \

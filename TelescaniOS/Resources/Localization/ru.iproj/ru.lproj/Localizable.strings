@@ -56,18 +56,16 @@
 "galleryPhoto" = "Выбрать из галереи";
 "deletePhoto" = "Удалить фото";
 "shareUtg" = "Поделиться профилем";
-"telescanTelegramExtension" = "Telescan — расширение для Telegram";
-"poweredByBluetooth" = "Powered by Bluetooth";
+"creatorCredit" = "from Ruslan Chukavin";
 "logout" = "Выйти";
-"logoutTitle" = "Выйти из Telescan";
+"accountActionsTitle" = "Действия с аккаунтом";
 "logoutCurrent" = "Выйти на этом устройстве";
-"logoutAll" = "Выйти на всех устройствах";
-"logoutAllSent" = "Подтвердите выход в Telegram-боте";
-"logoutAllSentMessage" = "До подтверждения в Telegram-боте все сессии останутся активными.";
+"logoutCurrentTitle" = "Выйти на этом устройстве?";
+"logoutCurrentMessage" = "Для повторного входа на этом устройстве потребуется новый код из Telegram.";
 "logoutFailed" = "Не удалось выполнить выход. Попробуйте ещё раз.";
 "deleteAccount" = "Удалить аккаунт";
 "deleteAccountTitle" = "Удалить аккаунт?";
-"deleteAccountMessage" = "Ваш профиль Telescan, фотография и локальные данные приложения будут удалены без возможности восстановления.";
+"deleteAccountMessage" = "Ваш профиль Telescan, фотография и сессии на всех устройствах будут удалены без возможности восстановления. Аккаунт Telegram не изменится.";
 "deleteAccountFailed" = "Аккаунт не удалён";
 "deleteAccountFailedMessage" = "Сервер не смог удалить аккаунт. Данные профиля не изменены. Попробуйте ещё раз позже.";
 
@@ -88,5 +86,6 @@
 "info_ideal_events_desc" = "Подходит для конференций, бизнес-встреч, профессиональных мероприятий, нетворкинга, дейтинга и остальных встреч.";
 "copyUsername" = "Скопируйте и вставьте в поле поиска Telegram";
 "licenseMIT" = "Лицензия: MIT";
-"openSourceText" = "Проект развивается как open-source, и мы открыты к сообществу. Если вам интересно поучаствовать в создании продукта, повлиять на архитектуру и функциональность или предложить свои идеи, вы можете свободно подключиться к разработке. Любой вклад, от замечаний до pull request’ов, приветствуется и влияет на развитие проекта.";
+"openSourceText" = "Проект открытый.";
+"rulesAndPrivacy" = "Правила и политика";
 "version" = "Версия";

@@ -69,7 +69,8 @@ final class CodeViewModel: ObservableObject {
                 let response = try await linkAction(normalizedCode)
                 guard !Task.isCancelled,
                       tmpCode.uppercased() == normalizedCode else { return }
-                apply(response.profile)
+                ProfileCache.clear()
+                applyProfile(response.profile)
                 codeStatus = true
                 feedback.notificationOccurred(.success)
             } catch is CancellationError {
@@ -101,15 +102,6 @@ final class CodeViewModel: ObservableObject {
         tmpCode = ""
     }
 
-    func refreshProfile() async {
-        guard AuthSessionStore.shared.hasTokens else { return }
-        isLoading = true
-        defer { isLoading = false }
-        if let profile = try? await FetchService.fetch.currentProfile() {
-            apply(profile)
-        }
-    }
-
     func restoreLocalProfile() {
         if let value = UserDefaults.standard.string(
             forKey: Keys.telescanIDKey.rawValue
@@ -136,7 +128,7 @@ final class CodeViewModel: ObservableObject {
         tmpCode = ""
     }
 
-    private func apply(_ profile: TelescanProfileResponse) {
+    func applyProfile(_ profile: TelescanProfileResponse) {
         telescanID = profile.telescanId
         tgName = profile.name
         tgUsername = profile.username.map { $0.hasPrefix("@") ? $0 : "@" + $0 }

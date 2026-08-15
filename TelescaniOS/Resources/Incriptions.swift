@@ -180,19 +180,14 @@ struct Inc {
         // EN: Share your profile
         // RU: Поделиться профилем
         
-        static let telescanTelegramExtension: String = "telescanTelegramExtension"
-        // EN: Telescan is a Telegram extension
-        // RU: Telescan — расширение для Telegram
-
-        static let poweredByBluetooth: String = "poweredByBluetooth"
-        // EN/RU: Powered by Bluetooth
+        static let creatorCredit: String = "creatorCredit"
+        // EN/RU: from Ruslan Chukavin
 
         static let logout: String = "logout"
-        static let logoutTitle: String = "logoutTitle"
+        static let accountActionsTitle: String = "accountActionsTitle"
         static let logoutCurrent: String = "logoutCurrent"
-        static let logoutAll: String = "logoutAll"
-        static let logoutAllSent: String = "logoutAllSent"
-        static let logoutAllSentMessage: String = "logoutAllSentMessage"
+        static let logoutCurrentTitle: String = "logoutCurrentTitle"
+        static let logoutCurrentMessage: String = "logoutCurrentMessage"
         static let logoutFailed: String = "logoutFailed"
 
         static let deleteAccount: String = "deleteAccount"
@@ -250,8 +245,12 @@ struct Inc {
         // RU: Лицензия: MIT
         
         static let openSourceText = "openSourceText"
-        // EN: This is an open-source project developed in the open and driven by the community. If you’re interested in contributing, shaping the architecture, improving features, or sharing     your ideas, you’re very welcome to join the development. Any contribution — from feedback to pull requests, is appreciated and helps the project grow.
-        // RU: Проект развивается как open-source, и мы открыты к сообществу. Если вам интересно поучаствовать в создании продукта, повлиять на архитектуру и функциональность или предложить       свои идеи, вы можете свободно подключиться к разработке. Любой вклад, от замечаний до pull request’ов, приветствуется и влияет на развитие проекта.
+        // EN: This project is open source.
+        // RU: Проект открытый.
+
+        static let rulesAndPrivacy = "rulesAndPrivacy"
+        // EN: Rules and Privacy
+        // RU: Правила и политика
         
         static let currentVersion = " 1.0.0"
     }
@@ -286,7 +285,6 @@ enum Keys: String {
     case photoS3URLKey = "photoS3Url"
     case isScaning = "isScaning"
     case isReg = "isReg"
-    case pendingLogoutAllConfirmation = "pendingLogoutAllConfirmation"
 }
 
 enum HTTPStatus: Int {

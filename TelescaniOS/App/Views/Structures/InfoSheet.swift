@@ -15,6 +15,8 @@ struct InfoSheetView: View {
     
     private let githubURL = URL(string: "https://github.com/orgs/hiTechTeam/repositories")!
     private let githubURLString = "https://github.com/orgs/hiTechTeam/repositories"
+    private let privacyPolicyURL = URL(string: Links.privacyPolicy)!
+    private let termsOfServiceURL = URL(string: Links.termsOfService)!
     
     // MARK: - Components
     private var headerSection: some View {
@@ -77,10 +79,30 @@ struct InfoSheetView: View {
                 .frame(width: boxWidth, height: boxHeight, alignment: .center)
         }
     }
+
+    private var legalSection: some View {
+        Section(Inc.Info.rulesAndPrivacy.localized) {
+            Link(destination: termsOfServiceURL) {
+                Label(
+                    Inc.Onboarding.termsOfService.localized,
+                    systemImage: "doc.text"
+                )
+            }
+
+            Link(destination: privacyPolicyURL) {
+                Label(
+                    Inc.Onboarding.privacyPolicy.localized,
+                    systemImage: "hand.raised"
+                )
+            }
+        }
+    }
     
     private var listContent: some View {
         List {
             Section { headerSection }
+
+            legalSection
             
             Section(
                 header: Text(Inc.Info.openSourceText.localized)

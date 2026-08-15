@@ -6,7 +6,7 @@ struct ProfileDataView: View {
     @ObservedObject var authCodeViewModel: CodeViewModel
     @StateObject private var photoVM = ProfilePhotoViewModel()
     @State private var showLogoutOptions = false
-    @State private var showLogoutAllSent = false
+    @State private var showLogoutConfirmation = false
     @State private var showLogoutError = false
     @State private var showDeleteConfirmation = false
     @State private var showDeleteError = false
@@ -36,17 +36,12 @@ struct ProfileDataView: View {
     }
 
     private var productDescription: some View {
-        VStack(spacing: 4) {
-            Text(Inc.Profile.telescanTelegramExtension.localized)
-                .font(.system(size: 12))
-            Text(Inc.Profile.poweredByBluetooth.localized)
-                .font(.system(size: 11))
-                .opacity(0.7)
-        }
-        .foregroundColor(.gray)
-        .frame(width: 280)
-        .multilineTextAlignment(.center)
-        .padding(.top, 40)
+        Text(Inc.Profile.creatorCredit.localized)
+            .font(.system(size: 12))
+            .foregroundColor(.gray)
+            .frame(width: 280)
+            .multilineTextAlignment(.center)
+            .padding(.top, 40)
     }
 
     private var logoutButton: some View {
@@ -70,25 +65,6 @@ struct ProfileDataView: View {
         .buttonStyle(.plain)
         .disabled(isWorking)
         .padding(.horizontal, 16)
-    }
-
-    private var deleteAccountButton: some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            showDeleteConfirmation = true
-        } label: {
-            Text(Inc.Profile.deleteAccount.localized)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.red)
-                .frame(maxWidth: .infinity)
-                .frame(height: 48)
-                .background(actionBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 13))
-        }
-        .buttonStyle(.plain)
-        .disabled(isWorking)
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
         .padding(.bottom, 24)
     }
 
@@ -102,10 +78,9 @@ struct ProfileDataView: View {
                 profileSection
                 productDescription
                 logoutButton.padding(.top, 40)
-                deleteAccountButton
             }
         }
-        .refreshable { await authCodeViewModel.refreshProfile() }
+        .refreshable { await coordinator.refreshSession() }
     }
 
     private func logoutCurrent() {
@@ -113,20 +88,6 @@ struct ProfileDataView: View {
         Task {
             do {
                 try await coordinator.logoutCurrentSession()
-            } catch {
-                isWorking = false
-                showLogoutError = true
-            }
-        }
-    }
-
-    private func logoutAll() {
-        isWorking = true
-        Task {
-            do {
-                try await coordinator.requestLogoutAll()
-                isWorking = false
-                showLogoutAllSent = true
             } catch {
                 isWorking = false
                 showLogoutError = true
@@ -155,17 +116,33 @@ struct ProfileDataView: View {
             photoVM.loadPhotoFromURL(value)
         }
         .alert(
-            Inc.Profile.logoutTitle.localized,
+            Inc.Profile.accountActionsTitle.localized,
             isPresented: $showLogoutOptions
         ) {
-            Button(Inc.Profile.logoutCurrent.localized, action: logoutCurrent)
-            Button(Inc.Profile.logoutAll.localized, role: .destructive, action: logoutAll)
+            Button(Inc.Profile.logoutCurrent.localized, role: .destructive) {
+                DispatchQueue.main.async {
+                    showLogoutConfirmation = true
+                }
+            }
+            Button(Inc.Profile.deleteAccount.localized, role: .destructive) {
+                DispatchQueue.main.async {
+                    showDeleteConfirmation = true
+                }
+            }
             Button(Inc.Common.cancel.localized, role: .cancel) { }
         }
-        .alert(Inc.Profile.logoutAllSent.localized, isPresented: $showLogoutAllSent) {
-            Button(Inc.Common.okey.localized, role: .cancel) { }
+        .alert(
+            Inc.Profile.logoutCurrentTitle.localized,
+            isPresented: $showLogoutConfirmation
+        ) {
+            Button(Inc.Common.cancel.localized, role: .cancel) { }
+            Button(
+                Inc.Profile.logoutCurrent.localized,
+                role: .destructive,
+                action: logoutCurrent
+            )
         } message: {
-            Text(Inc.Profile.logoutAllSentMessage.localized)
+            Text(Inc.Profile.logoutCurrentMessage.localized)
         }
         .alert(Inc.Profile.logoutFailed.localized, isPresented: $showLogoutError) {
             Button(Inc.Common.okey.localized, role: .cancel) { }

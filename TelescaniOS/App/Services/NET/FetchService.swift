@@ -33,16 +33,6 @@ final class FetchService {
         try await client.logoutCurrentSession()
     }
 
-    func requestLogoutAll() async throws -> ConfirmationRequestResponse {
-        try await client.requestLogoutAll()
-    }
-
-    func logoutAllStatus(
-        confirmationID: UUID
-    ) async throws -> ConfirmationRequestResponse {
-        try await client.logoutAllStatus(confirmationID: confirmationID)
-    }
-
     func deleteAccount() async throws {
         try await client.deleteAccount()
     }

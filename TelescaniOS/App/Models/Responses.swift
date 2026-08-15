@@ -18,15 +18,3 @@ struct LinkDeviceResponse: Codable, Equatable {
     let tokens: TokenResponse
     let profile: TelescanProfileResponse
 }
-
-enum ConfirmationStatus: String, Codable, Equatable {
-    case pending
-    case confirmed
-    case cancelled
-    case expired
-}
-
-struct ConfirmationRequestResponse: Codable, Equatable {
-    let confirmationId: UUID
-    let status: ConfirmationStatus
-}

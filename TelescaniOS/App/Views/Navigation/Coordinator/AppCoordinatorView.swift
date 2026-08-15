@@ -15,7 +15,9 @@ struct AppCoordinatorView: View {
         .environmentObject(coordinator)
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                coordinator.resumePendingLogoutAllIfNeeded()
+                Task {
+                    await coordinator.refreshSession()
+                }
             }
         }
     }
