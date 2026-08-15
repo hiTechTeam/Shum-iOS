@@ -25,6 +25,6 @@ struct People: View {
             }
         }
         .tag(SelectedTab.near)
-        .badge(peopleViewModel.devices.count)
+        .badge(peopleViewModel.visibleUsers.count)
     }
 }
