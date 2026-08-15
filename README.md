@@ -111,7 +111,9 @@ xcodebuild build \
 
 The `.app` bundle must not contain `.gitignore`, `.swiftlint.yml`,
 `project.yml`, or local `.xcconfig` files. Xcode `xcuserdata` is ignored and is
-not part of the repository.
+not part of the repository. The app-owned `PrivacyInfo.xcprivacy` declares
+`UserDefaults` access under Apple's `CA92.1` required reason; dependency privacy
+manifests remain bundled separately with their frameworks.
 
 Architecture, privacy, security, current limitations, and the roadmap live in
 the [Telescan documentation](https://github.com/hiTechTeam/Telescan-info).

@@ -3,8 +3,10 @@ import SwiftUI
 struct ProfileDataView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openURL) private var openURL
     @ObservedObject var authCodeViewModel: CodeViewModel
     @StateObject private var photoVM = ProfilePhotoViewModel()
+    @State private var showDeveloperLinks = false
     @State private var showLogoutOptions = false
     @State private var showLogoutConfirmation = false
     @State private var showLogoutError = false
@@ -36,12 +38,18 @@ struct ProfileDataView: View {
     }
 
     private var productDescription: some View {
-        Text(Inc.Profile.creatorCredit.localized)
-            .font(.system(size: 12))
-            .foregroundColor(.gray)
-            .frame(width: 280)
-            .multilineTextAlignment(.center)
-            .padding(.top, 40)
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            showDeveloperLinks = true
+        } label: {
+            Text(Inc.Profile.creatorCredit.localized)
+                .font(.system(size: 12))
+                .foregroundStyle(.blue)
+                .frame(width: 280)
+                .multilineTextAlignment(.center)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 40)
     }
 
     private var logoutButton: some View {
@@ -107,6 +115,11 @@ struct ProfileDataView: View {
         }
     }
 
+    private func openDeveloperLink(_ address: String) {
+        guard let url = URL(string: address) else { return }
+        openURL(url)
+    }
+
     var body: some View {
         ZStack {
             Color.tsBackground.ignoresSafeArea()
@@ -114,6 +127,20 @@ struct ProfileDataView: View {
         }
         .onChange(of: authCodeViewModel.photoS3URL) { _, value in
             photoVM.loadPhotoFromURL(value)
+        }
+        .alert(
+            Inc.Profile.developerLinksTitle.localized,
+            isPresented: $showDeveloperLinks
+        ) {
+            Button("GitHub") {
+                openDeveloperLink("https://github.com/r66cha")
+            }
+            Button(Inc.Profile.telegramChannel.localized) {
+                openDeveloperLink("https://t.me/r_chukavin")
+            }
+            Button(Inc.Common.cancel.localized, role: .cancel) { }
+        } message: {
+            Text(Inc.Profile.developerLinksMessage.localized)
         }
         .alert(
             Inc.Profile.accountActionsTitle.localized,

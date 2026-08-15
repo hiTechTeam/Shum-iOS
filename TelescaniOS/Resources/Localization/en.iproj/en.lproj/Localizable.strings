@@ -57,6 +57,9 @@
 "deletePhoto" = "Delete Photo";
 "shareUtg" = "Share your profile";
 "creatorCredit" = "from Ruslan Chukavin";
+"developerLinksTitle" = "App developer";
+"developerLinksMessage" = "Ruslan Chukavin is the developer of Telescan. Where would you like to go?";
+"telegramChannel" = "Telegram channel";
 "logout" = "Sign out";
 "accountActionsTitle" = "Account actions";
 "logoutCurrent" = "Sign out on this device";

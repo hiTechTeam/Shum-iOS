@@ -183,6 +183,10 @@ struct Inc {
         static let creatorCredit: String = "creatorCredit"
         // EN/RU: from Ruslan Chukavin
 
+        static let developerLinksTitle: String = "developerLinksTitle"
+        static let developerLinksMessage: String = "developerLinksMessage"
+        static let telegramChannel: String = "telegramChannel"
+
         static let logout: String = "logout"
         static let accountActionsTitle: String = "accountActionsTitle"
         static let logoutCurrent: String = "logoutCurrent"
