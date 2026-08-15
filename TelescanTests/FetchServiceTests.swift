@@ -77,7 +77,7 @@ struct FetchServiceTests {
             throw APIClientError.unauthenticated
         }
         let deleted = SessionValidator {
-            throw APIClientError.httpStatus(404)
+            throw APIClientError.accountNotFound
         }
 
         #expect(await revoked.validate() == .invalid)
@@ -201,6 +201,186 @@ struct FetchServiceTests {
         }
     }
 
+    @Test("A transient refresh failure preserves the local session")
+    func transientRefreshFailureKeepsTokens() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        try sessions.save(
+            TokenResponse(
+                accessToken: "old-access-token",
+                refreshToken: "old-refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MockURLProtocol.handler = { request in
+            request.url?.path == "/api/v1/auth/refresh"
+                ? (503, Data())
+                : (401, Data())
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        do {
+            let _: TelescanProfileResponse = try await client.currentProfile()
+            Issue.record("Expected a temporary HTTP error")
+        } catch APIClientError.httpStatus(let status) {
+            #expect(status == 503)
+            #expect(sessions.hasTokens)
+            #expect(sessions.accessToken == "old-access-token")
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test("A missing refresh route is not mistaken for a deleted account")
+    func refreshRouteNotFoundKeepsTokens() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        try sessions.save(
+            TokenResponse(
+                accessToken: "old-access-token",
+                refreshToken: "old-refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MockURLProtocol.handler = { request in
+            request.url?.path == "/api/v1/auth/refresh"
+                ? (404, Data())
+                : (401, Data())
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        do {
+            let _: TelescanProfileResponse = try await client.currentProfile()
+            Issue.record("Expected a refresh route error")
+        } catch APIClientError.httpStatus(let status) {
+            #expect(status == 404)
+            #expect(sessions.hasTokens)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test("A missing current profile is classified as a deleted account")
+    func missingCurrentProfileIsDefinitive() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        try sessions.save(
+            TokenResponse(
+                accessToken: "access-token",
+                refreshToken: "refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MockURLProtocol.handler = { _ in (404, Data()) }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        do {
+            let _: TelescanProfileResponse = try await client.currentProfile()
+            Issue.record("Expected a deleted-account error")
+        } catch APIClientError.accountNotFound {
+            #expect(sessions.hasTokens)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test("A nearby row appears only after a complete matching profile loads")
+    @MainActor
+    func nearbyProfileIsResolvedBeforeDisplay() async throws {
+        let manager = FakeBLEManager()
+        let profileID = UUID()
+        let viewModel = PeopleViewModel(bleManager: manager) { requestedID in
+            try await Task.sleep(for: .milliseconds(100))
+            return TelescanProfileResponse(
+                telescanId: requestedID,
+                name: nil,
+                username: "nearby_user",
+                photoUrl: nil
+            )
+        }
+
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -55)
+        await Task.yield()
+        #expect(viewModel.visibleUsers.isEmpty)
+
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(viewModel.visibleUsers.count == 1)
+        #expect(viewModel.visibleUsers.first?.id == profileID)
+        #expect(viewModel.visibleUsers.first?.name == "@nearby_user")
+        #expect(viewModel.visibleUsers.first?.username == "@nearby_user")
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("An incomplete nearby profile never produces an Unknown row")
+    @MainActor
+    func incompleteNearbyProfileStaysHidden() async throws {
+        let manager = FakeBLEManager()
+        let profileID = UUID()
+        let viewModel = PeopleViewModel(bleManager: manager) { requestedID in
+            TelescanProfileResponse(
+                telescanId: requestedID,
+                name: "No username",
+                username: nil,
+                photoUrl: nil
+            )
+        }
+
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -60)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(viewModel.visibleUsers.isEmpty)
+        #expect(viewModel.userCache.isEmpty)
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("Losing a BLE candidate cancels profile publication")
+    @MainActor
+    func lostCandidateCannotAppearLater() async throws {
+        let manager = FakeBLEManager()
+        let profileID = UUID()
+        let viewModel = PeopleViewModel(bleManager: manager) { requestedID in
+            try await Task.sleep(for: .milliseconds(150))
+            return TelescanProfileResponse(
+                telescanId: requestedID,
+                name: "Nearby",
+                username: "nearby",
+                photoUrl: nil
+            )
+        }
+
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -60)
+        await Task.yield()
+        manager.emitLoss(id: profileID.uuidString)
+        try await Task.sleep(for: .milliseconds(200))
+
+        #expect(viewModel.visibleUsers.isEmpty)
+        #expect(viewModel.devices.isEmpty)
+        viewModel.stopAllBluetoothActivity()
+    }
+
     @Test("Concurrent 401 responses share one refresh rotation")
     func concurrentRequestsUseSingleRefresh() async throws {
         let store = MemorySecureStore()
@@ -322,5 +502,29 @@ private final class RequestCounters: @unchecked Sendable {
 
     func recordOldAccess() {
         lock.withLock { oldAccessCount += 1 }
+    }
+}
+
+@MainActor
+private final class FakeBLEManager: BLEManagerProtocol {
+    weak var delegate: BLEManagerDelegate?
+    var isBluetoothAvailable = true
+
+    func startScanning() { }
+    func restartScanning() { }
+    func stopScanning() { }
+    func startAdvertising(id: String) { }
+    func restartAdvertising(id: String) { }
+    func stopAdvertising() { }
+    func reconcileDiscoveryState() { }
+    func setApplicationActive(_ isActive: Bool) { }
+    func reset() { }
+
+    func emitDiscovery(id: String, rssi: Int) {
+        delegate?.didDiscoverDevice(id: id, rssi: rssi)
+    }
+
+    func emitLoss(id: String) {
+        delegate?.didLoseDevice(id: id)
     }
 }

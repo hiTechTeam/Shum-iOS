@@ -3,6 +3,7 @@ import Foundation
 enum APIClientError: Error {
     case invalidURL
     case unauthenticated
+    case accountNotFound
     case invalidResponse
     case httpStatus(Int)
 }
@@ -121,6 +122,11 @@ actor APIClient {
             throw APIClientError.unauthenticated
         }
         guard (200...299).contains(http.statusCode) else {
+            if http.statusCode == 404,
+               request.httpMethod == "GET",
+               request.url?.path == "/api/v1/users/me" {
+                throw APIClientError.accountNotFound
+            }
             throw APIClientError.httpStatus(http.statusCode)
         }
         return data
@@ -147,10 +153,15 @@ actor APIClient {
             body: RefreshTokenRequest(refreshToken: refreshToken)
         )
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse,
-              (200...299).contains(http.statusCode) else {
+        guard let http = response as? HTTPURLResponse else {
+            throw APIClientError.invalidResponse
+        }
+        if http.statusCode == 401 {
             sessionStore.clearTokens()
             throw APIClientError.unauthenticated
+        }
+        guard (200...299).contains(http.statusCode) else {
+            throw APIClientError.httpStatus(http.statusCode)
         }
         try sessionStore.save(try decoder.decode(TokenResponse.self, from: data))
     }

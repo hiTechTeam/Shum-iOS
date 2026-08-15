@@ -24,7 +24,7 @@ struct SessionValidator {
             return .active(try await profileAction())
         } catch APIClientError.unauthenticated {
             return .invalid
-        } catch APIClientError.httpStatus(let status) where status == 404 {
+        } catch APIClientError.accountNotFound {
             return .invalid
         } catch is CancellationError {
             return .unavailable

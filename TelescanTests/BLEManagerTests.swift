@@ -45,6 +45,23 @@ struct BLEManagerTests {
         #expect(available == true || available == false)
     }
 
+    @Test("A telescan UUID uses a lossless 16-byte BLE representation.")
+    func identityUsesCompactBinaryRepresentation() throws {
+        let identity = UUID()
+        let data = try #require(BLEManager.encodedIdentity(identity))
+
+        #expect(data.count == 16)
+        #expect(BLEManager.decodedIdentity(data) == identity)
+    }
+
+    @Test("A string UUID from an older app version remains readable.")
+    func legacyStringIdentityRemainsCompatible() {
+        let identity = UUID()
+        let data = Data(identity.uuidString.utf8)
+
+        #expect(BLEManager.decodedIdentity(data) == identity)
+    }
+
     @Test("reset() clean active operations and allows you to start over.")
     func resetClearsActiveOperations() async throws {
         let manager = BLEManager.shared

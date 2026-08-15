@@ -22,6 +22,11 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             || (locallyRegistered && AuthSessionStore.shared.hasTokens)
         isScaning = UserDefaults.standard.bool(forKey: scanningKey)
         authCodeViewModel.restoreLocalProfile()
+        if locallyRegistered,
+           !AuthSessionStore.shared.hasTokens,
+           !AppConfig.skipRegistration {
+            clearLocalSession()
+        }
     }
 
     func start() -> AnyView {
@@ -31,7 +36,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
                 .environmentObject(authCodeViewModel)
                 .environmentObject(peopleViewModel)
                 .onAppear {
-                    self.startScanningIfNeeded()
+                    self.updateApplicationState(isActive: true)
                     Task {
                         await self.refreshSession()
                     }
@@ -42,6 +47,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     func completedRegistration() {
         isRegistered = true
         UserDefaults.standard.set(true, forKey: regKey)
+        updateApplicationState(isActive: true)
     }
 
     func logoutCurrentSession() async throws {
@@ -72,6 +78,11 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         switch await sessionValidator.validate() {
         case .active(let profile):
             authCodeViewModel.applyProfile(profile)
+            if isScaning {
+                peopleViewModel.startAdvertising(
+                    telescanID: profile.telescanId
+                )
+            }
         case .invalid:
             clearLocalSession()
         case .unavailable:
@@ -92,11 +103,15 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         isRegistered = false
     }
 
-    private func startScanningIfNeeded() {
-        guard isRegistered, isScaning else { return }
+    func updateApplicationState(isActive: Bool) {
+        guard isRegistered else {
+            peopleViewModel.stopAllBluetoothActivity()
+            return
+        }
+        peopleViewModel.reconcileBluetoothState(isActive: isActive)
+        guard isActive, isScaning else { return }
         peopleViewModel.toggleScanning(true)
-        if let value = UserDefaults.standard.string(forKey: Keys.telescanIDKey.rawValue),
-           let id = UUID(uuidString: value) {
+        if let id = authCodeViewModel.telescanID {
             peopleViewModel.startAdvertising(telescanID: id)
         }
     }

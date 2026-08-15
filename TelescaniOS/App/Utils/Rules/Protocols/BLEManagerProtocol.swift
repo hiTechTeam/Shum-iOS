@@ -7,17 +7,22 @@ public protocol BLEManagerDelegate: AnyObject {
     func didFail(with error: Error)
 }
 
-protocol BLEManagerProtocol {
+protocol BLEManagerProtocol: AnyObject {
     
     var delegate: BLEManagerDelegate? { get set }
     
     // SCAN
     func startScanning()
+    func restartScanning()
     func stopScanning()
 
     // ADVERTISE
     func startAdvertising(id: String)
+    func restartAdvertising(id: String)
     func stopAdvertising()
+
+    func reconcileDiscoveryState()
+    func setApplicationActive(_ isActive: Bool)
 
     func reset()
     

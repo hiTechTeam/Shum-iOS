@@ -29,24 +29,21 @@ struct ScanToggle: View {
         Toggle(Inc.Scanning.scanning.localized, isOn: $isScaning)
             .toggleStyle(SwitchToggleStyle(tint: .green))
             .onChange(of: isScaning) { _, newValue in
-                
-                peopleVM.toggleScanning(newValue)
                 coordinator.isScaning = newValue
                 UserDefaults.standard.set(newValue, forKey: Keys.isScaning.rawValue)
-                
-                guard let value = UserDefaults.standard.string(forKey: telescanIDKey),
-                      let telescanID = UUID(uuidString: value) else { return }
-                
+
                 if newValue {
-                    if bleManager.isBluetoothAvailable {
-                        bleManager.startAdvertising(
-                            id: telescanID.uuidString.lowercased()
-                        )
-                    } else {
+                    peopleVM.toggleScanning(true)
+                    if let value = UserDefaults.standard.string(
+                        forKey: telescanIDKey
+                    ), let telescanID = UUID(uuidString: value) {
+                        peopleVM.startAdvertising(telescanID: telescanID)
+                    }
+                    if !bleManager.isBluetoothAvailable {
                         showBluetoothAlert = true
                     }
                 } else {
-                    bleManager.stopAdvertising()
+                    peopleVM.stopAllBluetoothActivity()
                 }
             }
             .alert(Inc.Alerts.turnOnBLE.localized, isPresented: $showBluetoothAlert) {

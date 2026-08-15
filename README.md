@@ -45,7 +45,9 @@ Keychain as an unlinked per-installation identifier for a later registration.
 At launch and whenever the app returns to the foreground, it loads
 `GET /api/v1/users/me`. A valid response refreshes the locally displayed
 Telegram profile. A revoked or deleted account clears the local session and
-returns to registration; a temporary network failure leaves the session intact.
+returns to registration. Network errors, rate limits, and server failures during
+profile validation or token refresh leave the session, tokens, cached profile,
+and cached photo intact.
 Starting a new link clears local image and URL caches before applying the fresh
 Telegram profile returned by the API.
 
@@ -60,15 +62,22 @@ ID or an access token.
 | Item | Value |
 | --- | --- |
 | Service UUID | `A6B50001-8A5D-4F7A-9E4C-123456789001` |
-| Identity characteristic | `A6B50002-8A5D-4F7A-9E4C-123456789002` |
-| Identity encoding | Lowercase UUID text in UTF-8 |
+| Compact identity characteristic | `A6B50003-8A5D-4F7A-9E4C-123456789003` |
+| Compact identity encoding | Full UUID as 16 lossless binary bytes |
+| Compatibility characteristic | `A6B50002-8A5D-4F7A-9E4C-123456789002` |
+| Compatibility encoding | Lowercase UUID text in UTF-8 |
 | Characteristic access | Readable |
 
-The UUID is placed in the advertisement local name when iOS permits it;
-otherwise a scanner connects and reads the characteristic. Nearby profile
-lookup uses the authenticated `/api/v1/profiles/{telescan_id}` endpoint.
-Devices disappear from the list after 20 seconds without a sighting. RSSI is
-processed locally into a coarse distance hint and is never uploaded.
+The advertisement contains only the fixed service UUID, so the user identity
+cannot be truncated by the local-name payload limit. A scanner reads the compact
+characteristic once, caches the peripheral-to-identity mapping, and periodically
+revalidates it. The text characteristic keeps staged upgrades compatible with
+older app versions. Nearby profile lookup uses the authenticated
+`/api/v1/profiles/{telescan_id}` endpoint. A BLE candidate is not displayed until
+the API returns a matching profile with a usable Telegram username; incomplete
+or unavailable profiles never create `Unknown` rows. Devices expire after 10
+seconds without a foreground sighting, with a 45-second background grace period.
+RSSI is processed locally into a coarse distance hint and is never uploaded.
 
 ## Local storage
 
@@ -81,9 +90,10 @@ The clear link code and Telegram ID are not persisted by the current app.
 
 ## Verification
 
-Unit tests cover BLE manager state, automatic link-code success/error UI state,
-session validation, stable installation identity, token refresh and retry, and
-single-flight concurrent refresh. Example commands:
+Unit tests cover BLE manager state and identity encoding, resolved-only nearby
+profiles, disappearance cancellation, automatic link-code success/error UI
+state, offline-safe session validation, stable installation identity, token
+refresh and retry, and single-flight concurrent refresh. Example commands:
 
 ```sh
 xcodebuild test \

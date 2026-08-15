@@ -14,6 +14,7 @@ struct AppCoordinatorView: View {
         }
         .environmentObject(coordinator)
         .onChange(of: scenePhase) { _, phase in
+            coordinator.updateApplicationState(isActive: phase == .active)
             if phase == .active {
                 Task {
                     await coordinator.refreshSession()

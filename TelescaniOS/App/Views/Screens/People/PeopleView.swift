@@ -8,8 +8,7 @@ struct PeopleView: View {
 
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var selectedID: String?
-    @State private var showProfileSheet = false
+    @State private var selectedUser: NearbyUser?
 
     var body: some View {
         ZStack {
@@ -19,7 +18,7 @@ struct PeopleView: View {
             VStack(alignment: .leading) {
                 if coordinator.isScaning {
                     List {
-                        if peopleViewModel.devices.isEmpty {
+                        if peopleViewModel.visibleUsers.isEmpty {
                             VStack(
                                 alignment: .leading,
                                 spacing: 12
@@ -48,20 +47,12 @@ struct PeopleView: View {
                         }
 
                         ForEach(
-                            Array(peopleViewModel.devices.keys),
-                            id: \.self
-                        ) { id in
+                            peopleViewModel.visibleUsers
+                        ) { user in
                             Button {
-                                selectedID = id
-                                showProfileSheet = true
+                                selectedUser = user
                             } label: {
-                                PeopleRowContent(id: id)
-                            }
-                            .onAppear {
-                                Task {
-                                    await peopleViewModel
-                                        .loadUserIfNeeded(telescanID: id)
-                                }
+                                PeopleRowContent(user: user)
                             }
                         }
                     }
@@ -85,13 +76,16 @@ struct PeopleView: View {
                 await peopleViewModel.refreshVisibleUsers()
             }
         }
-        .sheet(isPresented: $showProfileSheet) {
-            if let id = selectedID {
-                ProfileSheetView(id: id)
-                    .environmentObject(peopleViewModel)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.hidden)
+        .onChange(of: peopleViewModel.visibleUsers.map(\.id)) { _, ids in
+            if let selectedUser, !ids.contains(selectedUser.id) {
+                self.selectedUser = nil
             }
+        }
+        .sheet(item: $selectedUser) { user in
+            ProfileSheetView(user: user)
+                .environmentObject(peopleViewModel)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
         }
     }
 }
@@ -100,12 +94,11 @@ struct PeopleRowContent: View {
 
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
-    let id: String
+    let user: NearbyUser
 
     var body: some View {
         HStack(spacing: 12) {
-            if let user = peopleViewModel.userCache[id],
-               let url = user.photoURL,
+            if let url = user.photoURL,
                let imageURL = URL(string: url) {
                 KFImage(imageURL)
                     .placeholder {
@@ -127,15 +120,13 @@ struct PeopleRowContent: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(
-                    peopleViewModel.userCache[id]?.name
-                    ?? "Unknown"
+                    user.name
                 )
                 .foregroundColor(.gray)
                 .font(.system(size: 14))
 
                 Text(
-                    peopleViewModel.userCache[id]?.username
-                    ?? ""
+                    user.username
                 )
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundColor(.primary)
@@ -143,7 +134,7 @@ struct PeopleRowContent: View {
 
             Spacer()
 
-            if let meters = peopleViewModel.distances[id] {
+            if let meters = peopleViewModel.distances[user.discoveryID] {
                 Text(
                     String.localizedStringWithFormat(
                         Inc.Common.distanceMetersFormat.localized,
@@ -163,15 +154,14 @@ struct ProfileSheetView: View {
     @EnvironmentObject var peopleViewModel: PeopleViewModel
     @Environment(\.dismiss) private var dismiss
 
-    let id: String
+    let user: NearbyUser
 
     var body: some View {
         ZStack {
             VStack {
                 Spacer(minLength: 0)
 
-                if let user = peopleViewModel.userCache[id],
-                   let url = user.photoURL,
+                if let url = user.photoURL,
                    let imageURL = URL(string: url) {
                     GeometryReader { geo in
                         let maxSize = min(
@@ -220,8 +210,7 @@ struct ProfileSheetView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(
-                            peopleViewModel.userCache[id]?.name
-                            ?? "Unknown"
+                            user.name
                         )
                         .font(.title)
                         .bold()
@@ -231,7 +220,9 @@ struct ProfileSheetView: View {
                                 .font(.system(size: 14))
                                 .foregroundColor(.gray)
 
-                            if let meters = peopleViewModel.distances[id] {
+                            if let meters = peopleViewModel.distances[
+                                user.discoveryID
+                            ] {
                                 Text(
                                     String.localizedStringWithFormat(
                                         Inc.Common.distanceMetersFormat.localized,
@@ -244,10 +235,7 @@ struct ProfileSheetView: View {
                         }
                     }
 
-                    if let username =
-                        peopleViewModel.userCache[id]?.username {
-                        CopyUsernameField(username: username)
-                    }
+                    CopyUsernameField(username: user.username)
                 }
             }
             .padding(.top, 60)
@@ -270,9 +258,6 @@ struct ProfileSheetView: View {
                 maxHeight: .infinity,
                 alignment: .topTrailing
             )
-        }
-        .task(id: id) {
-            await peopleViewModel.refreshUser(telescanID: id)
         }
     }
 }
