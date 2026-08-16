@@ -122,8 +122,13 @@ xcodebuild build \
   -scheme Telescan \
   -configuration Release \
   -destination 'generic/platform=iOS Simulator' \
-  CODE_SIGNING_ALLOWED=NO
+CODE_SIGNING_ALLOWED=NO
 ```
+
+GitHub Actions runs the test suite and an unsigned Release simulator build on
+the `macos-26` image with Xcode 26.3 for every pull request and every push to
+`main`. CI also verifies the production API origin and rejects forbidden local
+configuration files in the generated application bundle.
 
 The `.app` bundle must not contain `.gitignore`, `.swiftlint.yml`,
 `project.yml`, or local `.xcconfig` files. Xcode `xcuserdata` is ignored and is

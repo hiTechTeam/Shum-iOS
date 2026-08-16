@@ -1,0 +1,90 @@
+name: iOS CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ios-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-26
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Select Xcode 26.3
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+
+      - name: Create local build configuration
+        run: |
+          cp TelescaniOS/Configuration/Configs/Debug.example.xcconfig \
+            TelescaniOS/Configuration/Configs/Debug.xcconfig
+          cp TelescaniOS/Configuration/Configs/Release.example.xcconfig \
+            TelescaniOS/Configuration/Configs/Release.xcconfig
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project TelescaniOS.xcodeproj \
+            -scheme Telescan
+
+      - name: Select simulator
+        id: simulator
+        run: |
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          SIMULATOR_ID="$(python3 -c '
+          import json, os
+          with open(os.environ["RUNNER_TEMP"] + "/devices.json") as stream:
+              devices = json.load(stream)["devices"]
+          print(next(
+              device["udid"]
+              for runtime in sorted(devices, reverse=True)
+              if "iOS" in runtime
+              for device in devices[runtime]
+              if device["name"].startswith("iPhone")
+          ))
+          ')"
+          echo "id=$SIMULATOR_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project TelescaniOS.xcodeproj \
+            -scheme Telescan \
+            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
+            -derivedDataPath "$RUNNER_TEMP/TelescanTests" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build Release
+        run: |
+          xcodebuild build \
+            -project TelescaniOS.xcodeproj \
+            -scheme Telescan \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/TelescanRelease" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Validate Release bundle
+        run: |
+          APP="$RUNNER_TEMP/TelescanRelease/Build/Products/Release-iphonesimulator/Telescan.app"
+          test -d "$APP"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :API_ORIGIN' "$APP/Info.plist")" = \
+            'https://api.tgtelescan.ru'
+          test -z "$(find "$APP" \
+            \( -name '.gitignore' \
+            -o -name '.swiftlint.yml' \
+            -o -name 'project.yml' \
+            -o -name '*.xcconfig' \) -print -quit)"
