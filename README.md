@@ -94,6 +94,17 @@ or unavailable profiles never create `Unknown` rows. Devices expire after 10
 seconds without a foreground sighting, with a 45-second background grace period.
 RSSI is processed locally into a coarse distance hint and is never uploaded.
 
+Requested scan and advertising state is kept separately from CoreBluetooth
+manager readiness. Scan, connection, service, and advertising commands are
+issued only after the corresponding manager reaches `.poweredOn`; state delegate
+callbacks resume deferred work. This avoids API-misuse warnings during launch,
+Bluetooth power transitions, and state restoration.
+
+When the app is backgrounded, nearby notifications contain aggregate numeric
+counts rather than profile names. A profile contributes only after authenticated
+resolution succeeds, and cached blocks continue to suppress notifications while
+the API is temporarily unavailable.
+
 ## Local storage
 
 - Keychain: access token, refresh token, and installation `device_id`.
@@ -129,6 +140,11 @@ GitHub Actions runs the test suite and an unsigned Release simulator build on
 the `macos-26` image with Xcode 26.3 for every pull request and every push to
 `main`. CI also verifies the production API origin and rejects forbidden local
 configuration files in the generated application bundle.
+
+The `main` branch is protected and requires the `Build and test` check from this
+workflow. Changes are merged through pull requests; force-pushes and deletion
+are disabled. Secret scanning with push protection, vulnerability alerts, and
+Dependabot security updates are enabled for the repository.
 
 The `.app` bundle must not contain `.gitignore`, `.swiftlint.yml`,
 `project.yml`, or local `.xcconfig` files. Xcode `xcuserdata` is ignored and is
