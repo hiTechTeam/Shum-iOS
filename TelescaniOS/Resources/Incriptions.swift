@@ -26,6 +26,12 @@ struct Inc {
         
         static let nearby: String = "nearby"
         static let distanceMetersFormat: String = "distanceMetersFormat"
+        static let disappearsInSecondsFormat: String =
+            "disappearsInSecondsFormat"
+        static let countdownSecondsFormat: String =
+            "countdownSecondsFormat"
+        static let signalLostCountdownFormat: String =
+            "signalLostCountdownFormat"
         // EN: Nearby
         // RU: Рядом
         
@@ -154,6 +160,49 @@ struct Inc {
         // EN: To switch over, you need to enable scanning mode.
         // RU: Для перехода необходимо включить режим сканирования.
         
+    }
+
+    // MARK: - Nearby notifications
+    struct NearbyNotifications {
+        static let title: String = "nearbyNotificationTitle"
+        static let initialCountFormat: String =
+            "nearbyNotificationInitialCountFormat"
+        static let updateCountFormat: String =
+            "nearbyNotificationUpdateCountFormat"
+    }
+
+    // MARK: - Nearby profile moderation
+    struct NearbyProfile {
+        static let close: String = "nearbyProfileClose"
+        static let actions: String = "nearbyProfileActions"
+        static let report: String = "nearbyProfileReport"
+        static let block: String = "nearbyProfileBlock"
+
+        static let reportTitle: String = "nearbyProfileReportTitle"
+        static let reportMessage: String = "nearbyProfileReportMessage"
+        static let reportSpam: String = "nearbyProfileReportSpam"
+        static let reportHarassment: String = "nearbyProfileReportHarassment"
+        static let reportInappropriate: String = "nearbyProfileReportInappropriate"
+        static let reportImpersonation: String = "nearbyProfileReportImpersonation"
+        static let reportOther: String = "nearbyProfileReportOther"
+        static let reportConfirmTitle: String = "nearbyProfileReportConfirmTitle"
+        static let reportConfirmMessage: String = "nearbyProfileReportConfirmMessage"
+        static let reportDetailsPlaceholder: String =
+            "nearbyProfileReportDetailsPlaceholder"
+        static let reportSend: String = "nearbyProfileReportSend"
+        static let reportSentTitle: String = "nearbyProfileReportSentTitle"
+        static let reportSentMessage: String = "nearbyProfileReportSentMessage"
+
+        static let blockTitle: String = "nearbyProfileBlockTitle"
+        static let blockMessage: String = "nearbyProfileBlockMessage"
+        static let blockConfirm: String = "nearbyProfileBlockConfirm"
+        static let blockedProfiles: String = "nearbyProfileBlockedProfiles"
+        static let noBlockedProfiles: String = "nearbyProfileNoBlockedProfiles"
+        static let unblock: String = "nearbyProfileUnblock"
+
+        static let actionFailedTitle: String = "nearbyProfileActionFailedTitle"
+        static let actionFailedMessage: String = "nearbyProfileActionFailedMessage"
+        static let acknowledge: String = "nearbyProfileAcknowledge"
     }
     
     // MARK: - Profile

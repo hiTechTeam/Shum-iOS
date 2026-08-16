@@ -52,6 +52,51 @@ actor APIClient {
         try await decode(path: "/api/v1/profiles/\(id.uuidString.lowercased())")
     }
 
+    func submitReport(
+        targetID: UUID,
+        reason: ReportReason,
+        details: String?,
+        requestID: UUID = UUID()
+    ) async throws -> ReportResponse {
+        let request = try jsonRequest(
+            path: "/api/v1/reports",
+            method: "POST",
+            body: ReportCreateRequest(
+                clientRequestId: requestID,
+                targetTelescanId: targetID,
+                reason: reason,
+                details: details
+            )
+        )
+        return try decoder.decode(
+            ReportResponse.self,
+            from: try await perform(request, authenticated: true)
+        )
+    }
+
+    func blockProfile(id: UUID) async throws -> BlockedProfileResponse {
+        let request = try request(
+            path: "/api/v1/users/me/blocks/\(id.uuidString.lowercased())",
+            method: "PUT"
+        )
+        return try decoder.decode(
+            BlockedProfileResponse.self,
+            from: try await perform(request, authenticated: true)
+        )
+    }
+
+    func blockedProfiles() async throws -> [BlockedProfileResponse] {
+        try await decode(path: "/api/v1/users/me/blocks")
+    }
+
+    func unblockProfile(id: UUID) async throws {
+        let request = try request(
+            path: "/api/v1/users/me/blocks/\(id.uuidString.lowercased())",
+            method: "DELETE"
+        )
+        _ = try await perform(request, authenticated: true)
+    }
+
     func replacePhoto(_ data: Data) async throws -> TelescanProfileResponse {
         let boundary = "TelescanBoundary-\(UUID().uuidString)"
         var body = Data()

@@ -8,6 +8,7 @@ struct ProfileDataView: View {
     @StateObject private var photoVM = ProfilePhotoViewModel()
     @State private var showDeveloperLinks = false
     @State private var showLogoutOptions = false
+    @State private var showBlockedProfiles = false
     @State private var showLogoutConfirmation = false
     @State private var showLogoutError = false
     @State private var showDeleteConfirmation = false
@@ -76,6 +77,24 @@ struct ProfileDataView: View {
         .padding(.bottom, 24)
     }
 
+    private var blockedProfilesButton: some View {
+        Button {
+            showBlockedProfiles = true
+        } label: {
+            Label(
+                Inc.NearbyProfile.blockedProfiles.localized,
+                systemImage: "person.crop.circle.badge.xmark"
+            )
+            .font(.system(size: 15, weight: .medium))
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(actionBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 13))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+    }
+
     private var actionBackground: Color {
         colorScheme == .dark ? Color.gray.opacity(0.35) : .white
     }
@@ -85,7 +104,8 @@ struct ProfileDataView: View {
             VStack(spacing: 0) {
                 profileSection
                 productDescription
-                logoutButton.padding(.top, 40)
+                blockedProfilesButton.padding(.top, 32)
+                logoutButton.padding(.top, 12)
             }
         }
         .refreshable { await coordinator.refreshSession() }
@@ -127,6 +147,12 @@ struct ProfileDataView: View {
         }
         .onChange(of: authCodeViewModel.photoS3URL) { _, value in
             photoVM.loadPhotoFromURL(value)
+        }
+        .sheet(isPresented: $showBlockedProfiles) {
+            BlockedProfilesView()
+                .environmentObject(coordinator.peopleViewModel)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .alert(
             Inc.Profile.developerLinksTitle.localized,

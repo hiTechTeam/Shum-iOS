@@ -19,6 +19,7 @@ extension Image {
     static let noPhoto: Image = Image(systemName: "person.crop.square.on.square.angled.fill")
     static let wave3Up: Image = Image(systemName: "wave.3.up")
     static let personCropCircleFill: Image = Image(systemName: "person.crop.circle.fill")
-    static let xmarkCircleFill: Image = Image(systemName: "xmark.circle.fill")
+    static let chevronDownCircleFill: Image = Image(systemName: "chevron.down.circle.fill")
+    static let ellipsisCircleFill: Image = Image(systemName: "ellipsis.circle.fill")
     
 }

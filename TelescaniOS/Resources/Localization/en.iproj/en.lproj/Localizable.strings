@@ -8,6 +8,9 @@
 "copied_sheet" = "Copied";
 "nearby" = "Nearby";
 "distanceMetersFormat" = "%d m";
+"disappearsInSecondsFormat" = "Hides in %d s";
+"countdownSecondsFormat" = "%d s";
+"signalLostCountdownFormat" = "Signal lost. Profile hides in %d seconds.";
 
 /* Tabs */
 "peopleNearby" = "People nearby";
@@ -49,6 +52,39 @@
 "turnedOffScaning" = "Scanning is turned off. Enable scanning in the app to see nearby people.";
 "noPeopleNearby" = "Scanning is active. When Telescan users are nearby, they will appear on this screen.";
 "scanAlertText" = "To switch over, you need to enable scanning mode.";
+
+/* Nearby notifications */
+"nearbyNotificationTitle" = "People nearby";
+"nearbyNotificationInitialCountFormat" = "Nearby: %d";
+"nearbyNotificationUpdateCountFormat" = "New nearby: +%d · Total: %d";
+
+/* Nearby profile moderation */
+"nearbyProfileClose" = "Close profile";
+"nearbyProfileActions" = "Profile actions";
+"nearbyProfileReport" = "Report user";
+"nearbyProfileBlock" = "Block user";
+"nearbyProfileReportTitle" = "Why are you reporting this user?";
+"nearbyProfileReportMessage" = "Choose the reason that best describes the problem.";
+"nearbyProfileReportSpam" = "Spam";
+"nearbyProfileReportHarassment" = "Harassment or bullying";
+"nearbyProfileReportInappropriate" = "Inappropriate content";
+"nearbyProfileReportImpersonation" = "Impersonation";
+"nearbyProfileReportOther" = "Other";
+"nearbyProfileReportConfirmTitle" = "Send this report?";
+"nearbyProfileReportConfirmMessage" = "Reason: %@. You can add optional context before sending.";
+"nearbyProfileReportDetailsPlaceholder" = "Optional details";
+"nearbyProfileReportSend" = "Send report";
+"nearbyProfileReportSentTitle" = "Report sent";
+"nearbyProfileReportSentMessage" = "Thank you. The report has been saved for moderation.";
+"nearbyProfileBlockTitle" = "Block this user?";
+"nearbyProfileBlockMessage" = "You will no longer see each other in nearby profiles. You can cancel now if you are unsure.";
+"nearbyProfileBlockConfirm" = "Block";
+"nearbyProfileBlockedProfiles" = "Blocked profiles";
+"nearbyProfileNoBlockedProfiles" = "No blocked profiles";
+"nearbyProfileUnblock" = "Unblock";
+"nearbyProfileActionFailedTitle" = "Couldn’t complete action";
+"nearbyProfileActionFailedMessage" = "Check your connection and try again.";
+"nearbyProfileAcknowledge" = "OK";
 
 /* Profile */
 "photoOptions" = "Photo Options";

@@ -54,6 +54,21 @@ Telegram profile returned by the API.
 The in-app information screen links directly to the current Terms of Service
 and Privacy Policy.
 
+## Reports and blocking
+
+The nearby-profile sheet uses native menus, confirmation dialogs, and alerts.
+Users can report a profile for spam, harassment, inappropriate content,
+impersonation, or another reason and may add a short optional comment. Reports
+are submitted through the authenticated API with a client request UUID so a
+token refresh or retry does not create duplicate pending reports.
+
+Blocking succeeds on the API before the profile is removed locally. A block is
+enforced in both profile-lookup directions, immediately removes the person from
+the nearby list and open sheet, and excludes the UUID from numeric background
+notifications. The last successful blocked-ID list is cached locally so an
+offline launch does not reintroduce blocked profiles. Users can review and
+unblock profiles from **Blocked profiles** in their profile screen.
+
 ## BLE identity
 
 The app advertises the user's random public `telescan_id`, never the Telegram
@@ -83,7 +98,8 @@ RSSI is processed locally into a coarse distance hint and is never uploaded.
 
 - Keychain: access token, refresh token, and installation `device_id`.
 - `UserDefaults`: public `telescan_id`, profile metadata, registration state,
-  discovery state, and the BLE restoration identity.
+  discovery state, BLE restoration identity, and the current account's cached
+  blocked-profile UUIDs.
 - App storage and caches: selected/cached profile images and HTTP responses.
 
 The clear link code and Telegram ID are not persisted by the current app.

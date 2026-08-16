@@ -308,6 +308,96 @@ struct FetchServiceTests {
         }
     }
 
+    @Test("Report and block requests use authenticated moderation endpoints")
+    func moderationRequestsUseAuthenticatedAPI() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        try sessions.save(
+            TokenResponse(
+                accessToken: "access-token",
+                refreshToken: "refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let targetID = UUID()
+        let reportID = UUID()
+        let recorder = ModerationRequestRecorder()
+        MockURLProtocol.handler = { request in
+            recorder.record(request)
+            switch (request.httpMethod, request.url?.path) {
+            case ("POST", "/api/v1/reports"):
+                return (
+                    201,
+                    Data(
+                        """
+                        {"reportId":"\(reportID.uuidString)","status":"pending","createdAt":"2026-08-16T12:00:00Z"}
+                        """.utf8
+                    )
+                )
+            case (
+                "PUT",
+                "/api/v1/users/me/blocks/\(targetID.uuidString.lowercased())"
+            ):
+                return (
+                    200,
+                    Data(
+                        """
+                        {"telescanId":"\(targetID.uuidString)","name":"Target","username":"target","photoUrl":null,"blockedAt":"2026-08-16T12:00:00Z"}
+                        """.utf8
+                    )
+                )
+            case ("GET", "/api/v1/users/me/blocks"):
+                return (
+                    200,
+                    Data(
+                        """
+                        [{"telescanId":"\(targetID.uuidString)","name":"Target","username":"target","photoUrl":null,"blockedAt":"2026-08-16T12:00:00Z"}]
+                        """.utf8
+                    )
+                )
+            default:
+                return (404, Data())
+            }
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        let report = try await client.submitReport(
+            targetID: targetID,
+            reason: .spam,
+            details: "context"
+        )
+        let blocked = try await client.blockProfile(id: targetID)
+        let list = try await client.blockedProfiles()
+
+        #expect(report.reportId == reportID)
+        #expect(blocked.telescanId == targetID)
+        #expect(list.map(\.telescanId) == [targetID])
+        #expect(recorder.requests.count == 3)
+        #expect(
+            recorder.requests.allSatisfy {
+                $0.value(forHTTPHeaderField: "Authorization")
+                    == "Bearer access-token"
+            }
+        )
+        let reportRequest = try #require(recorder.requests.first)
+        let body = try #require(requestBodyData(reportRequest))
+        let json = try #require(
+            JSONSerialization.jsonObject(with: body) as? [String: Any]
+        )
+        #expect(json["targetTelescanId"] as? String == targetID.uuidString)
+        #expect(json["reason"] as? String == "spam")
+        #expect(json["details"] as? String == "context")
+        #expect(json["clientRequestId"] as? String != nil)
+    }
+
     @Test("A nearby row appears only after a complete matching profile loads")
     @MainActor
     func nearbyProfileIsResolvedBeforeDisplay() async throws {
@@ -378,6 +468,253 @@ struct FetchServiceTests {
 
         #expect(viewModel.visibleUsers.isEmpty)
         #expect(viewModel.devices.isEmpty)
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("Signal silence exposes and refresh clears the disappearance countdown")
+    @MainActor
+    func nearbyPresenceCountdownTracksSignals() async throws {
+        let manager = FakeBLEManager()
+        let profileID = UUID()
+        let viewModel = PeopleViewModel(bleManager: manager) { requestedID in
+            TelescanProfileResponse(
+                telescanId: requestedID,
+                name: "Nearby",
+                username: "nearby",
+                photoUrl: nil
+            )
+        }
+        let discoveryID = profileID.uuidString.lowercased()
+
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -60)
+        await Task.yield()
+        #expect(viewModel.disappearanceCountdowns[discoveryID] == nil)
+
+        viewModel.updateDisappearanceCountdowns(
+            at: Date().addingTimeInterval(4)
+        )
+        let countdown = try #require(
+            viewModel.disappearanceCountdowns[discoveryID]
+        )
+        #expect(countdown > 0)
+        #expect(countdown < Int(BLEPresencePolicy.activeTimeout))
+
+        manager.emitUpdate(id: profileID.uuidString, rssi: -58)
+        await Task.yield()
+        #expect(viewModel.disappearanceCountdowns[discoveryID] == nil)
+
+        viewModel.updateDisappearanceCountdowns(
+            at: Date().addingTimeInterval(4)
+        )
+        #expect(viewModel.disappearanceCountdowns[discoveryID] != nil)
+
+        manager.emitLoss(id: profileID.uuidString)
+        await Task.yield()
+        #expect(viewModel.disappearanceCountdowns[discoveryID] == nil)
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("Nearby notifications aggregate people into numeric batches")
+    func nearbyNotificationsAggregateNumericBatches() throws {
+        let start = Date(timeIntervalSince1970: 1_000)
+        var aggregator = NearbyEncounterAggregator(
+            initialCollectionWindow: 12,
+            updateCollectionWindow: 25,
+            encounterResetDelay: 180
+        )
+
+        var firstBatch: NearbyNotificationBatch?
+        for index in 0..<8 {
+            let update = aggregator.detect(
+                id: "person-\(index)",
+                at: start.addingTimeInterval(Double(index))
+            )
+            if case .schedule(let batch) = update {
+                firstBatch = batch
+            }
+        }
+
+        let initial = try #require(firstBatch)
+        #expect(initial.kind == .initial)
+        #expect(initial.addedCount == 8)
+        #expect(initial.totalCount == 8)
+        #expect(initial.deliveryDate == start.addingTimeInterval(12))
+
+        var secondBatch: NearbyNotificationBatch?
+        for index in 8..<15 {
+            let update = aggregator.detect(
+                id: "person-\(index)",
+                at: start.addingTimeInterval(13 + Double(index - 8))
+            )
+            if case .schedule(let batch) = update {
+                secondBatch = batch
+            }
+        }
+
+        let update = try #require(secondBatch)
+        #expect(update.kind == .update)
+        #expect(update.addedCount == 7)
+        #expect(update.totalCount == 15)
+        #expect(update.deliveryDate == start.addingTimeInterval(38))
+
+        let duplicate = aggregator.detect(
+            id: "person-14",
+            at: start.addingTimeInterval(20)
+        )
+        #expect(duplicate == nil)
+        #expect(aggregator.pendingIDs.count == 7)
+        #expect(aggregator.nearbyIDs.count == 15)
+
+        var thirdBatch: NearbyNotificationBatch?
+        for index in 15..<17 {
+            let update = aggregator.detect(
+                id: "person-\(index)",
+                at: start.addingTimeInterval(39 + Double(index - 15))
+            )
+            if case .schedule(let batch) = update {
+                thirdBatch = batch
+            }
+        }
+
+        let finalUpdate = try #require(thirdBatch)
+        #expect(finalUpdate.kind == .update)
+        #expect(finalUpdate.addedCount == 2)
+        #expect(finalUpdate.totalCount == 17)
+    }
+
+    @Test("Nearby notification encounter resets after a quiet period")
+    func nearbyNotificationEncounterResetsAfterQuietPeriod() throws {
+        let start = Date(timeIntervalSince1970: 2_000)
+        var aggregator = NearbyEncounterAggregator(
+            initialCollectionWindow: 12,
+            updateCollectionWindow: 25,
+            encounterResetDelay: 180
+        )
+
+        _ = aggregator.detect(id: "person", at: start)
+        _ = aggregator.lose(id: "person", at: start.addingTimeInterval(20))
+
+        #expect(
+            aggregator.detect(
+                id: "person",
+                at: start.addingTimeInterval(100)
+            ) == nil
+        )
+        _ = aggregator.lose(id: "person", at: start.addingTimeInterval(110))
+
+        let restarted = aggregator.detect(
+            id: "person",
+            at: start.addingTimeInterval(300)
+        )
+        guard case .schedule(let batch) = restarted else {
+            Issue.record("Expected a new encounter notification")
+            return
+        }
+        #expect(batch.kind == .initial)
+        #expect(batch.addedCount == 1)
+        #expect(batch.totalCount == 1)
+    }
+
+    @Test("Entering background synchronizes recently seen people")
+    @MainActor
+    func enteringBackgroundSynchronizesRecentlySeenPeople() async {
+        let manager = FakeBLEManager()
+        let notifier = FakeNearbyPeopleNotifier()
+        let profileID = UUID()
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            nearbyPeopleNotifier: notifier
+        ) { requestedID in
+            TelescanProfileResponse(
+                telescanId: requestedID,
+                name: "Nearby",
+                username: "nearby",
+                photoUrl: nil
+            )
+        }
+
+        viewModel.toggleScanning(true)
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -55)
+        await Task.yield()
+        await viewModel.loadUserIfNeeded(
+            telescanID: profileID.uuidString.lowercased()
+        )
+        viewModel.reconcileBluetoothState(isActive: false)
+
+        #expect(notifier.synchronizedIDs == [profileID.uuidString.lowercased()])
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("A blocked nearby profile is hidden and excluded from notifications")
+    @MainActor
+    func blockedProfilesStayHidden() async throws {
+        let manager = FakeBLEManager()
+        let notifier = FakeNearbyPeopleNotifier()
+        let blockedStore = FakeBlockedProfileStore()
+        let profileID = UUID()
+        blockedStore.insert(profileID)
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            nearbyPeopleNotifier: notifier,
+            blockedProfileStore: blockedStore
+        ) { requestedID in
+            TelescanProfileResponse(
+                telescanId: requestedID,
+                name: "Blocked",
+                username: "blocked",
+                photoUrl: nil
+            )
+        }
+
+        viewModel.toggleScanning(true)
+        viewModel.reconcileBluetoothState(isActive: false)
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -55)
+        await Task.yield()
+
+        #expect(viewModel.visibleUsers.isEmpty)
+        #expect(viewModel.devices.isEmpty)
+        #expect(notifier.detectedIDs.isEmpty)
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("Successful blocking immediately removes a visible profile")
+    @MainActor
+    func blockingRemovesVisibleProfile() async throws {
+        let manager = FakeBLEManager()
+        let blockedStore = FakeBlockedProfileStore()
+        let profileID = UUID()
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            blockedProfileStore: blockedStore,
+            profileLoader: { requestedID in
+                TelescanProfileResponse(
+                    telescanId: requestedID,
+                    name: "Target",
+                    username: "target",
+                    photoUrl: nil
+                )
+            },
+            blockSubmitter: { id in
+                BlockedProfileResponse(
+                    telescanId: id,
+                    name: "Target",
+                    username: "target",
+                    photoUrl: nil,
+                    blockedAt: "2026-08-16T12:00:00Z"
+                )
+            }
+        )
+
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -55)
+        await Task.yield()
+        await viewModel.loadUserIfNeeded(
+            telescanID: profileID.uuidString.lowercased()
+        )
+        let user = try #require(viewModel.visibleUsers.first)
+        try await viewModel.block(user)
+
+        #expect(viewModel.visibleUsers.isEmpty)
+        #expect(blockedStore.ids == [profileID.uuidString.lowercased()])
         viewModel.stopAllBluetoothActivity()
     }
 
@@ -458,6 +795,24 @@ private func clearStoredProfile() {
     defaults.removeObject(forKey: "userCode")
 }
 
+private func requestBodyData(_ request: URLRequest) -> Data? {
+    if let body = request.httpBody {
+        return body
+    }
+    guard let stream = request.httpBodyStream else { return nil }
+
+    stream.open()
+    defer { stream.close() }
+    var data = Data()
+    var buffer = [UInt8](repeating: 0, count: 1_024)
+    while stream.hasBytesAvailable {
+        let count = stream.read(&buffer, maxLength: buffer.count)
+        guard count > 0 else { break }
+        data.append(buffer, count: count)
+    }
+    return data
+}
+
 private final class MemorySecureStore: SecureStoring {
     private var values: [String: Data] = [:]
 
@@ -505,6 +860,19 @@ private final class RequestCounters: @unchecked Sendable {
     }
 }
 
+private final class ModerationRequestRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedRequests: [URLRequest] = []
+
+    var requests: [URLRequest] {
+        lock.withLock { storedRequests }
+    }
+
+    func record(_ request: URLRequest) {
+        lock.withLock { storedRequests.append(request) }
+    }
+}
+
 @MainActor
 private final class FakeBLEManager: BLEManagerProtocol {
     weak var delegate: BLEManagerDelegate?
@@ -524,7 +892,48 @@ private final class FakeBLEManager: BLEManagerProtocol {
         delegate?.didDiscoverDevice(id: id, rssi: rssi)
     }
 
+    func emitUpdate(id: String, rssi: Int) {
+        delegate?.didUpdateDevice(id: id, rssi: rssi)
+    }
+
     func emitLoss(id: String) {
         delegate?.didLoseDevice(id: id)
+    }
+}
+
+@MainActor
+private final class FakeNearbyPeopleNotifier: NearbyPeopleNotifying {
+    private(set) var synchronizedIDs: Set<String> = []
+    private(set) var detectedIDs: Set<String> = []
+
+    func setScanningEnabled(_ enabled: Bool) { }
+    func setApplicationActive(_ isActive: Bool) { }
+    func synchronizeNearby(ids: Set<String>) {
+        synchronizedIDs = ids
+    }
+    func detect(id: String) {
+        detectedIDs.insert(id)
+    }
+    func lose(id: String) { }
+    func reset() { }
+}
+
+private final class FakeBlockedProfileStore: BlockedProfileStoring {
+    private(set) var ids: Set<String> = []
+
+    func replace(with ids: Set<String>) {
+        self.ids = ids
+    }
+
+    func insert(_ id: UUID) {
+        ids.insert(id.uuidString.lowercased())
+    }
+
+    func remove(_ id: UUID) {
+        ids.remove(id.uuidString.lowercased())
+    }
+
+    func removeAll() {
+        ids.removeAll()
     }
 }

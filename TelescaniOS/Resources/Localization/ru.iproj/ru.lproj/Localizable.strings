@@ -8,6 +8,9 @@
 "copied_sheet" = "Скопированно";
 "nearby" = "Рядом";
 "distanceMetersFormat" = "%d м";
+"disappearsInSecondsFormat" = "Исчезнет через %d с";
+"countdownSecondsFormat" = "%d с";
+"signalLostCountdownFormat" = "Сигнал потерян. Профиль исчезнет через %d секунд.";
 
 /* Tabs */
 "peopleNearby" = "Люди рядом";
@@ -49,6 +52,39 @@
 "turnedOffScaning" = "Сканирование отключено. Включите сканирование в приложении, чтобы видеть людей, находящихся поблизости. ";
 "noPeopleNearby" = "Сканирование активно. Когда рядом появятся пользователи Telescan, они отобразятся на этом экране.";
 "scanAlertText" = "Для перехода необходимо включить режим сканирования.";
+
+/* Уведомления о людях поблизости */
+"nearbyNotificationTitle" = "Люди поблизости";
+"nearbyNotificationInitialCountFormat" = "Рядом с вами: %d";
+"nearbyNotificationUpdateCountFormat" = "Новых рядом: +%d · Всего: %d";
+
+/* Модерация профиля пользователя рядом */
+"nearbyProfileClose" = "Закрыть профиль";
+"nearbyProfileActions" = "Действия с профилем";
+"nearbyProfileReport" = "Пожаловаться";
+"nearbyProfileBlock" = "Заблокировать";
+"nearbyProfileReportTitle" = "Почему вы хотите пожаловаться?";
+"nearbyProfileReportMessage" = "Выберите причину, которая лучше всего описывает проблему.";
+"nearbyProfileReportSpam" = "Спам";
+"nearbyProfileReportHarassment" = "Оскорбления или травля";
+"nearbyProfileReportInappropriate" = "Недопустимый контент";
+"nearbyProfileReportImpersonation" = "Выдаёт себя за другого";
+"nearbyProfileReportOther" = "Другое";
+"nearbyProfileReportConfirmTitle" = "Отправить жалобу?";
+"nearbyProfileReportConfirmMessage" = "Причина: %@. Перед отправкой можно добавить комментарий.";
+"nearbyProfileReportDetailsPlaceholder" = "Комментарий (необязательно)";
+"nearbyProfileReportSend" = "Отправить жалобу";
+"nearbyProfileReportSentTitle" = "Жалоба отправлена";
+"nearbyProfileReportSentMessage" = "Спасибо. Жалоба сохранена и будет рассмотрена модератором.";
+"nearbyProfileBlockTitle" = "Заблокировать пользователя?";
+"nearbyProfileBlockMessage" = "Вы больше не будете видеть друг друга среди людей рядом. Если вы не уверены, отмените действие.";
+"nearbyProfileBlockConfirm" = "Заблокировать";
+"nearbyProfileBlockedProfiles" = "Заблокированные профили";
+"nearbyProfileNoBlockedProfiles" = "Нет заблокированных профилей";
+"nearbyProfileUnblock" = "Разблокировать";
+"nearbyProfileActionFailedTitle" = "Не удалось выполнить действие";
+"nearbyProfileActionFailedMessage" = "Проверьте подключение к сети и повторите попытку.";
+"nearbyProfileAcknowledge" = "Понятно";
 
 /* Profile */
 "photoOptions" = "Параметры фото";

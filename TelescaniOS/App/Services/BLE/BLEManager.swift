@@ -60,8 +60,6 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     private var retryNotBefore: [UUID: Date] = [:]
     private var devicesLastSeen: [String: Date] = [:]
 
-    private let activeDeviceTimeout: TimeInterval = 10
-    private let backgroundDeviceTimeout: TimeInterval = 45
     private let identityResolutionTimeout: TimeInterval = 8
     private let identityRetryDelay: TimeInterval = 3
     private let identityRevalidationInterval: TimeInterval = 30
@@ -518,8 +516,8 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         let timer = DispatchSource.makeTimerSource(queue: queue)
 
         timer.schedule(
-            deadline: .now() + 2,
-            repeating: 2
+            deadline: .now() + BLEPresencePolicy.cleanupInterval,
+            repeating: BLEPresencePolicy.cleanupInterval
         )
 
         timer.setEventHandler { [weak self] in
@@ -533,13 +531,13 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     private func removeExpiredDevices() {
         let now = Date()
         let timeout = isApplicationActive
-            ? activeDeviceTimeout
-            : backgroundDeviceTimeout
+            ? BLEPresencePolicy.activeTimeout
+            : BLEPresencePolicy.backgroundTimeout
 
         let expiredIDs = devicesLastSeen.compactMap {
             identity, lastSeen -> String? in
 
-            now.timeIntervalSince(lastSeen) > timeout
+            now.timeIntervalSince(lastSeen) >= timeout
                 ? identity
                 : nil
         }
