@@ -205,10 +205,13 @@ struct ProfileSheetView: View {
                 if let url = user.photoURL,
                    let imageURL = URL(string: url) {
                     GeometryReader { geo in
-                        let maxSize = min(
-                            geo.size.width,
-                            geo.size.height
-                        ) - 24
+                        let maxSize = max(
+                            0,
+                            min(
+                                geo.size.width,
+                                geo.size.height
+                            ) - 24
+                        )
 
                         let strokeWidth: CGFloat = 6
 

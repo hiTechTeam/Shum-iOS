@@ -127,9 +127,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             guard let self else { return }
 
             self.shouldScan = true
-            self.centralManager.stopScan()
-            self.cancelIdentityResolutions()
-            self.clearPresence(notify: true)
+            self.stopScanningNow(clearPresence: true)
 
             self.queue.asyncAfter(deadline: .now() + 0.2) {
                 self.startScanningIfPossible()
@@ -193,13 +191,8 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
                 forKey: self.storedIdentityKey
             )
 
-            self.peripheralManager.stopAdvertising()
-            self.peripheralManager.removeAllServices()
-
-            self.identityCharacteristic = nil
-            self.compactIdentityCharacteristic = nil
-            self.publishedService = nil
-            self.serviceIsPublished = false
+            self.removePublishedServiceIfPossible()
+            self.clearPublishedServiceState()
 
             self.queue.asyncAfter(deadline: .now() + 0.3) {
                 self.publishServiceIfPossible()
@@ -212,12 +205,8 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             guard let self else { return }
 
             self.shouldAdvertise = false
-            self.peripheralManager.stopAdvertising()
-            self.peripheralManager.removeAllServices()
-            self.identityCharacteristic = nil
-            self.compactIdentityCharacteristic = nil
-            self.publishedService = nil
-            self.serviceIsPublished = false
+            self.removePublishedServiceIfPossible()
+            self.clearPublishedServiceState()
 
             self.logger.info("Advertising stopped")
         }
@@ -247,13 +236,8 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             self.shouldScan = false
             self.shouldAdvertise = false
 
-            self.centralManager.stopScan()
-            self.peripheralManager.stopAdvertising()
-            self.peripheralManager.removeAllServices()
-
-            for peripheral in self.discoveredPeripherals.values {
-                self.centralManager.cancelPeripheralConnection(peripheral)
-            }
+            self.stopScanningNow(clearPresence: false)
+            self.removePublishedServiceIfPossible()
 
             self.discoveredPeripherals.removeAll()
             self.peripheralRSSI.removeAll()
@@ -264,10 +248,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             self.retryNotBefore.removeAll()
             self.devicesLastSeen.removeAll()
 
-            self.identityCharacteristic = nil
-            self.compactIdentityCharacteristic = nil
-            self.publishedService = nil
-            self.serviceIsPublished = false
+            self.clearPublishedServiceState()
             self.currentIdentity = nil
 
             UserDefaults.standard.removeObject(
@@ -304,13 +285,39 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     }
 
     private func stopScanningNow(clearPresence shouldClearPresence: Bool) {
-        if centralManager.isScanning {
+        if centralManager.state == .poweredOn,
+           centralManager.isScanning {
             centralManager.stopScan()
         }
         cancelIdentityResolutions()
         if shouldClearPresence {
             clearPresence(notify: true)
         }
+    }
+
+    private func cancelPeripheralConnectionIfPossible(
+        _ peripheral: CBPeripheral
+    ) {
+        guard centralManager.state == .poweredOn,
+              peripheral.state != .disconnected else {
+            return
+        }
+        centralManager.cancelPeripheralConnection(peripheral)
+    }
+
+    private func removePublishedServiceIfPossible() {
+        guard peripheralManager.state == .poweredOn else { return }
+        if peripheralManager.isAdvertising {
+            peripheralManager.stopAdvertising()
+        }
+        peripheralManager.removeAllServices()
+    }
+
+    private func clearPublishedServiceState() {
+        identityCharacteristic = nil
+        compactIdentityCharacteristic = nil
+        publishedService = nil
+        serviceIsPublished = false
     }
 
     private func reconcileWithPersistedState() {
@@ -325,12 +332,8 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             publishServiceIfPossible()
         } else {
             stopScanningNow(clearPresence: true)
-            peripheralManager.stopAdvertising()
-            peripheralManager.removeAllServices()
-            identityCharacteristic = nil
-            compactIdentityCharacteristic = nil
-            publishedService = nil
-            serviceIsPublished = false
+            removePublishedServiceIfPossible()
+            clearPublishedServiceState()
         }
     }
 
@@ -359,8 +362,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             return
         }
 
-        peripheralManager.stopAdvertising()
-        peripheralManager.removeAllServices()
+        removePublishedServiceIfPossible()
 
         let characteristic = CBMutableCharacteristic(
             type: identityCharacteristicUUID,
@@ -470,6 +472,8 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         peripheral: CBPeripheral,
         rssi: Int
     ) {
+        guard centralManager.state == .poweredOn else { return }
+
         let peripheralID = peripheral.identifier
         guard !resolvingPeripheralIDs.contains(peripheralID) else {
             peripheralRSSI[peripheralID] = rssi
@@ -554,7 +558,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
 
     private func cancelIdentityResolutions() {
         for peripheral in discoveredPeripherals.values {
-            centralManager.cancelPeripheralConnection(peripheral)
+            cancelPeripheralConnectionIfPossible(peripheral)
         }
         discoveredPeripherals.removeAll()
         peripheralRSSI.removeAll()
@@ -583,7 +587,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             retryNotBefore.removeValue(forKey: id)
             identityResolutionFailures.removeValue(forKey: id)
         }
-        centralManager.cancelPeripheralConnection(peripheral)
+        cancelPeripheralConnectionIfPossible(peripheral)
     }
 
     private func clearPresence(notify: Bool) {
@@ -700,7 +704,7 @@ extension BLEManager: CBCentralManagerDelegate {
 
         guard shouldScan,
               resolvingPeripheralIDs.contains(peripheral.identifier) else {
-            centralManager.cancelPeripheralConnection(peripheral)
+            cancelPeripheralConnectionIfPossible(peripheral)
             return
         }
         discoveredPeripherals[peripheral.identifier] = peripheral
@@ -893,7 +897,6 @@ extension BLEManager: CBPeripheralManagerDelegate {
              .resetting,
              .unknown:
             serviceIsPublished = false
-            peripheralManager.stopAdvertising()
             logger.info("Peripheral is unavailable")
 
         @unknown default:
@@ -921,11 +924,8 @@ extension BLEManager: CBPeripheralManagerDelegate {
         }
 
         guard shouldAdvertise else {
-            peripheralManager.removeAllServices()
-            identityCharacteristic = nil
-            compactIdentityCharacteristic = nil
-            publishedService = nil
-            serviceIsPublished = false
+            removePublishedServiceIfPossible()
+            clearPublishedServiceState()
             return
         }
 
@@ -991,12 +991,8 @@ extension BLEManager: CBPeripheralManagerDelegate {
         if shouldAdvertise {
             publishServiceIfPossible()
         } else {
-            peripheralManager.stopAdvertising()
-            peripheralManager.removeAllServices()
-            identityCharacteristic = nil
-            compactIdentityCharacteristic = nil
-            publishedService = nil
-            serviceIsPublished = false
+            removePublishedServiceIfPossible()
+            clearPublishedServiceState()
         }
     }
 }
