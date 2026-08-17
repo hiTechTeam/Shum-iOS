@@ -58,15 +58,21 @@ final class PeopleViewModel: ObservableObject {
     private var lastSignals: [String: Date] = [:]
     private var profileTasks: [String: Task<Void, Never>] = [:]
     private var resolutionAttempts: [String: Int] = [:]
+    private var suppressedProfileIDs: Set<String> = []
     private var isApplicationActive = true
     private let distanceUpdateInterval: TimeInterval = 3
     private let maximumRSSISamples = 30
-    private let maximumRetryDelay: TimeInterval = 30
+    private let maximumProfileResolutionAttempts: Int
+    private let profileRetryBaseDelay: TimeInterval
+    private let maximumRetryDelay: TimeInterval
 
     init(
         bleManager: BLEManagerProtocol = BLEManager.shared,
         nearbyPeopleNotifier: NearbyPeopleNotifying? = nil,
         blockedProfileStore: BlockedProfileStoring = BlockedProfileStore.shared,
+        maximumProfileResolutionAttempts: Int = 5,
+        profileRetryBaseDelay: TimeInterval = 2,
+        maximumRetryDelay: TimeInterval = 30,
         profileLoader: @escaping @MainActor (UUID) async throws
             -> TelescanProfileResponse = {
                 try await FetchService.fetch.profile(telescanID: $0)
@@ -98,6 +104,15 @@ final class PeopleViewModel: ObservableObject {
         self.nearbyPeopleNotifier = nearbyPeopleNotifier
             ?? NearbyPeopleNotifier()
         self.blockedProfileStore = blockedProfileStore
+        self.maximumProfileResolutionAttempts = max(
+            1,
+            maximumProfileResolutionAttempts
+        )
+        self.profileRetryBaseDelay = max(0, profileRetryBaseDelay)
+        self.maximumRetryDelay = max(
+            self.profileRetryBaseDelay,
+            maximumRetryDelay
+        )
         self.profileLoader = profileLoader
         self.blockedProfilesLoader = blockedProfilesLoader
         self.reportSubmitter = reportSubmitter
@@ -126,6 +141,7 @@ final class PeopleViewModel: ObservableObject {
         profileTasks[telescanID]?.cancel()
         profileTasks[telescanID] = nil
         resolutionAttempts[telescanID] = 0
+        suppressedProfileIDs.remove(telescanID)
         scheduleProfileResolution(
             for: telescanID,
             immediately: true,
@@ -140,6 +156,7 @@ final class PeopleViewModel: ObservableObject {
             profileTasks[id]?.cancel()
             profileTasks[id] = nil
             resolutionAttempts[id] = 0
+            suppressedProfileIDs.remove(id)
             scheduleProfileResolution(for: id, immediately: true, force: true)
         }
         let tasks = ids.compactMap { profileTasks[$0] }
@@ -332,6 +349,7 @@ final class PeopleViewModel: ObservableObject {
         }
         profileTasks.removeAll()
         resolutionAttempts.removeAll()
+        suppressedProfileIDs.removeAll()
         devices.removeAll()
         distances.removeAll()
         userCache.removeAll()
@@ -370,6 +388,7 @@ final class PeopleViewModel: ObservableObject {
     ) {
         guard devices[id] != nil,
               profileTasks[id] == nil,
+              force || !suppressedProfileIDs.contains(id),
               force || userCache[id] == nil else {
             return
         }
@@ -377,7 +396,10 @@ final class PeopleViewModel: ObservableObject {
         let attempt = resolutionAttempts[id, default: 0]
         let delay = immediately
             ? 0
-            : min(pow(2, Double(attempt)), maximumRetryDelay)
+            : min(
+                profileRetryBaseDelay * pow(2, Double(max(0, attempt - 1))),
+                maximumRetryDelay
+            )
 
         profileTasks[id] = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -421,12 +443,20 @@ final class PeopleViewModel: ObservableObject {
         } catch is CancellationError {
             profileTasks[id] = nil
         } catch {
-            if error is NearbyProfileError
-                || isNotFound(error) {
+            profileTasks[id] = nil
+            if isTerminalProfileError(error) {
                 userCache.removeValue(forKey: id)
+                resolutionAttempts.removeValue(forKey: id)
+                suppressedProfileIDs.insert(id)
+                return
             }
             resolutionAttempts[id, default: 0] += 1
-            profileTasks[id] = nil
+            guard shouldRetryProfileResolution(error),
+                  resolutionAttempts[id, default: 0]
+                    < maximumProfileResolutionAttempts else {
+                suppressedProfileIDs.insert(id)
+                return
+            }
             guard devices[id] != nil else { return }
             scheduleProfileResolution(for: id, immediately: false, force: true)
         }
@@ -464,11 +494,34 @@ final class PeopleViewModel: ObservableObject {
         )
     }
 
-    private func isNotFound(_ error: Error) -> Bool {
-        if case APIClientError.httpStatus(let status) = error {
-            return status == 404
+    private func isTerminalProfileError(_ error: Error) -> Bool {
+        if error is NearbyProfileError {
+            return true
         }
-        return false
+        guard case APIClientError.httpStatus(let status) = error else {
+            return false
+        }
+        return (400...499).contains(status)
+            && status != 408
+            && status != 425
+            && status != 429
+    }
+
+    private func shouldRetryProfileResolution(_ error: Error) -> Bool {
+        if error is URLError {
+            return true
+        }
+        switch error {
+        case APIClientError.invalidResponse:
+            return true
+        case APIClientError.httpStatus(let status):
+            return status == 408
+                || status == 425
+                || status == 429
+                || (500...599).contains(status)
+        default:
+            return false
+        }
     }
 
     private func loseDevice(id: String) {
@@ -478,6 +531,7 @@ final class PeopleViewModel: ObservableObject {
         profileTasks[canonicalID]?.cancel()
         profileTasks.removeValue(forKey: canonicalID)
         resolutionAttempts.removeValue(forKey: canonicalID)
+        suppressedProfileIDs.remove(canonicalID)
         devices.removeValue(forKey: canonicalID)
         distances.removeValue(forKey: canonicalID)
         userCache.removeValue(forKey: canonicalID)

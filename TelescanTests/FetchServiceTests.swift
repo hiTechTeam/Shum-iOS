@@ -430,8 +430,15 @@ struct FetchServiceTests {
     func incompleteNearbyProfileStaysHidden() async throws {
         let manager = FakeBLEManager()
         let profileID = UUID()
-        let viewModel = PeopleViewModel(bleManager: manager) { requestedID in
-            TelescanProfileResponse(
+        var attempts = 0
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            maximumProfileResolutionAttempts: 3,
+            profileRetryBaseDelay: 0.01,
+            maximumRetryDelay: 0.02
+        ) { requestedID in
+            attempts += 1
+            return TelescanProfileResponse(
                 telescanId: requestedID,
                 name: "No username",
                 username: nil,
@@ -440,9 +447,58 @@ struct FetchServiceTests {
         }
 
         manager.emitDiscovery(id: profileID.uuidString, rssi: -60)
-        try await Task.sleep(for: .milliseconds(50))
+        try await Task.sleep(for: .milliseconds(150))
         #expect(viewModel.visibleUsers.isEmpty)
         #expect(viewModel.userCache.isEmpty)
+        #expect(attempts == 1)
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("A missing nearby profile is a terminal resolution failure")
+    @MainActor
+    func missingNearbyProfileDoesNotRetry() async throws {
+        let manager = FakeBLEManager()
+        let profileID = UUID()
+        var attempts = 0
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            maximumProfileResolutionAttempts: 3,
+            profileRetryBaseDelay: 0.01,
+            maximumRetryDelay: 0.02
+        ) { _ in
+            attempts += 1
+            throw APIClientError.httpStatus(404)
+        }
+
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -60)
+        try await Task.sleep(for: .milliseconds(150))
+
+        #expect(viewModel.visibleUsers.isEmpty)
+        #expect(attempts == 1)
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("Transient nearby profile failures stop at the retry budget")
+    @MainActor
+    func transientNearbyProfileRetriesAreBounded() async throws {
+        let manager = FakeBLEManager()
+        let profileID = UUID()
+        var attempts = 0
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            maximumProfileResolutionAttempts: 3,
+            profileRetryBaseDelay: 0.01,
+            maximumRetryDelay: 0.02
+        ) { _ in
+            attempts += 1
+            throw APIClientError.httpStatus(503)
+        }
+
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -60)
+        try await Task.sleep(for: .milliseconds(200))
+
+        #expect(viewModel.visibleUsers.isEmpty)
+        #expect(attempts == 3)
         viewModel.stopAllBluetoothActivity()
     }
 
