@@ -13,8 +13,8 @@ struct InfoSheetView: View {
     private let blockSpacing: CGFloat = 16
     private let verticalContentMargin: CGFloat = 24
     
-    private let githubURL = URL(string: "https://github.com/orgs/hiTechTeam/repositories")!
-    private let githubURLString = "https://github.com/orgs/hiTechTeam/repositories"
+    private let githubURL = URL(string: "https://github.com/hiTechTeam/Telescan-info")!
+    private let githubURLString = "github.com/hiTechTeam/Telescan-info"
     private let privacyPolicyURL = URL(string: Links.privacyPolicy)!
     private let termsOfServiceURL = URL(string: Links.termsOfService)!
     
@@ -59,7 +59,7 @@ struct InfoSheetView: View {
         }
     }
     
-    private var openSourceSection: some View {
+    private var projectInfoSection: some View {
         VStack(spacing: blockSpacing) {
             HStack(spacing: 12) {
                 Image.tsIconGraySmall
@@ -105,17 +105,17 @@ struct InfoSheetView: View {
             legalSection
             
             Section(
-                header: Text(Inc.Info.openSourceText.localized)
+                header: Text(Inc.Info.projectAccessText.localized)
                     .font(.system(size: 12))
                     .multilineTextAlignment(.leading)
                     .foregroundColor(.gray)
                     .textCase(nil),
-                footer: Text(Inc.Info.licenseMIT.localized)
+                footer: Text(Inc.Info.proprietaryLicense.localized)
                     .font(.system(size: 12, weight: .light))
                     .foregroundColor(.gray)
                     .frame(width: boxWidth, alignment: .center)
             ) {
-                openSourceSection
+                projectInfoSection
             }
         }
         .listStyle(.insetGrouped)

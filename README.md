@@ -19,9 +19,20 @@ these build settings through `Configuration/Info.plist`:
 | `TELESCAN_BOT` | Link to `https://t.me/tgtelescan_bot` |
 | `LOCALHOST` | Optional Debug backend origin |
 
-Local `Configuration/Configs/Debug.xcconfig` and `Release.xcconfig` files are
-ignored by Git and excluded from the application bundle. Keep only non-secret
-templates in source control.
+Create local build settings from the tracked templates before the first build:
+
+```sh
+cp TelescaniOS/Configuration/Configs/Debug.example.xcconfig \
+  TelescaniOS/Configuration/Configs/Debug.xcconfig
+cp TelescaniOS/Configuration/Configs/Release.example.xcconfig \
+  TelescaniOS/Configuration/Configs/Release.xcconfig
+```
+
+Local `Debug.xcconfig` and `Release.xcconfig` files are ignored by Git and
+excluded from the application bundle. Keep only non-secret templates in source
+control. The tracked Release template points to `https://api.tgtelescan.ru`,
+whose production traffic enters through the Netherlands EU relay and continues
+to Moscow over WireGuard.
 
 ## Authentication and account lifecycle
 
@@ -93,6 +104,9 @@ the API returns a matching profile with a usable Telegram username; incomplete
 or unavailable profiles never create `Unknown` rows. Devices expire after 10
 seconds without a foreground sighting, with a 45-second background grace period.
 RSSI is processed locally into a coarse distance hint and is never uploaded.
+When signal silence starts the grace period, the nearby list displays a compact
+`N s` countdown and the expanded profile displays `Disappears in N seconds`;
+either label clears immediately when a fresh signal arrives.
 
 Requested scan and advertising state is kept separately from CoreBluetooth
 manager readiness. Scan, connection, service, and advertising commands are
@@ -101,9 +115,11 @@ callbacks resume deferred work. This avoids API-misuse warnings during launch,
 Bluetooth power transitions, and state restoration.
 
 When the app is backgrounded, nearby notifications contain aggregate numeric
-counts rather than profile names. A profile contributes only after authenticated
-resolution succeeds, and cached blocks continue to suppress notifications while
-the API is temporarily unavailable.
+counts rather than profile names. Discoveries are coalesced into numeric batches
+instead of producing one notification per profile, and a quiet period starts a
+new encounter. A profile contributes only after authenticated resolution
+succeeds, and cached blocks continue to suppress notifications while the API is
+temporarily unavailable.
 
 ## Local storage
 
@@ -141,10 +157,11 @@ the `macos-26` image with Xcode 26.3 for every pull request and every push to
 `main`. CI also verifies the production API origin and rejects forbidden local
 configuration files in the generated application bundle.
 
-The `main` branch is protected and requires the `Build and test` check from this
-workflow. Changes are merged through pull requests; force-pushes and deletion
-are disabled. Secret scanning with push protection, vulnerability alerts, and
-Dependabot security updates are enabled for the repository.
+The repository is private. Pull-request review and the green `Build and test`
+job are the intended merge gates, but the current GitHub plan does not enforce
+branch protection/rulesets or required checks and does not provide secret
+scanning or push protection for private repositories. Dependabot vulnerability
+alerts and security updates are enabled. Do not force-push or delete `main`.
 
 The `.app` bundle must not contain `.gitignore`, `.swiftlint.yml`,
 `project.yml`, or local `.xcconfig` files. Xcode `xcuserdata` is ignored and is
@@ -152,7 +169,12 @@ not part of the repository. The app-owned `PrivacyInfo.xcprivacy` declares
 `UserDefaults` access under Apple's `CA92.1` required reason; dependency privacy
 manifests remain bundled separately with their frameworks.
 
-Architecture, privacy, security, current limitations, and the roadmap live in
-the [Telescan documentation](https://github.com/hiTechTeam/Telescan-info).
+Public product, privacy, terms, and security-contact information live in
+[`Telescan-info`](https://github.com/hiTechTeam/Telescan-info). Cross-service
+architecture and engineering risks live in the private
+[`Telescan-internal-docs`](https://github.com/hiTechTeam/Telescan-internal-docs)
+repository.
 
-Licensed under the [MIT License](LICENSE.md).
+## License
+
+Proprietary and confidential. See [LICENSE.md](LICENSE.md).

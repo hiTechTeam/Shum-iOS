@@ -293,13 +293,13 @@ struct Inc {
         // EN: Copy and past username in Telegram search field
         // RU: Скопируйте и вставьте в поле поиска Telegram
         
-        static let licenseMIT = "licenseMIT"
-        // EN: License: MIT
-        // RU: Лицензия: MIT
+        static let proprietaryLicense = "proprietaryLicense"
+        // EN: Copyright © 2025–2026 Ruslan Chukavin. All rights reserved.
+        // RU: © 2025–2026 Ruslan Chukavin. Все права защищены.
         
-        static let openSourceText = "openSourceText"
-        // EN: This project is open source.
-        // RU: Проект открытый.
+        static let projectAccessText = "projectAccessText"
+        // EN: The core implementation is private. Public project information is available below.
+        // RU: Основная реализация закрыта. Ниже доступна публичная информация о проекте.
 
         static let rulesAndPrivacy = "rulesAndPrivacy"
         // EN: Rules and Privacy
