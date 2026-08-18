@@ -32,8 +32,7 @@ struct BlockedProfilesView: View {
                             Button(Inc.NearbyProfile.unblock.localized) {
                                 unblock(profile)
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.regular)
+                            .buttonStyle(.plain)
                             .disabled(isWorking)
                         }
                         .padding(12)
