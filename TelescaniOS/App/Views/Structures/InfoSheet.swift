@@ -22,38 +22,20 @@ struct InfoSheetView: View {
             .textCase(nil)
     }
 
-    private var heroSection: some View {
-        VStack(spacing: 10) {
-            Image.tsIcon66
-                .resizable()
-                .scaledToFit()
-                .frame(width: 64, height: 64)
-
-            Text(Inc.Info.Telescan)
-                .font(.system(size: 24, weight: .semibold))
-
-            Text(Inc.Info.mainDescription.localized)
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .accessibilityElement(children: .combine)
+    private func sectionDescription(_ description: String) -> some View {
+        Text(description)
+            .font(.system(size: 15))
+            .foregroundStyle(.primary)
+            .lineSpacing(4)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.vertical, 6)
     }
 
     private var storySection: some View {
         Section(
             header: sectionHeader(Inc.Info.whyTelescan.localized)
         ) {
-            Text(Inc.Info.story.localized)
-                .font(.system(size: 15))
-                .foregroundStyle(.primary)
-                .lineSpacing(4)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.vertical, 6)
+            sectionDescription(Inc.Info.story.localized)
         }
     }
 
@@ -61,23 +43,7 @@ struct InfoSheetView: View {
         Section(
             header: sectionHeader(Inc.Info.howItWorks.localized)
         ) {
-            InfoItem(
-                icon: "antenna.radiowaves.left.and.right",
-                title: Inc.Info.nearbyDiscoveryTitle.localized,
-                description: Inc.Info.nearbyDiscoveryDescription.localized
-            )
-
-            InfoItem(
-                icon: "person.crop.circle",
-                title: Inc.Info.profileDisplayTitle.localized,
-                description: Inc.Info.profileDisplayDescription.localized
-            )
-
-            InfoItem(
-                icon: "paperplane.fill",
-                title: Inc.Info.telegramContactTitle.localized,
-                description: Inc.Info.telegramContactDescription.localized
-            )
+            sectionDescription(Inc.Info.howItWorksDescription.localized)
         }
     }
 
@@ -85,19 +51,15 @@ struct InfoSheetView: View {
         Section(
             header: sectionHeader(Inc.Info.rulesAndPrivacy.localized)
         ) {
-            Link(destination: termsOfServiceURL) {
-                Label(
-                    Inc.Onboarding.termsOfService.localized,
-                    systemImage: "doc.text"
-                )
-            }
+            Link(
+                Inc.Onboarding.termsOfService.localized,
+                destination: termsOfServiceURL
+            )
 
-            Link(destination: privacyPolicyURL) {
-                Label(
-                    Inc.Onboarding.privacyPolicy.localized,
-                    systemImage: "hand.raised"
-                )
-            }
+            Link(
+                Inc.Onboarding.privacyPolicy.localized,
+                destination: privacyPolicyURL
+            )
         }
     }
 
@@ -105,17 +67,13 @@ struct InfoSheetView: View {
         Section(
             header: sectionHeader(Inc.Info.aboutApp.localized),
             footer: Text(Inc.Info.proprietaryLicense.localized)
-                .font(.system(size: 12, weight: .light))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.primary.opacity(0.72))
                 .frame(maxWidth: .infinity, alignment: .center)
                 .textCase(nil)
                 .padding(.top, 8)
         ) {
-            HStack(spacing: 14) {
-                Image(systemName: "app.badge")
-                    .foregroundStyle(.blue)
-                    .frame(width: 24)
-
+            HStack {
                 Text(Inc.Info.version.localized)
 
                 Spacer()
@@ -125,18 +83,8 @@ struct InfoSheetView: View {
             }
 
             Link(destination: githubURL) {
-                HStack(spacing: 14) {
-                    Image(systemName: "chevron.left.forwardslash.chevron.right")
-                        .foregroundStyle(.blue)
-                        .frame(width: 24)
-
+                HStack {
                     Text(Inc.Info.publicProject.localized)
-
-                    Spacer()
-
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.tertiary)
                 }
             }
         }
@@ -144,7 +92,6 @@ struct InfoSheetView: View {
 
     private var listContent: some View {
         List {
-            Section { heroSection }
             storySection
             howItWorksSection
             legalSection
@@ -156,37 +103,6 @@ struct InfoSheetView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            listContent
-                .navigationTitle(Inc.Info.aboutTelescan.localized)
-                .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-}
-
-struct InfoItem: View {
-    let icon: String
-    let title: String
-    let description: String
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 19, weight: .medium))
-                .foregroundStyle(.blue)
-                .frame(width: 24)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-
-                Text(description)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(.vertical, 4)
+        listContent
     }
 }

@@ -80,6 +80,7 @@
 "nearbyProfileBlockTitle" = "Заблокировать пользователя?";
 "nearbyProfileBlockMessage" = "Вы больше не будете видеть друг друга среди людей рядом. Если вы не уверены, отмените действие.";
 "nearbyProfileBlockConfirm" = "Заблокировать";
+"nearbyProfileBlockedMenu" = "Заблокированные";
 "nearbyProfileBlockedProfiles" = "Заблокированные профили";
 "nearbyProfileNoBlockedProfiles" = "Нет заблокированных профилей";
 "nearbyProfileUnblock" = "Разблокировать";
@@ -113,16 +114,9 @@
 /* Info Sheet */
 "Telescan" = "Telescan";
 "info_title" = "Информация";
-"info_about_telescan" = "О Telescan";
-"info_main_description" = "Telescan помогает находить людей рядом и обмениваться Telegram-профилями с помощью Bluetooth.";
 "info_why_telescan" = "Зачем нужен Telescan";
 "info_how_it_works" = "Как это работает";
-"info_nearby_discovery_title" = "Люди рядом";
-"info_nearby_discovery_desc" = "Устройства Telescan обнаруживают друг друга поблизости с помощью Bluetooth.";
-"info_profile_display_title" = "Профиль Telescan";
-"info_profile_display_desc" = "Приложение получает профиль найденного пользователя и показывает его имя, фотографию и Telegram username.";
-"info_telegram_contact_title" = "Общение в Telegram";
-"info_telegram_contact_desc" = "Скопируйте username и продолжите общение в Telegram.";
+"info_how_it_works_description" = "Telescan с помощью Bluetooth обнаруживает пользователей поблизости и показывает их имя, фотографию и Telegram username: скопируйте username, вставьте его в строку поиска Telegram, найдите пользователя и продолжите общение.";
 "copyUsername" = "Скопируйте и вставьте в поле поиска Telegram";
 "proprietaryLicense" = "© 2021–2026 Ruslan Chukavin. Все права защищены.";
 "info_story" = "Каждый день мы оказываемся рядом с людьми, с которыми могли бы заговорить, познакомиться, провести вечер или однажды вспомнить эту встречу как что-то важное. Мы пересекаемся в метро, на учебе, в кафе, на улице, смотрим друг на друга и почти всегда просто идем дальше.\n\nСлишком много хороших историй заканчиваются еще до того, как успевают начаться. Telescan - это попытка дать таким встречам еще один шанс.";

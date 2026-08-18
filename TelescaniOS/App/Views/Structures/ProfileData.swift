@@ -68,7 +68,7 @@ struct ProfileDataView: View {
                 showBlockedProfiles = true
             } label: {
                 Label(
-                    Inc.NearbyProfile.blockedProfiles.localized,
+                    Inc.NearbyProfile.blockedMenu.localized,
                     systemImage: "person.crop.circle.badge.xmark"
                 )
             }
