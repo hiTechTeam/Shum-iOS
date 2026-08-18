@@ -36,6 +36,7 @@ struct Inc {
         // RU: Рядом
         
         static let okey: String = "Ok"
+        static let close: String = "close"
         static let Telescan: String = "Telescan"
     }
     
@@ -232,6 +233,8 @@ struct Inc {
         static let creatorCredit: String = "creatorCredit"
         // EN/RU: from Ruslan Chukavin
 
+        static let moreActions: String = "profileMoreActions"
+
         static let developerLinksTitle: String = "developerLinksTitle"
         static let developerLinksMessage: String = "developerLinksMessage"
         static let telegramChannel: String = "telegramChannel"
@@ -252,38 +255,19 @@ struct Inc {
     
     struct Info {
         static let Telescan = "Telescan"
+        static let title = "info_title"
+        static let aboutTelescan = "info_about_telescan"
         
         static let mainDescription = "info_main_description"
-        // EN: The app extends Telegram's functionality and uses it as the main communication channel. Telescan enables instant exchange of Telegram usernames via Bluetooth.
-        // RU: Приложение расширяет возможности Telegram и использует его как основной канал связи. Telescan позволяет мгновенно обмениваться Telegram-юзернеймами через Bluetooth.
-        
-        static let instantExchangeTitle = "info_instant_exchange_title"
-        // EN: Instant Contact Exchange
-        // RU: Мгновенный обмен контактами
-        static let instantExchangeDesc = "info_instant_exchange_desc"
-        // EN: Exchange contact information with other participants instantly.
-        // RU: Мгновенно обменивайтесь контактной информацией с другими участниками.
-        
-        static let fastOfflineTitle = "info_fast_offline_title"
-        // EN: Fast and Offline
-        // RU: Быстро и офлайн
-        static let fastOfflineDesc = "info_fast_offline_desc"
-        // EN: Uses Bluetooth for offline code hash exchange.
-        // RU: Использует Bluetooth для офлайн-обмена хэшами кода.
-        
-        static let dataProtectionTitle = "info_data_protection_title"
-        // EN: Data Protection
-        // RU: Защита данных
-        static let dataProtectionDesc = "info_data_protection_desc"
-        // EN: All data is securely protected: code hashes are stored on the server, and only the account owner can link their Telegram.
-        // RU: Все данные надежно защищены: хэши кодов хранятся на сервере, и только владелец аккаунта может привязать свой Telegram.
-        
-        static let idealForEventsTitle = "info_ideal_events_title"
-        // EN: Ideal for Events
-        // RU: Идеально для мероприятий
-        static let idealForEventsDesc = "info_ideal_events_desc"
-        // EN: Perfect for conferences, business events, professional meetups, networking, and dating.
-        // RU: Подходит для конференций, бизнес-встреч, профессиональных мероприятий, нетворкинга и знакомств.
+
+        static let whyTelescan = "info_why_telescan"
+        static let howItWorks = "info_how_it_works"
+        static let nearbyDiscoveryTitle = "info_nearby_discovery_title"
+        static let nearbyDiscoveryDescription = "info_nearby_discovery_desc"
+        static let profileDisplayTitle = "info_profile_display_title"
+        static let profileDisplayDescription = "info_profile_display_desc"
+        static let telegramContactTitle = "info_telegram_contact_title"
+        static let telegramContactDescription = "info_telegram_contact_desc"
         
         static let version = "version"
         // EN: Version
@@ -294,18 +278,16 @@ struct Inc {
         // RU: Скопируйте и вставьте в поле поиска Telegram
         
         static let proprietaryLicense = "proprietaryLicense"
-        // EN: Copyright © 2025–2026 Ruslan Chukavin. All rights reserved.
-        // RU: © 2025–2026 Ruslan Chukavin. Все права защищены.
-        
-        static let projectAccessText = "projectAccessText"
-        // EN: The core implementation is private. Public project information is available below.
-        // RU: Основная реализация закрыта. Ниже доступна публичная информация о проекте.
+        // EN: Copyright © 2021–2026 Ruslan Chukavin. All rights reserved.
+        // RU: © 2021–2026 Ruslan Chukavin. Все права защищены.
+
+        static let story = "info_story"
 
         static let rulesAndPrivacy = "rulesAndPrivacy"
-        // EN: Rules and Privacy
-        // RU: Правила и политика
+        static let aboutApp = "info_about_app"
+        static let publicProject = "info_public_project"
         
-        static let currentVersion = " 1.0.0"
+        static let currentVersion = "1.0.0"
     }
 }
 

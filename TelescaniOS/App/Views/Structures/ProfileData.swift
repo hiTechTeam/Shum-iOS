@@ -2,10 +2,10 @@ import SwiftUI
 
 struct ProfileDataView: View {
     @EnvironmentObject var coordinator: AppCoordinator
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
     @ObservedObject var authCodeViewModel: CodeViewModel
     @StateObject private var photoVM = ProfilePhotoViewModel()
+    @State private var showInfoSheet = false
     @State private var showDeveloperLinks = false
     @State private var showLogoutOptions = false
     @State private var showBlockedProfiles = false
@@ -53,50 +53,46 @@ struct ProfileDataView: View {
         .padding(.top, 40)
     }
 
-    private var logoutButton: some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            showLogoutOptions = true
-        } label: {
-            Group {
-                if isWorking {
-                    ProgressView()
-                } else {
-                    Text(Inc.Profile.logout.localized)
-                        .font(.system(size: 16, weight: .semibold))
-                }
+    private var profileActionsMenu: some View {
+        Menu {
+            Button {
+                showInfoSheet = true
+            } label: {
+                Label(
+                    Inc.Info.title.localized,
+                    systemImage: "info.circle"
+                )
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 48)
-            .background(actionBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 13))
-        }
-        .buttonStyle(.plain)
-        .disabled(isWorking)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 24)
-    }
 
-    private var blockedProfilesButton: some View {
-        Button {
-            showBlockedProfiles = true
+            Button {
+                showBlockedProfiles = true
+            } label: {
+                Label(
+                    Inc.NearbyProfile.blockedProfiles.localized,
+                    systemImage: "person.crop.circle.badge.xmark"
+                )
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                showLogoutOptions = true
+            } label: {
+                Label(
+                    Inc.Profile.logout.localized,
+                    systemImage: "rectangle.portrait.and.arrow.right"
+                )
+            }
+            .disabled(isWorking)
         } label: {
-            Label(
-                Inc.NearbyProfile.blockedProfiles.localized,
-                systemImage: "person.crop.circle.badge.xmark"
-            )
-            .font(.system(size: 15, weight: .medium))
-            .frame(maxWidth: .infinity)
-            .frame(height: 48)
-            .background(actionBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 13))
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.gray)
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 16)
-    }
-
-    private var actionBackground: Color {
-        colorScheme == .dark ? Color.gray.opacity(0.35) : .white
+        .accessibilityLabel(Inc.Profile.moreActions.localized)
     }
 
     private var scrollContent: some View {
@@ -104,9 +100,8 @@ struct ProfileDataView: View {
             VStack(spacing: 0) {
                 profileSection
                 productDescription
-                blockedProfilesButton.padding(.top, 32)
-                logoutButton.padding(.top, 12)
             }
+            .padding(.bottom, 32)
         }
         .refreshable { await coordinator.refreshSession() }
     }
@@ -147,6 +142,16 @@ struct ProfileDataView: View {
         }
         .onChange(of: authCodeViewModel.photoS3URL) { _, value in
             photoVM.loadPhotoFromURL(value)
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                profileActionsMenu
+            }
+        }
+        .sheet(isPresented: $showInfoSheet) {
+            InfoSheetView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showBlockedProfiles) {
             BlockedProfilesView()

@@ -5,6 +5,7 @@
 "SignIn" = "Войти";
 "ok" = "Хорошо";
 "cancel" = "Отмена";
+"close" = "Закрыть";
 "copied_sheet" = "Скопированно";
 "nearby" = "Рядом";
 "distanceMetersFormat" = "%d м";
@@ -93,6 +94,7 @@
 "deletePhoto" = "Удалить фото";
 "shareUtg" = "Поделиться профилем";
 "creatorCredit" = "from Ruslan Chukavin";
+"profileMoreActions" = "Ещё";
 "developerLinksTitle" = "Разработчик приложения";
 "developerLinksMessage" = "Ruslan Chukavin — разработчик Telescan. Куда вы хотите перейти?";
 "telegramChannel" = "Telegram-канал";
@@ -110,21 +112,21 @@
 
 /* Info Sheet */
 "Telescan" = "Telescan";
-"info_main_description" = "Приложение расширяет возможности Telegram и использует его как основной канал связи. Telescan позволяет мгновенно обмениваться Telegram-юзернеймами через Bluetooth.";
-
-"info_instant_exchange_title" = "Мгновенный обмен контактами";
-"info_instant_exchange_desc" = "Мгновенно обменивайтесь контактной информацией с другими участниками.";
-
-"info_fast_offline_title" = "Быстро и офлайн";
-"info_fast_offline_desc" = "Использует Bluetooth для обмена постоянными идентификаторами профилей Telescan.";
-
-"info_data_protection_title" = "Защита данных";
-"info_data_protection_desc" = "Одноразовые коды быстро истекают, а доступ защищён отдельными сессиями устройств.";
-
-"info_ideal_events_title" = "Идеально для мероприятий";
-"info_ideal_events_desc" = "Подходит для конференций, бизнес-встреч, профессиональных мероприятий, нетворкинга, дейтинга и остальных встреч.";
+"info_title" = "Информация";
+"info_about_telescan" = "О Telescan";
+"info_main_description" = "Telescan помогает находить людей рядом и обмениваться Telegram-профилями с помощью Bluetooth.";
+"info_why_telescan" = "Зачем нужен Telescan";
+"info_how_it_works" = "Как это работает";
+"info_nearby_discovery_title" = "Люди рядом";
+"info_nearby_discovery_desc" = "Устройства Telescan обнаруживают друг друга поблизости с помощью Bluetooth.";
+"info_profile_display_title" = "Профиль Telescan";
+"info_profile_display_desc" = "Приложение получает профиль найденного пользователя и показывает его имя, фотографию и Telegram username.";
+"info_telegram_contact_title" = "Общение в Telegram";
+"info_telegram_contact_desc" = "Скопируйте username и продолжите общение в Telegram.";
 "copyUsername" = "Скопируйте и вставьте в поле поиска Telegram";
-"proprietaryLicense" = "© 2025–2026 Ruslan Chukavin. Все права защищены.";
-"projectAccessText" = "Основная реализация закрыта. Ниже доступна публичная информация о проекте.";
-"rulesAndPrivacy" = "Правила и политика";
+"proprietaryLicense" = "© 2021–2026 Ruslan Chukavin. Все права защищены.";
+"info_story" = "Каждый день мы оказываемся рядом с людьми, с которыми могли бы заговорить, познакомиться, провести вечер или однажды вспомнить эту встречу как что-то важное. Мы пересекаемся в метро, на учебе, в кафе, на улице, смотрим друг на друга и почти всегда просто идем дальше.\n\nСлишком много хороших историй заканчиваются еще до того, как успевают начаться. Telescan - это попытка дать таким встречам еще один шанс.";
+"rulesAndPrivacy" = "Документы";
+"info_about_app" = "О приложении";
+"info_public_project" = "Публичная информация о проекте";
 "version" = "Версия";

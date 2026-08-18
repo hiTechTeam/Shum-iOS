@@ -195,15 +195,47 @@ struct ProfileSheetView: View {
 
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
+    @State private var showPhotoPreview = false
+
     let user: NearbyUser
+
+    private var imageURL: URL? {
+        guard let url = user.photoURL else { return nil }
+        return URL(string: url)
+    }
+
+    private func openPhotoPreview() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+
+        withTransaction(transaction) {
+            showPhotoPreview = true
+        }
+    }
+
+    private func profilePhoto(
+        imageURL: URL,
+        size: CGFloat
+    ) -> some View {
+        KFImage(imageURL)
+            .placeholder {
+                Image.personCropCircleFill
+                    .resizable()
+                    .foregroundColor(.gray)
+            }
+            .resizable()
+            .scaledToFill()
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .contentShape(Circle())
+    }
 
     var body: some View {
         ZStack {
             VStack {
                 Spacer(minLength: 0)
 
-                if let url = user.photoURL,
-                   let imageURL = URL(string: url) {
+                if let imageURL {
                     GeometryReader { geo in
                         let maxSize = max(
                             0,
@@ -213,30 +245,11 @@ struct ProfileSheetView: View {
                             ) - 24
                         )
 
-                        let strokeWidth: CGFloat = 6
-
-                        KFImage(imageURL)
-                            .placeholder {
-                                Image.personCropCircleFill
-                                    .resizable()
-                                    .foregroundColor(.gray)
-                            }
-                            .resizable()
-                            .scaledToFill()
-                            .frame(
-                                width: maxSize,
-                                height: maxSize
-                            )
-                            .clipShape(Circle())
-                            .overlay(
-                                Circle()
-                                    .strokeBorder(
-                                        Color.gray,
-                                        lineWidth: strokeWidth
-                                    )
-                                    .padding(-strokeWidth)
-                                    .opacity(0.3)
-                            )
+                        profilePhoto(
+                            imageURL: imageURL,
+                            size: maxSize
+                        )
+                            .onTapGesture(perform: openPhotoPreview)
                             .frame(
                                 maxWidth: .infinity,
                                 maxHeight: .infinity
@@ -278,6 +291,16 @@ struct ProfileSheetView: View {
             .padding(.top, 60)
 
             ProfileSheetControls(user: user)
+        }
+        .fullScreenCover(isPresented: $showPhotoPreview) {
+            if let imageURL {
+                FullScreenPhotoView(isPresented: $showPhotoPreview) {
+                    KFImage(imageURL)
+                        .placeholder { ProgressView() }
+                        .resizable()
+                        .scaledToFit()
+                }
+            }
         }
     }
 }

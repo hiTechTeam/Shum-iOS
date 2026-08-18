@@ -3,7 +3,6 @@ import SwiftUI
 struct Profile: View {
     
     @ObservedObject var authVM: CodeViewModel
-    @State private var showInfoSheet = false
     
     private let profileInc: String = Inc.Tabs.profile.localized
     
@@ -12,25 +11,6 @@ struct Profile: View {
             ProfileDataView(authCodeViewModel: authVM)
                 .navigationTitle(authVM.tgName ?? profileInc)
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(
-                            action: {
-                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                showInfoSheet = true
-                            },
-                            label: {
-                                Image.infoImage
-                                    .foregroundColor(.gray)
-                            }
-                        )
-                    }
-                }
-                .sheet(isPresented: $showInfoSheet) {
-                    InfoSheetView()
-                        .presentationDetents([.large])
-                        .presentationDragIndicator(.visible)
-                }
         }
         .onAppear {
             authVM.restoreLocalProfile()

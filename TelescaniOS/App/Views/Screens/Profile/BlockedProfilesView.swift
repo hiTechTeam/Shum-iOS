@@ -32,8 +32,25 @@ struct BlockedProfilesView: View {
                             Button(Inc.NearbyProfile.unblock.localized) {
                                 unblock(profile)
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.regular)
                             .disabled(isWorking)
                         }
+                        .padding(12)
+                        .background(
+                            Color(uiColor: .secondarySystemGroupedBackground),
+                            in: RoundedRectangle(cornerRadius: 13)
+                        )
+                        .listRowInsets(
+                            EdgeInsets(
+                                top: 6,
+                                leading: 16,
+                                bottom: 6,
+                                trailing: 16
+                            )
+                        )
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                     }
                 }
             }
