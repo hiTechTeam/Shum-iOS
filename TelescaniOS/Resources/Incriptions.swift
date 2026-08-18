@@ -197,6 +197,7 @@ struct Inc {
         static let blockTitle: String = "nearbyProfileBlockTitle"
         static let blockMessage: String = "nearbyProfileBlockMessage"
         static let blockConfirm: String = "nearbyProfileBlockConfirm"
+        static let blockedMenu: String = "nearbyProfileBlockedMenu"
         static let blockedProfiles: String = "nearbyProfileBlockedProfiles"
         static let noBlockedProfiles: String = "nearbyProfileNoBlockedProfiles"
         static let unblock: String = "nearbyProfileUnblock"
@@ -254,20 +255,11 @@ struct Inc {
     }
     
     struct Info {
-        static let Telescan = "Telescan"
         static let title = "info_title"
-        static let aboutTelescan = "info_about_telescan"
-        
-        static let mainDescription = "info_main_description"
 
         static let whyTelescan = "info_why_telescan"
         static let howItWorks = "info_how_it_works"
-        static let nearbyDiscoveryTitle = "info_nearby_discovery_title"
-        static let nearbyDiscoveryDescription = "info_nearby_discovery_desc"
-        static let profileDisplayTitle = "info_profile_display_title"
-        static let profileDisplayDescription = "info_profile_display_desc"
-        static let telegramContactTitle = "info_telegram_contact_title"
-        static let telegramContactDescription = "info_telegram_contact_desc"
+        static let howItWorksDescription = "info_how_it_works_description"
         
         static let version = "version"
         // EN: Version

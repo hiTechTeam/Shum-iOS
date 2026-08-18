@@ -85,8 +85,9 @@ struct PeopleView: View {
         .sheet(item: $selectedUser) { user in
             ProfileSheetView(user: user)
                 .environmentObject(peopleViewModel)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.hidden)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationContentInteraction(.resizes)
         }
         .task {
             await peopleViewModel.synchronizeBlockedProfiles()
@@ -287,6 +288,9 @@ struct ProfileSheetView: View {
 
                     CopyUsernameField(username: user.username)
                 }
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
+                .geometryGroup()
             }
             .padding(.top, 60)
 

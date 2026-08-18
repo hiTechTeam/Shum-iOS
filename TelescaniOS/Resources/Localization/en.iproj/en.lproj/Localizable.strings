@@ -80,6 +80,7 @@
 "nearbyProfileBlockTitle" = "Block this user?";
 "nearbyProfileBlockMessage" = "You will no longer see each other in nearby profiles. You can cancel now if you are unsure.";
 "nearbyProfileBlockConfirm" = "Block";
+"nearbyProfileBlockedMenu" = "Blocked";
 "nearbyProfileBlockedProfiles" = "Blocked profiles";
 "nearbyProfileNoBlockedProfiles" = "No blocked profiles";
 "nearbyProfileUnblock" = "Unblock";
@@ -114,16 +115,9 @@
 /* Info Sheet */
 "Telescan" = "Telescan";
 "info_title" = "Information";
-"info_about_telescan" = "About Telescan";
-"info_main_description" = "Telescan helps you find people nearby and exchange Telegram profiles using Bluetooth.";
 "info_why_telescan" = "Why Telescan";
 "info_how_it_works" = "How it works";
-"info_nearby_discovery_title" = "People Nearby";
-"info_nearby_discovery_desc" = "Telescan devices discover one another nearby using Bluetooth.";
-"info_profile_display_title" = "Telescan Profile";
-"info_profile_display_desc" = "The app retrieves a nearby user's profile and shows their name, photo, and Telegram username.";
-"info_telegram_contact_title" = "Continue in Telegram";
-"info_telegram_contact_desc" = "Copy the username and continue the conversation in Telegram.";
+"info_how_it_works_description" = "Telescan uses Bluetooth to discover nearby users and displays their name, photo, and Telegram username: copy the username, paste it into Telegram’s search field, find the user, and continue the conversation.";
 "copyUsername" = "Copy and past username in Telegram search field";
 "proprietaryLicense" = "Copyright © 2021–2026 Ruslan Chukavin. All rights reserved.";
 "info_story" = "Every day, we find ourselves near people we could have talked to, gotten to know, spent an evening with, or one day remembered the encounter as something important. We cross paths on the metro, at school, in cafés, and on the street. We look at one another and almost always simply keep walking.\n\nToo many good stories end before they have a chance to begin. Telescan is an attempt to give those encounters another chance.";
