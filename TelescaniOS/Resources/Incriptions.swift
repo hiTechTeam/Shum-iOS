@@ -266,12 +266,12 @@ struct Inc {
         // RU: Версия
         
         static let copyUsername = "copyUsername"
-        // EN: Copy and past username in Telegram search field
+        // EN: Copy and paste into Telegram search
         // RU: Скопируйте и вставьте в поле поиска Telegram
         
         static let proprietaryLicense = "proprietaryLicense"
-        // EN: Copyright © 2021–2026 Ruslan Chukavin. All rights reserved.
-        // RU: © 2021–2026 Ruslan Chukavin. Все права защищены.
+        // EN: Copyright © 2021 - 2026 Ruslan Chukavin. All rights reserved.
+        // RU: © 2021 - 2026 Ruslan Chukavin. Все права защищены.
 
         static let story = "info_story"
 
