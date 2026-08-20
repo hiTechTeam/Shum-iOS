@@ -154,7 +154,9 @@ CODE_SIGNING_ALLOWED=NO
 
 GitHub Actions runs the test suite and an unsigned Release simulator build for
 every pull request and push to `main`. CI also verifies the production API
-origin and rejects forbidden local configuration files in the generated app.
+origin, Bluetooth background modes, privacy manifest, permission-text
+localizations, and rejects forbidden local configuration files in the generated
+app.
 
 The `.app` bundle must not contain `.gitignore`, `.swiftlint.yml`,
 `project.yml`, or local `.xcconfig` files. Xcode `xcuserdata` is ignored and is

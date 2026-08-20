@@ -220,9 +220,7 @@ struct ProfileSheetView: View {
     ) -> some View {
         KFImage(imageURL)
             .placeholder {
-                Image.personCropCircleFill
-                    .resizable()
-                    .foregroundColor(.gray)
+                profilePlaceholder(size: size)
             }
             .resizable()
             .scaledToFill()
@@ -231,36 +229,43 @@ struct ProfileSheetView: View {
             .contentShape(Circle())
     }
 
+    private func profilePlaceholder(size: CGFloat) -> some View {
+        Image.personCropCircleFill
+            .resizable()
+            .scaledToFit()
+            .foregroundColor(.gray)
+            .frame(width: size, height: size)
+    }
+
     var body: some View {
         ZStack {
             VStack {
                 Spacer(minLength: 0)
 
-                if let imageURL {
-                    GeometryReader { geo in
-                        let maxSize = max(
-                            0,
-                            min(
-                                geo.size.width,
-                                geo.size.height
-                            ) - 24
-                        )
+                GeometryReader { geo in
+                    let maxSize = max(
+                        0,
+                        min(
+                            geo.size.width,
+                            geo.size.height
+                        ) - 24
+                    )
 
-                        profilePhoto(
-                            imageURL: imageURL,
-                            size: maxSize
-                        )
-                            .onTapGesture(perform: openPhotoPreview)
-                            .frame(
-                                maxWidth: .infinity,
-                                maxHeight: .infinity
+                    Group {
+                        if let imageURL {
+                            profilePhoto(
+                                imageURL: imageURL,
+                                size: maxSize
                             )
+                                .onTapGesture(perform: openPhotoPreview)
+                        } else {
+                            profilePlaceholder(size: maxSize)
+                        }
                     }
-                } else {
-                    Image.personCropCircleFill
-                        .resizable()
-                        .foregroundColor(.gray)
-                        .frame(width: 300, height: 300)
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity
+                    )
                 }
 
                 Spacer()
@@ -306,6 +311,140 @@ struct ProfileSheetView: View {
                 }
             }
         }
+        .presentationBackground {
+            ProfileSheetBackground(imageURL: imageURL)
+        }
+    }
+}
+
+private struct ProfileSheetBackground: View {
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    let imageURL: URL?
+
+    private var systemBackground: Color {
+        Color(uiColor: .systemBackground)
+    }
+
+    var body: some View {
+        Group {
+            if let imageURL,
+               colorScheme == .dark,
+               !reduceTransparency {
+                photoBackground(imageURL: imageURL)
+            } else {
+                systemBackground
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    private func photoBackground(imageURL: URL) -> some View {
+        ZStack {
+            systemBackground
+
+            KFImage(imageURL)
+                .placeholder { systemBackground }
+                .resizable()
+                .scaledToFill()
+                .scaleEffect(1.35)
+                .blur(radius: 44, opaque: true)
+                .saturation(1.22)
+                .contrast(0.96)
+                .opacity(0.60)
+
+            adaptiveMaterial
+
+            LinearGradient(
+                stops: [
+                    .init(
+                        color: systemBackground.opacity(0.08),
+                        location: 0
+                    ),
+                    .init(
+                        color: systemBackground.opacity(0.34),
+                        location: 0.58
+                    ),
+                    .init(
+                        color: systemBackground.opacity(0.74),
+                        location: 1
+                    )
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .clipped()
+    }
+
+    @ViewBuilder
+    private var adaptiveMaterial: some View {
+        if #available(iOS 26.0, *) {
+            Color.clear
+                .glassEffect(.regular, in: .rect(cornerRadius: 0))
+        } else {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .opacity(0.55)
+        }
+    }
+}
+
+private struct ProfileSheetControlSurface: ViewModifier {
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    @ViewBuilder
+    private var fallbackBackground: some View {
+        if colorScheme == .light {
+            Circle()
+                .fill(Color(uiColor: .systemGray6))
+        } else if reduceTransparency {
+            Circle()
+                .fill(Color(uiColor: .secondarySystemBackground))
+        } else {
+            Circle()
+                .fill(.ultraThinMaterial)
+        }
+    }
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular.interactive(), in: Circle())
+        } else if colorScheme == .light {
+            content
+                .background { fallbackBackground }
+        } else {
+            content
+                .background { fallbackBackground }
+                .overlay {
+                    Circle()
+                        .stroke(
+                            colorScheme == .dark
+                                ? Color.white.opacity(0.24)
+                                : Color.black.opacity(0.10),
+                            lineWidth: 0.75
+                        )
+                }
+                .shadow(
+                    color: Color.black.opacity(
+                        colorScheme == .dark ? 0.28 : 0.14
+                    ),
+                    radius: 4,
+                    y: 2
+                )
+        }
+    }
+}
+
+private extension View {
+    func profileSheetControlSurface() -> some View {
+        modifier(ProfileSheetControlSurface())
     }
 }
 
@@ -421,11 +560,12 @@ private struct ProfileSheetControls: View {
         Button {
             dismiss()
         } label: {
-            Image.chevronDownCircleFill
-                .font(.system(size: 28))
-                .foregroundStyle(Color(uiColor: .systemGray3))
+            Image(systemName: "chevron.down")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.primary)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
+                .profileSheetControlSurface()
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Inc.NearbyProfile.close.localized)
@@ -454,14 +594,16 @@ private struct ProfileSheetControls: View {
             Group {
                 if isSubmitting {
                     ProgressView()
+                        .tint(.primary)
                 } else {
-                    Image.ellipsisCircleFill
-                        .font(.system(size: 28))
-                        .foregroundStyle(Color(uiColor: .systemGray3))
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(.primary)
                 }
             }
             .frame(width: 44, height: 44)
             .contentShape(Circle())
+            .profileSheetControlSurface()
         }
         .buttonStyle(.plain)
         .menuOrder(.fixed)

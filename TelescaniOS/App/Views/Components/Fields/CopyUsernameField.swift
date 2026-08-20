@@ -72,7 +72,7 @@ struct CopyUsernameField: View {
             .offset(x: isRussianLocale ? textOffsetXRussian : textOffsetXOther)
             .transition(.opacity.combined(with: .move(edge: .top)))
     }
-    
+
     private var content: some View {
         VStack {
             Text(Inc.Registration.tgUsername)

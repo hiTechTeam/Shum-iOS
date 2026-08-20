@@ -32,10 +32,10 @@
     <string>$(CURRENT_PROJECT_VERSION)</string>
 
     <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>Bluetooth is used to discover nearby Telescan users</string>
+    <string>Bluetooth lets Telescan discover nearby users and make your profile discoverable while scanning is enabled.</string>
     
     <key>NSCameraUsageDescription</key>
-    <string>Camera access is used to select a profile photo</string>
+    <string>Camera access lets you take a profile photo.</string>
     
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>

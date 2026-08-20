@@ -83,6 +83,13 @@ jobs:
           test -d "$APP"
           test "$(/usr/libexec/PlistBuddy -c 'Print :API_ORIGIN' "$APP/Info.plist")" = \
             'https://api.tgtelescan.ru'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes:0' "$APP/Info.plist")" = \
+            'bluetooth-central'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes:1' "$APP/Info.plist")" = \
+            'bluetooth-peripheral'
+          test -f "$APP/PrivacyInfo.xcprivacy"
+          test -f "$APP/en.lproj/InfoPlist.strings"
+          test -f "$APP/ru.lproj/InfoPlist.strings"
           test -z "$(find "$APP" \
             \( -name '.gitignore' \
             -o -name '.swiftlint.yml' \

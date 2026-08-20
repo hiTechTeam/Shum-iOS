@@ -33,6 +33,7 @@ struct BlockedProfilesView: View {
                                 unblock(profile)
                             }
                             .buttonStyle(.plain)
+                            .foregroundStyle(Color(uiColor: .systemBlue))
                             .disabled(isWorking)
                         }
                         .padding(12)
