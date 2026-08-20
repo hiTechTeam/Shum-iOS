@@ -21,7 +21,13 @@ struct SessionValidator {
 
     func validate() async -> SessionValidationResult {
         do {
-            return .active(try await profileAction())
+            let profile = try await profileAction()
+            guard let username = profile.username?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                  !username.isEmpty else {
+                return .invalid
+            }
+            return .active(profile)
         } catch APIClientError.unauthenticated {
             return .invalid
         } catch APIClientError.accountNotFound {

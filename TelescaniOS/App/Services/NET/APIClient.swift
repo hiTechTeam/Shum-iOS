@@ -4,8 +4,13 @@ enum APIClientError: Error {
     case invalidURL
     case unauthenticated
     case accountNotFound
+    case telegramUsernameRequired
     case invalidResponse
     case httpStatus(Int)
+}
+
+private struct APIErrorResponse: Decodable {
+    let code: String?
 }
 
 actor APIClient {
@@ -50,6 +55,18 @@ actor APIClient {
 
     func profile(id: UUID) async throws -> TelescanProfileResponse {
         try await decode(path: "/api/v1/profiles/\(id.uuidString.lowercased())")
+    }
+
+    func updateProfile(bio: String?) async throws -> TelescanProfileResponse {
+        let request = try jsonRequest(
+            path: "/api/v1/users/me",
+            method: "PATCH",
+            body: ProfileUpdateRequest(bio: bio)
+        )
+        return try decoder.decode(
+            TelescanProfileResponse.self,
+            from: try await perform(request, authenticated: true)
+        )
     }
 
     func submitReport(
@@ -171,6 +188,11 @@ actor APIClient {
                request.httpMethod == "GET",
                request.url?.path == "/api/v1/users/me" {
                 throw APIClientError.accountNotFound
+            }
+            if http.statusCode == 422,
+               let payload = try? decoder.decode(APIErrorResponse.self, from: data),
+               payload.code == "telegram_username_required" {
+                throw APIClientError.telegramUsernameRequired
             }
             throw APIClientError.httpStatus(http.statusCode)
         }

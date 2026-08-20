@@ -33,6 +33,7 @@ struct ProfileDataView: View {
         VStack(spacing: 16) {
             ProfilePhotoView(viewModel: photoVM)
             headerInfo
+            BioProfileField(authVM: authCodeViewModel)
             ScanToggle(isScaning: $coordinator.isScaning)
         }
         .frame(maxWidth: .infinity)

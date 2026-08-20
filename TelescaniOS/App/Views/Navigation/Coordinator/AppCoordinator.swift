@@ -105,7 +105,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
 
     func updateApplicationState(isActive: Bool) {
-        guard isRegistered else {
+        guard isRegistered,
+              AppConfig.skipRegistration || authCodeViewModel.isUsernameConfirmed else {
             peopleViewModel.stopAllBluetoothActivity()
             return
         }

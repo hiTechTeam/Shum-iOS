@@ -21,6 +21,10 @@ final class FetchService {
         try await client.profile(id: telescanID)
     }
 
+    func updateProfile(bio: String?) async throws -> TelescanProfileResponse {
+        try await client.updateProfile(bio: bio)
+    }
+
     func submitReport(
         targetID: UUID,
         reason: ReportReason,

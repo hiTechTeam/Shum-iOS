@@ -490,6 +490,7 @@ final class PeopleViewModel: ObservableObject {
             id: profile.telescanId,
             name: name,
             username: username,
+            bio: profile.bio?.trimmingCharacters(in: .whitespacesAndNewlines),
             photoURL: photoURL
         )
     }

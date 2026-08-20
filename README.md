@@ -36,7 +36,9 @@ to Moscow over WireGuard.
 
 ## Authentication and account lifecycle
 
-1. The user requests a short-lived, one-time link code from the Telegram bot.
+1. The user creates a public Telegram username and requests a short-lived,
+   one-time link code from the Telegram bot. The bot and API reject code
+   issuance while the username is missing.
 2. The app submits the code and a random installation `device_id` directly to
    `POST /api/v1/auth/link`.
 3. The clear code is cleared from memory after the attempt and is never stored
@@ -61,6 +63,11 @@ profile validation or token refresh leave the session, tokens, cached profile,
 and cached photo intact.
 Starting a new link clears local image and URL caches before applying the fresh
 Telegram profile returned by the API.
+The profile screen shows a separate BIO row below the scanning control. Tapping
+it opens a native medium-height sheet where the optional 120-character BIO can
+be applied or cleared without requesting another Telegram code. Nearby profile
+sheets show a non-empty BIO above the Telegram username control; BIO text is
+rendered as plain text and never as an active link.
 
 The in-app information screen links directly to the current Terms of Service
 and Privacy Policy.
@@ -69,7 +76,8 @@ and Privacy Policy.
 
 The nearby-profile sheet uses native menus, confirmation dialogs, and alerts.
 Users can report a profile for spam, harassment, inappropriate content,
-impersonation, or another reason and may add a short optional comment. Reports
+impersonation, or another reason and may add a short optional comment. The API
+captures the target BIO together with the name, username, and photo context. Reports
 are submitted through the authenticated API with a client request UUID so a
 token refresh or retry does not create duplicate pending reports.
 

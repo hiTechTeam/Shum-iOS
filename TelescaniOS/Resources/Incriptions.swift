@@ -82,8 +82,12 @@ struct Inc {
         // RU: Регистрация
         
         static let incorrectCode: String = "incorrectCode"
-        // EN: Couldn't find a telegram username
-        // RU: Не удалось найти Telegram username
+        // EN: Invalid or expired code
+        // RU: Код недействителен или истёк
+
+        static let telegramUsernameRequired: String = "telegramUsernameRequired"
+        // EN: Create a public Telegram username and request a new code
+        // RU: Создайте публичный Telegram username и запросите новый код
         
         static let warningCharactersEight: String = "warningCharactersEight"
         // EN: Maximum of 8 characters
@@ -240,6 +244,12 @@ struct Inc {
         static let developerLinksMessage: String = "developerLinksMessage"
         static let telegramChannel: String = "telegramChannel"
 
+        static let bioTitle: String = "profileBioTitle"
+        static let bioPlaceholder: String = "profileBioPlaceholder"
+        static let bioEmpty: String = "profileBioEmpty"
+        static let bioApply: String = "profileBioApply"
+        static let bioSaveFailed: String = "profileBioSaveFailed"
+
         static let logout: String = "logout"
         static let accountActionsTitle: String = "accountActionsTitle"
         static let logoutCurrent: String = "logoutCurrent"
@@ -309,6 +319,7 @@ enum Keys: String {
     case telescanIDKey = "telescan_id"
     case tgNameKey = "tgName"
     case usernameKey = "username"
+    case bioKey = "bio"
     case photoS3URLKey = "photoS3Url"
     case isScaning = "isScaning"
     case isReg = "isReg"

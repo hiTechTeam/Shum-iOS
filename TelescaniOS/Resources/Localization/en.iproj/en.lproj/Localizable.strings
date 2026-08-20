@@ -26,11 +26,17 @@
 "enterCode" = "Enter code";
 "code" = "Code";
 "registration" = "Registration";
-"incorrectCode" = "Couldn't find a Telegram username";
+"incorrectCode" = "Invalid or expired code";
+"telegramUsernameRequired" = "Create a public Telegram username and request a new code";
 "warningCharactersEight" = "Maximum of 8 characters";
 "regDescription" = "Enter the code that the bot sent so that the application can link your Telegram username.";
 "tgUsername" = "Telegram username";
 "usernamePlaceholder" = "@_";
+"profileBioTitle" = "BIO · Optional";
+"profileBioPlaceholder" = "A few words about you and who you would like to meet";
+"profileBioEmpty" = "Add BIO";
+"profileBioApply" = "Apply";
+"profileBioSaveFailed" = "Couldn’t save BIO. Please try again.";
 
 /* Onboarding */
 "welcome_title" = "Welcome to";

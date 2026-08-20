@@ -5,6 +5,7 @@ struct UsernamePlaceholder: View {
     // MARK: - Inputs
     var username: String?
     var codeStatus: Bool?
+    var codeError: CodeEntryError?
     var isLoading: Bool = false
     
     @State private var animate = false
@@ -33,7 +34,7 @@ struct UsernamePlaceholder: View {
             return name
         }
         if codeStatus == false {
-            return incorrectCodeText
+            return codeError?.localizedMessage ?? incorrectCodeText
         }
         return usernameField
     }
@@ -115,6 +116,8 @@ struct UsernamePlaceholder: View {
                 Text(displayedText)
                     .foregroundColor(textColor)
                     .font(.system(size: computedFontSize))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
                     .padding(.horizontal, paddingHorizontal)
                     .frame(width: fieldWidth, height: fieldHeight, alignment: .leading)
             }

@@ -26,11 +26,17 @@
 "code" = "Код";
 "enterCode" = "Введите код";
 "registration" = "Регистрация";
-"incorrectCode" = "Не удалось найти Telegram username";
+"incorrectCode" = "Код недействителен или истёк";
+"telegramUsernameRequired" = "Создайте публичный Telegram username и запросите новый код";
 "warningCharactersEight" = "Максимум 8 символов";
 "regDescription" = "Введите код, который отправил бот, для того чтобы приложение могло привязать ваш Telegram username.";
 "tgUsername" = "Telegram username";
 "usernamePlaceholder" = "@_";
+"profileBioTitle" = "BIO · Необязательно";
+"profileBioPlaceholder" = "Пара слов о вас и о том, с кем вы хотите познакомиться";
+"profileBioEmpty" = "Добавить BIO";
+"profileBioApply" = "Применить";
+"profileBioSaveFailed" = "Не удалось сохранить BIO. Попробуйте ещё раз.";
 
 /* Onboarding */
 "welcome_title" = "Добро пожаловать в";

@@ -39,6 +39,58 @@ struct FetchServiceTests {
         #expect(UserDefaults.standard.object(forKey: "userCode") == nil)
     }
 
+    @Test("BIO is saved independently from registration")
+    @MainActor
+    func bioIsSavedIndependentlyFromRegistration() async {
+        clearStoredProfile()
+        defer { clearStoredProfile() }
+        let profileID = UUID()
+        var submittedBio: String?
+        let linkedProfile = TelescanProfileResponse(
+            telescanId: profileID,
+            name: "Ada",
+            username: "ada",
+            photoUrl: nil
+        )
+        let viewModel = CodeViewModel(
+            linkAction: { _ in
+                LinkDeviceResponse(
+                    tokens: TokenResponse(
+                        accessToken: "access",
+                        refreshToken: "refresh",
+                        tokenType: "bearer",
+                        expiresIn: 900
+                    ),
+                    profile: linkedProfile
+                )
+            },
+            updateBioAction: { bio in
+                submittedBio = bio
+                return TelescanProfileResponse(
+                    telescanId: profileID,
+                    name: "Ada",
+                    username: "ada",
+                    bio: bio,
+                    photoUrl: nil
+                )
+            }
+        )
+
+        viewModel.tmpCode = "AB12CD34"
+        viewModel.checkCode(viewModel.tmpCode)
+        await waitForCodeCheck(viewModel)
+
+        #expect(await viewModel.confirmCode())
+        #expect(submittedBio == nil)
+        #expect(await viewModel.updateBio("  iOS engineer. Open to meetups.  "))
+        #expect(submittedBio == "iOS engineer. Open to meetups.")
+        #expect(viewModel.bio == submittedBio)
+        #expect(
+            UserDefaults.standard.string(forKey: Keys.bioKey.rawValue)
+                == submittedBio
+        )
+    }
+
     @Test("A rejected complete code exposes the visual error state")
     @MainActor
     func rejectedCodeShowsError() async {
@@ -50,7 +102,24 @@ struct FetchServiceTests {
         await waitForCodeCheck(viewModel)
 
         #expect(viewModel.codeStatus == false)
+        #expect(viewModel.codeError == .invalidCode)
         #expect(viewModel.tmpTgUsername == nil)
+        #expect(await !viewModel.confirmCode())
+    }
+
+    @Test("A profile without a public Telegram username shows a specific error")
+    @MainActor
+    func missingTelegramUsernameShowsSpecificError() async {
+        let viewModel = CodeViewModel { _ in
+            throw APIClientError.telegramUsernameRequired
+        }
+
+        viewModel.tmpCode = "USERLESS"
+        viewModel.checkCode(viewModel.tmpCode)
+        await waitForCodeCheck(viewModel)
+
+        #expect(viewModel.codeStatus == false)
+        #expect(viewModel.codeError == .telegramUsernameRequired)
         #expect(await !viewModel.confirmCode())
     }
 
@@ -68,6 +137,21 @@ struct FetchServiceTests {
         let result = await validator.validate()
 
         #expect(result == .active(profile))
+    }
+
+    @Test("A session without a public Telegram username is invalid")
+    @MainActor
+    func missingUsernameInvalidatesSession() async {
+        let validator = SessionValidator {
+            TelescanProfileResponse(
+                telescanId: UUID(),
+                name: "Ada",
+                username: nil,
+                photoUrl: nil
+            )
+        }
+
+        #expect(await validator.validate() == .invalid)
     }
 
     @Test("Revoked and deleted sessions are invalid")
@@ -101,6 +185,99 @@ struct FetchServiceTests {
         let first = try identity.value()
         let second = try identity.value()
         #expect(first == second)
+    }
+
+    @Test("The API username-required response has a dedicated client error")
+    func usernameRequiredResponseIsClassified() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MockURLProtocol.handler = { request in
+            #expect(request.url?.path == "/api/v1/auth/link")
+            return (
+                422,
+                Data(
+                    """
+                    {"detail":"Public Telegram username is required","code":"telegram_username_required"}
+                    """.utf8
+                )
+            )
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        do {
+            _ = try await client.link(code: "USERLESS")
+            Issue.record("Expected a Telegram username error")
+        } catch APIClientError.telegramUsernameRequired {
+            #expect(!sessions.hasTokens)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test("Authenticated profile update sends and receives BIO")
+    func profileBioUpdateUsesAuthenticatedPatch() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        try sessions.save(
+            TokenResponse(
+                accessToken: "access-token",
+                refreshToken: "refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let profileID = UUID()
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            #expect(request.url?.path == "/api/v1/users/me")
+            #expect(request.httpMethod == "PATCH")
+            #expect(
+                request.value(forHTTPHeaderField: "Authorization")
+                    == "Bearer access-token"
+            )
+            let body = requestBodyData(request).flatMap {
+                try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+            }
+            if requestCount == 1 {
+                #expect(body?["bio"] as? String == "Open to networking")
+            } else {
+                #expect(body?["bio"] is NSNull)
+            }
+            let responseBio = requestCount == 1
+                ? "\"Open to networking\""
+                : "null"
+            return (
+                200,
+                Data(
+                    """
+                    {"telescanId":"\(profileID.uuidString)","name":"Ada","username":"ada","bio":\(responseBio),"photoUrl":null}
+                    """.utf8
+                )
+            )
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        let profile = try await client.updateProfile(bio: "Open to networking")
+        let cleared = try await client.updateProfile(bio: nil)
+
+        #expect(profile.bio == "Open to networking")
+        #expect(cleared.bio == nil)
+        #expect(requestCount == 2)
     }
 
     @Test("401 refreshes, rotates Keychain tokens, and retries once")
@@ -409,6 +586,7 @@ struct FetchServiceTests {
                 telescanId: requestedID,
                 name: nil,
                 username: "nearby_user",
+                bio: "Open to conference meetups",
                 photoUrl: nil
             )
         }
@@ -422,6 +600,7 @@ struct FetchServiceTests {
         #expect(viewModel.visibleUsers.first?.id == profileID)
         #expect(viewModel.visibleUsers.first?.name == "@nearby_user")
         #expect(viewModel.visibleUsers.first?.username == "@nearby_user")
+        #expect(viewModel.visibleUsers.first?.bio == "Open to conference meetups")
         viewModel.stopAllBluetoothActivity()
     }
 
@@ -846,6 +1025,7 @@ private func clearStoredProfile() {
     defaults.removeObject(forKey: Keys.telescanIDKey.rawValue)
     defaults.removeObject(forKey: Keys.tgNameKey.rawValue)
     defaults.removeObject(forKey: Keys.usernameKey.rawValue)
+    defaults.removeObject(forKey: Keys.bioKey.rawValue)
     defaults.removeObject(forKey: Keys.photoS3URLKey.rawValue)
     defaults.removeObject(forKey: "cleanCode")
     defaults.removeObject(forKey: "userCode")

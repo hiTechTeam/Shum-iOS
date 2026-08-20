@@ -30,10 +30,11 @@ struct CodeSpace: View {
                 UsernamePlaceholder(
                     username: authCodeViewModel.tmpTgUsername,
                     codeStatus: authCodeViewModel.codeStatus,
+                    codeError: authCodeViewModel.codeError,
                     isLoading: authCodeViewModel.isLoading
                 )
             }
-            
+
             Description(text: Inc.Registration.regDescription.localized)
         }
         .padding(.top, 10)

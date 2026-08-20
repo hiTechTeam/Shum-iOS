@@ -11,7 +11,22 @@ struct TelescanProfileResponse: Codable, Equatable {
     let telescanId: UUID
     let name: String?
     let username: String?
+    let bio: String?
     let photoUrl: String?
+
+    init(
+        telescanId: UUID,
+        name: String?,
+        username: String?,
+        bio: String? = nil,
+        photoUrl: String?
+    ) {
+        self.telescanId = telescanId
+        self.name = name
+        self.username = username
+        self.bio = bio
+        self.photoUrl = photoUrl
+    }
 }
 
 struct LinkDeviceResponse: Codable, Equatable {

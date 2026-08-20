@@ -289,6 +289,14 @@ struct ProfileSheetView: View {
 
                             NearbyPresenceLabel(user: user)
                         }
+
+                        if let bio = user.bio, !bio.isEmpty {
+                            Text(bio)
+                                .font(.system(size: 15))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
 
                     CopyUsernameField(username: user.username)
