@@ -2,11 +2,10 @@ import SwiftUI
 
 struct ProfileDataView: View {
     @EnvironmentObject var coordinator: AppCoordinator
-    @Environment(\.openURL) private var openURL
     @ObservedObject var authCodeViewModel: CodeViewModel
     @StateObject private var photoVM = ProfilePhotoViewModel()
+    @State private var showScanningSettings = false
     @State private var showInfoSheet = false
-    @State private var showDeveloperLinks = false
     @State private var showLogoutOptions = false
     @State private var showBlockedProfiles = false
     @State private var showLogoutConfirmation = false
@@ -34,28 +33,21 @@ struct ProfileDataView: View {
             ProfilePhotoView(viewModel: photoVM)
             headerInfo
             BioProfileField(authVM: authCodeViewModel)
-            ScanToggle(isScaning: $coordinator.isScaning)
         }
         .frame(maxWidth: .infinity)
     }
 
-    private var productDescription: some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            showDeveloperLinks = true
-        } label: {
-            Text(Inc.Profile.creatorCredit.localized)
-                .font(.system(size: 12))
-                .foregroundStyle(.blue)
-                .frame(width: 280)
-                .multilineTextAlignment(.center)
-        }
-        .buttonStyle(.plain)
-        .padding(.top, 40)
-    }
-
     private var profileActionsMenu: some View {
         Menu {
+            Button {
+                showScanningSettings = true
+            } label: {
+                Label(
+                    Inc.Scanning.scanning.localized,
+                    systemImage: "dot.radiowaves.left.and.right"
+                )
+            }
+
             Button {
                 showInfoSheet = true
             } label: {
@@ -100,7 +92,6 @@ struct ProfileDataView: View {
         ScrollView {
             VStack(spacing: 0) {
                 profileSection
-                productDescription
             }
             .padding(.bottom, 32)
         }
@@ -131,11 +122,6 @@ struct ProfileDataView: View {
         }
     }
 
-    private func openDeveloperLink(_ address: String) {
-        guard let url = URL(string: address) else { return }
-        openURL(url)
-    }
-
     var body: some View {
         ZStack {
             Color.tsBackground.ignoresSafeArea()
@@ -149,6 +135,13 @@ struct ProfileDataView: View {
                 profileActionsMenu
             }
         }
+        .sheet(isPresented: $showScanningSettings) {
+            ScanningSettingsSheet(isScanning: $coordinator.isScaning)
+                .environmentObject(coordinator)
+                .environmentObject(coordinator.peopleViewModel)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showInfoSheet) {
             InfoSheetView()
                 .presentationDetents([.large])
@@ -159,20 +152,6 @@ struct ProfileDataView: View {
                 .environmentObject(coordinator.peopleViewModel)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-        }
-        .alert(
-            Inc.Profile.developerLinksTitle.localized,
-            isPresented: $showDeveloperLinks
-        ) {
-            Button("GitHub") {
-                openDeveloperLink("https://github.com/r66cha")
-            }
-            Button(Inc.Profile.telegramChannel.localized) {
-                openDeveloperLink("https://t.me/r_chukavin")
-            }
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-        } message: {
-            Text(Inc.Profile.developerLinksMessage.localized)
         }
         .alert(
             Inc.Profile.accountActionsTitle.localized,
@@ -223,6 +202,38 @@ struct ProfileDataView: View {
             Button(Inc.Common.okey.localized, role: .cancel) { }
         } message: {
             Text(Inc.Profile.deleteAccountFailedMessage.localized)
+        }
+    }
+}
+
+private struct ScanningSettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var isScanning: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Text(Inc.Scanning.scanToggleDescription.localized)
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: 360, alignment: .leading)
+
+                ScanToggle(isScaning: $isScanning)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 20)
+            .navigationTitle(Inc.Scanning.scanning.localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(Inc.Common.close.localized) {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
 }

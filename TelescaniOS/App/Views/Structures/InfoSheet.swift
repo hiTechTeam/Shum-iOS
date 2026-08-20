@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct InfoSheetView: View {
+    @Environment(\.openURL) private var openURL
+    @State private var showDeveloperLinks = false
+
     private let sectionSpacing: CGFloat = 16
 
     private let githubURL = URL(
@@ -8,6 +11,9 @@ struct InfoSheetView: View {
     )!
     private let privacyPolicyURL = URL(string: Links.privacyPolicy)!
     private let termsOfServiceURL = URL(string: Links.termsOfService)!
+    private let developerActionURL = URL(string: "telescan://developer")!
+    private let developerGitHubURL = URL(string: "https://github.com/r66cha")!
+    private let developerTelegramURL = URL(string: "https://t.me/r_chukavin")!
 
     private var appVersion: String {
         Bundle.main.object(
@@ -17,8 +23,10 @@ struct InfoSheetView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 13, weight: .regular))
             .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .multilineTextAlignment(.leading)
             .textCase(nil)
     }
 
@@ -27,8 +35,19 @@ struct InfoSheetView: View {
             .font(.system(size: 15))
             .foregroundStyle(.primary)
             .lineSpacing(4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, 6)
+    }
+
+    private var copyrightNotice: AttributedString {
+        var notice = AttributedString(Inc.Info.proprietaryLicense.localized)
+        if let name = notice.range(of: "Ruslan Chukavin") {
+            notice[name].foregroundColor = .blue
+            notice[name].link = developerActionURL
+        }
+        return notice
     }
 
     private var storySection: some View {
@@ -66,9 +85,10 @@ struct InfoSheetView: View {
     private var appDetailsSection: some View {
         Section(
             header: sectionHeader(Inc.Info.aboutApp.localized),
-            footer: Text(Inc.Info.proprietaryLicense.localized)
+            footer: Text(copyrightNotice)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.primary.opacity(0.72))
+                .tint(.blue)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .textCase(nil)
                 .padding(.top, 8)
@@ -104,5 +124,29 @@ struct InfoSheetView: View {
 
     var body: some View {
         listContent
+            .environment(
+                \.openURL,
+                OpenURLAction { url in
+                    guard url == developerActionURL else {
+                        return .systemAction
+                    }
+                    showDeveloperLinks = true
+                    return .handled
+                }
+            )
+            .alert(
+                Inc.Profile.developerLinksTitle.localized,
+                isPresented: $showDeveloperLinks
+            ) {
+                Button("GitHub") {
+                    openURL(developerGitHubURL)
+                }
+                Button(Inc.Profile.telegramChannel.localized) {
+                    openURL(developerTelegramURL)
+                }
+                Button(Inc.Common.cancel.localized, role: .cancel) { }
+            } message: {
+                Text(Inc.Profile.developerLinksMessage.localized)
+            }
     }
 }

@@ -75,10 +75,6 @@ struct CopyUsernameField: View {
 
     private var content: some View {
         VStack {
-            Text(Inc.Registration.tgUsername)
-                .font(.system(size: labelFontSize))
-                .frame(width: fieldWidth, alignment: .leading)
-            
             ZStack {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(Color.thinblue)

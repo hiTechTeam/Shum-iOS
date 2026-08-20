@@ -6,7 +6,7 @@ struct BioEditorField: View {
     let isSaving: Bool
     let saveFailed: Bool
 
-    private let characterLimit = 120
+    private let characterLimit = 60
     private let fieldWidth: CGFloat = 360
     private let cornerRadius: CGFloat = 13
 
@@ -81,14 +81,6 @@ struct BioProfileField: View {
     @State private var draftBio = ""
     @State private var showEditor = false
 
-    private let fieldWidth: CGFloat = 360
-    private let fieldHeight: CGFloat = 46
-    private let cornerRadius: CGFloat = 13
-
-    private var displayedBio: String {
-        authVM.bio ?? Inc.Profile.bioEmpty.localized
-    }
-
     private func openEditor() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         draftBio = authVM.bio ?? ""
@@ -97,38 +89,31 @@ struct BioProfileField: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
-            Text("BIO")
-                .font(.system(size: 12))
-                .frame(width: 350, alignment: .leading)
+        ZStack {
+            BioEditorField(
+                text: $draftBio,
+                isSaving: false,
+                saveFailed: false
+            )
+            .allowsHitTesting(false)
 
             Button(action: openEditor) {
-                HStack(spacing: 0) {
-                    Text(displayedBio)
-                        .font(.system(size: 20, weight: .regular))
-                        .foregroundStyle(.primary.opacity(authVM.bio == nil ? 0.38 : 0.55))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.leading, 20)
-
-                    ZStack {
-                        RoundedRectangle(cornerRadius: cornerRadius)
-                            .fill(Color.gray.opacity(0.5))
-
-                        Image.upChevron
-                            .scaleEffect(0.8)
-                    }
-                    .frame(width: fieldHeight, height: fieldHeight)
-                }
-                .frame(width: fieldWidth, height: fieldHeight)
-                .background(Color.tField.opacity(0.8))
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-                .contentShape(Rectangle())
+                Color.clear
+                    .frame(width: 360, height: 96)
+                    .contentShape(RoundedRectangle(cornerRadius: 13))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("BIO")
-            .accessibilityValue(displayedBio)
+        }
+        .accessibilityLabel("BIO")
+        .accessibilityValue(draftBio)
+        .accessibilityAddTraits(.isButton)
+        .onAppear {
+            draftBio = authVM.bio ?? ""
+        }
+        .onChange(of: showEditor) { _, isPresented in
+            if !isPresented {
+                draftBio = authVM.bio ?? ""
+            }
         }
         .sheet(isPresented: $showEditor) {
             BioEditorSheet(
@@ -173,6 +158,7 @@ private struct BioEditorSheet: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .disabled(authVM.isSavingBio)
                 .frame(width: 360)

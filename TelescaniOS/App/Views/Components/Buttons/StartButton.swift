@@ -34,12 +34,7 @@ struct RegistrationPrimaryButton: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
                 .background(backgroundColor)
-                .clipShape(
-                    RoundedRectangle(
-                        cornerRadius: 13,
-                        style: .continuous
-                    )
-                )
+                .clipShape(Capsule())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)

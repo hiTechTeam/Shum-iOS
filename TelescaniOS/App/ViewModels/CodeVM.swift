@@ -242,6 +242,6 @@ final class CodeViewModel: ObservableObject {
     private static func normalizedBio(_ value: String?) -> String? {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : String(trimmed.prefix(120))
+        return trimmed.isEmpty ? nil : String(trimmed.prefix(60))
     }
 }

@@ -32,8 +32,8 @@
 "regDescription" = "Введите код, который отправил бот, для того чтобы приложение могло привязать ваш Telegram username.";
 "tgUsername" = "Telegram username";
 "usernamePlaceholder" = "@_";
-"profileBioTitle" = "BIO · Необязательно";
-"profileBioPlaceholder" = "Пара слов о вас и о том, с кем вы хотите познакомиться";
+"profileBioTitle" = "BIO";
+"profileBioPlaceholder" = "Пару слов о вас ...";
 "profileBioEmpty" = "Добавить BIO";
 "profileBioApply" = "Применить";
 "profileBioSaveFailed" = "Не удалось сохранить BIO. Попробуйте ещё раз.";
@@ -55,7 +55,7 @@
 /* Scanning */
 "scanning" = "Сканирование";
 "justTurnScaning" = "Включите сканирование";
-"scanToggleDescription" = "Включите Bluetooth-сканирование, чтобы видеть людей рядом.";
+"scanToggleDescription" = "Переключатель включает Bluetooth-сканирование и передачу вашего Telescan ID. Пока сканирование активно, вы видите пользователей Telescan рядом, а они могут увидеть вас.";
 "turnedOffScaning" = "Сканирование отключено. Включите сканирование в приложении, чтобы видеть людей, находящихся поблизости. ";
 "noPeopleNearby" = "Сканирование активно. Когда рядом появятся пользователи Telescan, они отобразятся на этом экране.";
 "scanAlertText" = "Для перехода необходимо включить режим сканирования.";
@@ -68,6 +68,7 @@
 /* Модерация профиля пользователя рядом */
 "nearbyProfileClose" = "Закрыть профиль";
 "nearbyProfileActions" = "Действия с профилем";
+"nearbyProfileUsernameFallback" = "Мой Telegram Username";
 "nearbyProfileReport" = "Пожаловаться";
 "nearbyProfileBlock" = "Заблокировать";
 "nearbyProfileReportTitle" = "Почему вы хотите пожаловаться?";

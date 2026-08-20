@@ -89,6 +89,10 @@ struct FetchServiceTests {
             UserDefaults.standard.string(forKey: Keys.bioKey.rawValue)
                 == submittedBio
         )
+
+        let longBio = String(repeating: "a", count: 61)
+        #expect(await viewModel.updateBio(longBio))
+        #expect(submittedBio == String(repeating: "a", count: 60))
     }
 
     @Test("A rejected complete code exposes the visual error state")

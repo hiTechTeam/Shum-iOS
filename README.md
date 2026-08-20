@@ -63,11 +63,12 @@ profile validation or token refresh leave the session, tokens, cached profile,
 and cached photo intact.
 Starting a new link clears local image and URL caches before applying the fresh
 Telegram profile returned by the API.
-The profile screen shows a separate BIO row below the scanning control. Tapping
-it opens a native medium-height sheet where the optional 120-character BIO can
-be applied or cleared without requesting another Telegram code. Nearby profile
-sheets show a non-empty BIO above the Telegram username control; BIO text is
-rendered as plain text and never as an active link.
+The profile screen shows a BIO field. Tapping it opens a native medium-height
+editor where the optional 60-character BIO can be applied or cleared without
+requesting another Telegram code. Bluetooth scanning is controlled from a
+medium-height settings sheet opened through the profile's More menu. Nearby
+profile sheets show a non-empty BIO in up to three lines above the Telegram
+username control; BIO text is rendered as plain text and never as an active link.
 
 The in-app information screen links directly to the current Terms of Service
 and Privacy Policy.

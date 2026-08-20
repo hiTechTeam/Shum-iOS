@@ -180,6 +180,7 @@ struct Inc {
     struct NearbyProfile {
         static let close: String = "nearbyProfileClose"
         static let actions: String = "nearbyProfileActions"
+        static let usernameFallback: String = "nearbyProfileUsernameFallback"
         static let report: String = "nearbyProfileReport"
         static let block: String = "nearbyProfileBlock"
 

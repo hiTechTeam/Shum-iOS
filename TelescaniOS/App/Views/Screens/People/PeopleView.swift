@@ -151,6 +151,7 @@ private struct NearbyPresenceLabel: View {
 
     let user: NearbyUser
     var usesCompactCountdown = false
+    var fontSize: CGFloat = 12
 
     var body: some View {
         Group {
@@ -185,7 +186,7 @@ private struct NearbyPresenceLabel: View {
                 .foregroundStyle(.gray)
             }
         }
-        .font(.system(size: 12))
+        .font(.system(size: fontSize))
         .lineLimit(1)
         .minimumScaleFactor(0.75)
         .layoutPriority(1)
@@ -270,7 +271,7 @@ struct ProfileSheetView: View {
 
                 Spacer()
 
-                VStack(alignment: .leading, spacing: 28) {
+                VStack(alignment: .leading, spacing: 0) {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(
                             user.name
@@ -278,26 +279,27 @@ struct ProfileSheetView: View {
                         .font(.title)
                         .bold()
 
-                        HStack(spacing: 8) {
-                            if peopleViewModel.disappearanceCountdowns[
-                                user.discoveryID
-                            ] == nil {
-                                Text(Inc.Common.nearby.localized)
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.gray)
-                            }
+                    }
 
-                            NearbyPresenceLabel(user: user)
-                        }
-
+                    Group {
                         if let bio = user.bio, !bio.isEmpty {
                             Text(bio)
-                                .font(.system(size: 15))
+                                .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(3)
                                 .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text(Inc.NearbyProfile.usernameFallback.localized)
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                     }
+                    .frame(
+                        width: 360,
+                        height: 48,
+                        alignment: .leading
+                    )
 
                     CopyUsernameField(username: user.username)
                 }
@@ -564,21 +566,6 @@ private struct ProfileSheetControls: View {
         }
     }
 
-    private var closeButton: some View {
-        Button {
-            dismiss()
-        } label: {
-            Image(systemName: "chevron.down")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(.primary)
-                .frame(width: 44, height: 44)
-                .contentShape(Circle())
-                .profileSheetControlSurface()
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Inc.NearbyProfile.close.localized)
-    }
-
     private var moderationMenu: some View {
         Menu {
             Button(role: .destructive) {
@@ -617,6 +604,21 @@ private struct ProfileSheetControls: View {
         .menuOrder(.fixed)
         .disabled(isSubmitting)
         .accessibilityLabel(Inc.NearbyProfile.actions.localized)
+    }
+
+    private var presenceInfo: some View {
+        HStack(spacing: 8) {
+            if peopleViewModel.disappearanceCountdowns[
+                user.discoveryID
+            ] == nil {
+                Text(Inc.Common.nearby.localized)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.gray)
+            }
+
+            NearbyPresenceLabel(user: user, fontSize: 13)
+        }
+        .frame(width: 360, height: 44, alignment: .leading)
     }
 
     @ViewBuilder
@@ -726,15 +728,16 @@ private struct ProfileSheetControls: View {
     }
 
     var body: some View {
-        HStack {
-            closeButton
+        ZStack(alignment: .top) {
+            presenceInfo
 
-            Spacer()
-
-            moderationMenu
+            HStack {
+                Spacer()
+                moderationMenu
+            }
+            .padding(.horizontal, 8)
         }
         .padding(.top, 8)
-        .padding(.horizontal, 8)
         .frame(
             maxWidth: .infinity,
             maxHeight: .infinity,

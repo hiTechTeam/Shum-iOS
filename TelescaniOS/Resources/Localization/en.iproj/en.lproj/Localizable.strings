@@ -32,8 +32,8 @@
 "regDescription" = "Enter the code that the bot sent so that the application can link your Telegram username.";
 "tgUsername" = "Telegram username";
 "usernamePlaceholder" = "@_";
-"profileBioTitle" = "BIO · Optional";
-"profileBioPlaceholder" = "A few words about you and who you would like to meet";
+"profileBioTitle" = "BIO";
+"profileBioPlaceholder" = "A few words about you...";
 "profileBioEmpty" = "Add BIO";
 "profileBioApply" = "Apply";
 "profileBioSaveFailed" = "Couldn’t save BIO. Please try again.";
@@ -55,7 +55,7 @@
 /* Scanning */
 "scanning" = "Scanning";
 "justTurnScaning" = "Turn on scaning";
-"scanToggleDescription" = "Turn on Bluetooth scanning so that you can see the people around you.";
+"scanToggleDescription" = "The switch enables Bluetooth scanning and broadcasts your Telescan ID. While scanning is active, you can see nearby Telescan users and they can see you.";
 "turnedOffScaning" = "Scanning is turned off. Enable scanning in the app to see nearby people.";
 "noPeopleNearby" = "Scanning is active. When Telescan users are nearby, they will appear on this screen.";
 "scanAlertText" = "To switch over, you need to enable scanning mode.";
@@ -68,6 +68,7 @@
 /* Nearby profile moderation */
 "nearbyProfileClose" = "Close profile";
 "nearbyProfileActions" = "Profile actions";
+"nearbyProfileUsernameFallback" = "My Telegram Username";
 "nearbyProfileReport" = "Report user";
 "nearbyProfileBlock" = "Block user";
 "nearbyProfileReportTitle" = "Why are you reporting this user?";

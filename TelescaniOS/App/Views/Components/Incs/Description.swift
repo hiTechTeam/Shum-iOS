@@ -15,7 +15,7 @@ struct Description: View {
             .font(.system(size: fontSize, weight: .regular))
             .foregroundColor(.gray)
             .frame(width: frameWidth, alignment: .leading)
-            .multilineTextAlignment(.center)
+            .multilineTextAlignment(.leading)
             .padding(.top, topPadding)
     }
     
