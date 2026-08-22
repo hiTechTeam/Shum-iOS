@@ -43,8 +43,6 @@ struct RegistrationPrimaryButton: View {
 
 struct StartButton: View {
 
-    @Environment(\.colorScheme) private var colorScheme
-
     let title: String
     let accentColor: Color
     let onStart: () -> Void
@@ -52,8 +50,8 @@ struct StartButton: View {
     var body: some View {
         RegistrationPrimaryButton(
             title: title,
-            accentColor: colorScheme == .dark ? accentColor : .white,
-            enabledForegroundColor: colorScheme == .dark ? .white : accentColor,
+            accentColor: accentColor,
+            enabledForegroundColor: .white,
             action: onStart
         )
         .accessibilityHint(Inc.Onboarding.continueHint.localized)

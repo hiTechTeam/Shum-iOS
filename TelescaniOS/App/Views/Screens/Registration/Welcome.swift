@@ -13,36 +13,20 @@ struct Welcome: View {
     )
 
     private var backgroundColor: Color {
-        colorScheme == .dark
-            ? Color(red: 24 / 255, green: 24 / 255, blue: 24 / 255)
-            : Color.bl2
+        Color("ls-Background")
     }
 
-    private var contentColor: Color {
-        colorScheme == .dark ? accentColor : .white
-    }
+    private let lightCircleColors: [Color] = [
+        Color(red: 248 / 255, green: 248 / 255, blue: 250 / 255),
+        Color(red: 243 / 255, green: 244 / 255, blue: 246 / 255),
+        Color(red: 237 / 255, green: 239 / 255, blue: 242 / 255)
+    ]
 
     private let darkCircleColors: [Color] = [
         Color(red: 20 / 255, green: 72 / 255, blue: 120 / 255),
         Color(red: 22 / 255, green: 44 / 255, blue: 67 / 255),
         Color(red: 24 / 255, green: 29 / 255, blue: 35 / 255)
     ]
-
-    @ViewBuilder
-    private func circleContent() -> some View {
-        if colorScheme == .dark {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: darkCircleColors,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        } else {
-            Color.clear
-        }
-    }
 
     private var privacyPolicyURL: URL {
         URL(string: Links.privacyPolicy)!
@@ -56,6 +40,28 @@ struct Welcome: View {
         min(max(width / referenceWidth, 0.84), 1.12)
     }
 
+    private func backgroundCircle(
+        size: CGSize,
+        scale: CGFloat
+    ) -> some View {
+        Circle()
+            .fill(
+                LinearGradient(
+                    colors: colorScheme == .dark
+                        ? darkCircleColors
+                        : lightCircleColors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 940 * scale, height: 940 * scale)
+            .position(
+                x: size.width * 0.19,
+                y: size.height * 0.18
+            )
+            .accessibilityHidden(true)
+    }
+
     private func legalText(scale: CGFloat) -> AttributedString {
         let privacyTitle = Inc.Onboarding.privacyPolicy.localized
         let termsTitle = Inc.Onboarding.termsOfService.localized
@@ -66,11 +72,12 @@ struct Welcome: View {
         )
         var text = AttributedString(content)
 
-        text.foregroundColor = contentColor
+        text.foregroundColor = Color.primary
         text.font = .system(size: 14 * scale, weight: .regular)
 
         if let privacyRange = text.range(of: privacyTitle) {
             text[privacyRange].link = privacyPolicyURL
+            text[privacyRange].foregroundColor = accentColor
             text[privacyRange].underlineStyle = .single
             text[privacyRange].font = .system(
                 size: 14 * scale,
@@ -80,6 +87,7 @@ struct Welcome: View {
 
         if let termsRange = text.range(of: termsTitle) {
             text[termsRange].link = termsOfServiceURL
+            text[termsRange].foregroundColor = accentColor
             text[termsRange].underlineStyle = .single
             text[termsRange].font = .system(
                 size: 14 * scale,
@@ -90,25 +98,12 @@ struct Welcome: View {
         return text
     }
 
-    private func backgroundCircle(
-        size: CGSize,
-        scale: CGFloat
-    ) -> some View {
-        circleContent()
-            .frame(width: 940 * scale, height: 940 * scale)
-            .position(
-                x: size.width * 0.19,
-                y: size.height * 0.18
-            )
-            .accessibilityHidden(true)
-    }
-
     private func hero(scale: CGFloat) -> some View {
         VStack(spacing: 0) {
-            Image.tsIcon100
+            Image.telescanLogo
                 .resizable()
                 .scaledToFit()
-                .frame(width: 53 * scale, height: 53 * scale)
+                .frame(width: 82 * scale, height: 82 * scale)
                 .accessibilityHidden(true)
 
             Text(Inc.Onboarding.welcomeTitle.localized)
@@ -127,7 +122,7 @@ struct Welcome: View {
                 .lineSpacing(4 * scale)
                 .padding(.top, 8 * scale)
         }
-        .foregroundStyle(contentColor)
+        .foregroundStyle(.primary)
         .frame(maxWidth: 330 * scale)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -139,7 +134,7 @@ struct Welcome: View {
         VStack(spacing: 0) {
             Text(legalText(scale: scale))
                 .multilineTextAlignment(.center)
-                .tint(contentColor)
+                .tint(accentColor)
                 .frame(maxWidth: 340 * scale)
 
             StartButton(

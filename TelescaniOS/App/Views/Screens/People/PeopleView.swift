@@ -338,6 +338,30 @@ private struct ProfileSheetBackground: View {
         Color(uiColor: .systemBackground)
     }
 
+    private var photoBlurRadius: CGFloat {
+        if #available(iOS 26.0, *) {
+            return 44
+        }
+
+        return 58
+    }
+
+    private var photoSaturation: Double {
+        if #available(iOS 26.0, *) {
+            return 1.22
+        }
+
+        return 1.06
+    }
+
+    private var photoOpacity: Double {
+        if #available(iOS 26.0, *) {
+            return 0.60
+        }
+
+        return 0.32
+    }
+
     var body: some View {
         Group {
             if let imageURL,
@@ -360,10 +384,10 @@ private struct ProfileSheetBackground: View {
                 .resizable()
                 .scaledToFill()
                 .scaleEffect(1.35)
-                .blur(radius: 44, opaque: true)
-                .saturation(1.22)
+                .blur(radius: photoBlurRadius, opaque: true)
+                .saturation(photoSaturation)
                 .contrast(0.96)
-                .opacity(0.60)
+                .opacity(photoOpacity)
 
             adaptiveMaterial
 
@@ -397,7 +421,7 @@ private struct ProfileSheetBackground: View {
         } else {
             Rectangle()
                 .fill(.ultraThinMaterial)
-                .opacity(0.55)
+                .opacity(0.20)
         }
     }
 }
