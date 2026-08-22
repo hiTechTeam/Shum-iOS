@@ -289,6 +289,7 @@ struct Inc {
         static let rulesAndPrivacy = "rulesAndPrivacy"
         static let aboutApp = "info_about_app"
         static let publicProject = "info_public_project"
+        static let questionsAndSuggestions = "info_questions_and_suggestions"
         
         static let currentVersion = "1.0.0"
     }

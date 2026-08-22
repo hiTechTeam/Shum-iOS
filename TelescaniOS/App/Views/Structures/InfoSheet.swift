@@ -14,6 +14,7 @@ struct InfoSheetView: View {
     private let developerActionURL = URL(string: "telescan://developer")!
     private let developerGitHubURL = URL(string: "https://github.com/r66cha")!
     private let developerTelegramURL = URL(string: "https://t.me/r_chukavin")!
+    private let supportEmailURL = URL(string: "mailto:admin@tgtelescan.ru")!
 
     private var appVersion: String {
         Bundle.main.object(
@@ -105,6 +106,16 @@ struct InfoSheetView: View {
             Link(destination: githubURL) {
                 HStack {
                     Text(Inc.Info.publicProject.localized)
+                }
+            }
+
+            Link(destination: supportEmailURL) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(Inc.Info.questionsAndSuggestions.localized)
+
+                    Text("admin@tgtelescan.ru")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
