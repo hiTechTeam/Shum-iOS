@@ -200,6 +200,7 @@ struct ProfileSheetView: View {
     @State private var showPhotoPreview = false
 
     let user: NearbyUser
+    var showsNearbyControls = true
 
     private var imageURL: URL? {
         guard let url = user.photoURL else { return nil }
@@ -315,7 +316,9 @@ struct ProfileSheetView: View {
             }
             .padding(.top, 60)
 
-            ProfileSheetControls(user: user)
+            if showsNearbyControls {
+                ProfileSheetControls(user: user)
+            }
         }
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let imageURL {
@@ -602,8 +605,6 @@ private struct ProfileSheetControls: View {
             Button(action: openTelegramChat) {
                 Text(Inc.NearbyProfile.message.localized)
             }
-
-            Divider()
 
             Button(role: .destructive) {
                 moderationDialog = .report

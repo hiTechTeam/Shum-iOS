@@ -241,6 +241,7 @@ struct Inc {
         // EN/RU: from Ruslan Chukavin
 
         static let moreActions: String = "profileMoreActions"
+        static let myCard: String = "profileMyCard"
 
         static let developerLinksTitle: String = "developerLinksTitle"
         static let developerLinksMessage: String = "developerLinksMessage"

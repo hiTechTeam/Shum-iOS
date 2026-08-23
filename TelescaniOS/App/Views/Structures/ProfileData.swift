@@ -12,6 +12,7 @@ struct ProfileDataView: View {
     @State private var showLogoutError = false
     @State private var showDeleteConfirmation = false
     @State private var showDeleteError = false
+    @State private var ownProfilePreview: NearbyUser?
     @State private var isWorking = false
 
     init(authCodeViewModel: CodeViewModel) {
@@ -39,6 +40,14 @@ struct ProfileDataView: View {
 
     private var profileActionsMenu: some View {
         Menu {
+            Button(action: showOwnProfile) {
+                Label(
+                    Inc.Profile.myCard.localized,
+                    systemImage: "person.crop.rectangle"
+                )
+            }
+            .disabled(ownProfile == nil)
+
             Button {
                 showScanningSettings = true
             } label: {
@@ -66,8 +75,6 @@ struct ProfileDataView: View {
                 )
             }
 
-            Divider()
-
             Button(role: .destructive) {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 showLogoutOptions = true
@@ -86,6 +93,48 @@ struct ProfileDataView: View {
                 .contentShape(Rectangle())
         }
         .accessibilityLabel(Inc.Profile.moreActions.localized)
+    }
+
+    private var ownProfile: NearbyUser? {
+        guard let id = authCodeViewModel.telescanID,
+              let usernameValue = authCodeViewModel.tgUsername?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !usernameValue.isEmpty else {
+            return nil
+        }
+
+        let username = usernameValue.hasPrefix("@")
+            ? usernameValue
+            : "@" + usernameValue
+        let trimmedName = authCodeViewModel.tgName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = trimmedName.flatMap { $0.isEmpty ? nil : $0 }
+            ?? username
+        let storedPhotoURL = UserDefaults.standard.string(
+            forKey: Keys.photoS3URLKey.rawValue
+        )
+        let photoURL = storedPhotoURL.flatMap { value -> String? in
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  URL(string: trimmed) != nil else {
+                return nil
+            }
+            return trimmed
+        }
+
+        return NearbyUser(
+            id: id,
+            name: name,
+            username: username,
+            bio: authCodeViewModel.bio,
+            photoURL: photoURL
+        )
+    }
+
+    private func showOwnProfile() {
+        guard let ownProfile else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        ownProfilePreview = ownProfile
     }
 
     private var scrollContent: some View {
@@ -134,6 +183,13 @@ struct ProfileDataView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 profileActionsMenu
             }
+        }
+        .sheet(item: $ownProfilePreview) { user in
+            ProfileSheetView(user: user, showsNearbyControls: false)
+                .environmentObject(coordinator.peopleViewModel)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationContentInteraction(.resizes)
         }
         .sheet(isPresented: $showScanningSettings) {
             ScanningSettingsSheet(isScanning: $coordinator.isScaning)
