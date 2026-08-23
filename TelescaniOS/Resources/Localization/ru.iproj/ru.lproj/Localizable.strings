@@ -69,7 +69,7 @@
 "nearbyProfileClose" = "Закрыть профиль";
 "nearbyProfileActions" = "Действия с профилем";
 "nearbyProfileUsernameFallback" = "Мой Telegram Username";
-"nearbyProfileMessage" = "Написать в Telegram";
+"nearbyProfileMessage" = "Написать";
 "nearbyProfileReport" = "Пожаловаться";
 "nearbyProfileBlock" = "Заблокировать";
 "nearbyProfileReportTitle" = "Почему вы хотите пожаловаться?";

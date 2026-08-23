@@ -288,6 +288,7 @@ struct ProfileSheetView: View {
                                 .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(3)
+                                .fixedSize(horizontal: false, vertical: true)
                         } else {
                             Text(Inc.NearbyProfile.usernameFallback.localized)
                                 .font(.system(size: 13))
@@ -295,13 +296,6 @@ struct ProfileSheetView: View {
                                 .lineLimit(1)
                         }
                     }
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: .infinity,
-                        alignment: .leading
-                    )
-                    .clipped()
-                    .compositingGroup()
                     .frame(
                         width: 360,
                         height: 48,
@@ -313,6 +307,7 @@ struct ProfileSheetView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
                 .geometryGroup()
+                .compositingGroup()
             }
             .padding(.top, 60)
 
@@ -493,6 +488,34 @@ private extension View {
 
 private struct ProfileSheetControls: View {
 
+    private static let telegramMenuIcon: UIImage = {
+        guard let source = UIImage(named: "tg-icon"),
+              source.size.width > 0,
+              source.size.height > 0 else {
+            return UIImage()
+        }
+
+        let targetSize = CGSize(width: 17, height: 17)
+        let scale = min(
+            targetSize.width / source.size.width,
+            targetSize.height / source.size.height
+        )
+        let drawSize = CGSize(
+            width: source.size.width * scale,
+            height: source.size.height * scale
+        )
+        let drawRect = CGRect(
+            x: (targetSize.width - drawSize.width) / 2,
+            y: (targetSize.height - drawSize.height) / 2,
+            width: drawSize.width,
+            height: drawSize.height
+        )
+        let image = UIGraphicsImageRenderer(size: targetSize).image { _ in
+            source.draw(in: drawRect)
+        }
+        return image.withRenderingMode(.alwaysTemplate)
+    }()
+
     private enum ModerationDialog {
         case report
         case block
@@ -603,7 +626,11 @@ private struct ProfileSheetControls: View {
     private var moderationMenu: some View {
         Menu {
             Button(action: openTelegramChat) {
-                Text(Inc.NearbyProfile.message.localized)
+                Label {
+                    Text(Inc.NearbyProfile.message.localized)
+                } icon: {
+                    Image(uiImage: Self.telegramMenuIcon)
+                }
             }
 
             Button(role: .destructive) {
