@@ -287,7 +287,6 @@ struct ProfileSheetView: View {
                                 .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(3)
-                                .fixedSize(horizontal: false, vertical: true)
                         } else {
                             Text(Inc.NearbyProfile.usernameFallback.localized)
                                 .font(.system(size: 13))
@@ -295,6 +294,13 @@ struct ProfileSheetView: View {
                                 .lineLimit(1)
                         }
                     }
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: .leading
+                    )
+                    .clipped()
+                    .compositingGroup()
                     .frame(
                         width: 360,
                         height: 48,
@@ -507,6 +513,7 @@ private struct ProfileSheetControls: View {
     }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
     let user: NearbyUser
@@ -592,6 +599,12 @@ private struct ProfileSheetControls: View {
 
     private var moderationMenu: some View {
         Menu {
+            Button(action: openTelegramChat) {
+                Text(Inc.NearbyProfile.message.localized)
+            }
+
+            Divider()
+
             Button(role: .destructive) {
                 moderationDialog = .report
             } label: {
@@ -628,6 +641,36 @@ private struct ProfileSheetControls: View {
         .menuOrder(.fixed)
         .disabled(isSubmitting)
         .accessibilityLabel(Inc.NearbyProfile.actions.localized)
+    }
+
+    private func openTelegramChat() {
+        let username = user.username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+        guard !username.isEmpty else { return }
+
+        var appComponents = URLComponents()
+        appComponents.scheme = "tg"
+        appComponents.host = "resolve"
+        appComponents.queryItems = [
+            URLQueryItem(name: "domain", value: username)
+        ]
+
+        var webComponents = URLComponents()
+        webComponents.scheme = "https"
+        webComponents.host = "t.me"
+        webComponents.path = "/\(username)"
+
+        guard let appURL = appComponents.url,
+              let webURL = webComponents.url else {
+            return
+        }
+
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        openURL(appURL) { accepted in
+            guard !accepted else { return }
+            openURL(webURL)
+        }
     }
 
     private var presenceInfo: some View {

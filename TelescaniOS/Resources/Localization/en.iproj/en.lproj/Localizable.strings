@@ -69,6 +69,7 @@
 "nearbyProfileClose" = "Close profile";
 "nearbyProfileActions" = "Profile actions";
 "nearbyProfileUsernameFallback" = "My Telegram Username";
+"nearbyProfileMessage" = "Message in Telegram";
 "nearbyProfileReport" = "Report user";
 "nearbyProfileBlock" = "Block user";
 "nearbyProfileReportTitle" = "Why are you reporting this user?";

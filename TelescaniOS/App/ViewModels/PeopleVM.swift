@@ -25,16 +25,7 @@ final class PeopleViewModel: ObservableObject {
     @Published private(set) var discoveryError: String?
 
     var visibleUsers: [NearbyUser] {
-        userCache.values.sorted { first, second in
-            let firstDistance = distances[first.discoveryID] ?? Int.max
-            let secondDistance = distances[second.discoveryID] ?? Int.max
-            if firstDistance == secondDistance {
-                return first.username.localizedCaseInsensitiveCompare(
-                    second.username
-                ) == .orderedAscending
-            }
-            return firstDistance < secondDistance
-        }
+        discoveryOrder.compactMap { userCache[$0] }
     }
 
     private let bleManager: BLEManagerProtocol
@@ -54,13 +45,14 @@ final class PeopleViewModel: ObservableObject {
     private let unblockSubmitter: @MainActor (UUID) async throws -> Void
     private var distanceTimer: Timer?
     private var presenceTimer: Timer?
+    private var discoveryOrder: [String] = []
     private var rssiSamples: [String: [Int]] = [:]
     private var lastSignals: [String: Date] = [:]
     private var profileTasks: [String: Task<Void, Never>] = [:]
     private var resolutionAttempts: [String: Int] = [:]
     private var suppressedProfileIDs: Set<String> = []
     private var isApplicationActive = true
-    private let distanceUpdateInterval: TimeInterval = 3
+    private let distanceUpdateInterval: TimeInterval = 10
     private let maximumRSSISamples = 30
     private let maximumProfileResolutionAttempts: Int
     private let profileRetryBaseDelay: TimeInterval
@@ -353,6 +345,7 @@ final class PeopleViewModel: ObservableObject {
         devices.removeAll()
         distances.removeAll()
         userCache.removeAll()
+        discoveryOrder.removeAll()
         disappearanceCountdowns.removeAll()
         rssiSamples.removeAll()
         lastSignals.removeAll()
@@ -364,6 +357,9 @@ final class PeopleViewModel: ObservableObject {
         guard !blockedProfileStore.ids.contains(canonicalID) else { return }
         let isNew = devices[canonicalID] == nil
         devices[canonicalID] = rssi
+        if isNew {
+            discoveryOrder.insert(canonicalID, at: 0)
+        }
         lastSignals[canonicalID] = Date()
         if disappearanceCountdowns[canonicalID] != nil {
             disappearanceCountdowns.removeValue(forKey: canonicalID)
@@ -536,6 +532,7 @@ final class PeopleViewModel: ObservableObject {
         devices.removeValue(forKey: canonicalID)
         distances.removeValue(forKey: canonicalID)
         userCache.removeValue(forKey: canonicalID)
+        discoveryOrder.removeAll { $0 == canonicalID }
         disappearanceCountdowns.removeValue(forKey: canonicalID)
         rssiSamples.removeValue(forKey: canonicalID)
         lastSignals.removeValue(forKey: canonicalID)

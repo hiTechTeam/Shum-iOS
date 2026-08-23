@@ -608,6 +608,43 @@ struct FetchServiceTests {
         viewModel.stopAllBluetoothActivity()
     }
 
+    @Test("Nearby profiles keep discovery stack order instead of distance order")
+    @MainActor
+    func nearbyProfilesUseStableDiscoveryOrder() async {
+        let manager = FakeBLEManager()
+        let firstID = UUID()
+        let secondID = UUID()
+        let viewModel = PeopleViewModel(bleManager: manager) { requestedID in
+            TelescanProfileResponse(
+                telescanId: requestedID,
+                name: requestedID == firstID ? "First" : "Second",
+                username: requestedID == firstID ? "first" : "second",
+                photoUrl: nil
+            )
+        }
+
+        manager.emitDiscovery(id: firstID.uuidString, rssi: -35)
+        await Task.yield()
+        await viewModel.loadUserIfNeeded(
+            telescanID: firstID.uuidString.lowercased()
+        )
+
+        manager.emitDiscovery(id: secondID.uuidString, rssi: -90)
+        await Task.yield()
+        await viewModel.loadUserIfNeeded(
+            telescanID: secondID.uuidString.lowercased()
+        )
+
+        #expect(viewModel.visibleUsers.map(\.id) == [secondID, firstID])
+
+        manager.emitUpdate(id: firstID.uuidString, rssi: -100)
+        manager.emitUpdate(id: secondID.uuidString, rssi: -30)
+        await Task.yield()
+
+        #expect(viewModel.visibleUsers.map(\.id) == [secondID, firstID])
+        viewModel.stopAllBluetoothActivity()
+    }
+
     @Test("An incomplete nearby profile never produces an Unknown row")
     @MainActor
     func incompleteNearbyProfileStaysHidden() async throws {
