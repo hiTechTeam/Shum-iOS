@@ -70,6 +70,12 @@ medium-height settings sheet opened through the profile's More menu. Nearby
 profile sheets show a non-empty BIO in up to three lines above the Telegram
 username control; BIO text is rendered as plain text and never as an active link.
 
+The main tab bar contains **Nearby**, **Met**, and **Profile**. **Nearby** keeps
+profiles in discovery order instead of re-sorting rows whenever RSSI changes;
+coarse distance labels are recalculated every 10 seconds. After a resolved
+profile leaves **Nearby**, it appears in the device-local **Met** history for up
+to 24 hours. A profile is never shown in both lists at once.
+
 The in-app information screen links directly to the current Terms of Service
 and Privacy Policy.
 
@@ -84,10 +90,10 @@ token refresh or retry does not create duplicate pending reports.
 
 Blocking succeeds on the API before the profile is removed locally. A block is
 enforced in both profile-lookup directions, immediately removes the person from
-the nearby list and open sheet, and excludes the UUID from numeric background
-notifications. The last successful blocked-ID list is cached locally so an
-offline launch does not reintroduce blocked profiles. Users can review and
-unblock profiles from **Blocked profiles** in their profile screen.
+the nearby list, encounter history, and open sheet, and excludes the UUID from
+numeric background notifications. The last successful blocked-ID list is
+cached locally so an offline launch does not reintroduce blocked profiles.
+Users can review and unblock profiles from **Blocked** in the profile More menu.
 
 ## BLE identity
 
@@ -110,9 +116,9 @@ revalidates it. The text characteristic keeps staged upgrades compatible with
 older app versions. Nearby profile lookup uses the authenticated
 `/api/v1/profiles/{telescan_id}` endpoint. A BLE candidate is not displayed until
 the API returns a matching profile with a usable Telegram username; incomplete
-or unavailable profiles never create `Unknown` rows. Devices expire after 10
-seconds without a foreground sighting, with a 45-second background grace period.
-RSSI is processed locally into a coarse distance hint and is never uploaded.
+or unavailable profiles never create `Unknown` rows. Devices expire after 60
+seconds without a sighting in either foreground or background operation. RSSI
+is processed locally into a coarse distance hint and is never uploaded.
 When signal silence starts the grace period, the nearby list displays a compact
 `N s` countdown and the expanded profile displays `Disappears in N seconds`;
 either label clears immediately when a fresh signal arrives.
@@ -135,17 +141,23 @@ temporarily unavailable.
 - Keychain: access token, refresh token, and installation `device_id`.
 - `UserDefaults`: public `telescan_id`, profile metadata, registration state,
   discovery state, BLE restoration identity, and the current account's cached
-  blocked-profile UUIDs.
+  blocked-profile UUIDs. It also stores at most 500 resolved encounter-profile
+  snapshots with their last-seen timestamps; entries older than 24 hours are
+  removed and the history is never uploaded.
 - App storage and caches: selected/cached profile images and HTTP responses.
 
-The clear link code and Telegram ID are not persisted by the current app.
+The encounter history can be cleared from **Met** and is also cleared on sign
+out or account deletion. The clear link code and Telegram ID are not persisted
+by the current app.
 
 ## Verification
 
 Unit tests cover BLE manager state and identity encoding, resolved-only nearby
 profiles, disappearance cancellation, automatic link-code success/error UI
 state, offline-safe session validation, stable installation identity, token
-refresh and retry, and single-flight concurrent refresh. Example commands:
+refresh and retry, single-flight concurrent refresh, stable discovery ordering,
+10-second distance refresh, and 24-hour encounter-history persistence,
+deduplication, filtering, and cleanup. Example commands:
 
 ```sh
 xcodebuild test \
