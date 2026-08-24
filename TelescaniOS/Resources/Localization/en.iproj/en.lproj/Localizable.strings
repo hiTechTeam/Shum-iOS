@@ -15,10 +15,18 @@
 
 /* Tabs */
 "peopleNearby" = "People nearby";
-"people" = "People";
+"people" = "Nearby";
 "chats" = "Chats";
 "profile" = "Profile";
 "metTitle" = "Met";
+
+/* Encounter history */
+"encounterHistoryEmptyTitle" = "No encounters yet";
+"encounterHistoryEmptyMessage" = "People you meet during the last 24 hours will appear here.";
+"encounterHistoryClear" = "Clear history";
+"encounterHistoryClearTitle" = "Clear encounter history?";
+"encounterHistoryClearMessage" = "All encounters saved on this device will be removed.";
+"encounterHistoryLastSeenFormat" = "Met %@";
 
 /* Registration */
 "placeCode" = "Code";
@@ -53,6 +61,7 @@
 "confirmButton" = "Confirm";
 
 /* Scanning */
+"nearbyEmptyTitle" = "No one nearby yet";
 "scanning" = "Scanning";
 "justTurnScaning" = "Turn on scaning";
 "scanToggleDescription" = "The switch enables Bluetooth scanning and broadcasts your Telescan ID. While scanning is active, you can see nearby Telescan users and they can see you.";

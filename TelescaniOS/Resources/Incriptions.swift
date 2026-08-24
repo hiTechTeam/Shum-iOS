@@ -62,6 +62,16 @@ struct Inc {
         // EN: Met recently
         // RU: Виделись недавно
     }
+
+    // MARK: - Encounter history
+    struct EncounterHistory {
+        static let emptyTitle: String = "encounterHistoryEmptyTitle"
+        static let emptyMessage: String = "encounterHistoryEmptyMessage"
+        static let clear: String = "encounterHistoryClear"
+        static let clearTitle: String = "encounterHistoryClearTitle"
+        static let clearMessage: String = "encounterHistoryClearMessage"
+        static let lastSeenFormat: String = "encounterHistoryLastSeenFormat"
+    }
     
     // MARK: - Registration
     struct Registration {
@@ -141,6 +151,8 @@ struct Inc {
     
     // MARK: - Scanning
     struct Scanning {
+        static let emptyTitle: String = "nearbyEmptyTitle"
+
         static let scanning: String = "scanning"
         // EN: Scanning
         // RU: Сканирование
@@ -315,8 +327,8 @@ struct Links {
 
 enum SelectedTab: Int {
     case near = 0
-    case localChats = 2
     case profile = 1
+    case met = 2
 }
 
 enum Keys: String {

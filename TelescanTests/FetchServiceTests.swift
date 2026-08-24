@@ -645,6 +645,155 @@ struct FetchServiceTests {
         viewModel.stopAllBluetoothActivity()
     }
 
+    @Test("Encounter history persists, deduplicates and prunes old profiles")
+    func encounterHistoryStoreMaintainsRecentUniqueProfiles() throws {
+        let suiteName = "telescan.tests.encounters.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let start = Date(timeIntervalSince1970: 10_000)
+        let first = NearbyUser(
+            id: UUID(),
+            name: "First",
+            username: "@first",
+            bio: "Original BIO",
+            photoURL: "https://example.com/first.jpg"
+        )
+        let second = NearbyUser(
+            id: UUID(),
+            name: "Second",
+            username: "@second",
+            bio: nil,
+            photoURL: nil
+        )
+        let updatedFirst = NearbyUser(
+            id: first.id,
+            name: "First Updated",
+            username: "@first",
+            bio: "Updated BIO",
+            photoURL: first.photoURL
+        )
+
+        let store = EncounterHistoryStore(defaults: defaults)
+        store.record(first, seenAt: start)
+        store.record(second, seenAt: start.addingTimeInterval(50))
+        store.record(updatedFirst, seenAt: start.addingTimeInterval(100))
+
+        #expect(store.entries.map(\.id) == [first.id, second.id])
+        #expect(store.entries.first?.user.name == "First Updated")
+        #expect(store.entries.first?.user.bio == "Updated BIO")
+
+        let restored = EncounterHistoryStore(defaults: defaults)
+        #expect(restored.entries == store.entries)
+
+        restored.prune(olderThan: start.addingTimeInterval(75))
+        #expect(restored.entries.map(\.id) == [first.id])
+    }
+
+    @Test("Encounter history shows profiles only after BLE loss")
+    @MainActor
+    func nearbyProfileUpdatesEncounterHistoryWithoutSignalWriteFlooding() async {
+        let manager = FakeBLEManager()
+        let historyStore = FakeEncounterHistoryStore()
+        let profileID = UUID()
+        let start = Date(timeIntervalSince1970: 20_000)
+        var now = start
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            encounterHistoryStore: historyStore,
+            historyUpdateInterval: 60,
+            profileLoader: { requestedID in
+                TelescanProfileResponse(
+                    telescanId: requestedID,
+                    name: "Met user",
+                    username: "met_user",
+                    bio: "Conference attendee",
+                    photoUrl: nil
+                )
+            },
+            nowProvider: { now }
+        )
+
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -55)
+        await Task.yield()
+        await viewModel.loadUserIfNeeded(
+            telescanID: profileID.uuidString.lowercased()
+        )
+
+        #expect(viewModel.encounterHistory.isEmpty)
+        #expect(historyStore.entries.first?.id == profileID)
+        #expect(historyStore.entries.first?.lastSeen == start)
+        #expect(historyStore.recordCount == 1)
+
+        now = start.addingTimeInterval(30)
+        manager.emitUpdate(id: profileID.uuidString, rssi: -58)
+        await Task.yield()
+        #expect(historyStore.recordCount == 1)
+
+        now = start.addingTimeInterval(70)
+        manager.emitUpdate(id: profileID.uuidString, rssi: -57)
+        await Task.yield()
+        #expect(historyStore.recordCount == 2)
+        #expect(viewModel.encounterHistory.isEmpty)
+        #expect(historyStore.entries.first?.lastSeen == now)
+
+        manager.emitLoss(id: profileID.uuidString)
+        await Task.yield()
+        #expect(viewModel.visibleUsers.isEmpty)
+        #expect(viewModel.encounterHistory.first?.id == profileID)
+
+        now = start.addingTimeInterval(80)
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -56)
+        await Task.yield()
+        #expect(viewModel.encounterHistory.isEmpty)
+
+        manager.emitLoss(id: profileID.uuidString)
+        await Task.yield()
+        #expect(viewModel.encounterHistory.first?.id == profileID)
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("Encounter history expires after 24 hours and clears locally")
+    @MainActor
+    func encounterHistoryExpiresAndClears() {
+        let historyStore = FakeEncounterHistoryStore()
+        let now = Date(timeIntervalSince1970: 200_000)
+        let expired = NearbyUser(
+            id: UUID(),
+            name: "Expired",
+            username: "@expired",
+            bio: nil,
+            photoURL: nil
+        )
+        let recent = NearbyUser(
+            id: UUID(),
+            name: "Recent",
+            username: "@recent",
+            bio: nil,
+            photoURL: nil
+        )
+        historyStore.record(
+            expired,
+            seenAt: now.addingTimeInterval(-(24 * 60 * 60) - 1)
+        )
+        historyStore.record(
+            recent,
+            seenAt: now.addingTimeInterval(-60)
+        )
+
+        let viewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            encounterHistoryStore: historyStore,
+            nowProvider: { now }
+        )
+
+        #expect(viewModel.encounterHistory.map(\.id) == [recent.id])
+        viewModel.clearEncounterHistory()
+        #expect(viewModel.encounterHistory.isEmpty)
+        #expect(historyStore.entries.isEmpty)
+        viewModel.stopAllBluetoothActivity()
+    }
+
     @Test("An incomplete nearby profile never produces an Unknown row")
     @MainActor
     func incompleteNearbyProfileStaysHidden() async throws {
@@ -958,10 +1107,12 @@ struct FetchServiceTests {
     func blockingRemovesVisibleProfile() async throws {
         let manager = FakeBLEManager()
         let blockedStore = FakeBlockedProfileStore()
+        let historyStore = FakeEncounterHistoryStore()
         let profileID = UUID()
         let viewModel = PeopleViewModel(
             bleManager: manager,
             blockedProfileStore: blockedStore,
+            encounterHistoryStore: historyStore,
             profileLoader: { requestedID in
                 TelescanProfileResponse(
                     telescanId: requestedID,
@@ -987,9 +1138,13 @@ struct FetchServiceTests {
             telescanID: profileID.uuidString.lowercased()
         )
         let user = try #require(viewModel.visibleUsers.first)
+        #expect(viewModel.encounterHistory.isEmpty)
+        #expect(historyStore.entries.map(\.id) == [profileID])
         try await viewModel.block(user)
 
         #expect(viewModel.visibleUsers.isEmpty)
+        #expect(viewModel.encounterHistory.isEmpty)
+        #expect(historyStore.entries.isEmpty)
         #expect(blockedStore.ids == [profileID.uuidString.lowercased()])
         viewModel.stopAllBluetoothActivity()
     }
@@ -1212,5 +1367,35 @@ private final class FakeBlockedProfileStore: BlockedProfileStoring {
 
     func removeAll() {
         ids.removeAll()
+    }
+}
+
+private final class FakeEncounterHistoryStore: EncounterHistoryStoring {
+    private(set) var entries: [EncounterHistoryEntry] = []
+    private(set) var recordCount = 0
+
+    func record(_ user: NearbyUser, seenAt: Date) {
+        recordCount += 1
+        let previousDate = entries.first { $0.id == user.id }?.lastSeen
+        entries.removeAll { $0.id == user.id }
+        entries.append(
+            EncounterHistoryEntry(
+                user: user,
+                lastSeen: max(previousDate ?? seenAt, seenAt)
+            )
+        )
+        entries.sort { $0.lastSeen > $1.lastSeen }
+    }
+
+    func remove(ids: Set<UUID>) {
+        entries.removeAll { ids.contains($0.id) }
+    }
+
+    func prune(olderThan cutoff: Date) {
+        entries.removeAll { $0.lastSeen < cutoff }
+    }
+
+    func removeAll() {
+        entries.removeAll()
     }
 }

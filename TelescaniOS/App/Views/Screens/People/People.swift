@@ -9,8 +9,6 @@ struct People: View {
     private let peopNearleInc: String = Inc.Common.nearby.localized
     private let peopleInc: String = Inc.Tabs.people.localized
     
-    @State private var showMet = false
-    
     var body: some View {
         NavigationStack {
             PeopleView()
@@ -18,11 +16,12 @@ struct People: View {
                 .navigationBarTitleDisplayMode(.large)
         }
         .tabItem {
-            if coordinator.isScaning {
-                Label(peopleInc, systemImage: IncLogos.shareplay)
-            } else {
-                Label("", systemImage: "shareplay.slash")
-            }
+            Label(
+                peopleInc,
+                systemImage: coordinator.isScaning
+                    ? IncLogos.shareplay
+                    : "shareplay.slash"
+            )
         }
         .tag(SelectedTab.near)
         .badge(peopleViewModel.visibleUsers.count)

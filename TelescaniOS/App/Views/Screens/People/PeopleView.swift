@@ -15,37 +15,27 @@ struct PeopleView: View {
             Color.tsBackground
                 .ignoresSafeArea()
 
-            VStack(alignment: .leading) {
-                if coordinator.isScaning {
-                    List {
-                        if peopleViewModel.visibleUsers.isEmpty {
-                            VStack(
-                                alignment: .leading,
-                                spacing: 12
-                            ) {
-                                Image.wave3Up
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 28, height: 28)
-                                    .foregroundColor(.gray)
-
-                                Text(Inc.Scanning.noPeopleNeaby.localized)
-                                    .font(.system(size: 14, weight: .regular))
-                                    .foregroundColor(.gray)
-                            }
-                            .padding(.top, 12)
-                            .listRowInsets(
-                                EdgeInsets(
-                                    top: 0,
-                                    leading: 16,
-                                    bottom: 0,
-                                    trailing: 16
+            if coordinator.isScaning {
+                if peopleViewModel.visibleUsers.isEmpty {
+                    GeometryReader { geometry in
+                        ScrollView {
+                            ContentUnavailableView(
+                                Inc.Scanning.emptyTitle.localized,
+                                systemImage: "wave.3.up",
+                                description: Text(
+                                    Inc.Scanning.noPeopleNeaby.localized
                                 )
                             )
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: geometry.size.height)
                         }
-
+                        .scrollBounceBehavior(.always)
+                        .refreshable {
+                            await peopleViewModel.refreshNearbyPeople()
+                        }
+                    }
+                } else {
+                    List {
                         ForEach(
                             peopleViewModel.visibleUsers
                         ) { user in
@@ -134,7 +124,7 @@ struct PeopleRowContent: View {
                     user.username
                 )
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(.primary)
+                .foregroundStyle(Color(uiColor: .systemBlue))
             }
 
             Spacer()
@@ -201,6 +191,7 @@ struct ProfileSheetView: View {
 
     let user: NearbyUser
     var showsNearbyControls = true
+    var lastMetAt: Date? = nil
 
     private var imageURL: URL? {
         guard let url = user.photoURL else { return nil }
@@ -312,7 +303,7 @@ struct ProfileSheetView: View {
             .padding(.top, 60)
 
             if showsNearbyControls {
-                ProfileSheetControls(user: user)
+                ProfileSheetControls(user: user, lastMetAt: lastMetAt)
             }
         }
         .fullScreenCover(isPresented: $showPhotoPreview) {
@@ -543,6 +534,7 @@ private struct ProfileSheetControls: View {
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
     let user: NearbyUser
+    let lastMetAt: Date?
 
     @State private var moderationDialog: ModerationDialog?
     @State private var moderationAlert: ModerationAlert?
@@ -702,16 +694,27 @@ private struct ProfileSheetControls: View {
     }
 
     private var presenceInfo: some View {
-        HStack(spacing: 8) {
-            if peopleViewModel.disappearanceCountdowns[
-                user.discoveryID
-            ] == nil {
-                Text(Inc.Common.nearby.localized)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.gray)
-            }
+        Group {
+            if let lastMetAt {
+                EncounterRelativeTimeText(
+                    date: lastMetAt,
+                    includesMetPrefix: true
+                )
+                .font(.system(size: 13))
+                .foregroundStyle(.gray)
+            } else {
+                HStack(spacing: 8) {
+                    if peopleViewModel.disappearanceCountdowns[
+                        user.discoveryID
+                    ] == nil {
+                        Text(Inc.Common.nearby.localized)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.gray)
+                    }
 
-            NearbyPresenceLabel(user: user, fontSize: 13)
+                    NearbyPresenceLabel(user: user, fontSize: 13)
+                }
+            }
         }
         .frame(width: 360, height: 44, alignment: .leading)
     }

@@ -9,7 +9,7 @@ struct ProfileInfo: Codable, Identifiable {
     var cachedLocalPhotoPath: String?
 }
 
-struct NearbyUser: Identifiable, Equatable {
+struct NearbyUser: Identifiable, Codable, Equatable {
     let id: UUID
     let name: String
     let username: String
@@ -18,5 +18,14 @@ struct NearbyUser: Identifiable, Equatable {
 
     var discoveryID: String {
         id.uuidString.lowercased()
+    }
+}
+
+struct EncounterHistoryEntry: Identifiable, Codable, Equatable {
+    let user: NearbyUser
+    let lastSeen: Date
+
+    var id: UUID {
+        user.id
     }
 }

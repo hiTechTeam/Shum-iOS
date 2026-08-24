@@ -22,6 +22,7 @@ final class PeopleViewModel: ObservableObject {
     @Published private(set) var userCache: [String: NearbyUser] = [:]
     @Published private(set) var disappearanceCountdowns: [String: Int] = [:]
     @Published private(set) var blockedProfiles: [BlockedProfileResponse] = []
+    @Published private(set) var encounterHistory: [EncounterHistoryEntry] = []
     @Published private(set) var discoveryError: String?
 
     var visibleUsers: [NearbyUser] {
@@ -31,6 +32,7 @@ final class PeopleViewModel: ObservableObject {
     private let bleManager: BLEManagerProtocol
     private let nearbyPeopleNotifier: NearbyPeopleNotifying
     private let blockedProfileStore: BlockedProfileStoring
+    private let encounterHistoryStore: EncounterHistoryStoring
     private let profileLoader: @MainActor (UUID) async throws
         -> TelescanProfileResponse
     private let blockedProfilesLoader: @MainActor () async throws
@@ -50,6 +52,7 @@ final class PeopleViewModel: ObservableObject {
     private var lastSignals: [String: Date] = [:]
     private var profileTasks: [String: Task<Void, Never>] = [:]
     private var resolutionAttempts: [String: Int] = [:]
+    private var lastHistoryUpdates: [String: Date] = [:]
     private var suppressedProfileIDs: Set<String> = []
     private var isApplicationActive = true
     private let distanceUpdateInterval: TimeInterval = 10
@@ -57,11 +60,18 @@ final class PeopleViewModel: ObservableObject {
     private let maximumProfileResolutionAttempts: Int
     private let profileRetryBaseDelay: TimeInterval
     private let maximumRetryDelay: TimeInterval
+    private let encounterRetention: TimeInterval
+    private let historyUpdateInterval: TimeInterval
+    private let nowProvider: () -> Date
 
     init(
         bleManager: BLEManagerProtocol = BLEManager.shared,
         nearbyPeopleNotifier: NearbyPeopleNotifying? = nil,
         blockedProfileStore: BlockedProfileStoring = BlockedProfileStore.shared,
+        encounterHistoryStore: EncounterHistoryStoring =
+            EncounterHistoryStore.shared,
+        encounterRetention: TimeInterval = 24 * 60 * 60,
+        historyUpdateInterval: TimeInterval = 60,
         maximumProfileResolutionAttempts: Int = 5,
         profileRetryBaseDelay: TimeInterval = 2,
         maximumRetryDelay: TimeInterval = 30,
@@ -87,15 +97,20 @@ final class PeopleViewModel: ObservableObject {
         blockSubmitter: @escaping @MainActor (UUID) async throws
             -> BlockedProfileResponse = { id in
                 try await FetchService.fetch.blockProfile(telescanID: id)
-            },
+        },
         unblockSubmitter: @escaping @MainActor (UUID) async throws -> Void = {
             try await FetchService.fetch.unblockProfile(telescanID: $0)
-            }
+        },
+        nowProvider: @escaping () -> Date = Date.init
     ) {
         self.bleManager = bleManager
         self.nearbyPeopleNotifier = nearbyPeopleNotifier
             ?? NearbyPeopleNotifier()
         self.blockedProfileStore = blockedProfileStore
+        self.encounterHistoryStore = encounterHistoryStore
+        self.encounterRetention = max(1, encounterRetention)
+        self.historyUpdateInterval = max(0, historyUpdateInterval)
+        self.nowProvider = nowProvider
         self.maximumProfileResolutionAttempts = max(
             1,
             maximumProfileResolutionAttempts
@@ -111,6 +126,7 @@ final class PeopleViewModel: ObservableObject {
         self.blockSubmitter = blockSubmitter
         self.unblockSubmitter = unblockSubmitter
         bleManager.delegate = self
+        refreshEncounterHistory(at: nowProvider())
         startDistanceUpdater()
         startPresenceUpdater()
     }
@@ -170,6 +186,7 @@ final class PeopleViewModel: ObservableObject {
                 profiles.map { $0.telescanId.uuidString.lowercased() }
             )
             blockedProfileStore.replace(with: serverIDs)
+            removeEncounterHistory(canonicalIDs: serverIDs)
             let visibleBlockedIDs = devices.keys.filter(serverIDs.contains)
             for id in visibleBlockedIDs {
                 loseDevice(id: id)
@@ -195,6 +212,7 @@ final class PeopleViewModel: ObservableObject {
         } else {
             blockedProfiles.insert(blockedProfile, at: 0)
         }
+        removeEncounterHistory(ids: [user.id])
         loseDevice(id: user.discoveryID)
     }
 
@@ -207,6 +225,28 @@ final class PeopleViewModel: ObservableObject {
     func clearBlockedProfileCache() {
         blockedProfileStore.removeAll()
         blockedProfiles.removeAll()
+    }
+
+    func clearEncounterHistory() {
+        encounterHistoryStore.removeAll()
+        encounterHistory.removeAll()
+        lastHistoryUpdates.removeAll()
+    }
+
+    func refreshEncounterHistory(at now: Date = Date()) {
+        let cutoff = now.addingTimeInterval(-encounterRetention)
+        encounterHistoryStore.prune(olderThan: cutoff)
+
+        let blockedIDs = blockedProfileStore.ids
+        let hiddenHistoryIDs = Set(
+            encounterHistoryStore.entries.compactMap { entry in
+                blockedIDs.contains(entry.user.discoveryID) ? entry.id : nil
+            }
+        )
+        encounterHistoryStore.remove(ids: hiddenHistoryIDs)
+        encounterHistory = encounterHistoryStore.entries.filter { entry in
+            devices[entry.user.discoveryID] == nil
+        }
     }
 
     func toggleScanning(_ enabled: Bool) {
@@ -323,6 +363,7 @@ final class PeopleViewModel: ObservableObject {
             distances = updated
         }
         rssiSamples.removeAll(keepingCapacity: true)
+        refreshEncounterHistory(at: nowProvider())
     }
 
     func distanceFromRSSI(
@@ -336,6 +377,14 @@ final class PeopleViewModel: ObservableObject {
     }
 
     func clearDevices() {
+        let now = nowProvider()
+        for (id, user) in userCache {
+            recordEncounter(
+                user,
+                at: lastSignals[id] ?? now,
+                force: true
+            )
+        }
         for task in profileTasks.values {
             task.cancel()
         }
@@ -349,6 +398,8 @@ final class PeopleViewModel: ObservableObject {
         disappearanceCountdowns.removeAll()
         rssiSamples.removeAll()
         lastSignals.removeAll()
+        lastHistoryUpdates.removeAll()
+        refreshEncounterHistory(at: nowProvider())
     }
 
     private func receiveDevice(id: String, rssi: Int) {
@@ -359,8 +410,13 @@ final class PeopleViewModel: ObservableObject {
         devices[canonicalID] = rssi
         if isNew {
             discoveryOrder.insert(canonicalID, at: 0)
+            refreshEncounterHistory(at: nowProvider())
         }
-        lastSignals[canonicalID] = Date()
+        let now = nowProvider()
+        lastSignals[canonicalID] = now
+        if let user = userCache[canonicalID] {
+            recordEncounter(user, at: now)
+        }
         if disappearanceCountdowns[canonicalID] != nil {
             disappearanceCountdowns.removeValue(forKey: canonicalID)
         }
@@ -433,6 +489,11 @@ final class PeopleViewModel: ObservableObject {
                 return
             }
             userCache[id] = user
+            recordEncounter(
+                user,
+                at: lastSignals[id] ?? nowProvider(),
+                force: true
+            )
             nearbyPeopleNotifier.detect(id: id)
             resolutionAttempts[id] = 0
             profileTasks[id] = nil
@@ -524,6 +585,13 @@ final class PeopleViewModel: ObservableObject {
     private func loseDevice(id: String) {
         guard let uuid = UUID(uuidString: id) else { return }
         let canonicalID = uuid.uuidString.lowercased()
+        if let user = userCache[canonicalID] {
+            recordEncounter(
+                user,
+                at: lastSignals[canonicalID] ?? nowProvider(),
+                force: true
+            )
+        }
         nearbyPeopleNotifier.lose(id: canonicalID)
         profileTasks[canonicalID]?.cancel()
         profileTasks.removeValue(forKey: canonicalID)
@@ -536,6 +604,46 @@ final class PeopleViewModel: ObservableObject {
         disappearanceCountdowns.removeValue(forKey: canonicalID)
         rssiSamples.removeValue(forKey: canonicalID)
         lastSignals.removeValue(forKey: canonicalID)
+        lastHistoryUpdates.removeValue(forKey: canonicalID)
+        refreshEncounterHistory(at: nowProvider())
+    }
+
+    private func recordEncounter(
+        _ user: NearbyUser,
+        at date: Date,
+        force: Bool = false
+    ) {
+        let canonicalID = user.discoveryID
+        guard !blockedProfileStore.ids.contains(canonicalID) else { return }
+
+        if !force,
+           let lastUpdate = lastHistoryUpdates[canonicalID],
+           date.timeIntervalSince(lastUpdate) < historyUpdateInterval {
+            return
+        }
+
+        encounterHistoryStore.record(user, seenAt: date)
+        lastHistoryUpdates[canonicalID] = max(
+            lastHistoryUpdates[canonicalID] ?? date,
+            date
+        )
+        refreshEncounterHistory(at: max(nowProvider(), date))
+    }
+
+    private func removeEncounterHistory(ids: Set<UUID>) {
+        encounterHistoryStore.remove(ids: ids)
+        let canonicalIDs = Set(ids.map { $0.uuidString.lowercased() })
+        lastHistoryUpdates = lastHistoryUpdates.filter {
+            !canonicalIDs.contains($0.key)
+        }
+        refreshEncounterHistory(at: nowProvider())
+    }
+
+    private func removeEncounterHistory(canonicalIDs: Set<String>) {
+        let ids = Set(
+            canonicalIDs.compactMap { UUID(uuidString: $0) }
+        )
+        removeEncounterHistory(ids: ids)
     }
 }
 

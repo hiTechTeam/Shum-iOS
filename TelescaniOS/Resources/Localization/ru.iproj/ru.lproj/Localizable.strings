@@ -15,10 +15,18 @@
 
 /* Tabs */
 "peopleNearby" = "Люди рядом";
-"people" = "Люди";
+"people" = "Рядом";
 "chats" = "Чаты";
 "profile" = "Профиль";
 "metTitle" = "Виделись";
+
+/* История встреч */
+"encounterHistoryEmptyTitle" = "Пока никого";
+"encounterHistoryEmptyMessage" = "Здесь появятся люди, которых вы встретили за последние 24 часа.";
+"encounterHistoryClear" = "Очистить историю";
+"encounterHistoryClearTitle" = "Очистить историю встреч?";
+"encounterHistoryClearMessage" = "Все сохранённые на этом устройстве встречи будут удалены.";
+"encounterHistoryLastSeenFormat" = "Виделись %@";
 
 /* Registration */
 "placeCode" = "Код";
@@ -53,6 +61,7 @@
 "confirmButton" = "Применить";
 
 /* Scanning */
+"nearbyEmptyTitle" = "Пока никого";
 "scanning" = "Сканирование";
 "justTurnScaning" = "Включите сканирование";
 "scanToggleDescription" = "Переключатель включает Bluetooth-сканирование и передачу вашего Telescan ID. Пока сканирование активно, вы видите пользователей Telescan рядом, а они могут увидеть вас.";

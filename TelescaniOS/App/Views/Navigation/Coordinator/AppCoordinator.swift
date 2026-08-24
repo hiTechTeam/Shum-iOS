@@ -93,6 +93,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     private func clearLocalSession() {
         peopleViewModel.stopAllBluetoothActivity()
         peopleViewModel.clearBlockedProfileCache()
+        peopleViewModel.clearEncounterHistory()
         BLEManager.shared.reset()
         authSession.clearTokens()
         ProfileCache.clear()
