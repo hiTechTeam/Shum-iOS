@@ -20,7 +20,6 @@ struct MainContentView: View {
 
                     contentPager
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .modifier(NativeTopScrollEdgeEffect())
                 }
                 .navigationTitle(headerTitle)
                 .navigationBarTitleDisplayMode(.inline)
@@ -211,6 +210,7 @@ private struct HeaderButton: View {
 private struct TextTabBar: View {
     @State private var dragProgress: CGFloat?
     @State private var dragStartProgress: CGFloat?
+    @Namespace private var glassNamespace
 
     let selectedTab: SelectedTab
     let nearbyCount: Int
@@ -256,7 +256,7 @@ private struct TextTabBar: View {
     }
 
     private var selectionPill: some View {
-        SelectedTabSurface()
+        SelectedTabSurface(namespace: glassNamespace)
             .frame(width: tabWidth, height: 44)
             .offset(x: selectionPillOffset)
             .allowsHitTesting(false)
@@ -392,10 +392,8 @@ private struct TextTabBarSurface: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: 0) {
-                content
-                    .glassEffect(.regular.interactive(), in: Capsule())
-            }
+            content
+                .glassEffect(.regular.interactive(), in: Capsule())
                 .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
         } else {
             content
@@ -433,7 +431,7 @@ private struct BottomTabBarLayout<TabBar: View>: ViewModifier {
     }
 }
 
-private struct NativeTopScrollEdgeEffect: ViewModifier {
+struct NativeTopScrollEdgeEffect: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
@@ -512,11 +510,22 @@ private struct ScanningAlertSurface: ViewModifier {
 }
 
 private struct SelectedTabSurface: View {
+    let namespace: Namespace.ID
+
     var body: some View {
         Group {
             if #available(iOS 26.0, *) {
-                Color.clear
-                    .glassEffect(.regular.interactive(), in: Capsule())
+                GlassEffectContainer(spacing: 0) {
+                    Capsule()
+                        .fill(Color.primary.opacity(0.001))
+                        .glassEffect(
+                            .regular
+                                .tint(Color.primary.opacity(0.08))
+                                .interactive(),
+                            in: Capsule()
+                        )
+                        .glassEffectID("selected-tab", in: namespace)
+                }
             } else {
                 Capsule()
                     .fill(Color(uiColor: .secondarySystemBackground))

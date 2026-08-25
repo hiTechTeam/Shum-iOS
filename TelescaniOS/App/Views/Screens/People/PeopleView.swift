@@ -35,6 +35,7 @@ struct PeopleView: View {
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: geometry.size.height)
                         }
+                        .modifier(NativeTopScrollEdgeEffect())
                         .scrollBounceBehavior(.always)
                         .refreshable {
                             await peopleViewModel.refreshNearbyPeople()
@@ -53,6 +54,7 @@ struct PeopleView: View {
                         .padding(.top, 18)
                         .padding(.bottom, gridBottomPadding)
                     }
+                    .modifier(NativeTopScrollEdgeEffect())
                     .scrollBounceBehavior(.always)
                     .refreshable {
                         await peopleViewModel.refreshNearbyPeople()
