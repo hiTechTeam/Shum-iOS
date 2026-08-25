@@ -46,7 +46,7 @@ struct EncounterHistoryView: View {
                     }
                     .padding(.horizontal, 24)
                     .padding(.top, 18)
-                    .padding(.bottom, 90)
+                    .padding(.bottom, gridBottomPadding)
                 }
                 .scrollBounceBehavior(.always)
                 .refreshable {
@@ -78,6 +78,14 @@ struct EncounterHistoryView: View {
         .task {
             await peopleViewModel.synchronizeBlockedProfiles()
             peopleViewModel.refreshEncounterHistory()
+        }
+    }
+
+    private var gridBottomPadding: CGFloat {
+        if #available(iOS 26.0, *) {
+            90
+        } else {
+            18
         }
     }
 }

@@ -68,7 +68,7 @@ struct Inc {
 
         static let metHeader: String = "metHeader"
         // EN: Met recently
-        // RU: Встречали недавно
+        // RU: Виделись недавно
     }
 
     // MARK: - Chats

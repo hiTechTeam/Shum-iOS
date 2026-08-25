@@ -10,8 +10,6 @@ struct MainContentView: View {
     @State private var navigationPath: [MainDestination] = []
     @State private var showScanAlert = false
     @State private var showBluetoothAlert = false
-    @State private var contentDragProgress: CGFloat?
-    @State private var contentDragStartProgress: CGFloat?
 
     var body: some View {
         ZStack {
@@ -20,12 +18,9 @@ struct MainContentView: View {
                     Color.tsBackground
                         .ignoresSafeArea()
 
-                    selectedContent
-                        .id(selectedTab)
+                    contentPager
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .modifier(NativeTopScrollEdgeEffect())
-                        .simultaneousGesture(contentSwipeGesture)
-                        .transition(.opacity)
                 }
                 .navigationTitle(headerTitle)
                 .navigationBarTitleDisplayMode(.inline)
@@ -34,18 +29,17 @@ struct MainContentView: View {
                         rootToolbar
                     }
                 }
-                .overlay(alignment: .bottom) {
-                    TextTabBar(
-                        selectedTab: selectedTab,
-                        nearbyCount: peopleViewModel.visibleUsers.count,
-                        encounterCount: peopleViewModel.encounterHistory.count,
-                        isScanningEnabled: coordinator.isScaning,
-                        externalProgress: contentDragProgress,
-                        select: selectTab
+                .modifier(
+                    BottomTabBarLayout(
+                        tabBar: TextTabBar(
+                            selectedTab: selectedTab,
+                            nearbyCount: peopleViewModel.visibleUsers.count,
+                            encounterCount: peopleViewModel.encounterHistory.count,
+                            isScanningEnabled: coordinator.isScaning,
+                            select: selectTab
+                        )
                     )
-                    .padding(.horizontal, 28)
-                    .safeAreaPadding(.bottom, 6)
-                }
+                )
                 .navigationDestination(for: MainDestination.self) { destination in
                     destinationView(for: destination)
                 }
@@ -99,65 +93,22 @@ struct MainContentView: View {
         }
     }
 
-    @ViewBuilder
-    private var selectedContent: some View {
-        switch selectedTab {
-        case .near:
+    private var contentPager: some View {
+        TabView(selection: pageSelection) {
             PeopleView()
-        case .met:
+                .tag(SelectedTab.near)
+
             EncounterHistoryView()
-        case .profile:
-            EmptyView()
+                .tag(SelectedTab.met)
         }
+        .tabViewStyle(.page(indexDisplayMode: .never))
     }
 
-    private var contentSwipeGesture: some Gesture {
-        DragGesture(minimumDistance: 18)
-            .onChanged { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else {
-                    return
-                }
-
-                let start = contentDragStartProgress
-                    ?? progress(for: selectedTab)
-                if contentDragStartProgress == nil {
-                    contentDragStartProgress = start
-                }
-                contentDragProgress = min(
-                    max(start - value.translation.width / 240, 0),
-                    1
-                )
-            }
-            .onEnded { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else {
-                    resetContentDrag()
-                    return
-                }
-
-                let start = contentDragStartProgress
-                    ?? progress(for: selectedTab)
-                let projectedProgress = min(
-                    max(start - value.predictedEndTranslation.width / 240, 0),
-                    1
-                )
-                let requestedTab: SelectedTab = projectedProgress < 0.5
-                    ? .near
-                    : .met
-                let resolvedTab = requestedTab == .near && !coordinator.isScaning
-                    ? selectedTab
-                    : requestedTab
-
-                selectTab(requestedTab)
-                contentDragStartProgress = nil
-
-                withAnimation(
-                    .spring(response: 0.30, dampingFraction: 0.84)
-                ) {
-                    contentDragProgress = progress(for: resolvedTab)
-                } completion: {
-                    contentDragProgress = nil
-                }
-            }
+    private var pageSelection: Binding<SelectedTab> {
+        Binding(
+            get: { selectedTab },
+            set: selectTab
+        )
     }
 
     private var headerTitle: String {
@@ -217,19 +168,6 @@ struct MainContentView: View {
         }
     }
 
-    private func progress(for tab: SelectedTab) -> CGFloat {
-        tab == .near ? 0 : 1
-    }
-
-    private func resetContentDrag() {
-        contentDragStartProgress = nil
-        withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
-            contentDragProgress = progress(for: selectedTab)
-        } completion: {
-            contentDragProgress = nil
-        }
-    }
-
     @ViewBuilder
     private func destinationView(for destination: MainDestination) -> some View {
         switch destination {
@@ -278,7 +216,6 @@ private struct TextTabBar: View {
     let nearbyCount: Int
     let encounterCount: Int
     let isScanningEnabled: Bool
-    let externalProgress: CGFloat?
     let select: (SelectedTab) -> Void
 
     private let barWidth: CGFloat = 276
@@ -330,7 +267,7 @@ private struct TextTabBar: View {
     }
 
     private var effectiveProgress: CGFloat {
-        dragProgress ?? externalProgress ?? progress(for: selectedTab)
+        dragProgress ?? progress(for: selectedTab)
     }
 
     private var selectionDragGesture: some Gesture {
@@ -457,21 +394,41 @@ private struct TextTabBarSurface: ViewModifier {
         if #available(iOS 26.0, *) {
             GlassEffectContainer(spacing: 0) {
                 content
-                    .glassEffect(.clear.interactive(), in: Capsule())
+                    .glassEffect(.regular.interactive(), in: Capsule())
             }
                 .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
         } else {
             content
-                .background {
-                    Capsule()
-                        .fill(.ultraThinMaterial)
-                        .opacity(0.72)
-                }
+                .background(.ultraThinMaterial, in: Capsule())
                 .overlay {
                     Capsule()
                         .stroke(Color.primary.opacity(0.10), lineWidth: 0.5)
                 }
                 .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
+        }
+    }
+}
+
+private struct BottomTabBarLayout<TabBar: View>: ViewModifier {
+    let tabBar: TabBar
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .overlay(alignment: .bottom) {
+                    tabBar
+                        .padding(.horizontal, 28)
+                        .safeAreaPadding(.bottom, 6)
+                }
+        } else {
+            content
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    tabBar
+                        .padding(.horizontal, 28)
+                        .padding(.top, 8)
+                        .padding(.bottom, 6)
+                }
         }
     }
 }
