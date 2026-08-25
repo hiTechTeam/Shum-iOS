@@ -212,7 +212,7 @@ private struct NearbyAvatarPresenceRing: View {
             switch state {
             case .active:
                 Circle()
-                    .strokeBorder(Color.green, lineWidth: lineWidth)
+                    .strokeBorder(Color.primary.opacity(0.13), lineWidth: 2)
 
             case .disappearing:
                 Circle()
