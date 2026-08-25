@@ -297,7 +297,9 @@ private struct TextTabBar: View {
                         .padding(.horizontal, 6)
                         .frame(minWidth: 20, minHeight: 20)
                         .background(
-                            isAvailable ? badgeColor : Color.gray,
+                            isAvailable && isSelected
+                                ? badgeColor
+                                : Color.gray,
                             in: Capsule()
                         )
                         .transition(.scale.combined(with: .opacity))
