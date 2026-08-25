@@ -44,7 +44,7 @@
 "incorrectCode" = "Invalid or expired code";
 "telegramUsernameRequired" = "Create a public Telegram username and request a new code";
 "warningCharactersEight" = "Maximum of 8 characters";
-"regDescription" = "Enter the code that the bot sent so that the application can link your Telegram username.";
+"regDescription" = "Enter the code sent to you by Telescan_bot so the app can link your Telegram.";
 "tgUsername" = "Telegram username";
 "usernamePlaceholder" = "@_";
 "profileBioTitle" = "BIO";
@@ -55,6 +55,10 @@
 
 /* Onboarding */
 "appleSignInFailed" = "Couldn’t sign in with Apple. Please try again.";
+"appleIdentityTitle" = "Identity verification is required";
+"appleIdentityDescription" = "Sign in with your Apple ID. After verification, you’ll need to link your Telegram profile.";
+"appleSignInButton" = "Sign in with Apple";
+"appleSignInHint" = "Continues registration without contacting Apple in development builds";
 "welcome_title" = "Welcome to";
 "poweredByTG" = "Powered by Telegram";
 "aboutOnBoardingMsg" = "Telescan lets you instantly find and share Telegram profiles with people nearby.";
@@ -63,7 +67,7 @@
 "legalAgreement" = "By continuing, you agree to Telescan’s\n%@ and %@";
 "privacyPolicy" = "Privacy Policy";
 "termsOfService" = "Terms of Service";
-"continueHint" = "Opens the Telegram registration code screen";
+"continueHint" = "Opens the identity verification screen";
 "goNext" = "Next";
 "go" = "Go";
 "confirmButton" = "Confirm";

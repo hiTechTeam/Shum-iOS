@@ -44,7 +44,7 @@
 "incorrectCode" = "Код недействителен или истёк";
 "telegramUsernameRequired" = "Создайте публичный Telegram username и запросите новый код";
 "warningCharactersEight" = "Максимум 8 символов";
-"regDescription" = "Введите код, который отправил бот, для того чтобы приложение могло привязать ваш Telegram username.";
+"regDescription" = "Введите код, который отправил вам Telescan_bot, для того чтобы приложение могло привязать ваш Telegram.";
 "tgUsername" = "Telegram username";
 "usernamePlaceholder" = "@_";
 "profileBioTitle" = "BIO";
@@ -55,6 +55,10 @@
 
 /* Onboarding */
 "appleSignInFailed" = "Не удалось войти с Apple. Попробуйте ещё раз.";
+"appleIdentityTitle" = "Необходимо подтвердить личность";
+"appleIdentityDescription" = "Войдите с помощью Apple ID. После подтверждения вам будет необходимо привязать свой профиль Telegram.";
+"appleSignInButton" = "Войти с Apple";
+"appleSignInHint" = "В режиме разработки продолжает регистрацию без обращения к Apple";
 "welcome_title" = "Добро пожаловать в";
 "poweredByTG" = "Работает от Telegram";
 "aboutOnBoardingMsg" = "Telescan позволяет быстро находить и обмениваться Telegram-профилями.";
@@ -63,7 +67,7 @@
 "legalAgreement" = "Продолжая, вы соглашаетесь с документами\n«%@» и «%@»";
 "privacyPolicy" = "Политика конфиденциальности";
 "termsOfService" = "Условия использования";
-"continueHint" = "Открывает экран ввода кода регистрации Telegram";
+"continueHint" = "Открывает экран подтверждения личности";
 "goNext" = "Далее";
 "go" = "Начать";
 "confirmButton" = "Применить";

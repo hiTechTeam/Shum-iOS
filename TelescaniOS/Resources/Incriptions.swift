@@ -119,8 +119,8 @@ struct Inc {
         // RU: Максимум 8 символов
         
         static let regDescription: String = "regDescription"
-        // EN: Enter the code that the bot sent so that the application can link your tg username.
-        // RU: Введите код, который отправил бот, для того чтобы приложение могло привязать ваш tg username.
+        // EN: Enter the code sent to you by Telescan_bot so the app can link your Telegram.
+        // RU: Введите код, который отправил вам Telescan_bot, чтобы приложение могло привязать ваш Telegram.
         
         static let tgUsername: String = "Telegram username"
         static let usernamePlaceholder: String = "@_"
@@ -129,6 +129,10 @@ struct Inc {
     // MARK: - Onboarding
     struct Onboarding {
         static let appleSignInFailed: String = "appleSignInFailed"
+        static let appleIdentityTitle: String = "appleIdentityTitle"
+        static let appleIdentityDescription: String = "appleIdentityDescription"
+        static let appleSignInButton: String = "appleSignInButton"
+        static let appleSignInHint: String = "appleSignInHint"
         static let welcomeTitle: String = "welcome_title"
         // EN: Welcome to Telescan
         // RU: Добро пожаловать в Telescan

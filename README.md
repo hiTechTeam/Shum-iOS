@@ -47,10 +47,12 @@ Use the shared `Telescan` scheme for Personal Team development. Use
 physical device after the paid Apple Developer team is available. Archive and
 Profile actions always use Release.
 
-1. The system Sign in with Apple control creates or resumes the primary
-   Telescan account through `POST /api/v1/auth/apple`. The request includes an
-   Apple identity token, a cryptographic nonce, and a random installation
-   `device_id`.
+1. The welcome screen opens a separate identity-verification step. Its system
+   Sign in with Apple control creates or resumes the primary Telescan account
+   through `POST /api/v1/auth/apple`. The request includes an Apple identity
+   token, a cryptographic nonce, and a random installation `device_id`. Debug
+   shows a matching non-Apple placeholder that continues to the temporary
+   Telegram-code development flow without requiring the Apple entitlement.
 2. Access and refresh tokens are stored in the iOS Keychain before Telegram is
    requested. Until Telegram is linked, relaunching returns to the mandatory
    linking screen rather than asking for Apple authentication again. A versioned
