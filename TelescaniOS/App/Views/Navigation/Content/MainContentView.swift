@@ -172,7 +172,8 @@ private struct HeaderButton: View {
                 .font(.system(size: 21, weight: .medium))
                 .foregroundStyle(tint)
                 .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
+                .contentShape(Circle())
+                .modifier(HeaderButtonSurface())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
@@ -203,12 +204,7 @@ private struct TextTabBar: View {
         }
         .padding(4)
         .frame(maxWidth: 276)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(Color.primary.opacity(0.10), lineWidth: 0.5)
-        }
-        .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
+        .modifier(TextTabBarSurface())
     }
 
     private func tabButton(
@@ -242,16 +238,61 @@ private struct TextTabBar: View {
             .frame(maxWidth: .infinity)
             .frame(height: 44)
             .background {
-                if isSelected {
-                    Capsule()
-                        .fill(Color(uiColor: .secondarySystemBackground))
-                        .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
-                }
+                SelectedTabSurface(isVisible: isSelected)
             }
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityValue(count > 0 ? count.formatted() : "")
+    }
+}
+
+private struct HeaderButtonSurface: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            content
+        }
+    }
+}
+
+private struct TextTabBarSurface: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular, in: Capsule())
+                .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.10), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
+        }
+    }
+}
+
+private struct SelectedTabSurface: View {
+    let isVisible: Bool
+
+    @ViewBuilder
+    var body: some View {
+        if isVisible {
+            if #available(iOS 26.0, *) {
+                Color.clear
+                    .glassEffect(.regular.interactive(), in: Capsule())
+            } else {
+                Capsule()
+                    .fill(Color(uiColor: .secondarySystemBackground))
+                    .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
+            }
+        }
     }
 }
 

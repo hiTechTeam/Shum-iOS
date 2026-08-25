@@ -100,21 +100,31 @@ struct ProfileAvatarButton: View {
             UIImpactFeedbackGenerator(style: .soft).impactOccurred()
             action()
         } label: {
-            GeometryReader { geometry in
-                let diameter = min(geometry.size.width, geometry.size.height)
+            VStack(spacing: 8) {
+                GeometryReader { geometry in
+                    let diameter = min(geometry.size.width, geometry.size.height)
 
-                profileImage(diameter: diameter)
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: .infinity,
-                        alignment: .center
-                    )
+                    profileImage(diameter: diameter)
+                        .frame(
+                            maxWidth: .infinity,
+                            maxHeight: .infinity,
+                            alignment: .center
+                        )
+                }
+                .aspectRatio(1, contentMode: .fit)
+                .contentShape(Circle())
+
+                Text(user.name)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(maxWidth: .infinity)
             }
-            .aspectRatio(1, contentMode: .fit)
-            .contentShape(Circle())
+            .contentShape(Rectangle())
         }
         .buttonStyle(ProfileAvatarButtonStyle())
-        .accessibilityLabel("\(user.name), \(user.username)")
+        .accessibilityLabel(user.name)
         .accessibilityAddTraits(.isButton)
     }
 
