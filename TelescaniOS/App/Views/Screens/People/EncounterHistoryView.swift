@@ -1,32 +1,15 @@
 import SwiftUI
-import Kingfisher
 
-struct EncounterHistoryTab: View {
-    @EnvironmentObject var peopleViewModel: PeopleViewModel
-
-    var body: some View {
-        NavigationStack {
-            EncounterHistoryView()
-                .navigationTitle(Inc.Tabs.metTitle.localized)
-                .navigationBarTitleDisplayMode(.large)
-        }
-        .tabItem {
-            Label(
-                Inc.Tabs.metTitle.localized,
-                systemImage: "clock.arrow.circlepath"
-            )
-        }
-        .tag(SelectedTab.met)
-        .badge(peopleViewModel.encounterHistory.count)
-    }
-}
-
-private struct EncounterHistoryView: View {
+struct EncounterHistoryView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
     @State private var selectedEncounter: EncounterHistoryEntry?
-    @State private var showsClearConfirmation = false
+
+    private let gridColumns = Array(
+        repeating: GridItem(.flexible(), spacing: 18),
+        count: 3
+    )
 
     var body: some View {
         ZStack {
@@ -53,35 +36,21 @@ private struct EncounterHistoryView: View {
                     }
                 }
             } else {
-                List(peopleViewModel.encounterHistory) { encounter in
-                    Button {
-                        selectedEncounter = encounter
-                    } label: {
-                        EncounterHistoryRow(encounter: encounter)
+                ScrollView {
+                    LazyVGrid(columns: gridColumns, spacing: 22) {
+                        ForEach(peopleViewModel.encounterHistory) { encounter in
+                            ProfileAvatarButton(user: encounter.user) {
+                                selectedEncounter = encounter
+                            }
+                        }
                     }
-                    .listRowBackground(
-                        Color(uiColor: .systemOrange).opacity(0.20)
-                    )
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 18)
                 }
-                .scrollContentBackground(.hidden)
+                .scrollBounceBehavior(.always)
                 .refreshable {
                     await peopleViewModel.synchronizeBlockedProfiles()
                     peopleViewModel.refreshEncounterHistory()
-                }
-            }
-        }
-        .toolbar {
-            if !peopleViewModel.encounterHistory.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(
-                        Inc.EncounterHistory.clear.localized,
-                        systemImage: "trash"
-                    ) {
-                        showsClearConfirmation = true
-                    }
-                    .accessibilityLabel(
-                        Inc.EncounterHistory.clear.localized
-                    )
                 }
             }
         }
@@ -94,20 +63,6 @@ private struct EncounterHistoryView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
             .presentationContentInteraction(.resizes)
-        }
-        .alert(
-            Inc.EncounterHistory.clearTitle.localized,
-            isPresented: $showsClearConfirmation
-        ) {
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-            Button(
-                Inc.EncounterHistory.clear.localized,
-                role: .destructive
-            ) {
-                peopleViewModel.clearEncounterHistory()
-            }
-        } message: {
-            Text(Inc.EncounterHistory.clearMessage.localized)
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
@@ -122,64 +77,6 @@ private struct EncounterHistoryView: View {
         .task {
             await peopleViewModel.synchronizeBlockedProfiles()
             peopleViewModel.refreshEncounterHistory()
-        }
-    }
-}
-
-private struct EncounterHistoryRow: View {
-    let encounter: EncounterHistoryEntry
-
-    private var user: NearbyUser {
-        encounter.user
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            profileImage
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(user.name)
-                    .foregroundStyle(.gray)
-                    .font(.system(size: 14))
-                    .lineLimit(1)
-
-                Text(user.username)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color(uiColor: .systemBlue))
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            EncounterRelativeTimeText(date: encounter.lastSeen)
-                .font(.system(size: 12))
-                .foregroundStyle(.gray)
-                .lineLimit(2)
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: 100, alignment: .trailing)
-        }
-    }
-
-    @ViewBuilder
-    private var profileImage: some View {
-        if let photoURL = user.photoURL,
-           let imageURL = URL(string: photoURL) {
-            KFImage(imageURL)
-                .placeholder {
-                    Image.personCropCircleFill
-                        .resizable()
-                        .foregroundStyle(.gray)
-                }
-                .resizable()
-                .scaledToFill()
-                .frame(width: 62, height: 62)
-                .clipShape(Circle())
-                .clipped()
-        } else {
-            Image.personCropCircleFill
-                .resizable()
-                .foregroundStyle(.gray)
-                .frame(width: 56, height: 56)
         }
     }
 }

@@ -42,9 +42,13 @@ struct Inc {
     
     // MARK: - Tabs
     struct Tabs {
-        static let chats: String = "Chats"
+        static let chats: String = "chats"
         // EN: Chats
         // RU: Чаты
+
+        static let settings: String = "settings"
+        // EN: Settings
+        // RU: Настройки
         
         static let peopleNearby: String = "peopleNearby"
         // EN: People nearby
@@ -61,6 +65,16 @@ struct Inc {
         static let metTitle: String = "metTitle"
         // EN: Met recently
         // RU: Виделись недавно
+
+        static let metHeader: String = "metHeader"
+        // EN: People you've met during the day
+        // RU: Люди, которых вы встретили за день
+    }
+
+    // MARK: - Chats
+    struct Chats {
+        static let unavailableTitle: String = "chatsUnavailableTitle"
+        static let unavailableMessage: String = "chatsUnavailableMessage"
     }
 
     // MARK: - Encounter history

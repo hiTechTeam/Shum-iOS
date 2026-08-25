@@ -17,8 +17,14 @@
 "peopleNearby" = "People nearby";
 "people" = "Nearby";
 "chats" = "Chats";
+"settings" = "Settings";
 "profile" = "Profile";
 "metTitle" = "Met";
+"metHeader" = "People you’ve met during the day";
+
+/* Chats */
+"chatsUnavailableTitle" = "Chats are coming later";
+"chatsUnavailableMessage" = "This screen is ready for the future chat experience.";
 
 /* Encounter history */
 "encounterHistoryEmptyTitle" = "No encounters yet";

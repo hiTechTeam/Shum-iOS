@@ -17,8 +17,14 @@
 "peopleNearby" = "Люди рядом";
 "people" = "Рядом";
 "chats" = "Чаты";
+"settings" = "Настройки";
 "profile" = "Профиль";
 "metTitle" = "Виделись";
+"metHeader" = "Люди, которых вы встретили за день";
+
+/* Чаты */
+"chatsUnavailableTitle" = "Чаты появятся позже";
+"chatsUnavailableMessage" = "Этот экран подготовлен для будущих чатов.";
 
 /* История встреч */
 "encounterHistoryEmptyTitle" = "Пока никого";

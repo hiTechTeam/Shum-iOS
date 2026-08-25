@@ -1,5 +1,6 @@
 import SwiftUI
 import Kingfisher
+import UIKit
 
 struct PeopleView: View {
 
@@ -9,6 +10,11 @@ struct PeopleView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var selectedUser: NearbyUser?
+
+    private let gridColumns = Array(
+        repeating: GridItem(.flexible(), spacing: 18),
+        count: 3
+    )
 
     var body: some View {
         ZStack {
@@ -35,18 +41,18 @@ struct PeopleView: View {
                         }
                     }
                 } else {
-                    List {
-                        ForEach(
-                            peopleViewModel.visibleUsers
-                        ) { user in
-                            Button {
-                                selectedUser = user
-                            } label: {
-                                PeopleRowContent(user: user)
+                    ScrollView {
+                        LazyVGrid(columns: gridColumns, spacing: 22) {
+                            ForEach(peopleViewModel.visibleUsers) { user in
+                                ProfileAvatarButton(user: user) {
+                                    selectedUser = user
+                                }
                             }
                         }
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 18)
                     }
-                    .scrollContentBackground(.hidden)
+                    .scrollBounceBehavior(.always)
                     .refreshable {
                         await peopleViewModel.refreshNearbyPeople()
                     }
@@ -85,53 +91,73 @@ struct PeopleView: View {
     }
 }
 
-struct PeopleRowContent: View {
-
-    @EnvironmentObject var peopleViewModel: PeopleViewModel
-
+struct ProfileAvatarButton: View {
     let user: NearbyUser
+    let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        Button {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            action()
+        } label: {
+            GeometryReader { geometry in
+                let diameter = min(geometry.size.width, geometry.size.height)
+
+                profileImage(diameter: diameter)
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: .center
+                    )
+            }
+            .aspectRatio(1, contentMode: .fit)
+            .contentShape(Circle())
+        }
+        .buttonStyle(ProfileAvatarButtonStyle())
+        .accessibilityLabel("\(user.name), \(user.username)")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    @ViewBuilder
+    private func profileImage(diameter: CGFloat) -> some View {
+        Group {
             if let url = user.photoURL,
                let imageURL = URL(string: url) {
                 KFImage(imageURL)
                     .placeholder {
                         Image.personCropCircleFill
                             .resizable()
-                            .foregroundColor(.gray)
+                            .foregroundStyle(.gray)
                     }
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 62, height: 62)
-                    .clipShape(Circle())
-                    .clipped()
             } else {
                 Image.personCropCircleFill
                     .resizable()
-                    .foregroundColor(.gray)
-                    .frame(width: 56, height: 56)
+                    .scaledToFit()
+                    .foregroundStyle(.gray)
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(
-                    user.name
-                )
-                .foregroundColor(.gray)
-                .font(.system(size: 14))
-
-                Text(
-                    user.username
-                )
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color(uiColor: .systemBlue))
-            }
-
-            Spacer()
-
-            NearbyPresenceLabel(user: user, usesCompactCountdown: true)
-                .padding(.trailing, 20)
         }
+        .frame(width: diameter, height: diameter)
+        .background(Color(uiColor: .secondarySystemBackground), in: Circle())
+        .clipShape(Circle())
+        .overlay {
+            Circle()
+                .stroke(Color.primary.opacity(0.13), lineWidth: 2)
+        }
+        .clipped()
+    }
+}
+
+private struct ProfileAvatarButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .animation(
+                .spring(response: 0.22, dampingFraction: 0.68),
+                value: configuration.isPressed
+            )
     }
 }
 
