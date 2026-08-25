@@ -12,6 +12,7 @@ struct MainContentView: View {
     @State private var showBluetoothAlert = false
     @State private var contentDragProgress: CGFloat?
     @State private var contentDragStartProgress: CGFloat?
+    @State private var contentDragAxis: ContentDragAxis?
     @State private var contentWidth: CGFloat = 1
 
     var body: some View {
@@ -26,7 +27,6 @@ struct MainContentView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .modifier(NativeTopScrollEdgeEffect())
                         .offset(x: contentOffset(for: selectedTab))
-                        .simultaneousGesture(contentSwipeGesture)
 
                     if let adjacentTab {
                         selectedContent(for: adjacentTab)
@@ -40,6 +40,7 @@ struct MainContentView: View {
                 } action: { width in
                     contentWidth = max(width, 1)
                 }
+                .simultaneousGesture(contentSwipeGesture)
                 .navigationTitle(headerTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -156,7 +157,14 @@ struct MainContentView: View {
     private var contentSwipeGesture: some Gesture {
         DragGesture(minimumDistance: 10)
             .onChanged { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else {
+                if contentDragAxis == nil {
+                    contentDragAxis = abs(value.translation.width)
+                        > abs(value.translation.height)
+                        ? .horizontal
+                        : .vertical
+                }
+
+                guard contentDragAxis == .horizontal else {
                     return
                 }
 
@@ -171,8 +179,11 @@ struct MainContentView: View {
                 )
             }
             .onEnded { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else {
-                    resetContentDrag()
+                defer { contentDragAxis = nil }
+
+                guard contentDragAxis == .horizontal else {
+                    contentDragStartProgress = nil
+                    contentDragProgress = nil
                     return
                 }
 
@@ -196,28 +207,26 @@ struct MainContentView: View {
 
                 contentDragStartProgress = nil
 
+                if resolvedTab != selectedTab {
+                    UISelectionFeedbackGenerator().selectionChanged()
+
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        selectedTab = resolvedTab
+                    }
+                } else if requestedTab == .near,
+                          !coordinator.isScaning,
+                          requestedTab != selectedTab {
+                    selectTab(requestedTab)
+                }
+
                 withAnimation(
                     .spring(response: 0.30, dampingFraction: 0.84)
                 ) {
                     contentDragProgress = progress(for: resolvedTab)
                 } completion: {
-                    if resolvedTab == selectedTab {
-                        contentDragProgress = nil
-
-                        if requestedTab == .near,
-                           !coordinator.isScaning {
-                            selectTab(requestedTab)
-                        }
-                    } else {
-                        UISelectionFeedbackGenerator().selectionChanged()
-
-                        var transaction = Transaction()
-                        transaction.disablesAnimations = true
-                        withTransaction(transaction) {
-                            selectedTab = resolvedTab
-                            contentDragProgress = nil
-                        }
-                    }
+                    contentDragProgress = nil
                 }
             }
     }
@@ -283,15 +292,6 @@ struct MainContentView: View {
         tab == .near ? 0 : 1
     }
 
-    private func resetContentDrag() {
-        contentDragStartProgress = nil
-        withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
-            contentDragProgress = progress(for: selectedTab)
-        } completion: {
-            contentDragProgress = nil
-        }
-    }
-
     @ViewBuilder
     private func destinationView(for destination: MainDestination) -> some View {
         switch destination {
@@ -308,6 +308,11 @@ struct MainContentView: View {
 private enum MainDestination: Hashable {
     case settings
     case chats
+}
+
+private enum ContentDragAxis {
+    case horizontal
+    case vertical
 }
 
 private struct HeaderButton: View {
