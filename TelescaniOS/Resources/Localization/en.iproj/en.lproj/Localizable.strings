@@ -69,7 +69,7 @@
 /* Scanning */
 "nearbyEmptyTitle" = "No one nearby yet";
 "scanning" = "Scanning";
-"justTurnScaning" = "Turn on scaning";
+"justTurnScaning" = "Turn on scanning";
 "scanToggleDescription" = "The switch enables Bluetooth scanning and broadcasts your Telescan ID. While scanning is active, you can see nearby Telescan users and they can see you.";
 "turnedOffScaning" = "Scanning is turned off. Enable scanning in the app to see nearby people.";
 "noPeopleNearby" = "Scanning is active. When Telescan users are nearby, they will appear on this screen.";

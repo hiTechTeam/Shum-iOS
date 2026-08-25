@@ -9,44 +9,55 @@ struct MainContentView: View {
     @State private var selectedTab: SelectedTab = .near
     @State private var navigationPath: [MainDestination] = []
     @State private var showScanAlert = false
+    @State private var showBluetoothAlert = false
 
     var body: some View {
-        NavigationStack(path: $navigationPath) {
-            ZStack {
-                Color.tsBackground
-                    .ignoresSafeArea()
-
-                VStack(spacing: 0) {
-                    MainHeader(
-                        title: headerTitle,
-                        openSettings: {
-                            navigationPath.append(.settings)
-                        },
-                        openChats: {
-                            navigationPath.append(.chats)
-                        }
-                    )
+        ZStack {
+            NavigationStack(path: $navigationPath) {
+                ZStack {
+                    Color.tsBackground
+                        .ignoresSafeArea()
 
                     selectedContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .navigationTitle(headerTitle)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+                .toolbar {
+                    if navigationPath.isEmpty {
+                        rootToolbar
+                    }
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    TextTabBar(
+                        selectedTab: selectedTab,
+                        nearbyCount: peopleViewModel.visibleUsers.count,
+                        encounterCount: peopleViewModel.encounterHistory.count,
+                        isScanningEnabled: coordinator.isScaning,
+                        select: selectTab
+                    )
+                    .padding(.horizontal, 28)
+                    .padding(.top, 8)
+                    .padding(.bottom, 6)
+                }
+                .navigationDestination(for: MainDestination.self) { destination in
+                    destinationView(for: destination)
+                }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                TextTabBar(
-                    selectedTab: selectedTab,
-                    nearbyCount: peopleViewModel.visibleUsers.count,
-                    encounterCount: peopleViewModel.encounterHistory.count,
-                    select: selectTab
+            .disabled(showScanAlert)
+
+            if showScanAlert {
+                ScanningQuickAlert(
+                    isScanning: scanningBinding,
+                    dismiss: dismissScanAlert
                 )
-                .padding(.horizontal, 28)
-                .padding(.top, 8)
-                .padding(.bottom, 6)
-            }
-            .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: MainDestination.self) { destination in
-                destinationView(for: destination)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(1)
             }
         }
+        .animation(.easeInOut(duration: 0.18), value: showScanAlert)
         .onAppear {
             if !coordinator.isScaning {
                 selectedTab = .met
@@ -57,10 +68,40 @@ struct MainContentView: View {
                 selectedTab = .met
             }
         }
-        .alert(Inc.Scanning.justTurnScaning.localized, isPresented: $showScanAlert) {
+        .alert(Inc.Alerts.turnOnBLE.localized, isPresented: $showBluetoothAlert) {
             Button(Inc.Common.okey.localized, role: .cancel) { }
-        } message: {
-            Text(Inc.Scanning.scanAlertText.localized)
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var rootToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            HeaderButton(
+                systemImage: "slider.horizontal.3",
+                accessibilityLabel: Inc.Tabs.settings.localized
+            ) {
+                navigationPath.append(.settings)
+            }
+        }
+
+        ToolbarItem(placement: .principal) {
+            Text(headerTitle)
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(2)
+                .minimumScaleFactor(0.82)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 220)
+                .contentTransition(.opacity)
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            HeaderButton(
+                systemImage: "bubble.left.and.bubble.right",
+                accessibilityLabel: Inc.Tabs.chats.localized,
+                tint: Color(uiColor: .systemBlue)
+            ) {
+                navigationPath.append(.chats)
+            }
         }
     }
 
@@ -91,13 +132,45 @@ struct MainContentView: View {
         guard tab != selectedTab else { return }
 
         if tab == .near, !coordinator.isScaning {
-            showScanAlert = true
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            withAnimation {
+                showScanAlert = true
+            }
             return
         }
 
         UISelectionFeedbackGenerator().selectionChanged()
         withAnimation(.easeInOut(duration: 0.18)) {
             selectedTab = tab
+        }
+    }
+
+    private var scanningBinding: Binding<Bool> {
+        Binding(
+            get: { coordinator.isScaning },
+            set: { isScanning in
+                coordinator.setScanning(isScanning)
+                UISelectionFeedbackGenerator().selectionChanged()
+
+                guard isScanning else { return }
+
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    selectedTab = .near
+                    showScanAlert = false
+                }
+
+                if !BLEManager.shared.isBluetoothAvailable {
+                    DispatchQueue.main.async {
+                        showBluetoothAlert = true
+                    }
+                }
+            }
+        )
+    }
+
+    private func dismissScanAlert() {
+        withAnimation {
+            showScanAlert = false
         }
     }
 
@@ -119,44 +192,6 @@ private enum MainDestination: Hashable {
     case chats
 }
 
-private struct MainHeader: View {
-    let title: String
-    let openSettings: () -> Void
-    let openChats: () -> Void
-
-    var body: some View {
-        HStack(spacing: 16) {
-            HeaderButton(
-                systemImage: "slider.horizontal.3",
-                accessibilityLabel: Inc.Tabs.settings.localized,
-                action: openSettings
-            )
-
-            Spacer(minLength: 0)
-
-            Text(title)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.82)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 220)
-                .contentTransition(.opacity)
-
-            Spacer(minLength: 0)
-
-            HeaderButton(
-                systemImage: "bubble.left.and.bubble.right",
-                accessibilityLabel: Inc.Tabs.chats.localized,
-                tint: Color(uiColor: .systemBlue),
-                action: openChats
-            )
-        }
-        .padding(.horizontal, 20)
-        .frame(height: 74)
-    }
-}
-
 private struct HeaderButton: View {
     let systemImage: String
     let accessibilityLabel: String
@@ -171,11 +206,7 @@ private struct HeaderButton: View {
             Image(systemName: systemImage)
                 .font(.system(size: 21, weight: .medium))
                 .foregroundStyle(tint)
-                .frame(width: 44, height: 44)
-                .contentShape(Circle())
-                .modifier(HeaderButtonSurface())
         }
-        .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
     }
 }
@@ -184,6 +215,7 @@ private struct TextTabBar: View {
     let selectedTab: SelectedTab
     let nearbyCount: Int
     let encounterCount: Int
+    let isScanningEnabled: Bool
     let select: (SelectedTab) -> Void
 
     var body: some View {
@@ -192,14 +224,16 @@ private struct TextTabBar: View {
                 title: Inc.Tabs.people.localized,
                 tab: .near,
                 count: nearbyCount,
-                badgeColor: .green
+                badgeColor: .green,
+                isAvailable: isScanningEnabled
             )
 
             tabButton(
                 title: Inc.Tabs.metTitle.localized,
                 tab: .met,
                 count: encounterCount,
-                badgeColor: .orange
+                badgeColor: .orange,
+                isAvailable: true
             )
         }
         .padding(4)
@@ -211,7 +245,8 @@ private struct TextTabBar: View {
         title: String,
         tab: SelectedTab,
         count: Int,
-        badgeColor: Color
+        badgeColor: Color,
+        isAvailable: Bool
     ) -> some View {
         let isSelected = selectedTab == tab
 
@@ -228,34 +263,42 @@ private struct TextTabBar: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6)
                         .frame(minWidth: 20, minHeight: 20)
-                        .background(badgeColor, in: Capsule())
+                        .background(
+                            isAvailable ? badgeColor : Color.gray,
+                            in: Capsule()
+                        )
                         .transition(.scale.combined(with: .opacity))
                 }
             }
             .foregroundStyle(
-                isSelected ? Color(uiColor: .systemBlue) : Color.primary
+                tabForegroundColor(
+                    isSelected: isSelected,
+                    isAvailable: isAvailable
+                )
             )
             .frame(maxWidth: .infinity)
             .frame(height: 44)
             .background {
-                SelectedTabSurface(isVisible: isSelected)
+                TabButtonSurface(
+                    isSelected: isSelected,
+                    isAvailable: isAvailable
+                )
             }
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityValue(count > 0 ? count.formatted() : "")
+        .accessibilityHint(
+            isAvailable ? "" : Inc.Scanning.justTurnScaning.localized
+        )
     }
-}
 
-private struct HeaderButtonSurface: ViewModifier {
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .glassEffect(.regular.interactive(), in: Circle())
-        } else {
-            content
-        }
+    private func tabForegroundColor(
+        isSelected: Bool,
+        isAvailable: Bool
+    ) -> Color {
+        guard isAvailable else { return Color(uiColor: .systemGray) }
+        return isSelected ? Color(uiColor: .systemBlue) : Color.primary
     }
 }
 
@@ -264,7 +307,7 @@ private struct TextTabBarSurface: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content
-                .glassEffect(.regular, in: Capsule())
+                .glassEffect(.regular.interactive(), in: Capsule())
                 .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
         } else {
             content
@@ -278,12 +321,82 @@ private struct TextTabBarSurface: ViewModifier {
     }
 }
 
-private struct SelectedTabSurface: View {
-    let isVisible: Bool
+private struct ScanningQuickAlert: View {
+    @Binding var isScanning: Bool
+    let dismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.28)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                VStack(spacing: 8) {
+                    Text(Inc.Scanning.justTurnScaning.localized)
+                        .font(.headline)
+
+                    Text(Inc.Scanning.scanAlertText.localized)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 22)
+                .padding(.top, 22)
+                .padding(.bottom, 18)
+
+                Divider()
+
+                Toggle(
+                    Inc.Scanning.scanning.localized,
+                    isOn: $isScanning
+                )
+                .font(.body.weight(.medium))
+                .toggleStyle(.switch)
+                .tint(.green)
+                .padding(.horizontal, 20)
+                .frame(height: 56)
+
+                Divider()
+
+                Button(Inc.Common.okey.localized, action: dismiss)
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+            }
+            .frame(maxWidth: 320)
+            .modifier(ScanningAlertSurface())
+            .padding(.horizontal, 28)
+        }
+        .accessibilityAddTraits(.isModal)
+    }
+}
+
+private struct ScanningAlertSurface: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26))
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26))
+        } else {
+            content
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.24), radius: 24, y: 10)
+        }
+    }
+}
+
+private struct TabButtonSurface: View {
+    let isSelected: Bool
+    let isAvailable: Bool
 
     @ViewBuilder
     var body: some View {
-        if isVisible {
+        if !isAvailable {
+            Capsule()
+                .fill(Color(uiColor: .systemGray4).opacity(0.42))
+        } else if isSelected {
             if #available(iOS 26.0, *) {
                 Color.clear
                     .glassEffect(.regular.interactive(), in: Capsule())

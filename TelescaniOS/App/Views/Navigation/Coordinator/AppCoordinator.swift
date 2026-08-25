@@ -50,6 +50,20 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         updateApplicationState(isActive: true)
     }
 
+    func setScanning(_ enabled: Bool) {
+        isScaning = enabled
+        UserDefaults.standard.set(enabled, forKey: scanningKey)
+
+        if enabled {
+            peopleViewModel.toggleScanning(true)
+            if let id = authCodeViewModel.telescanID {
+                peopleViewModel.startAdvertising(telescanID: id)
+            }
+        } else {
+            peopleViewModel.stopAllBluetoothActivity()
+        }
+    }
+
     func logoutCurrentSession() async throws {
         do {
             try await FetchService.fetch.logoutCurrentSession()
