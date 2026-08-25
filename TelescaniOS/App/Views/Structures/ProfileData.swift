@@ -192,7 +192,7 @@ struct ProfileDataView: View {
                 .presentationContentInteraction(.resizes)
         }
         .sheet(isPresented: $showScanningSettings) {
-            ScanningSettingsSheet(isScanning: $coordinator.isScaning)
+            ScanningSettingsSheet()
                 .environmentObject(coordinator)
                 .environmentObject(coordinator.peopleViewModel)
                 .presentationDetents([.medium])
@@ -264,7 +264,8 @@ struct ProfileDataView: View {
 
 private struct ScanningSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Binding var isScanning: Bool
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @State private var showBluetoothAlert = false
 
     var body: some View {
         NavigationStack {
@@ -274,13 +275,27 @@ private struct ScanningSettingsSheet: View {
                     .foregroundStyle(.secondary)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(width: 360, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                ScanToggle(isScaning: $isScanning)
+                Toggle(
+                    Inc.Scanning.scanning.localized,
+                    isOn: scanningBinding
+                )
+                .font(.body.weight(.medium))
+                .toggleStyle(.switch)
+                .tint(.green)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .background(
+                    Color.grOne,
+                    in: RoundedRectangle(cornerRadius: 13)
+                )
 
                 Spacer(minLength: 0)
             }
             .padding(.top, 20)
+            .padding(.horizontal, 20)
             .navigationTitle(Inc.Scanning.scanning.localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -290,6 +305,28 @@ private struct ScanningSettingsSheet: View {
                     }
                 }
             }
+            .alert(
+                Inc.Alerts.turnOnBLE.localized,
+                isPresented: $showBluetoothAlert
+            ) {
+                Button(Inc.Common.okey.localized, role: .cancel) { }
+            }
         }
+    }
+
+    private var scanningBinding: Binding<Bool> {
+        Binding(
+            get: { coordinator.isScaning },
+            set: { isScanning in
+                guard isScanning != coordinator.isScaning else { return }
+
+                coordinator.setScanning(isScanning)
+                UISelectionFeedbackGenerator().selectionChanged()
+
+                if isScanning, !BLEManager.shared.isBluetoothAvailable {
+                    showBluetoothAlert = true
+                }
+            }
+        )
     }
 }

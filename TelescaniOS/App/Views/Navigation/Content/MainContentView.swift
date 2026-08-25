@@ -43,7 +43,7 @@ struct MainContentView: View {
                     destinationView(for: destination)
                 }
             }
-            .disabled(showScanAlert)
+            .allowsHitTesting(!showScanAlert)
 
             if showScanAlert {
                 ScanningQuickAlert(
@@ -61,9 +61,19 @@ struct MainContentView: View {
             }
         }
         .onChange(of: coordinator.isScaning) { _, isScanning in
-            if !isScanning, selectedTab == .near {
+            if navigationPath.isEmpty,
+               !isScanning,
+               selectedTab == .near {
                 selectedTab = .met
             }
+        }
+        .onChange(of: navigationPath) { _, path in
+            guard path.isEmpty,
+                  !coordinator.isScaning,
+                  selectedTab == .near else {
+                return
+            }
+            selectedTab = .met
         }
         .alert(Inc.Alerts.turnOnBLE.localized, isPresented: $showBluetoothAlert) {
             Button(Inc.Common.okey.localized, role: .cancel) { }
@@ -480,10 +490,14 @@ private struct ScanningQuickAlert: View {
 
                 Divider()
 
-                Button(Inc.Common.okey.localized, action: dismiss)
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
+                Button(action: dismiss) {
+                    Text(Inc.Common.okey.localized)
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .frame(height: 50)
             }
             .frame(maxWidth: 320)
             .modifier(ScanningAlertSurface())
