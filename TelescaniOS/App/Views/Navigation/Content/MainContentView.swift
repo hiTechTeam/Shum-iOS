@@ -12,6 +12,7 @@ struct MainContentView: View {
     @State private var showBluetoothAlert = false
     @State private var contentDragProgress: CGFloat?
     @State private var contentDragStartProgress: CGFloat?
+    @State private var contentWidth: CGFloat = 1
 
     var body: some View {
         ZStack {
@@ -20,12 +21,24 @@ struct MainContentView: View {
                     Color.tsBackground
                         .ignoresSafeArea()
 
-                    selectedContent
+                    selectedContent(for: selectedTab)
                         .id(selectedTab)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .modifier(NativeTopScrollEdgeEffect())
+                        .offset(x: contentOffset(for: selectedTab))
                         .simultaneousGesture(contentSwipeGesture)
-                        .transition(.opacity)
+
+                    if let adjacentTab {
+                        selectedContent(for: adjacentTab)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .offset(x: contentOffset(for: adjacentTab))
+                            .allowsHitTesting(false)
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.width
+                } action: { width in
+                    contentWidth = max(width, 1)
                 }
                 .navigationTitle(headerTitle)
                 .navigationBarTitleDisplayMode(.inline)
@@ -110,8 +123,8 @@ struct MainContentView: View {
     }
 
     @ViewBuilder
-    private var selectedContent: some View {
-        switch selectedTab {
+    private func selectedContent(for tab: SelectedTab) -> some View {
+        switch tab {
         case .near:
             PeopleView()
         case .met:
@@ -121,8 +134,27 @@ struct MainContentView: View {
         }
     }
 
+    private var adjacentTab: SelectedTab? {
+        guard contentDragProgress != nil else { return nil }
+
+        switch selectedTab {
+        case .near:
+            return .met
+        case .met:
+            return .near
+        case .profile:
+            return nil
+        }
+    }
+
+    private func contentOffset(for tab: SelectedTab) -> CGFloat {
+        let currentProgress = contentDragProgress
+            ?? progress(for: selectedTab)
+        return (progress(for: tab) - currentProgress) * contentWidth
+    }
+
     private var contentSwipeGesture: some Gesture {
-        DragGesture(minimumDistance: 18)
+        DragGesture(minimumDistance: 10)
             .onChanged { value in
                 guard abs(value.translation.width) > abs(value.translation.height) else {
                     return
@@ -134,7 +166,7 @@ struct MainContentView: View {
                     contentDragStartProgress = start
                 }
                 contentDragProgress = min(
-                    max(start - value.translation.width / 240, 0),
+                    max(start - value.translation.width / contentWidth, 0),
                     1
                 )
             }
@@ -147,7 +179,12 @@ struct MainContentView: View {
                 let start = contentDragStartProgress
                     ?? progress(for: selectedTab)
                 let projectedProgress = min(
-                    max(start - value.predictedEndTranslation.width / 240, 0),
+                    max(
+                        start
+                            - value.predictedEndTranslation.width
+                            / contentWidth,
+                        0
+                    ),
                     1
                 )
                 let requestedTab: SelectedTab = projectedProgress < 0.5
@@ -157,7 +194,6 @@ struct MainContentView: View {
                     ? selectedTab
                     : requestedTab
 
-                selectTab(requestedTab)
                 contentDragStartProgress = nil
 
                 withAnimation(
@@ -165,7 +201,23 @@ struct MainContentView: View {
                 ) {
                     contentDragProgress = progress(for: resolvedTab)
                 } completion: {
-                    contentDragProgress = nil
+                    if resolvedTab == selectedTab {
+                        contentDragProgress = nil
+
+                        if requestedTab == .near,
+                           !coordinator.isScaning {
+                            selectTab(requestedTab)
+                        }
+                    } else {
+                        UISelectionFeedbackGenerator().selectionChanged()
+
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            selectedTab = resolvedTab
+                            contentDragProgress = nil
+                        }
+                    }
                 }
             }
     }
