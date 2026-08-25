@@ -36,16 +36,37 @@ actor APIClient {
         self.sessionStore = sessionStore
     }
 
-    func link(code: String) async throws -> LinkDeviceResponse {
+    func signInWithApple(
+        identityToken: String,
+        nonce: String,
+        name: String?
+    ) async throws -> AuthenticatedAccountResponse {
         let deviceID = try sessionStore.installationDeviceID()
         let request = try jsonRequest(
-            path: "/api/v1/auth/link",
+            path: "/api/v1/auth/apple",
             method: "POST",
-            body: LinkDeviceRequest(code: code, deviceId: deviceID)
+            body: AppleSignInRequest(
+                identityToken: identityToken,
+                nonce: nonce,
+                deviceId: deviceID,
+                name: name
+            )
         )
         let data = try await perform(request, authenticated: false)
-        let response = try decoder.decode(LinkDeviceResponse.self, from: data)
-        try sessionStore.save(response.tokens)
+        let response = try decoder.decode(AuthenticatedAccountResponse.self, from: data)
+        try sessionStore.saveAppleSession(response.tokens)
+        return response
+    }
+
+    func linkTelegram(code: String) async throws -> TelegramLinkResponse {
+        let request = try jsonRequest(
+            path: "/api/v1/users/me/telegram/link",
+            method: "POST",
+            body: TelegramLinkRequest(code: code)
+        )
+        let data = try await perform(request, authenticated: true)
+        let response = try decoder.decode(TelegramLinkResponse.self, from: data)
+        try sessionStore.saveAccessToken(response.access.accessToken)
         return response
     }
 

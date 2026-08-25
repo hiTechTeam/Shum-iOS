@@ -35,6 +35,7 @@
 "encounterHistoryLastSeenFormat" = "Met %@";
 
 /* Registration */
+"telegramLinkTitle" = "Link Telegram";
 "placeCode" = "Code";
 "codePlaceholder" = "Code";
 "enterCode" = "Enter code";
@@ -53,6 +54,7 @@
 "profileBioSaveFailed" = "Couldn’t save BIO. Please try again.";
 
 /* Onboarding */
+"appleSignInFailed" = "Couldn’t sign in with Apple. Please try again.";
 "welcome_title" = "Welcome to";
 "poweredByTG" = "Powered by Telegram";
 "aboutOnBoardingMsg" = "Telescan lets you instantly find and share Telegram profiles with people nearby.";
@@ -127,7 +129,7 @@
 "accountActionsTitle" = "Account actions";
 "logoutCurrent" = "Sign out on this device";
 "logoutCurrentTitle" = "Sign out on this device?";
-"logoutCurrentMessage" = "You will need a new Telegram code to sign in again on this device.";
+"logoutCurrentMessage" = "You will need to sign in with Apple again on this device.";
 "logoutFailed" = "Couldn't sign out. Please try again.";
 "deleteAccount" = "Delete account";
 "deleteAccountTitle" = "Delete account?";

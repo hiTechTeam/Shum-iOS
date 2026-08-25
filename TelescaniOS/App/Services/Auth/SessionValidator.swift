@@ -2,6 +2,7 @@ import Foundation
 
 enum SessionValidationResult: Equatable {
     case active(TelescanProfileResponse)
+    case telegramLinkRequired(TelescanProfileResponse)
     case invalid
     case unavailable
 }
@@ -22,10 +23,8 @@ struct SessionValidator {
     func validate() async -> SessionValidationResult {
         do {
             let profile = try await profileAction()
-            guard let username = profile.username?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-                  !username.isEmpty else {
-                return .invalid
+            guard profile.isTelegramLinked else {
+                return .telegramLinkRequired(profile)
             }
             return .active(profile)
         } catch APIClientError.unauthenticated {

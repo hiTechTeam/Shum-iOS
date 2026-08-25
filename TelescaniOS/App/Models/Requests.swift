@@ -1,8 +1,14 @@
 import Foundation
 
-struct LinkDeviceRequest: Encodable {
-    let code: String
+struct AppleSignInRequest: Encodable {
+    let identityToken: String
+    let nonce: String
     let deviceId: UUID
+    let name: String?
+}
+
+struct TelegramLinkRequest: Encodable {
+    let code: String
 }
 
 struct RefreshTokenRequest: Encodable {

@@ -12,10 +12,9 @@ struct FetchServiceTests {
         let profileID = UUID()
         let viewModel = CodeViewModel { code in
             #expect(code == "AB12CD34")
-            return LinkDeviceResponse(
-                tokens: TokenResponse(
-                    accessToken: "access",
-                    refreshToken: "refresh",
+            return TelegramLinkResponse(
+                access: AccessTokenResponse(
+                    accessToken: "linked-access",
                     tokenType: "bearer",
                     expiresIn: 900
                 ),
@@ -54,10 +53,9 @@ struct FetchServiceTests {
         )
         let viewModel = CodeViewModel(
             linkAction: { _ in
-                LinkDeviceResponse(
-                    tokens: TokenResponse(
-                        accessToken: "access",
-                        refreshToken: "refresh",
+                TelegramLinkResponse(
+                    access: AccessTokenResponse(
+                        accessToken: "linked-access",
                         tokenType: "bearer",
                         expiresIn: 900
                     ),
@@ -143,7 +141,7 @@ struct FetchServiceTests {
         #expect(result == .active(profile))
     }
 
-    @Test("A session without a public Telegram username is invalid")
+    @Test("A session without Telegram continues at the required link step")
     @MainActor
     func missingUsernameInvalidatesSession() async {
         let validator = SessionValidator {
@@ -155,7 +153,12 @@ struct FetchServiceTests {
             )
         }
 
-        #expect(await validator.validate() == .invalid)
+        let result = await validator.validate()
+        guard case .telegramLinkRequired(let profile) = result else {
+            Issue.record("Expected the Telegram linking state")
+            return
+        }
+        #expect(profile.username == nil)
     }
 
     @Test("Revoked and deleted sessions are invalid")
@@ -191,15 +194,169 @@ struct FetchServiceTests {
         #expect(first == second)
     }
 
-    @Test("The API username-required response has a dedicated client error")
-    func usernameRequiredResponseIsClassified() async throws {
+    @Test("Legacy tokens are not an Apple primary session")
+    func legacyTokensRequireAppleSignIn() throws {
+        let sessions = AuthSessionStore(store: MemorySecureStore())
+        let tokens = TokenResponse(
+            accessToken: "legacy-access",
+            refreshToken: "legacy-refresh-token-value-that-is-long-enough",
+            tokenType: "bearer",
+            expiresIn: 900
+        )
+
+        try sessions.save(tokens)
+        #expect(sessions.hasTokens)
+        #expect(!sessions.hasPrimarySession)
+
+        try sessions.saveAppleSession(tokens)
+        #expect(sessions.hasPrimarySession)
+    }
+
+    @Test("Sign in with Apple creates and stores the primary session")
+    func appleSignInCreatesPrimarySession() async throws {
         let store = MemorySecureStore()
         let sessions = AuthSessionStore(store: store)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MockURLProtocol.self]
         let session = URLSession(configuration: configuration)
+        let profileID = UUID()
         MockURLProtocol.handler = { request in
-            #expect(request.url?.path == "/api/v1/auth/link")
+            #expect(request.url?.path == "/api/v1/auth/apple")
+            #expect(request.httpMethod == "POST")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+            let body = requestBodyData(request).flatMap {
+                try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+            }
+            #expect(body?["identityToken"] as? String == "apple-identity-token")
+            #expect(body?["nonce"] as? String == "raw-nonce-value")
+            return (
+                200,
+                Data(
+                    """
+                    {
+                      "tokens": {
+                        "accessToken": "apple-access",
+                        "refreshToken": "apple-refresh-token-value-that-is-long-enough",
+                        "tokenType": "bearer",
+                        "expiresIn": 900
+                      },
+                      "profile": {
+                        "telescanId": "\(profileID.uuidString)",
+                        "name": null,
+                        "username": null,
+                        "bio": null,
+                        "photoUrl": null,
+                        "telegramLinked": false
+                      }
+                    }
+                    """.utf8
+                )
+            )
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        let response = try await client.signInWithApple(
+            identityToken: "apple-identity-token",
+            nonce: "raw-nonce-value",
+            name: "Ada"
+        )
+
+        #expect(!response.profile.isTelegramLinked)
+        #expect(sessions.accessToken == "apple-access")
+        #expect(sessions.hasPrimarySession)
+        #expect(
+            sessions.refreshToken
+                == "apple-refresh-token-value-that-is-long-enough"
+        )
+    }
+
+    @Test("Telegram linking replaces access but preserves the Apple refresh token")
+    func telegramLinkPreservesAppleRefreshToken() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        try sessions.saveAppleSession(
+            TokenResponse(
+                accessToken: "apple-access",
+                refreshToken: "apple-refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let profileID = UUID()
+        MockURLProtocol.handler = { request in
+            #expect(request.url?.path == "/api/v1/users/me/telegram/link")
+            #expect(
+                request.value(forHTTPHeaderField: "Authorization")
+                    == "Bearer apple-access"
+            )
+            return (
+                200,
+                Data(
+                    """
+                    {
+                      "access": {
+                        "accessToken": "linked-access",
+                        "tokenType": "bearer",
+                        "expiresIn": 900
+                      },
+                      "profile": {
+                        "telescanId": "\(profileID.uuidString)",
+                        "name": "Ada",
+                        "username": "ada",
+                        "bio": null,
+                        "photoUrl": null,
+                        "telegramLinked": true
+                      }
+                    }
+                    """.utf8
+                )
+            )
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        let response = try await client.linkTelegram(code: "AB12CD34")
+
+        #expect(response.profile.isTelegramLinked)
+        #expect(sessions.hasPrimarySession)
+        #expect(sessions.accessToken == "linked-access")
+        #expect(
+            sessions.refreshToken
+                == "apple-refresh-token-value-that-is-long-enough"
+        )
+    }
+
+    @Test("The API username-required response has a dedicated client error")
+    func usernameRequiredResponseIsClassified() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        try sessions.save(
+            TokenResponse(
+                accessToken: "apple-access-token",
+                refreshToken: "apple-refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MockURLProtocol.handler = { request in
+            #expect(request.url?.path == "/api/v1/users/me/telegram/link")
+            #expect(
+                request.value(forHTTPHeaderField: "Authorization")
+                    == "Bearer apple-access-token"
+            )
             return (
                 422,
                 Data(
@@ -216,10 +373,10 @@ struct FetchServiceTests {
         )
 
         do {
-            _ = try await client.link(code: "USERLESS")
+            _ = try await client.linkTelegram(code: "USERLESS")
             Issue.record("Expected a Telegram username error")
         } catch APIClientError.telegramUsernameRequired {
-            #expect(!sessions.hasTokens)
+            #expect(sessions.hasTokens)
         } catch {
             Issue.record("Unexpected error: \(error)")
         }

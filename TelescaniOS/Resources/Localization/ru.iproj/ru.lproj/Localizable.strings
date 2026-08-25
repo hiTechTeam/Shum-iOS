@@ -35,6 +35,7 @@
 "encounterHistoryLastSeenFormat" = "Виделись %@";
 
 /* Registration */
+"telegramLinkTitle" = "Привязка Telegram";
 "placeCode" = "Код";
 "codePlaceholder" = "Код";
 "code" = "Код";
@@ -53,6 +54,7 @@
 "profileBioSaveFailed" = "Не удалось сохранить BIO. Попробуйте ещё раз.";
 
 /* Onboarding */
+"appleSignInFailed" = "Не удалось войти с Apple. Попробуйте ещё раз.";
 "welcome_title" = "Добро пожаловать в";
 "poweredByTG" = "Работает от Telegram";
 "aboutOnBoardingMsg" = "Telescan позволяет быстро находить и обмениваться Telegram-профилями.";
@@ -127,7 +129,7 @@
 "accountActionsTitle" = "Действия с аккаунтом";
 "logoutCurrent" = "Выйти на этом устройстве";
 "logoutCurrentTitle" = "Выйти на этом устройстве?";
-"logoutCurrentMessage" = "Для повторного входа на этом устройстве потребуется новый код из Telegram.";
+"logoutCurrentMessage" = "Для повторного входа на этом устройстве потребуется войти с Apple.";
 "logoutFailed" = "Не удалось выполнить выход. Попробуйте ещё раз.";
 "deleteAccount" = "Удалить аккаунт";
 "deleteAccountTitle" = "Удалить аккаунт?";

@@ -1,9 +1,13 @@
+import AuthenticationServices
 import SwiftUI
 
 struct Welcome: View {
 
     @Environment(\.colorScheme) private var colorScheme
-    @State private var onStart = false
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @State private var currentNonce: String?
+    @State private var isSigningIn = false
+    @State private var signInFailed = false
 
     private let referenceWidth: CGFloat = 390
     private let accentColor = Color(
@@ -137,14 +141,74 @@ struct Welcome: View {
                 .tint(accentColor)
                 .frame(maxWidth: 340 * scale)
 
-            StartButton(
-                title: Inc.Onboarding.start.localized,
-                accentColor: accentColor
-            ) {
-                onStart = true
+            ZStack {
+                SignInWithAppleButton(.continue) { request in
+                    do {
+                        let nonce = try AppleSignInNonce.make()
+                        currentNonce = nonce
+                        request.requestedScopes = [.fullName, .email]
+                        request.nonce = AppleSignInNonce.hashed(nonce)
+                    } catch {
+                        currentNonce = nil
+                        signInFailed = true
+                    }
+                } onCompletion: { result in
+                    completeAppleAuthorization(result)
+                }
+                .signInWithAppleButtonStyle(
+                    colorScheme == .dark ? .white : .black
+                )
+                .clipShape(Capsule())
+                .allowsHitTesting(!isSigningIn)
+
+                if isSigningIn {
+                    Capsule()
+                        .fill(Color.black.opacity(0.32))
+                    ProgressView()
+                        .tint(.white)
+                }
             }
+            .frame(height: 50)
             .frame(maxWidth: min(360 * scale, width - 30))
             .padding(.top, 27 * scale)
+        }
+    }
+
+    private func completeAppleAuthorization(
+        _ result: Result<ASAuthorization, Error>
+    ) {
+        guard case .success(let authorization) = result,
+              let credential = authorization.credential
+                as? ASAuthorizationAppleIDCredential,
+              let nonce = currentNonce,
+              let tokenData = credential.identityToken,
+              let identityToken = String(data: tokenData, encoding: .utf8) else {
+            if case .failure(let error) = result,
+               (error as? ASAuthorizationError)?.code == .canceled {
+                return
+            }
+            signInFailed = true
+            return
+        }
+        let name = credential.fullName.flatMap {
+            let value = PersonNameComponentsFormatter().string(from: $0)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? nil : value
+        }
+
+        Task { @MainActor in
+            isSigningIn = true
+            defer { isSigningIn = false }
+            do {
+                let response = try await FetchService.fetch.signInWithApple(
+                    identityToken: identityToken,
+                    nonce: nonce,
+                    name: name
+                )
+                coordinator.completedAppleSignIn(profile: response.profile)
+            } catch {
+                signInFailed = true
+            }
         }
     }
 
@@ -181,10 +245,12 @@ struct Welcome: View {
             }
             .tint(accentColor)
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(isPresented: $onStart) {
-                AuthCode()
-                    .navigationBarBackButtonHidden(true)
-            }
+        }
+        .alert(
+            Inc.Onboarding.appleSignInFailed.localized,
+            isPresented: $signInFailed
+        ) {
+            Button(Inc.Common.okey.localized, role: .cancel) {}
         }
     }
 }

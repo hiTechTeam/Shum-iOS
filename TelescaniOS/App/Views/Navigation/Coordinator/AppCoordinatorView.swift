@@ -9,6 +9,8 @@ struct AppCoordinatorView: View {
             Group {
                 if coordinator.isRegistered {
                     MainContentView()
+                } else if coordinator.isAuthenticated {
+                    AuthenticatedOnboardingView()
                 } else {
                     Welcome()
                 }
@@ -36,6 +38,23 @@ struct AppCoordinatorView: View {
                 Task {
                     await coordinator.refreshSession()
                 }
+            }
+        }
+    }
+}
+
+private struct AuthenticatedOnboardingView: View {
+    @EnvironmentObject private var coordinator: AppCoordinator
+
+    var body: some View {
+        NavigationStack {
+            switch coordinator.onboardingStage {
+            case .telegram:
+                AuthCode()
+                    .navigationBarBackButtonHidden(true)
+            case .scanning:
+                ScanToggleView()
+                    .navigationBarBackButtonHidden(true)
             }
         }
     }

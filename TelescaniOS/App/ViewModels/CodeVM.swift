@@ -31,15 +31,15 @@ final class CodeViewModel: ObservableObject {
     @Published var tmpTgUsername: String?
     @Published var tmpCode = ""
 
-    private let linkAction: @MainActor (String) async throws -> LinkDeviceResponse
+    private let linkAction: @MainActor (String) async throws -> TelegramLinkResponse
     private let updateBioAction: @MainActor (String?) async throws
         -> TelescanProfileResponse
     private var linkTask: Task<Void, Never>?
     private let codeCount = 8
 
     init(
-        linkAction: @escaping @MainActor (String) async throws -> LinkDeviceResponse = {
-            try await FetchService.fetch.link(code: $0)
+        linkAction: @escaping @MainActor (String) async throws -> TelegramLinkResponse = {
+            try await FetchService.fetch.linkTelegram(code: $0)
         }
     ) {
         self.linkAction = linkAction
@@ -49,7 +49,7 @@ final class CodeViewModel: ObservableObject {
     }
 
     init(
-        linkAction: @escaping @MainActor (String) async throws -> LinkDeviceResponse,
+        linkAction: @escaping @MainActor (String) async throws -> TelegramLinkResponse,
         updateBioAction: @escaping @MainActor (String?) async throws
             -> TelescanProfileResponse
     ) {

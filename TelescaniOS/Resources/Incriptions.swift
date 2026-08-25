@@ -89,6 +89,7 @@ struct Inc {
     
     // MARK: - Registration
     struct Registration {
+        static let telegramLinkTitle: String = "telegramLinkTitle"
         static let placeCode: String = "placeCode"
         // EN: Code
         // RU: Код
@@ -127,6 +128,7 @@ struct Inc {
     
     // MARK: - Onboarding
     struct Onboarding {
+        static let appleSignInFailed: String = "appleSignInFailed"
         static let welcomeTitle: String = "welcome_title"
         // EN: Welcome to Telescan
         // RU: Добро пожаловать в Telescan

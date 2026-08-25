@@ -36,14 +36,20 @@ to Moscow over WireGuard.
 
 ## Authentication and account lifecycle
 
-1. The user creates a public Telegram username and requests a short-lived,
-   one-time link code from the Telegram bot. The bot and API reject code
-   issuance while the username is missing.
-2. The app submits the code and a random installation `device_id` directly to
-   `POST /api/v1/auth/link`.
-3. The clear code is cleared from memory after the attempt and is never stored
+1. The system Sign in with Apple control creates or resumes the primary
+   Telescan account through `POST /api/v1/auth/apple`. The request includes an
+   Apple identity token, a cryptographic nonce, and a random installation
+   `device_id`.
+2. Access and refresh tokens are stored in the iOS Keychain before Telegram is
+   requested. Until Telegram is linked, relaunching returns to the mandatory
+   linking screen rather than asking for Apple authentication again. A versioned
+   Keychain marker distinguishes this primary Apple session from tokens issued
+   by the legacy Telegram-only flow; legacy tokens return to Apple sign-in.
+3. The user creates a public Telegram username and requests a short-lived,
+   one-time code from the bot. The app submits it with the Apple-authenticated
+   session to `POST /api/v1/users/me/telegram/link`.
+4. The clear code is cleared from memory after the attempt and is never stored
    locally or logged.
-4. Access and rotating refresh tokens are stored in the iOS Keychain.
 5. Protected requests automatically retry once after a coordinated token
    refresh; concurrent 401 responses share one refresh operation.
 

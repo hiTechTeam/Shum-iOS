@@ -9,8 +9,20 @@ final class FetchService {
         self.client = client
     }
 
-    func link(code: String) async throws -> LinkDeviceResponse {
-        try await client.link(code: code)
+    func signInWithApple(
+        identityToken: String,
+        nonce: String,
+        name: String?
+    ) async throws -> AuthenticatedAccountResponse {
+        try await client.signInWithApple(
+            identityToken: identityToken,
+            nonce: nonce,
+            name: name
+        )
+    }
+
+    func linkTelegram(code: String) async throws -> TelegramLinkResponse {
+        try await client.linkTelegram(code: code)
     }
 
     func currentProfile() async throws -> TelescanProfileResponse {

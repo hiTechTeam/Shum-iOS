@@ -2,6 +2,11 @@ import SwiftUI
 
 @MainActor
 final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
+    enum OnboardingStage {
+        case telegram
+        case scanning
+    }
+
     private let regKey = Keys.isReg.rawValue
     private let scanningKey = Keys.isScaning.rawValue
     private let authSession = AuthSessionStore.shared
@@ -9,6 +14,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     private var isValidatingSession = false
 
     @Published var isRegistered: Bool
+    @Published private(set) var isAuthenticated: Bool
+    @Published private(set) var onboardingStage: OnboardingStage
     @Published var showSplash = true
     @Published var isScaning: Bool
 
@@ -18,12 +25,19 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     init(sessionValidator: SessionValidator? = nil) {
         self.sessionValidator = sessionValidator ?? SessionValidator()
         let locallyRegistered = UserDefaults.standard.bool(forKey: regKey)
+        let hasTokens = AuthSessionStore.shared.hasTokens
+        let hasPrimarySession = AuthSessionStore.shared.hasPrimarySession
+        let hasLegacySession = hasTokens && !hasPrimarySession
+        isAuthenticated = AppConfig.skipRegistration || hasPrimarySession
         isRegistered = AppConfig.skipRegistration
-            || (locallyRegistered && AuthSessionStore.shared.hasTokens)
+            || (locallyRegistered && hasPrimarySession)
         isScaning = UserDefaults.standard.bool(forKey: scanningKey)
+        onboardingStage = .telegram
         authCodeViewModel.restoreLocalProfile()
-        if locallyRegistered,
-           !AuthSessionStore.shared.hasTokens,
+        onboardingStage = authCodeViewModel.isUsernameConfirmed
+            ? .scanning
+            : .telegram
+        if hasLegacySession || locallyRegistered && !hasPrimarySession,
            !AppConfig.skipRegistration {
             clearLocalSession()
         }
@@ -48,6 +62,14 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         isRegistered = true
         UserDefaults.standard.set(true, forKey: regKey)
         updateApplicationState(isActive: true)
+    }
+
+    func completedAppleSignIn(profile: TelescanProfileResponse) {
+        authCodeViewModel.applyProfile(profile)
+        isAuthenticated = true
+        isRegistered = false
+        UserDefaults.standard.set(false, forKey: regKey)
+        onboardingStage = profile.isTelegramLinked ? .scanning : .telegram
     }
 
     func setScanning(_ enabled: Bool) {
@@ -85,18 +107,26 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
 
     func refreshSession() async {
-        guard isRegistered, !isValidatingSession else { return }
+        guard isAuthenticated, !isValidatingSession else { return }
         isValidatingSession = true
         defer { isValidatingSession = false }
 
         switch await sessionValidator.validate() {
         case .active(let profile):
             authCodeViewModel.applyProfile(profile)
+            if !isRegistered {
+                onboardingStage = .scanning
+            }
             if isScaning {
                 peopleViewModel.startAdvertising(
                     telescanID: profile.telescanId
                 )
             }
+        case .telegramLinkRequired(let profile):
+            authCodeViewModel.applyProfile(profile)
+            isRegistered = false
+            UserDefaults.standard.set(false, forKey: regKey)
+            onboardingStage = .telegram
         case .invalid:
             clearLocalSession()
         case .unavailable:
@@ -116,6 +146,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             UserDefaults.standard.removePersistentDomain(forName: bundleID)
         }
         isScaning = false
+        isAuthenticated = false
         isRegistered = false
     }
 
