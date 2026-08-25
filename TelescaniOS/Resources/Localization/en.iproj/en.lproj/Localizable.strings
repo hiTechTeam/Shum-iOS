@@ -23,8 +23,27 @@
 "metHeader" = "Met recently";
 
 /* Chats */
-"chatsUnavailableTitle" = "Chats are coming later";
-"chatsUnavailableMessage" = "This screen is ready for the future chat experience.";
+"chatsEmptyTitle" = "No chats yet";
+"chatsEmptyMessage" = "Start a chat from someone’s profile.";
+"chatSearch" = "Search";
+"chatNewConversation" = "New chat";
+"chatNoMessagesTitle" = "No messages yet";
+"chatNoMessagesMessage" = "Send the first message.";
+"chatMessagePlaceholder" = "Message";
+"chatToday" = "Today";
+"chatSend" = "Send";
+"chatActions" = "Chat actions";
+"chatMute" = "Mute notifications";
+"chatUnmute" = "Unmute notifications";
+"chatAttachment" = "Add attachment";
+"chatPhoto" = "Photo";
+"chatCamera" = "Camera";
+"chatFile" = "File";
+"chatTimeRemaining" = "Time remaining";
+"chatTimeExpired" = "Time expired";
+"chatWaitForNextMeeting" = "Wait for the next meeting";
+"chatNearbyWithYou" = "nearby with you";
+"chatRecentlyMet" = "recently met";
 
 /* Encounter history */
 "encounterHistoryEmptyTitle" = "No encounters yet";
@@ -90,7 +109,8 @@
 "nearbyProfileClose" = "Close profile";
 "nearbyProfileActions" = "Profile actions";
 "nearbyProfileUsernameFallback" = "My Telegram Username";
-"nearbyProfileMessage" = "Message";
+"nearbyProfileChat" = "Chat";
+"nearbyProfileTelegramChat" = "Telegram Chat";
 "nearbyProfileReport" = "Report user";
 "nearbyProfileBlock" = "Block user";
 "nearbyProfileReportTitle" = "Why are you reporting this user?";

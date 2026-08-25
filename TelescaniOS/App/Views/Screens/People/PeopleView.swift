@@ -4,6 +4,8 @@ import UIKit
 
 struct PeopleView: View {
 
+    var onOpenChat: (NearbyUser) -> Void = { _ in }
+
     @EnvironmentObject var coordinator: AppCoordinator
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
@@ -83,7 +85,7 @@ struct PeopleView: View {
             }
         }
         .sheet(item: $selectedUser) { user in
-            ProfileSheetView(user: user)
+            ProfileSheetView(user: user, onOpenChat: onOpenChat)
                 .environmentObject(peopleViewModel)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -320,6 +322,7 @@ struct ProfileSheetView: View {
     let user: NearbyUser
     var showsNearbyControls = true
     var lastMetAt: Date? = nil
+    var onOpenChat: (NearbyUser) -> Void = { _ in }
 
     private var imageURL: URL? {
         guard let url = user.photoURL else { return nil }
@@ -431,7 +434,11 @@ struct ProfileSheetView: View {
             .padding(.top, 60)
 
             if showsNearbyControls {
-                ProfileSheetControls(user: user, lastMetAt: lastMetAt)
+                ProfileSheetControls(
+                    user: user,
+                    lastMetAt: lastMetAt,
+                    onOpenChat: onOpenChat
+                )
             }
         }
         .fullScreenCover(isPresented: $showPhotoPreview) {
@@ -663,6 +670,7 @@ private struct ProfileSheetControls: View {
 
     let user: NearbyUser
     let lastMetAt: Date?
+    let onOpenChat: (NearbyUser) -> Void
 
     @State private var moderationDialog: ModerationDialog?
     @State private var moderationAlert: ModerationAlert?
@@ -745,9 +753,16 @@ private struct ProfileSheetControls: View {
 
     private var moderationMenu: some View {
         Menu {
+            Button(action: openInternalChat) {
+                Label(
+                    Inc.NearbyProfile.chat.localized,
+                    systemImage: "bubble.left.and.bubble.right"
+                )
+            }
+
             Button(action: openTelegramChat) {
                 Label {
-                    Text(Inc.NearbyProfile.message.localized)
+                    Text(Inc.NearbyProfile.telegramChat.localized)
                 } icon: {
                     Image(uiImage: Self.telegramMenuIcon)
                 }
@@ -789,6 +804,14 @@ private struct ProfileSheetControls: View {
         .menuOrder(.fixed)
         .disabled(isSubmitting)
         .accessibilityLabel(Inc.NearbyProfile.actions.localized)
+    }
+
+    private func openInternalChat() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            onOpenChat(user)
+        }
     }
 
     private func openTelegramChat() {

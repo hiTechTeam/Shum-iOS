@@ -70,7 +70,7 @@ final class PeopleViewModel: ObservableObject {
         blockedProfileStore: BlockedProfileStoring = BlockedProfileStore.shared,
         encounterHistoryStore: EncounterHistoryStoring =
             EncounterHistoryStore.shared,
-        encounterRetention: TimeInterval = 24 * 60 * 60,
+        encounterRetention: TimeInterval = EncounterHistoryPolicy.retention,
         historyUpdateInterval: TimeInterval = 60,
         maximumProfileResolutionAttempts: Int = 5,
         profileRetryBaseDelay: TimeInterval = 2,

@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct EncounterHistoryView: View {
+    var onOpenChat: (NearbyUser) -> Void = { _ in }
+
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
@@ -58,7 +60,8 @@ struct EncounterHistoryView: View {
         .sheet(item: $selectedEncounter) { encounter in
             ProfileSheetView(
                 user: encounter.user,
-                lastMetAt: encounter.lastSeen
+                lastMetAt: encounter.lastSeen,
+                onOpenChat: onOpenChat
             )
             .environmentObject(peopleViewModel)
             .presentationDetents([.medium, .large])

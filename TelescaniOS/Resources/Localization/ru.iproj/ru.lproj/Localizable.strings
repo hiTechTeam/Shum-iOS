@@ -23,8 +23,27 @@
 "metHeader" = "Виделись недавно";
 
 /* Чаты */
-"chatsUnavailableTitle" = "Чаты появятся позже";
-"chatsUnavailableMessage" = "Этот экран подготовлен для будущих чатов.";
+"chatsEmptyTitle" = "Пока нет чатов";
+"chatsEmptyMessage" = "Начните чат из карточки человека.";
+"chatSearch" = "Поиск";
+"chatNewConversation" = "Новый чат";
+"chatNoMessagesTitle" = "Сообщений пока нет";
+"chatNoMessagesMessage" = "Напишите первое сообщение.";
+"chatMessagePlaceholder" = "Сообщение";
+"chatToday" = "Сегодня";
+"chatSend" = "Отправить";
+"chatActions" = "Действия с чатом";
+"chatMute" = "Выключить уведомления";
+"chatUnmute" = "Включить уведомления";
+"chatAttachment" = "Добавить вложение";
+"chatPhoto" = "Фото";
+"chatCamera" = "Камера";
+"chatFile" = "Файл";
+"chatTimeRemaining" = "Время для общения";
+"chatTimeExpired" = "Время истекло";
+"chatWaitForNextMeeting" = "Ждём следующей встречи";
+"chatNearbyWithYou" = "Рядом с вами";
+"chatRecentlyMet" = "Виделись недавно";
 
 /* История встреч */
 "encounterHistoryEmptyTitle" = "Пока никого";
@@ -90,7 +109,8 @@
 "nearbyProfileClose" = "Закрыть профиль";
 "nearbyProfileActions" = "Действия с профилем";
 "nearbyProfileUsernameFallback" = "Мой Telegram Username";
-"nearbyProfileMessage" = "Написать";
+"nearbyProfileChat" = "Чат";
+"nearbyProfileTelegramChat" = "Чат Telegram";
 "nearbyProfileReport" = "Пожаловаться";
 "nearbyProfileBlock" = "Заблокировать";
 "nearbyProfileReportTitle" = "Почему вы хотите пожаловаться?";

@@ -6,6 +6,7 @@ struct MainContentView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
+    @StateObject private var chatStore = ChatUIStore()
     @State private var selectedTab: SelectedTab = .near
     @State private var navigationPath: [MainDestination] = []
     @State private var showScanAlert = false
@@ -104,9 +105,13 @@ struct MainContentView: View {
     private var selectedContent: some View {
         switch selectedTab {
         case .near:
-            PeopleView()
+            PeopleView { user in
+                openChat(with: user, isNearby: true)
+            }
         case .met:
-            EncounterHistoryView()
+            EncounterHistoryView { user in
+                openChat(with: user, isNearby: false)
+            }
         case .profile:
             EmptyView()
         }
@@ -153,15 +158,49 @@ struct MainContentView: View {
             SettingsDestinationView(authVM: coordinator.authCodeViewModel)
                 .toolbar(.visible, for: .navigationBar)
         case .chats:
-            ChatsPlaceholderView()
+            ChatsListView(
+                store: chatStore
+            ) { contact in
+                navigationPath.append(.conversation(contact))
+            }
+                .toolbar(.visible, for: .navigationBar)
+        case .conversation(let contact):
+            ChatConversationView(
+                contact: contact,
+                store: chatStore,
+                isNearby: peopleViewModel.visibleUsers.contains {
+                    $0.id == contact.id
+                },
+                lastMetAt: lastMetAt(for: contact)
+            )
                 .toolbar(.visible, for: .navigationBar)
         }
+    }
+
+    private func openChat(with user: NearbyUser, isNearby: Bool) {
+        let encounterDate = peopleViewModel.encounterHistory
+            .first(where: { $0.id == user.id })?
+            .lastSeen
+        let contact = ChatContact(
+            user: user,
+            isNearby: isNearby,
+            lastMetAt: isNearby ? .now : encounterDate ?? .now
+        )
+        navigationPath.append(.conversation(contact))
+    }
+
+    private func lastMetAt(for contact: ChatContact) -> Date {
+        peopleViewModel.encounterHistory
+            .first(where: { $0.id == contact.id })?
+            .lastSeen
+            ?? contact.lastMetAt
     }
 }
 
 private enum MainDestination: Hashable {
     case settings
     case chats
+    case conversation(ChatContact)
 }
 
 private struct HeaderButton: View {
@@ -211,7 +250,6 @@ private struct TextTabBar: View {
                     title: Inc.Tabs.people.localized,
                     tab: .near,
                     count: nearbyCount,
-                    badgeColor: .green,
                     isAvailable: isScanningEnabled
                 )
 
@@ -219,7 +257,6 @@ private struct TextTabBar: View {
                     title: Inc.Tabs.metTitle.localized,
                     tab: .met,
                     count: encounterCount,
-                    badgeColor: .orange,
                     isAvailable: true
                 )
             }
@@ -250,7 +287,6 @@ private struct TextTabBar: View {
         title: String,
         tab: SelectedTab,
         count: Int,
-        badgeColor: Color,
         isAvailable: Bool
     ) -> some View {
         let isSelected = selectedTab == tab
@@ -270,7 +306,9 @@ private struct TextTabBar: View {
                             .padding(.horizontal, 6)
                             .frame(minWidth: 20, minHeight: 20)
                             .background(
-                                isSelected ? badgeColor : Color.gray,
+                                isSelected
+                                    ? Color(uiColor: .systemBlue)
+                                    : Color.gray,
                                 in: Capsule()
                             )
                             .transition(.scale.combined(with: .opacity))
@@ -465,22 +503,5 @@ private struct SettingsDestinationView: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return name.flatMap { $0.isEmpty ? nil : $0 }
             ?? Inc.Tabs.settings.localized
-    }
-}
-
-private struct ChatsPlaceholderView: View {
-    var body: some View {
-        ZStack {
-            Color.tsBackground
-                .ignoresSafeArea()
-
-            ContentUnavailableView(
-                Inc.Chats.unavailableTitle.localized,
-                systemImage: "bubble.left.and.bubble.right",
-                description: Text(Inc.Chats.unavailableMessage.localized)
-            )
-        }
-        .navigationTitle(Inc.Tabs.chats.localized)
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
