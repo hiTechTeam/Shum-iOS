@@ -80,12 +80,6 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         onboardingStage = profile.isTelegramLinked ? .scanning : .telegram
     }
 
-    func startTemporaryTelegramSignIn() {
-        isAuthenticated = true
-        isRegistered = false
-        onboardingStage = .telegram
-    }
-
     func setScanning(_ enabled: Bool) {
         isScaning = enabled
         UserDefaults.standard.set(enabled, forKey: scanningKey)

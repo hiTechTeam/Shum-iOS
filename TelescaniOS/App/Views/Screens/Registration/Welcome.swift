@@ -8,6 +8,7 @@ struct Welcome: View {
     @State private var currentNonce: String?
     @State private var isSigningIn = false
     @State private var signInFailed = false
+    @State private var showTelegramCode = false
 
     private let referenceWidth: CGFloat = 390
     private let accentColor = Color(
@@ -143,22 +144,12 @@ struct Welcome: View {
 
             ZStack {
                 #if TELESCAN_PERSONAL_TEAM
-                Button {
-                    coordinator.startTemporaryTelegramSignIn()
-                } label: {
-                    Text(Inc.Onboarding.start.localized)
-                        .font(.system(size: 17 * scale, weight: .semibold))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .foregroundStyle(
-                            colorScheme == .dark ? Color.black : Color.white
-                        )
+                StartButton(
+                    title: Inc.Onboarding.start.localized,
+                    accentColor: accentColor
+                ) {
+                    showTelegramCode = true
                 }
-                .buttonStyle(.plain)
-                .background(
-                    Capsule().fill(
-                        colorScheme == .dark ? Color.white : Color.black
-                    )
-                )
                 #else
                 SignInWithAppleButton(.continue) { request in
                     do {
@@ -188,7 +179,7 @@ struct Welcome: View {
                 #endif
             }
             .frame(height: 50)
-            .frame(maxWidth: min(360 * scale, width - 30))
+            .frame(maxWidth: min(360 * scale, max(0, width - 30)))
             .padding(.top, 27 * scale)
         }
     }
@@ -264,6 +255,10 @@ struct Welcome: View {
             }
             .tint(accentColor)
             .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(isPresented: $showTelegramCode) {
+                AuthCode()
+                    .navigationBarBackButtonHidden(true)
+            }
         }
         .alert(
             Inc.Onboarding.appleSignInFailed.localized,
