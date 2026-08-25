@@ -67,8 +67,8 @@ struct Inc {
         // RU: Виделись недавно
 
         static let metHeader: String = "metHeader"
-        // EN: People you've met during the day
-        // RU: Люди, которых вы встретили за день
+        // EN: Met recently
+        // RU: Встречали недавно
     }
 
     // MARK: - Chats

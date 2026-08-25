@@ -18,13 +18,11 @@ struct MainContentView: View {
                     Color.tsBackground
                         .ignoresSafeArea()
 
-                    selectedContent
+                    contentPager
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .navigationTitle(headerTitle)
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
                 .toolbar {
                     if navigationPath.isEmpty {
                         rootToolbar
@@ -105,16 +103,22 @@ struct MainContentView: View {
         }
     }
 
-    @ViewBuilder
-    private var selectedContent: some View {
-        switch selectedTab {
-        case .near:
+    private var contentPager: some View {
+        TabView(selection: pageSelection) {
             PeopleView()
-        case .met:
+                .tag(SelectedTab.near)
+
             EncounterHistoryView()
-        case .profile:
-            EmptyView()
+                .tag(SelectedTab.met)
         }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+    }
+
+    private var pageSelection: Binding<SelectedTab> {
+        Binding(
+            get: { selectedTab },
+            set: selectTab
+        )
     }
 
     private var headerTitle: String {
@@ -204,41 +208,94 @@ private struct HeaderButton: View {
             action()
         } label: {
             Image(systemName: systemImage)
-                .font(.system(size: 21, weight: .medium))
+                .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(tint)
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
     }
 }
 
 private struct TextTabBar: View {
+    @GestureState private var dragTranslation: CGFloat = 0
+
     let selectedTab: SelectedTab
     let nearbyCount: Int
     let encounterCount: Int
     let isScanningEnabled: Bool
     let select: (SelectedTab) -> Void
 
-    var body: some View {
-        HStack(spacing: 0) {
-            tabButton(
-                title: Inc.Tabs.people.localized,
-                tab: .near,
-                count: nearbyCount,
-                badgeColor: .green,
-                isAvailable: isScanningEnabled
-            )
+    private let barWidth: CGFloat = 276
+    private let barPadding: CGFloat = 4
 
-            tabButton(
-                title: Inc.Tabs.metTitle.localized,
-                tab: .met,
-                count: encounterCount,
-                badgeColor: .orange,
-                isAvailable: true
-            )
+    private var tabWidth: CGFloat {
+        (barWidth - (barPadding * 2)) / 2
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            selectionPill
+
+            HStack(spacing: 0) {
+                tabButton(
+                    title: Inc.Tabs.people.localized,
+                    tab: .near,
+                    count: nearbyCount,
+                    badgeColor: .green,
+                    isAvailable: isScanningEnabled
+                )
+
+                tabButton(
+                    title: Inc.Tabs.metTitle.localized,
+                    tab: .met,
+                    count: encounterCount,
+                    badgeColor: .orange,
+                    isAvailable: true
+                )
+            }
         }
-        .padding(4)
-        .frame(maxWidth: 276)
+        .padding(barPadding)
+        .frame(width: barWidth)
         .modifier(TextTabBarSurface())
+        .contentShape(Capsule())
+        .simultaneousGesture(selectionDragGesture)
+        .animation(.spring(response: 0.30, dampingFraction: 0.82), value: selectedTab)
+    }
+
+    private var selectionPill: some View {
+        SelectedTabSurface()
+            .frame(width: tabWidth, height: 44)
+            .offset(x: selectionPillOffset)
+            .allowsHitTesting(false)
+    }
+
+    private var selectionPillOffset: CGFloat {
+        let origin = selectedTab == .near ? 0 : tabWidth
+        return min(max(origin + dragTranslation, 0), tabWidth)
+    }
+
+    private var selectionDragGesture: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .updating($dragTranslation) { value, state, _ in
+                guard abs(value.translation.width) > abs(value.translation.height) else {
+                    return
+                }
+                state = value.translation.width
+            }
+            .onEnded { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else {
+                    return
+                }
+
+                let origin = selectedTab == .near ? 0 : tabWidth
+                let projectedOffset = origin + value.predictedEndTranslation.width
+                let target: SelectedTab = projectedOffset < tabWidth / 2
+                    ? .near
+                    : .met
+                select(target)
+            }
     }
 
     private func tabButton(
@@ -279,10 +336,7 @@ private struct TextTabBar: View {
             .frame(maxWidth: .infinity)
             .frame(height: 44)
             .background {
-                TabButtonSurface(
-                    isSelected: isSelected,
-                    isAvailable: isAvailable
-                )
+                DisabledTabSurface(isVisible: !isAvailable)
             }
             .contentShape(Capsule())
         }
@@ -387,16 +441,9 @@ private struct ScanningAlertSurface: ViewModifier {
     }
 }
 
-private struct TabButtonSurface: View {
-    let isSelected: Bool
-    let isAvailable: Bool
-
-    @ViewBuilder
+private struct SelectedTabSurface: View {
     var body: some View {
-        if !isAvailable {
-            Capsule()
-                .fill(Color(uiColor: .systemGray4).opacity(0.42))
-        } else if isSelected {
+        Group {
             if #available(iOS 26.0, *) {
                 Color.clear
                     .glassEffect(.regular.interactive(), in: Capsule())
@@ -409,16 +456,35 @@ private struct TabButtonSurface: View {
     }
 }
 
+private struct DisabledTabSurface: View {
+    let isVisible: Bool
+
+    @ViewBuilder
+    var body: some View {
+        if isVisible {
+            Capsule()
+                .fill(Color(uiColor: .systemGray4).opacity(0.42))
+        }
+    }
+}
+
 private struct SettingsDestinationView: View {
     @ObservedObject var authVM: CodeViewModel
 
     var body: some View {
         ProfileDataView(authCodeViewModel: authVM)
-            .navigationTitle(Inc.Tabs.settings.localized)
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 authVM.restoreLocalProfile()
             }
+    }
+
+    private var navigationTitle: String {
+        let name = authVM.tgName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.flatMap { $0.isEmpty ? nil : $0 }
+            ?? Inc.Tabs.settings.localized
     }
 }
 

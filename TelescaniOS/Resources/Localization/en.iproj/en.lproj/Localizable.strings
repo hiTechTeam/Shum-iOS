@@ -20,7 +20,7 @@
 "settings" = "Settings";
 "profile" = "Profile";
 "metTitle" = "Met";
-"metHeader" = "People you’ve met during the day";
+"metHeader" = "Met recently";
 
 /* Chats */
 "chatsUnavailableTitle" = "Chats are coming later";
