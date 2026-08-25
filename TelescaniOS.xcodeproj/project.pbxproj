@@ -547,7 +547,7 @@
 				B9559D622EBC4A0500FC3377 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		B9559D632EBC4A0500FC3377 /* Build configuration list for PBXNativeTarget "Telescan" */ = {
 			isa = XCConfigurationList;
@@ -556,7 +556,7 @@
 				B9559D652EBC4A0500FC3377 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		B98E8FF22F00964600D882A0 /* Build configuration list for PBXNativeTarget "TelescanTests" */ = {
 			isa = XCConfigurationList;
@@ -565,7 +565,7 @@
 				B98E8FF42F00964600D882A0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 

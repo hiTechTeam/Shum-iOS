@@ -58,6 +58,7 @@ actor APIClient {
         return response
     }
 
+    #if TELESCAN_PERSONAL_TEAM
     func linkForDevelopment(code: String) async throws -> TelegramLinkResponse {
         let deviceID = try sessionStore.installationDeviceID()
         let request = try jsonRequest(
@@ -67,7 +68,7 @@ actor APIClient {
         )
         let data = try await perform(request, authenticated: false)
         let response = try decoder.decode(AuthenticatedAccountResponse.self, from: data)
-        try sessionStore.save(response.tokens)
+        try sessionStore.saveLegacySession(response.tokens)
         return TelegramLinkResponse(
             access: AccessTokenResponse(
                 accessToken: response.tokens.accessToken,
@@ -77,6 +78,15 @@ actor APIClient {
             profile: response.profile
         )
     }
+
+    func linkTelegramForPersonalTeam(code: String) async throws
+        -> TelegramLinkResponse {
+        if sessionStore.hasPrimarySession {
+            return try await linkTelegram(code: code)
+        }
+        return try await linkForDevelopment(code: code)
+    }
+    #endif
 
     func linkTelegram(code: String) async throws -> TelegramLinkResponse {
         let request = try jsonRequest(

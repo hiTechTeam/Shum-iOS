@@ -278,6 +278,14 @@ struct FetchServiceTests {
     func developmentTelegramLinkCreatesSession() async throws {
         let store = MemorySecureStore()
         let sessions = AuthSessionStore(store: store)
+        try sessions.saveAppleSession(
+            TokenResponse(
+                accessToken: "old-apple-access",
+                refreshToken: "old-apple-refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MockURLProtocol.self]
         let session = URLSession(configuration: configuration)
@@ -380,7 +388,9 @@ struct FetchServiceTests {
             sessionStore: sessions
         )
 
-        let response = try await client.linkTelegram(code: "AB12CD34")
+        let response = try await client.linkTelegramForPersonalTeam(
+            code: "AB12CD34"
+        )
 
         #expect(response.profile.isTelegramLinked)
         #expect(sessions.hasPrimarySession)

@@ -42,6 +42,11 @@ has no Sign in with Apple entitlement. Release builds retain the entitlement
 and mandatory Apple-first flow. Remove `TELESCAN_PERSONAL_TEAM` and disable the
 server compatibility flag after paid-team signing is available.
 
+Use the shared `Telescan` scheme for Personal Team development. Use
+`Telescan Release` to run the Apple-first build in a simulator now or on a
+physical device after the paid Apple Developer team is available. Archive and
+Profile actions always use Release.
+
 1. The system Sign in with Apple control creates or resumes the primary
    Telescan account through `POST /api/v1/auth/apple`. The request includes an
    Apple identity token, a cryptographic nonce, and a random installation

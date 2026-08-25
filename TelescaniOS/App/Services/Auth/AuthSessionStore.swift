@@ -57,6 +57,16 @@ final class AuthSessionStore: @unchecked Sendable {
         }
     }
 
+    func saveLegacySession(_ tokens: TokenResponse) throws {
+        do {
+            try save(tokens)
+            try store.remove(Key.primarySession)
+        } catch {
+            clearTokens()
+            throw error
+        }
+    }
+
     func saveAccessToken(_ token: String) throws {
         guard !token.isEmpty else { throw SecureStoreError.invalidData }
         try store.set(Data(token.utf8), for: Key.accessToken)

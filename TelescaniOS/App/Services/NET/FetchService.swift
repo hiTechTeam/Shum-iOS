@@ -23,7 +23,7 @@ final class FetchService {
 
     func linkTelegram(code: String) async throws -> TelegramLinkResponse {
         #if TELESCAN_PERSONAL_TEAM
-        try await client.linkForDevelopment(code: code)
+        try await client.linkTelegramForPersonalTeam(code: code)
         #else
         try await client.linkTelegram(code: code)
         #endif

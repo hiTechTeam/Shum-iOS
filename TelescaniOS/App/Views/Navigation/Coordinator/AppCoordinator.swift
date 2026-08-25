@@ -67,6 +67,11 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
 
     func completedRegistration() {
+        guard AppConfig.skipRegistration || authSession.hasTokens else {
+            clearLocalSession()
+            return
+        }
+        isAuthenticated = true
         isRegistered = true
         UserDefaults.standard.set(true, forKey: regKey)
         updateApplicationState(isActive: true)
