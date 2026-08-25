@@ -28,19 +28,27 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         let hasTokens = AuthSessionStore.shared.hasTokens
         let hasPrimarySession = AuthSessionStore.shared.hasPrimarySession
         let hasLegacySession = hasTokens && !hasPrimarySession
+        #if TELESCAN_PERSONAL_TEAM
+        isAuthenticated = AppConfig.skipRegistration || hasTokens
+        isRegistered = AppConfig.skipRegistration
+            || (locallyRegistered && hasTokens)
+        #else
         isAuthenticated = AppConfig.skipRegistration || hasPrimarySession
         isRegistered = AppConfig.skipRegistration
             || (locallyRegistered && hasPrimarySession)
+        #endif
         isScaning = UserDefaults.standard.bool(forKey: scanningKey)
         onboardingStage = .telegram
         authCodeViewModel.restoreLocalProfile()
         onboardingStage = authCodeViewModel.isUsernameConfirmed
             ? .scanning
             : .telegram
+        #if !TELESCAN_PERSONAL_TEAM
         if hasLegacySession || locallyRegistered && !hasPrimarySession,
            !AppConfig.skipRegistration {
             clearLocalSession()
         }
+        #endif
     }
 
     func start() -> AnyView {
@@ -70,6 +78,12 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         isRegistered = false
         UserDefaults.standard.set(false, forKey: regKey)
         onboardingStage = profile.isTelegramLinked ? .scanning : .telegram
+    }
+
+    func startTemporaryTelegramSignIn() {
+        isAuthenticated = true
+        isRegistered = false
+        onboardingStage = .telegram
     }
 
     func setScanning(_ enabled: Bool) {
@@ -107,7 +121,9 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
 
     func refreshSession() async {
-        guard isAuthenticated, !isValidatingSession else { return }
+        guard isAuthenticated, authSession.hasTokens, !isValidatingSession else {
+            return
+        }
         isValidatingSession = true
         defer { isValidatingSession = false }
 

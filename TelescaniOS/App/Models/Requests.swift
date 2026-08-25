@@ -7,6 +7,11 @@ struct AppleSignInRequest: Encodable {
     let name: String?
 }
 
+struct LinkDeviceRequest: Encodable {
+    let code: String
+    let deviceId: UUID
+}
+
 struct TelegramLinkRequest: Encodable {
     let code: String
 }

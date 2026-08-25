@@ -36,6 +36,12 @@ to Moscow over WireGuard.
 
 ## Authentication and account lifecycle
 
+Debug builds use a temporary Telegram-code sign-in so the app can run on a
+physical iPhone signed by a free Personal Team. The Debug target intentionally
+has no Sign in with Apple entitlement. Release builds retain the entitlement
+and mandatory Apple-first flow. Remove `TELESCAN_PERSONAL_TEAM` and disable the
+server compatibility flag after paid-team signing is available.
+
 1. The system Sign in with Apple control creates or resumes the primary
    Telescan account through `POST /api/v1/auth/apple`. The request includes an
    Apple identity token, a cryptographic nonce, and a random installation

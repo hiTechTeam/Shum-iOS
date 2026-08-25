@@ -58,6 +58,26 @@ actor APIClient {
         return response
     }
 
+    func linkForDevelopment(code: String) async throws -> TelegramLinkResponse {
+        let deviceID = try sessionStore.installationDeviceID()
+        let request = try jsonRequest(
+            path: "/api/v1/auth/link",
+            method: "POST",
+            body: LinkDeviceRequest(code: code, deviceId: deviceID)
+        )
+        let data = try await perform(request, authenticated: false)
+        let response = try decoder.decode(AuthenticatedAccountResponse.self, from: data)
+        try sessionStore.save(response.tokens)
+        return TelegramLinkResponse(
+            access: AccessTokenResponse(
+                accessToken: response.tokens.accessToken,
+                tokenType: response.tokens.tokenType,
+                expiresIn: response.tokens.expiresIn
+            ),
+            profile: response.profile
+        )
+    }
+
     func linkTelegram(code: String) async throws -> TelegramLinkResponse {
         let request = try jsonRequest(
             path: "/api/v1/users/me/telegram/link",

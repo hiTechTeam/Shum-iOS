@@ -274,6 +274,61 @@ struct FetchServiceTests {
         )
     }
 
+    @Test("Personal Team development linking creates a legacy session")
+    func developmentTelegramLinkCreatesSession() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let profileID = UUID()
+        MockURLProtocol.handler = { request in
+            #expect(request.url?.path == "/api/v1/auth/link")
+            #expect(request.httpMethod == "POST")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+            let body = requestBodyData(request).flatMap {
+                try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+            }
+            #expect(body?["code"] as? String == "AB12CD34")
+            #expect(body?["deviceId"] as? String != nil)
+            return (
+                200,
+                Data(
+                    """
+                    {
+                      "tokens": {
+                        "accessToken": "development-access",
+                        "refreshToken": "development-refresh-token-value-that-is-long-enough",
+                        "tokenType": "bearer",
+                        "expiresIn": 900
+                      },
+                      "profile": {
+                        "telescanId": "\(profileID.uuidString)",
+                        "name": "Ada",
+                        "username": "ada",
+                        "bio": null,
+                        "photoUrl": null,
+                        "telegramLinked": true
+                      }
+                    }
+                    """.utf8
+                )
+            )
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        let response = try await client.linkForDevelopment(code: "AB12CD34")
+
+        #expect(response.profile.isTelegramLinked)
+        #expect(sessions.hasTokens)
+        #expect(!sessions.hasPrimarySession)
+        #expect(sessions.accessToken == "development-access")
+    }
+
     @Test("Telegram linking replaces access but preserves the Apple refresh token")
     func telegramLinkPreservesAppleRefreshToken() async throws {
         let store = MemorySecureStore()

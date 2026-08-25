@@ -142,6 +142,24 @@ struct Welcome: View {
                 .frame(maxWidth: 340 * scale)
 
             ZStack {
+                #if TELESCAN_PERSONAL_TEAM
+                Button {
+                    coordinator.startTemporaryTelegramSignIn()
+                } label: {
+                    Text(Inc.Onboarding.start.localized)
+                        .font(.system(size: 17 * scale, weight: .semibold))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .foregroundStyle(
+                            colorScheme == .dark ? Color.black : Color.white
+                        )
+                }
+                .buttonStyle(.plain)
+                .background(
+                    Capsule().fill(
+                        colorScheme == .dark ? Color.white : Color.black
+                    )
+                )
+                #else
                 SignInWithAppleButton(.continue) { request in
                     do {
                         let nonce = try AppleSignInNonce.make()
@@ -167,6 +185,7 @@ struct Welcome: View {
                     ProgressView()
                         .tint(.white)
                 }
+                #endif
             }
             .frame(height: 50)
             .frame(maxWidth: min(360 * scale, width - 30))
