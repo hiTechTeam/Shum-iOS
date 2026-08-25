@@ -188,8 +188,8 @@ struct Inc {
         // RU: Сканирование активно. Пользователи Telescan поблизости появятся здесь.
         
         static let scanAlertText: String = "scanAlertText"
-        // EN: To switch over, you need to enable scanning mode.
-        // RU: Для перехода необходимо включить режим сканирования.
+        // EN: Enable scanning in Settings to open the Nearby section.
+        // RU: Включите сканирование в настройках, чтобы открыть раздел «Рядом».
         
     }
 

@@ -9,7 +9,6 @@ struct MainContentView: View {
     @State private var selectedTab: SelectedTab = .near
     @State private var navigationPath: [MainDestination] = []
     @State private var showScanAlert = false
-    @State private var showBluetoothAlert = false
 
     var body: some View {
         ZStack {
@@ -50,7 +49,6 @@ struct MainContentView: View {
 
             if showScanAlert {
                 ScanningQuickAlert(
-                    isScanning: scanningBinding,
                     dismiss: dismissScanAlert
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -77,9 +75,6 @@ struct MainContentView: View {
                 return
             }
             selectedTab = .met
-        }
-        .alert(Inc.Alerts.turnOnBLE.localized, isPresented: $showBluetoothAlert) {
-            Button(Inc.Common.okey.localized, role: .cancel) { }
         }
     }
 
@@ -143,29 +138,6 @@ struct MainContentView: View {
         withAnimation(.easeInOut(duration: 0.18)) {
             selectedTab = tab
         }
-    }
-
-    private var scanningBinding: Binding<Bool> {
-        Binding(
-            get: { coordinator.isScaning },
-            set: { isScanning in
-                coordinator.setScanning(isScanning)
-                UISelectionFeedbackGenerator().selectionChanged()
-
-                guard isScanning else { return }
-
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    selectedTab = .near
-                    showScanAlert = false
-                }
-
-                if !BLEManager.shared.isBluetoothAvailable {
-                    DispatchQueue.main.async {
-                        showBluetoothAlert = true
-                    }
-                }
-            }
-        )
     }
 
     private func dismissScanAlert() {
@@ -287,22 +259,26 @@ private struct TextTabBar: View {
             select(tab)
         } label: {
             HStack(spacing: 7) {
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                if isAvailable {
+                    Text(title)
+                        .font(.system(size: 15, weight: .semibold))
 
-                if count > 0 {
-                    Text(count.formatted())
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .frame(minWidth: 20, minHeight: 20)
-                        .background(
-                            isAvailable && isSelected
-                                ? badgeColor
-                                : Color.gray,
-                            in: Capsule()
-                        )
-                        .transition(.scale.combined(with: .opacity))
+                    if count > 0 {
+                        Text(count.formatted())
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .frame(minWidth: 20, minHeight: 20)
+                            .background(
+                                isSelected ? badgeColor : Color.gray,
+                                in: Capsule()
+                            )
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                } else {
+                    Image(systemName: "eye.slash")
+                        .font(.system(size: 17, weight: .semibold))
+                        .accessibilityHidden(true)
                 }
             }
             .foregroundStyle(
@@ -313,13 +289,13 @@ private struct TextTabBar: View {
             )
             .frame(maxWidth: .infinity)
             .frame(height: 44)
-            .background {
-                DisabledTabSurface(isVisible: !isAvailable)
-            }
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityValue(count > 0 ? count.formatted() : "")
+        .accessibilityLabel(title)
+        .accessibilityValue(
+            isAvailable && count > 0 ? count.formatted() : ""
+        )
         .accessibilityHint(
             isAvailable ? "" : Inc.Scanning.justTurnScaning.localized
         )
@@ -390,7 +366,6 @@ struct NativeTopScrollEdgeEffect: ViewModifier {
 }
 
 private struct ScanningQuickAlert: View {
-    @Binding var isScanning: Bool
     let dismiss: () -> Void
 
     var body: some View {
@@ -399,30 +374,18 @@ private struct ScanningQuickAlert: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                VStack(spacing: 8) {
-                    Text(Inc.Scanning.justTurnScaning.localized)
-                        .font(.headline)
+                VStack(spacing: 14) {
+                    Image(systemName: "eye.slash")
+                        .font(.system(size: 30, weight: .medium))
+                        .foregroundStyle(Color(uiColor: .systemGray))
 
                     Text(Inc.Scanning.scanAlertText.localized)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.body)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 22)
                 .padding(.bottom, 18)
-
-                Divider()
-
-                Toggle(
-                    Inc.Scanning.scanning.localized,
-                    isOn: $isScanning
-                )
-                .font(.body.weight(.medium))
-                .toggleStyle(.switch)
-                .tint(.green)
-                .padding(.horizontal, 20)
-                .frame(height: 56)
 
                 Divider()
 
@@ -481,18 +444,6 @@ private struct SelectedTabSurface: View {
                     .fill(Color(uiColor: .secondarySystemBackground))
                     .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
             }
-        }
-    }
-}
-
-private struct DisabledTabSurface: View {
-    let isVisible: Bool
-
-    @ViewBuilder
-    var body: some View {
-        if isVisible {
-            Capsule()
-                .fill(Color(uiColor: .systemGray4).opacity(0.42))
         }
     }
 }
