@@ -44,7 +44,10 @@ struct PeopleView: View {
                     ScrollView {
                         LazyVGrid(columns: gridColumns, spacing: 22) {
                             ForEach(peopleViewModel.visibleUsers) { user in
-                                ProfileAvatarButton(user: user) {
+                                ProfileAvatarButton(
+                                    user: user,
+                                    presenceState: presenceState(for: user)
+                                ) {
                                     selectedUser = user
                                 }
                             }
@@ -98,11 +101,39 @@ struct PeopleView: View {
             18
         }
     }
+
+    private func presenceState(
+        for user: NearbyUser
+    ) -> NearbyAvatarPresenceState {
+        guard let seconds = peopleViewModel.disappearanceCountdowns[
+            user.discoveryID
+        ] else {
+            return .active
+        }
+
+        return .disappearing(seconds: seconds)
+    }
+}
+
+enum NearbyAvatarPresenceState {
+    case active
+    case disappearing(seconds: Int)
 }
 
 struct ProfileAvatarButton: View {
     let user: NearbyUser
+    let presenceState: NearbyAvatarPresenceState?
     let action: () -> Void
+
+    init(
+        user: NearbyUser,
+        presenceState: NearbyAvatarPresenceState? = nil,
+        action: @escaping () -> Void
+    ) {
+        self.user = user
+        self.presenceState = presenceState
+        self.action = action
+    }
 
     var body: some View {
         Button {
@@ -161,10 +192,62 @@ struct ProfileAvatarButton: View {
         .background(Color(uiColor: .secondarySystemBackground), in: Circle())
         .clipShape(Circle())
         .overlay {
-            Circle()
-                .stroke(Color.primary.opacity(0.13), lineWidth: 2)
+            if let presenceState {
+                NearbyAvatarPresenceRing(state: presenceState)
+            } else {
+                Circle()
+                    .strokeBorder(Color.primary.opacity(0.13), lineWidth: 2)
+            }
         }
-        .clipped()
+    }
+}
+
+private struct NearbyAvatarPresenceRing: View {
+    let state: NearbyAvatarPresenceState
+
+    private let lineWidth: CGFloat = 3
+
+    var body: some View {
+        Group {
+            switch state {
+            case .active:
+                Circle()
+                    .strokeBorder(Color.green, lineWidth: lineWidth)
+
+            case .disappearing:
+                Circle()
+                    .trim(from: 0, to: remainingProgress)
+                    .stroke(
+                        Color.orange,
+                        style: StrokeStyle(
+                            lineWidth: lineWidth,
+                            lineCap: .round
+                        )
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .padding(lineWidth / 2)
+            }
+        }
+        .animation(
+            .linear(duration: BLEPresencePolicy.countdownUpdateInterval),
+            value: remainingProgress
+        )
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private var remainingProgress: CGFloat {
+        guard case let .disappearing(seconds) = state else { return 1 }
+
+        let countdownDuration = max(
+            1,
+            BLEPresencePolicy.activeTimeout
+                - BLEPresencePolicy.signalLossIndicatorDelay
+        )
+        return min(
+            max(CGFloat(Double(seconds) / countdownDuration), 0),
+            1
+        )
     }
 }
 
