@@ -20,6 +20,7 @@ struct MainContentView: View {
 
                     contentPager
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .ignoresSafeArea(.container, edges: .top)
                 }
                 .navigationTitle(headerTitle)
                 .navigationBarTitleDisplayMode(.inline)
@@ -80,16 +81,6 @@ struct MainContentView: View {
             ) {
                 navigationPath.append(.settings)
             }
-        }
-
-        ToolbarItem(placement: .principal) {
-            Text(headerTitle)
-                .font(.system(size: 15, weight: .medium))
-                .lineLimit(2)
-                .minimumScaleFactor(0.82)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 220)
-                .contentTransition(.opacity)
         }
 
         ToolbarItem(placement: .topBarTrailing) {
@@ -219,7 +210,8 @@ private struct HeaderButton: View {
 }
 
 private struct TextTabBar: View {
-    @GestureState private var dragTranslation: CGFloat = 0
+    @State private var dragProgress: CGFloat?
+    @State private var dragStartProgress: CGFloat?
 
     let selectedTab: SelectedTab
     let nearbyCount: Int
@@ -261,7 +253,10 @@ private struct TextTabBar: View {
         .modifier(TextTabBarSurface())
         .contentShape(Capsule())
         .simultaneousGesture(selectionDragGesture)
-        .animation(.spring(response: 0.30, dampingFraction: 0.82), value: selectedTab)
+        .animation(
+            .spring(response: 0.30, dampingFraction: 0.82),
+            value: selectedTab
+        )
     }
 
     private var selectionPill: some View {
@@ -272,30 +267,71 @@ private struct TextTabBar: View {
     }
 
     private var selectionPillOffset: CGFloat {
-        let origin = selectedTab == .near ? 0 : tabWidth
-        return min(max(origin + dragTranslation, 0), tabWidth)
+        effectiveProgress * tabWidth
+    }
+
+    private var effectiveProgress: CGFloat {
+        dragProgress ?? progress(for: selectedTab)
     }
 
     private var selectionDragGesture: some Gesture {
         DragGesture(minimumDistance: 8)
-            .updating($dragTranslation) { value, state, _ in
-                guard abs(value.translation.width) > abs(value.translation.height) else {
-                    return
-                }
-                state = value.translation.width
-            }
-            .onEnded { value in
+            .onChanged { value in
                 guard abs(value.translation.width) > abs(value.translation.height) else {
                     return
                 }
 
-                let origin = selectedTab == .near ? 0 : tabWidth
-                let projectedOffset = origin + value.predictedEndTranslation.width
-                let target: SelectedTab = projectedOffset < tabWidth / 2
+                let start = dragStartProgress ?? progress(for: selectedTab)
+                if dragStartProgress == nil {
+                    dragStartProgress = start
+                }
+                dragProgress = min(
+                    max(start + value.translation.width / tabWidth, 0),
+                    1
+                )
+            }
+            .onEnded { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else {
+                    resetDragPosition()
+                    return
+                }
+
+                let start = dragStartProgress ?? progress(for: selectedTab)
+                let projectedProgress = min(
+                    max(start + value.predictedEndTranslation.width / tabWidth, 0),
+                    1
+                )
+                let requestedTab: SelectedTab = projectedProgress < 0.5
                     ? .near
                     : .met
-                select(target)
+
+                let resolvedTab = requestedTab == .near && !isScanningEnabled
+                    ? selectedTab
+                    : requestedTab
+                select(requestedTab)
+                dragStartProgress = nil
+
+                withAnimation(
+                    .spring(response: 0.30, dampingFraction: 0.82)
+                ) {
+                    dragProgress = progress(for: resolvedTab)
+                } completion: {
+                    dragProgress = nil
+                }
             }
+    }
+
+    private func progress(for tab: SelectedTab) -> CGFloat {
+        tab == .near ? 0 : 1
+    }
+
+    private func resetDragPosition() {
+        dragStartProgress = nil
+        withAnimation(.spring(response: 0.30, dampingFraction: 0.82)) {
+            dragProgress = progress(for: selectedTab)
+        } completion: {
+            dragProgress = nil
+        }
     }
 
     private func tabButton(
@@ -365,7 +401,11 @@ private struct TextTabBarSurface: ViewModifier {
                 .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
         } else {
             content
-                .background(.ultraThinMaterial, in: Capsule())
+                .background {
+                    Capsule()
+                        .fill(.ultraThinMaterial)
+                        .opacity(0.72)
+                }
                 .overlay {
                     Capsule()
                         .stroke(Color.primary.opacity(0.10), lineWidth: 0.5)
