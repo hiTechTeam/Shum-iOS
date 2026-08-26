@@ -2,179 +2,183 @@ import SwiftUI
 import UIKit
 
 struct MainContentView: View {
-
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var coordinator: AppCoordinator
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
     @StateObject private var chatStore = ChatUIStore()
-    @State private var selectedTab: SelectedTab = .near
-    @State private var navigationPath: [MainDestination] = []
+    @StateObject private var profilePhotoViewModel = ProfilePhotoViewModel()
+    @State private var selectedMainTab: MainTab = .nearby
+    @State private var chatsPath: [ChatsDestination] = []
     @State private var showScanAlert = false
 
     var body: some View {
-        ZStack {
-            NavigationStack(path: $navigationPath) {
-                ZStack {
-                    Color.tsBackground
-                        .ignoresSafeArea()
-
-                    selectedContent
-                        .id(selectedTab)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .modifier(NativeTopScrollEdgeEffect())
-                        .transition(.opacity)
+        TabView(selection: mainTabBinding) {
+            nearbyTab
+                .tabItem {
+                    Label(
+                        Inc.Common.nearby.localized,
+                        systemImage: "person.2.fill"
+                    )
                 }
-                .navigationTitle(headerTitle)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    if navigationPath.isEmpty {
-                        rootToolbar
+                .badge(
+                    coordinator.isScaning
+                        ? peopleViewModel.visibleUsers.count
+                        : 0
+                )
+                .tag(MainTab.nearby)
+
+            recentlyMetTab
+                .tabItem {
+                    Label(
+                        Inc.Tabs.metTitle.localized,
+                        systemImage: "clock.arrow.circlepath"
+                    )
+                }
+                .badge(peopleViewModel.encounterHistory.count)
+                .tag(MainTab.recentlyMet)
+
+            chatsTab
+                .tabItem {
+                    Label(
+                        Inc.Tabs.chats.localized,
+                        systemImage: "bubble.left.and.bubble.right"
+                    )
+                }
+                .tag(MainTab.chats)
+
+            profileTab
+                .tabItem {
+                    Label {
+                        Text(Inc.Tabs.profile.localized)
+                    } icon: {
+                        profileTabIcon
                     }
                 }
-                .modifier(
-                    BottomTabBarLayout(
-                        tabBar: TextTabBar(
-                            selectedTab: selectedTab,
-                            nearbyCount: peopleViewModel.visibleUsers.count,
-                            encounterCount: peopleViewModel.encounterHistory.count,
-                            isScanningEnabled: coordinator.isScaning,
-                            select: selectTab
-                        )
-                    )
-                )
-                .navigationDestination(for: MainDestination.self) { destination in
-                    destinationView(for: destination)
-                }
-            }
-            .allowsHitTesting(!showScanAlert)
-
-            if showScanAlert {
-                ScanningQuickAlert(
-                    dismiss: dismissScanAlert
-                )
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                .zIndex(1)
-            }
+                .tag(MainTab.profile)
         }
-        .animation(.easeInOut(duration: 0.18), value: showScanAlert)
+        .tint(Color(uiColor: .systemBlue))
+        .background(
+            TabBarBadgeAppearanceConfigurator(
+                colorScheme: colorScheme,
+                selectedTab: selectedMainTab
+            )
+        )
+        .alert(
+            Inc.Common.nearby.localized,
+            isPresented: $showScanAlert
+        ) {
+            Button(Inc.Common.okey.localized, role: .cancel) {}
+        } message: {
+            Text(Inc.Scanning.scanAlertText.localized)
+        }
         .onAppear {
             if !coordinator.isScaning {
-                selectedTab = .met
+                selectedMainTab = .recentlyMet
             }
         }
         .onChange(of: coordinator.isScaning) { _, isScanning in
-            if navigationPath.isEmpty,
-               !isScanning,
-               selectedTab == .near {
-                selectedTab = .met
-            }
-        }
-        .onChange(of: navigationPath) { _, path in
-            guard path.isEmpty,
-                  !coordinator.isScaning,
-                  selectedTab == .near else {
-                return
-            }
-            selectedTab = .met
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var rootToolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            HeaderButton(
-                systemImage: "slider.horizontal.3",
-                accessibilityLabel: Inc.Tabs.settings.localized
-            ) {
-                navigationPath.append(.settings)
-            }
-        }
-
-        ToolbarItem(placement: .topBarTrailing) {
-            HeaderButton(
-                systemImage: "bubble.left.and.bubble.right",
-                accessibilityLabel: Inc.Tabs.chats.localized,
-                tint: Color(uiColor: .systemBlue)
-            ) {
-                navigationPath.append(.chats)
+            if !isScanning, selectedMainTab == .nearby {
+                selectedMainTab = .recentlyMet
             }
         }
     }
 
-    @ViewBuilder
-    private var selectedContent: some View {
-        switch selectedTab {
-        case .near:
+    private var nearbyTab: some View {
+        NavigationStack {
             PeopleView { user in
                 openChat(with: user, isNearby: true)
             }
-        case .met:
+            .navigationTitle(Inc.Common.nearby.localized)
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private var recentlyMetTab: some View {
+        NavigationStack {
             EncounterHistoryView { user in
                 openChat(with: user, isNearby: false)
             }
-        case .profile:
-            EmptyView()
+            .navigationTitle(Inc.Tabs.metTitle.localized)
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 
-    private var headerTitle: String {
-        switch selectedTab {
-        case .near:
-            Inc.Tabs.peopleNearby.localized
-        case .met:
-            Inc.Tabs.metHeader.localized
-        case .profile:
-            Inc.Tabs.profile.localized
-        }
+    private var mainTabBinding: Binding<MainTab> {
+        Binding(
+            get: { selectedMainTab },
+            set: selectMainTab
+        )
     }
 
-    private func selectTab(_ tab: SelectedTab) {
-        guard tab != selectedTab else { return }
-
-        if tab == .near, !coordinator.isScaning {
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-            withAnimation {
-                showScanAlert = true
+    private var chatsTab: some View {
+        NavigationStack(path: $chatsPath) {
+            ChatsListView(store: chatStore) { contact in
+                chatsPath.append(.conversation(contact))
             }
-            return
-        }
-
-        UISelectionFeedbackGenerator().selectionChanged()
-        withAnimation(.easeInOut(duration: 0.18)) {
-            selectedTab = tab
+            .navigationDestination(for: ChatsDestination.self) { destination in
+                switch destination {
+                case .conversation(let contact):
+                    conversationView(for: contact)
+                }
+            }
         }
     }
 
-    private func dismissScanAlert() {
-        withAnimation {
-            showScanAlert = false
+    private var profileTab: some View {
+        NavigationStack {
+            ProfileDataView(
+                authCodeViewModel: coordinator.authCodeViewModel,
+                photoViewModel: profilePhotoViewModel
+            )
+            .navigationTitle(profileNavigationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                coordinator.authCodeViewModel.restoreLocalProfile()
+            }
         }
+    }
+
+    private var profileNavigationTitle: String {
+        let name = coordinator.authCodeViewModel.tgName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.flatMap { $0.isEmpty ? nil : $0 }
+            ?? Inc.Tabs.profile.localized
     }
 
     @ViewBuilder
-    private func destinationView(for destination: MainDestination) -> some View {
-        switch destination {
-        case .settings:
-            SettingsDestinationView(authVM: coordinator.authCodeViewModel)
-                .toolbar(.visible, for: .navigationBar)
-        case .chats:
-            ChatsListView(
-                store: chatStore
-            ) { contact in
-                navigationPath.append(.conversation(contact))
-            }
-                .toolbar(.visible, for: .navigationBar)
-        case .conversation(let contact):
-            ChatConversationView(
-                contact: contact,
-                store: chatStore,
-                isNearby: peopleViewModel.visibleUsers.contains {
-                    $0.id == contact.id
-                },
-                lastMetAt: lastMetAt(for: contact)
-            )
-                .toolbar(.visible, for: .navigationBar)
+    private var profileTabIcon: some View {
+        if let image = profilePhotoViewModel.uiImage {
+            Image(uiImage: ProfileTabBarIcon.make(from: image))
+        } else {
+            Image(systemName: "person.crop.circle")
         }
+    }
+
+    private func selectMainTab(_ tab: MainTab) {
+        guard tab != selectedMainTab else { return }
+
+        if tab == .nearby, !coordinator.isScaning {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            showScanAlert = true
+            return
+        }
+
+        selectedMainTab = tab
+    }
+
+    private func conversationView(
+        for contact: ChatContact
+    ) -> some View {
+        ChatConversationView(
+            contact: contact,
+            store: chatStore,
+            isNearby: peopleViewModel.visibleUsers.contains {
+                $0.id == contact.id
+            },
+            lastMetAt: lastMetAt(for: contact)
+        )
+        .toolbar(.hidden, for: .tabBar)
     }
 
     private func openChat(with user: NearbyUser, isNearby: Bool) {
@@ -186,7 +190,14 @@ struct MainContentView: View {
             isNearby: isNearby,
             lastMetAt: isNearby ? .now : encounterDate ?? .now
         )
-        navigationPath.append(.conversation(contact))
+        chatsPath.removeAll()
+        selectedMainTab = .chats
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
+            withAnimation {
+                chatsPath.append(.conversation(contact))
+            }
+        }
     }
 
     private func lastMetAt(for contact: ChatContact) -> Date {
@@ -197,311 +208,197 @@ struct MainContentView: View {
     }
 }
 
-private enum MainDestination: Hashable {
-    case settings
+private enum MainTab: Hashable {
+    case nearby
+    case recentlyMet
     case chats
+    case profile
+}
+
+private enum ChatsDestination: Hashable {
     case conversation(ChatContact)
 }
 
-private struct HeaderButton: View {
-    let systemImage: String
-    let accessibilityLabel: String
-    var tint: Color = .primary
-    let action: () -> Void
+private struct TabBarBadgeAppearanceConfigurator:
+    UIViewControllerRepresentable {
+    let colorScheme: ColorScheme
+    let selectedTab: MainTab
 
-    var body: some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            action()
-        } label: {
-            Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(tint)
-                .frame(width: 32, height: 32)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
+    func makeUIViewController(
+        context: Context
+    ) -> TabBarBadgeAppearanceController {
+        TabBarBadgeAppearanceController(
+            colorScheme: colorScheme,
+            selectedTab: selectedTab
+        )
+    }
+
+    func updateUIViewController(
+        _ uiViewController: TabBarBadgeAppearanceController,
+        context: Context
+    ) {
+        uiViewController.colorScheme = colorScheme
+        uiViewController.selectedTab = selectedTab
+        uiViewController.applyAppearanceWhenAvailable()
     }
 }
 
-private struct TextTabBar: View {
-    @Namespace private var glassNamespace
+private final class TabBarBadgeAppearanceController: UIViewController {
+    var colorScheme: ColorScheme
+    var selectedTab: MainTab
 
-    let selectedTab: SelectedTab
-    let nearbyCount: Int
-    let encounterCount: Int
-    let isScanningEnabled: Bool
-    let select: (SelectedTab) -> Void
-
-    private let barWidth: CGFloat = 276
-    private let barPadding: CGFloat = 4
-
-    private var tabWidth: CGFloat {
-        (barWidth - (barPadding * 2)) / 2
+    init(colorScheme: ColorScheme, selectedTab: MainTab) {
+        self.colorScheme = colorScheme
+        self.selectedTab = selectedTab
+        super.init(nibName: nil, bundle: nil)
     }
 
-    var body: some View {
-        ZStack(alignment: .leading) {
-            selectionPill
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
-            HStack(spacing: 0) {
-                tabButton(
-                    title: Inc.Tabs.people.localized,
-                    tab: .near,
-                    count: nearbyCount,
-                    isAvailable: isScanningEnabled
-                )
+    override func loadView() {
+        let view = UIView()
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+        self.view = view
+    }
 
-                tabButton(
-                    title: Inc.Tabs.metTitle.localized,
-                    tab: .met,
-                    count: encounterCount,
-                    isAvailable: true
-                )
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
+        applyAppearanceWhenAvailable()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        applyAppearance()
+    }
+
+    func applyAppearanceWhenAvailable() {
+        DispatchQueue.main.async { [weak self] in
+            self?.applyAppearance()
+        }
+    }
+
+    private func applyAppearance() {
+        guard let items = enclosingTabBarController?.tabBar.items,
+              items.count >= 3 else {
+            return
+        }
+
+        let inactiveBadgeTextColor: UIColor = colorScheme == .dark
+            ? .white
+            : .black
+
+        configurePeopleBadge(
+            for: items[0],
+            isSelected: selectedTab == .nearby,
+            inactiveTextColor: inactiveBadgeTextColor
+        )
+        configurePeopleBadge(
+            for: items[1],
+            isSelected: selectedTab == .recentlyMet,
+            inactiveTextColor: inactiveBadgeTextColor
+        )
+        configureBadge(
+            for: items[2],
+            backgroundColor: .systemRed,
+            textColor: .white
+        )
+    }
+
+    private func configurePeopleBadge(
+        for item: UITabBarItem,
+        isSelected: Bool,
+        inactiveTextColor: UIColor
+    ) {
+        configureBadge(
+            for: item,
+            backgroundColor: isSelected ? .systemBlue : .systemGray,
+            textColor: isSelected ? .white : inactiveTextColor
+        )
+    }
+
+    private var enclosingTabBarController: UITabBarController? {
+        var current: UIViewController? = self
+
+        while let viewController = current {
+            if let tabBarController = viewController as? UITabBarController {
+                return tabBarController
+            }
+            current = viewController.parent
+        }
+
+        return findTabBarController(in: view.window?.rootViewController)
+    }
+
+    private func findTabBarController(
+        in viewController: UIViewController?
+    ) -> UITabBarController? {
+        guard let viewController else { return nil }
+        if let tabBarController = viewController as? UITabBarController {
+            return tabBarController
+        }
+
+        for child in viewController.children {
+            if let tabBarController = findTabBarController(in: child) {
+                return tabBarController
             }
         }
-        .padding(barPadding)
-        .frame(width: barWidth)
-        .modifier(TextTabBarSurface())
-        .contentShape(Capsule())
-        .animation(.spring(response: 0.30, dampingFraction: 0.82), value: selectedTab)
+
+        return nil
     }
 
-    private var selectionPill: some View {
-        SelectedTabSurface(namespace: glassNamespace)
-            .frame(width: tabWidth, height: 44)
-            .offset(x: selectionPillOffset)
-            .allowsHitTesting(false)
+    private func configureBadge(
+        for item: UITabBarItem,
+        backgroundColor: UIColor,
+        textColor: UIColor
+    ) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: textColor
+        ]
+
+        item.badgeColor = backgroundColor
+        item.setBadgeTextAttributes(attributes, for: .normal)
+        item.setBadgeTextAttributes(attributes, for: .selected)
     }
+}
 
-    private var selectionPillOffset: CGFloat {
-        progress(for: selectedTab) * tabWidth
-    }
+private enum ProfileTabBarIcon {
+    private static let canvasSize = CGSize(width: 25, height: 25)
 
-    private func progress(for tab: SelectedTab) -> CGFloat {
-        tab == .near ? 0 : 1
-    }
+    static func make(from source: UIImage) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = UIScreen.main.scale
+        format.opaque = false
 
-    private func tabButton(
-        title: String,
-        tab: SelectedTab,
-        count: Int,
-        isAvailable: Bool
-    ) -> some View {
-        let isSelected = selectedTab == tab
+        let renderer = UIGraphicsImageRenderer(
+            size: canvasSize,
+            format: format
+        )
+        let image = renderer.image { _ in
+            let bounds = CGRect(origin: .zero, size: canvasSize)
+            UIBezierPath(ovalIn: bounds).addClip()
 
-        return Button {
-            select(tab)
-        } label: {
-            HStack(spacing: 7) {
-                if isAvailable {
-                    Text(title)
-                        .font(.system(size: 15, weight: .semibold))
-
-                    if count > 0 {
-                        Text(count.formatted())
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .frame(minWidth: 20, minHeight: 20)
-                            .background(
-                                isSelected
-                                    ? Color(uiColor: .systemBlue)
-                                    : Color.gray,
-                                in: Capsule()
-                            )
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                } else {
-                    Image(systemName: "eye.slash")
-                        .font(.system(size: 17, weight: .semibold))
-                        .accessibilityHidden(true)
-                }
-            }
-            .foregroundStyle(
-                tabForegroundColor(
-                    isSelected: isSelected,
-                    isAvailable: isAvailable
+            let sourceSize = source.size
+            let scale = max(
+                canvasSize.width / sourceSize.width,
+                canvasSize.height / sourceSize.height
+            )
+            let drawSize = CGSize(
+                width: sourceSize.width * scale,
+                height: sourceSize.height * scale
+            )
+            source.draw(
+                in: CGRect(
+                    x: (canvasSize.width - drawSize.width) / 2,
+                    y: (canvasSize.height - drawSize.height) / 2,
+                    width: drawSize.width,
+                    height: drawSize.height
                 )
             )
-            .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityValue(
-            isAvailable && count > 0 ? count.formatted() : ""
-        )
-        .accessibilityHint(
-            isAvailable ? "" : Inc.Scanning.justTurnScaning.localized
-        )
-    }
 
-    private func tabForegroundColor(
-        isSelected: Bool,
-        isAvailable: Bool
-    ) -> Color {
-        guard isAvailable else { return Color(uiColor: .systemGray) }
-        return isSelected ? Color(uiColor: .systemBlue) : Color.primary
-    }
-}
-
-private struct TextTabBarSurface: ViewModifier {
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .glassEffect(.regular.interactive(), in: Capsule())
-                .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
-        } else {
-            content
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(Color.primary.opacity(0.10), lineWidth: 0.5)
-                }
-                .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
-        }
-    }
-}
-
-private struct BottomTabBarLayout<TabBar: View>: ViewModifier {
-    let tabBar: TabBar
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .overlay(alignment: .bottom) {
-                    tabBar
-                        .padding(.horizontal, 28)
-                        .safeAreaPadding(.bottom, 6)
-                }
-        } else {
-            content
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    tabBar
-                        .padding(.horizontal, 28)
-                        .padding(.top, 8)
-                        .padding(.bottom, 6)
-                }
-        }
-    }
-}
-
-struct NativeTopScrollEdgeEffect: ViewModifier {
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .scrollEdgeEffectStyle(.soft, for: .top)
-        } else {
-            content
-        }
-    }
-}
-
-private struct ScanningQuickAlert: View {
-    let dismiss: () -> Void
-
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.28)
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                VStack(spacing: 14) {
-                    Image(systemName: "eye.slash")
-                        .font(.system(size: 30, weight: .medium))
-                        .foregroundStyle(Color(uiColor: .systemGray))
-
-                    Text(Inc.Scanning.scanAlertText.localized)
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.horizontal, 22)
-                .padding(.top, 22)
-                .padding(.bottom, 18)
-
-                Divider()
-
-                Button(action: dismiss) {
-                    Text(Inc.Common.okey.localized)
-                        .font(.body.weight(.semibold))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .frame(height: 50)
-            }
-            .frame(maxWidth: 320)
-            .modifier(ScanningAlertSurface())
-            .padding(.horizontal, 28)
-        }
-        .accessibilityAddTraits(.isModal)
-    }
-}
-
-private struct ScanningAlertSurface: ViewModifier {
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26))
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26))
-        } else {
-            content
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .shadow(color: .black.opacity(0.24), radius: 24, y: 10)
-        }
-    }
-}
-
-private struct SelectedTabSurface: View {
-    let namespace: Namespace.ID
-
-    var body: some View {
-        Group {
-            if #available(iOS 26.0, *) {
-                GlassEffectContainer(spacing: 0) {
-                    Capsule()
-                        .fill(Color.primary.opacity(0.001))
-                        .glassEffect(
-                            .regular
-                                .tint(Color.primary.opacity(0.08))
-                                .interactive(),
-                            in: Capsule()
-                        )
-                        .glassEffectID("selected-tab", in: namespace)
-                }
-            } else {
-                Capsule()
-                    .fill(Color(uiColor: .secondarySystemBackground))
-                    .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
-            }
-        }
-    }
-}
-
-private struct SettingsDestinationView: View {
-    @ObservedObject var authVM: CodeViewModel
-
-    var body: some View {
-        ProfileDataView(authCodeViewModel: authVM)
-            .navigationTitle(navigationTitle)
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                authVM.restoreLocalProfile()
-            }
-    }
-
-    private var navigationTitle: String {
-        let name = authVM.tgName?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.flatMap { $0.isEmpty ? nil : $0 }
-            ?? Inc.Tabs.settings.localized
+        return image.withRenderingMode(.alwaysOriginal)
     }
 }

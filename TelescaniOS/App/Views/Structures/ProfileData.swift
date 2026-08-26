@@ -3,7 +3,7 @@ import SwiftUI
 struct ProfileDataView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @ObservedObject var authCodeViewModel: CodeViewModel
-    @StateObject private var photoVM = ProfilePhotoViewModel()
+    @ObservedObject private var photoVM: ProfilePhotoViewModel
     @State private var showScanningSettings = false
     @State private var showInfoSheet = false
     @State private var showLogoutOptions = false
@@ -15,8 +15,12 @@ struct ProfileDataView: View {
     @State private var ownProfilePreview: NearbyUser?
     @State private var isWorking = false
 
-    init(authCodeViewModel: CodeViewModel) {
+    init(
+        authCodeViewModel: CodeViewModel,
+        photoViewModel: ProfilePhotoViewModel
+    ) {
         self.authCodeViewModel = authCodeViewModel
+        self.photoVM = photoViewModel
     }
 
     private var headerInfo: some View {
@@ -45,7 +49,9 @@ struct ProfileDataView: View {
                     Inc.Profile.myCard.localized,
                     systemImage: "person.crop.rectangle"
                 )
+                .foregroundStyle(.primary)
             }
+            .tint(.primary)
             .disabled(ownProfile == nil)
 
             Button {
@@ -55,7 +61,9 @@ struct ProfileDataView: View {
                     Inc.Scanning.scanning.localized,
                     systemImage: "dot.radiowaves.left.and.right"
                 )
+                .foregroundStyle(.primary)
             }
+            .tint(.primary)
 
             Button {
                 showInfoSheet = true
@@ -64,7 +72,9 @@ struct ProfileDataView: View {
                     Inc.Info.title.localized,
                     systemImage: "info.circle"
                 )
+                .foregroundStyle(.primary)
             }
+            .tint(.primary)
 
             Button {
                 showBlockedProfiles = true
@@ -73,7 +83,9 @@ struct ProfileDataView: View {
                     Inc.NearbyProfile.blockedMenu.localized,
                     systemImage: "person.crop.circle.badge.xmark"
                 )
+                .foregroundStyle(.primary)
             }
+            .tint(.primary)
 
             Button(role: .destructive) {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -83,7 +95,9 @@ struct ProfileDataView: View {
                     Inc.Profile.logout.localized,
                     systemImage: "rectangle.portrait.and.arrow.right"
                 )
+                .foregroundStyle(.red)
             }
+            .tint(.red)
             .disabled(isWorking)
         } label: {
             Image(systemName: "ellipsis")
@@ -144,6 +158,7 @@ struct ProfileDataView: View {
             }
             .padding(.bottom, 32)
         }
+        .scrollBounceBehavior(.always, axes: .vertical)
         .refreshable { await coordinator.refreshSession() }
     }
 

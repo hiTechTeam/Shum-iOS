@@ -3,7 +3,6 @@ import Kingfisher
 import UIKit
 
 struct PeopleView: View {
-
     var onOpenChat: (NearbyUser) -> Void = { _ in }
 
     @EnvironmentObject var coordinator: AppCoordinator
@@ -56,7 +55,7 @@ struct PeopleView: View {
                         }
                         .padding(.horizontal, 24)
                         .padding(.top, 18)
-                        .padding(.bottom, gridBottomPadding)
+                        .padding(.bottom, 18)
                     }
                     .scrollBounceBehavior(.always)
                     .refreshable {
@@ -96,14 +95,6 @@ struct PeopleView: View {
         }
     }
 
-    private var gridBottomPadding: CGFloat {
-        if #available(iOS 26.0, *) {
-            90
-        } else {
-            18
-        }
-    }
-
     private func presenceState(
         for user: NearbyUser
     ) -> NearbyAvatarPresenceState {
@@ -122,18 +113,53 @@ enum NearbyAvatarPresenceState {
     case disappearing(seconds: Int)
 }
 
+enum ProfileAvatarPresentation: Equatable {
+    case nearby
+    case encounterHistory
+
+    var scale: CGFloat {
+        switch self {
+        case .nearby:
+            return 1
+        case .encounterHistory:
+            return 0.8
+        }
+    }
+
+    var borderWidth: CGFloat {
+        switch self {
+        case .nearby:
+            return 2
+        case .encounterHistory:
+            return 3
+        }
+    }
+
+    var borderColor: Color {
+        switch self {
+        case .nearby:
+            return Color.primary.opacity(0.13)
+        case .encounterHistory:
+            return Color(uiColor: .systemGray).opacity(0.48)
+        }
+    }
+}
+
 struct ProfileAvatarButton: View {
     let user: NearbyUser
     let presenceState: NearbyAvatarPresenceState?
+    let presentation: ProfileAvatarPresentation
     let action: () -> Void
 
     init(
         user: NearbyUser,
         presenceState: NearbyAvatarPresenceState? = nil,
+        presentation: ProfileAvatarPresentation = .nearby,
         action: @escaping () -> Void
     ) {
         self.user = user
         self.presenceState = presenceState
+        self.presentation = presentation
         self.action = action
     }
 
@@ -144,7 +170,10 @@ struct ProfileAvatarButton: View {
         } label: {
             VStack(spacing: 8) {
                 GeometryReader { geometry in
-                    let diameter = min(geometry.size.width, geometry.size.height)
+                    let diameter = min(
+                        geometry.size.width,
+                        geometry.size.height
+                    ) * presentation.scale
 
                     profileImage(diameter: diameter)
                         .frame(
@@ -196,9 +225,19 @@ struct ProfileAvatarButton: View {
         .overlay {
             if let presenceState {
                 NearbyAvatarPresenceRing(state: presenceState)
+            } else if presentation == .encounterHistory {
+                Circle()
+                    .strokeBorder(
+                        presentation.borderColor,
+                        lineWidth: presentation.borderWidth
+                    )
+                    .padding(-presentation.borderWidth)
             } else {
                 Circle()
-                    .strokeBorder(Color.primary.opacity(0.13), lineWidth: 2)
+                    .strokeBorder(
+                        presentation.borderColor,
+                        lineWidth: presentation.borderWidth
+                    )
             }
         }
     }
@@ -758,7 +797,9 @@ private struct ProfileSheetControls: View {
                     Inc.NearbyProfile.chat.localized,
                     systemImage: "bubble.left.and.bubble.right"
                 )
+                .foregroundStyle(.primary)
             }
+            .tint(.primary)
 
             Button(action: openTelegramChat) {
                 Label {
@@ -766,7 +807,9 @@ private struct ProfileSheetControls: View {
                 } icon: {
                     Image(uiImage: Self.telegramMenuIcon)
                 }
+                .foregroundStyle(.primary)
             }
+            .tint(.primary)
 
             Button(role: .destructive) {
                 moderationDialog = .report
@@ -775,7 +818,9 @@ private struct ProfileSheetControls: View {
                     Inc.NearbyProfile.report.localized,
                     systemImage: "exclamationmark.bubble"
                 )
+                .foregroundStyle(.red)
             }
+            .tint(.red)
 
             Button(role: .destructive) {
                 moderationDialog = .block
@@ -784,7 +829,9 @@ private struct ProfileSheetControls: View {
                     Inc.NearbyProfile.block.localized,
                     systemImage: "person.crop.circle.badge.xmark"
                 )
+                .foregroundStyle(.red)
             }
+            .tint(.red)
         } label: {
             Group {
                 if isSubmitting {

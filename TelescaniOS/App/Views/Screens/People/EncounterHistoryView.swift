@@ -41,14 +41,17 @@ struct EncounterHistoryView: View {
                 ScrollView {
                     LazyVGrid(columns: gridColumns, spacing: 22) {
                         ForEach(peopleViewModel.encounterHistory) { encounter in
-                            ProfileAvatarButton(user: encounter.user) {
+                            ProfileAvatarButton(
+                                user: encounter.user,
+                                presentation: .encounterHistory
+                            ) {
                                 selectedEncounter = encounter
                             }
                         }
                     }
                     .padding(.horizontal, 24)
                     .padding(.top, 18)
-                    .padding(.bottom, gridBottomPadding)
+                    .padding(.bottom, 18)
                 }
                 .scrollBounceBehavior(.always)
                 .refreshable {
@@ -84,13 +87,6 @@ struct EncounterHistoryView: View {
         }
     }
 
-    private var gridBottomPadding: CGFloat {
-        if #available(iOS 26.0, *) {
-            90
-        } else {
-            18
-        }
-    }
 }
 
 struct EncounterRelativeTimeText: View {

@@ -3,12 +3,16 @@ import SwiftUI
 struct Profile: View {
     
     @ObservedObject var authVM: CodeViewModel
+    @StateObject private var photoViewModel = ProfilePhotoViewModel()
     
     private let profileInc: String = Inc.Tabs.profile.localized
     
     var body: some View {
         NavigationStack {
-            ProfileDataView(authCodeViewModel: authVM)
+            ProfileDataView(
+                authCodeViewModel: authVM,
+                photoViewModel: photoViewModel
+            )
                 .navigationTitle(authVM.tgName ?? profileInc)
                 .navigationBarTitleDisplayMode(.inline)
         }

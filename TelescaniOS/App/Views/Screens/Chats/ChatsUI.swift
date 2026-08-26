@@ -120,24 +120,6 @@ struct ChatsListView: View {
     @ObservedObject var store: ChatUIStore
     let openChat: (ChatContact) -> Void
 
-    @State private var searchText = ""
-    @State private var searchScrollOffset: CGFloat = 0
-    @State private var isSearchActive = false
-
-    private let searchHeaderHeight: CGFloat = 56
-    private let scrollCoordinateSpace = "ChatsListScroll"
-
-    private var filteredConversations: [ChatConversation] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return store.conversations }
-
-        return store.conversations.filter { conversation in
-            conversation.contact.name.localizedCaseInsensitiveContains(query)
-                || conversation.contact.username.localizedCaseInsensitiveContains(query)
-                || conversation.messages.last?.text.localizedCaseInsensitiveContains(query) == true
-        }
-    }
-
     var body: some View {
         chatsList
             .navigationTitle(Inc.Tabs.chats.localized)
@@ -145,86 +127,26 @@ struct ChatsListView: View {
     }
 
     private var chatsList: some View {
-        GeometryReader { geometry in
-            ScrollViewReader { proxy in
-                ZStack(alignment: .top) {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            scrollOffsetReader
-
-                            Color.clear
-                                .frame(height: searchHeaderHeight)
-                                .id(ChatListScrollAnchor.searchTop)
-
-                            listContent
-                        }
-                        .frame(
-                            minHeight: geometry.size.height + searchHeaderHeight,
-                            alignment: .top
-                        )
-                    }
-                    .coordinateSpace(name: scrollCoordinateSpace)
-                    .scrollIndicators(.hidden)
-                    .scrollBounceBehavior(.always, axes: .vertical)
-                    .scrollDismissesKeyboard(.interactively)
-                    .scrollTargetBehavior(
-                        ChatSearchSnapBehavior(
-                            searchHeight: searchHeaderHeight,
-                            isSearchActive: isSearchActive
-                        )
-                    )
-                    .refreshable {
-                        await store.refresh()
-                    }
-                    .onPreferenceChange(ChatListScrollOffsetKey.self) { offset in
-                        searchScrollOffset = max(0, offset)
-                    }
-
-                    NativeChatSearchBar(
-                        text: $searchText,
-                        isActive: $isSearchActive,
-                        placeholder: Inc.Chats.search.localized
-                    )
-                    .frame(height: searchHeaderHeight)
-                    .offset(y: searchHeaderOffset)
-                    .zIndex(1)
-                }
-                .clipped()
-                .overlay {
-                    emptyState
-                        .padding(.top, searchHeaderHeight)
-                }
-                .onChange(of: isSearchActive) { _, isActive in
-                    guard isActive else { return }
-
-                    withAnimation(.easeOut(duration: 0.22)) {
-                        proxy.scrollTo(ChatListScrollAnchor.searchTop, anchor: .top)
-                    }
-                }
-            }
+        List {
+            listContent
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.always, axes: .vertical)
+        .refreshable {
+            await store.refresh()
+        }
+        .overlay {
+            emptyState
         }
         .background(Color.tsBackground.ignoresSafeArea())
-    }
-
-    private var searchHeaderOffset: CGFloat {
-        guard !isSearchActive else { return 0 }
-        return -min(searchScrollOffset, searchHeaderHeight)
-    }
-
-    private var scrollOffsetReader: some View {
-        GeometryReader { proxy in
-            Color.clear.preference(
-                key: ChatListScrollOffsetKey.self,
-                value: -proxy.frame(in: .named(scrollCoordinateSpace)).minY
-            )
-        }
-        .frame(height: 0)
     }
 
     @ViewBuilder
     private var listContent: some View {
         if !store.conversations.isEmpty {
-            ForEach(Array(filteredConversations.enumerated()), id: \.element.id) { index, conversation in
+            ForEach(store.conversations) { conversation in
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     openChat(conversation.contact)
@@ -234,13 +156,16 @@ struct ChatsListView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 9)
-
-                if index < filteredConversations.count - 1 {
-                    Divider()
-                        .padding(.leading, 84)
-                }
+                .listRowInsets(
+                    EdgeInsets(
+                        top: 9,
+                        leading: 18,
+                        bottom: 9,
+                        trailing: 18
+                    )
+                )
+                .listRowBackground(Color.tsBackground)
+                .alignmentGuide(.listRowSeparatorLeading) { _ in 84 }
             }
         }
     }
@@ -254,109 +179,6 @@ struct ChatsListView: View {
                 description: Text(Inc.Chats.emptyMessage.localized)
             )
             .allowsHitTesting(false)
-        } else if filteredConversations.isEmpty {
-            ContentUnavailableView.search(text: searchText)
-                .allowsHitTesting(false)
-        }
-    }
-}
-
-private enum ChatListScrollAnchor: Hashable {
-    case searchTop
-}
-
-private struct ChatListScrollOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-private struct ChatSearchSnapBehavior: ScrollTargetBehavior {
-    let searchHeight: CGFloat
-    let isSearchActive: Bool
-
-    func updateTarget(
-        _ target: inout ScrollTarget,
-        context: TargetContext
-    ) {
-        guard !isSearchActive else { return }
-
-        let proposedOffset = target.rect.minY
-        guard proposedOffset > 0, proposedOffset < searchHeight else { return }
-
-        target.rect.origin.y = proposedOffset < searchHeight / 2
-            ? 0
-            : searchHeight
-    }
-}
-
-private struct NativeChatSearchBar: UIViewRepresentable {
-    @Binding var text: String
-    @Binding var isActive: Bool
-    let placeholder: String
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
-    }
-
-    func makeUIView(context: Context) -> UISearchBar {
-        let searchBar = UISearchBar(frame: .zero)
-        searchBar.delegate = context.coordinator
-        searchBar.searchBarStyle = .minimal
-        searchBar.autocapitalizationType = .none
-        searchBar.autocorrectionType = .no
-        searchBar.returnKeyType = .search
-        searchBar.placeholder = placeholder
-        return searchBar
-    }
-
-    func updateUIView(_ searchBar: UISearchBar, context: Context) {
-        context.coordinator.parent = self
-
-        if searchBar.text != text {
-            searchBar.text = text
-        }
-
-        if searchBar.placeholder != placeholder {
-            searchBar.placeholder = placeholder
-        }
-
-        if searchBar.showsCancelButton != isActive {
-            searchBar.setShowsCancelButton(isActive, animated: true)
-        }
-    }
-
-    final class Coordinator: NSObject, UISearchBarDelegate {
-        var parent: NativeChatSearchBar
-
-        init(parent: NativeChatSearchBar) {
-            self.parent = parent
-        }
-
-        func searchBarTextDidBeginEditing(_ searchBar: UISearchBar) {
-            guard !parent.isActive else { return }
-            parent.isActive = true
-        }
-
-        func searchBar(
-            _ searchBar: UISearchBar,
-            textDidChange searchText: String
-        ) {
-            parent.text = searchText
-        }
-
-        func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-            searchBar.resignFirstResponder()
-        }
-
-        func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
-            searchBar.text = ""
-            parent.text = ""
-            parent.isActive = false
-            searchBar.setShowsCancelButton(false, animated: true)
-            searchBar.resignFirstResponder()
         }
     }
 }
@@ -479,8 +301,7 @@ struct ChatConversationView: View {
                             : Inc.Chats.recentlyMet.localized
                     )
                     .font(.system(size: 11))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.38), radius: 1, y: 1)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                 }
             }
@@ -577,10 +398,11 @@ struct ChatConversationView: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 21, weight: .regular))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .frame(width: 38, height: 38)
                     .contentShape(Circle())
             }
+            .tint(.primary)
             .accessibilityLabel(Inc.Chats.attachment.localized)
 
             TextField(
@@ -601,15 +423,15 @@ struct ChatConversationView: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 38, height: 38)
-                    .background(Color.accentColor, in: Circle())
+                    .background(
+                        canSendMessage
+                            ? Color.accentColor
+                            : Color(uiColor: .systemGray),
+                        in: Circle()
+                    )
             }
             .buttonStyle(.plain)
-            .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .opacity(
-                draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? 0.55
-                    : 1
-            )
+            .disabled(!canSendMessage)
             .accessibilityLabel(Inc.Chats.send.localized)
         }
         .padding(6)
@@ -624,6 +446,10 @@ struct ChatConversationView: View {
                 endPoint: .bottom
             )
         }
+    }
+
+    private var canSendMessage: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var expiredComposer: some View {
