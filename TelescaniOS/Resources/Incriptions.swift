@@ -20,7 +20,6 @@ struct Inc {
         // EN: Cancel
         // RU: Отмена
         
-        static let copiedSheet: String = "copied_sheet"
         // EN: Copied
         // RU: Скопировано
         
@@ -104,6 +103,31 @@ struct Inc {
         static let clearTitle: String = "encounterHistoryClearTitle"
         static let clearMessage: String = "encounterHistoryClearMessage"
         static let lastSeenFormat: String = "encounterHistoryLastSeenFormat"
+    }
+
+    // MARK: - People filters
+    struct PeopleFilters {
+        static let distanceTitle: String = "peopleDistanceFilterTitle"
+        static let distanceDescription: String =
+            "peopleDistanceFilterDescription"
+        static let distanceUnlimited: String =
+            "peopleDistanceFilterUnlimited"
+        static let distanceValueFormat: String =
+            "peopleDistanceFilterValueFormat"
+        static let maximum: String = "peopleFilterMaximum"
+        static let nearbyEmptyTitle: String = "peopleDistanceFilterEmptyTitle"
+        static let nearbyEmptyMessage: String =
+            "peopleDistanceFilterEmptyMessage"
+        static let timeTitle: String = "peopleTimeFilterTitle"
+        static let timeDescription: String = "peopleTimeFilterDescription"
+        static let timeOldest: String = "peopleTimeFilterOldest"
+        static let timeNow: String = "peopleTimeFilterNow"
+        static let timeAll: String = "peopleTimeFilterAll"
+        static let timeFirst: String = "peopleTimeFilterFirst"
+        static let timeLatest: String = "peopleTimeFilterLatest"
+        static let timeSelected: String = "peopleTimeFilterSelected"
+        static let timeEmptyTitle: String = "peopleTimeFilterEmptyTitle"
+        static let timeEmptyMessage: String = "peopleTimeFilterEmptyMessage"
     }
     
     // MARK: - Registration
@@ -231,8 +255,9 @@ struct Inc {
     struct NearbyProfile {
         static let close: String = "nearbyProfileClose"
         static let actions: String = "nearbyProfileActions"
-        static let usernameFallback: String = "nearbyProfileUsernameFallback"
-        static let chat: String = "nearbyProfileChat"
+        static let write: String = "nearbyProfileWrite"
+        static let internalChatHint: String = "nearbyProfileInternalChatHint"
+        static let telegramChatHint: String = "nearbyProfileTelegramChatHint"
         static let telegramChat: String = "nearbyProfileTelegramChat"
         static let report: String = "nearbyProfileReport"
         static let block: String = "nearbyProfileBlock"
@@ -293,7 +318,6 @@ struct Inc {
         // EN/RU: from Ruslan Chukavin
 
         static let moreActions: String = "profileMoreActions"
-        static let myCard: String = "profileMyCard"
 
         static let developerLinksTitle: String = "developerLinksTitle"
         static let developerLinksMessage: String = "developerLinksMessage"
@@ -304,6 +328,17 @@ struct Inc {
         static let bioEmpty: String = "profileBioEmpty"
         static let bioApply: String = "profileBioApply"
         static let bioSaveFailed: String = "profileBioSaveFailed"
+
+        static let nameTitle: String = "profileNameTitle"
+        static let informationTitle: String = "profileInformationTitle"
+        static let telegramTitle: String = "profileTelegramTitle"
+        static let notSpecified: String = "profileNotSpecified"
+        static let linkTelegram: String = "profileLinkTelegram"
+        static let changePhoto: String = "profileChangePhoto"
+        static let changePhotoTitle: String = "profileChangePhotoTitle"
+        static let saveName: String = "profileSaveName"
+        static let namePlaceholder: String = "profileNamePlaceholder"
+        static let nameDescription: String = "profileNameDescription"
 
         static let logout: String = "logout"
         static let accountActionsTitle: String = "accountActionsTitle"
@@ -330,7 +365,6 @@ struct Inc {
         // EN: Version
         // RU: Версия
         
-        static let copyUsername = "copyUsername"
         // EN: Copy and paste into Telegram search
         // RU: Скопируйте и вставьте в поле поиска Telegram
         

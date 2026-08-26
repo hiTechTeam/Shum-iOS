@@ -16,10 +16,7 @@ struct MainContentView: View {
         TabView(selection: mainTabBinding) {
             nearbyTab
                 .tabItem {
-                    Label(
-                        Inc.Common.nearby.localized,
-                        systemImage: "person.2.fill"
-                    )
+                    nearbyTabItem
                 }
                 .badge(
                     coordinator.isScaning
@@ -131,7 +128,7 @@ struct MainContentView: View {
                 authCodeViewModel: coordinator.authCodeViewModel,
                 photoViewModel: profilePhotoViewModel
             )
-            .navigationTitle(profileNavigationTitle)
+            .navigationTitle(Inc.Tabs.profile.localized)
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 coordinator.authCodeViewModel.restoreLocalProfile()
@@ -139,11 +136,17 @@ struct MainContentView: View {
         }
     }
 
-    private var profileNavigationTitle: String {
-        let name = coordinator.authCodeViewModel.tgName?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.flatMap { $0.isEmpty ? nil : $0 }
-            ?? Inc.Tabs.profile.localized
+    @ViewBuilder
+    private var nearbyTabItem: some View {
+        if coordinator.isScaning {
+            Label(
+                Inc.Common.nearby.localized,
+                systemImage: "person.2.fill"
+            )
+        } else {
+            Image(systemName: "eye.slash")
+                .accessibilityLabel(Inc.Common.nearby.localized)
+        }
     }
 
     @ViewBuilder

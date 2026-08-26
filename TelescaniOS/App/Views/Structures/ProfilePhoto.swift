@@ -11,35 +11,7 @@ struct ProfilePhotoView: View {
     @State private var showPhotoPreview: Bool = false
     @State private var tempCameraImage: UIImage?
     
-    private let imageSizeEmpty: CGFloat = 120
-    private let imageSizeFilled: CGFloat = 180
-
-    private var currentImageSize: CGFloat {
-        viewModel.uiImage == nil ? imageSizeEmpty : imageSizeFilled
-    }
-
-    private var editButton: some View {
-        Button {
-            openPhotoOptions()
-        } label: {
-            Image(systemName: "camera.fill")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Color.black)
-                .frame(width: 40, height: 40)
-                .background {
-                    Circle()
-                        .fill(Color.white)
-                }
-                .overlay {
-                    Circle()
-                        .stroke(Color.tsBackground, lineWidth: 2)
-                }
-                .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Inc.Profile.photoOptions.localized)
-        .offset(x: -6, y: -6)
-    }
+    private let imageSize: CGFloat = 132
 
     private func openPhotoOptions() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -59,58 +31,73 @@ struct ProfilePhotoView: View {
         Image(uiImage: uiImage)
             .resizable()
             .scaledToFill()
-            .frame(width: imageSizeFilled, height: imageSizeFilled)
+            .frame(width: imageSize, height: imageSize)
             .clipShape(Circle())
             .contentShape(Circle())
     }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            Group {
+        VStack(spacing: 14) {
+            Button {
+                if let uiImage = viewModel.uiImage {
+                    openPhotoPreview()
+                } else {
+                    openPhotoOptions()
+                }
+            } label: {
                 if let uiImage = viewModel.uiImage {
                     profilePhoto(uiImage)
-                        .onTapGesture(perform: openPhotoPreview)
                 } else {
                     viewModel.profileImage
                         .resizable()
                         .scaledToFit()
-                        .frame(width: imageSizeEmpty, height: imageSizeEmpty)
-                        .foregroundColor(.gray)
-                        .contentShape(Rectangle())
-                        .onTapGesture(perform: openPhotoOptions)
+                        .foregroundStyle(.secondary)
+                        .padding(18)
+                        .frame(width: imageSize, height: imageSize)
+                        .background(
+                            Color(uiColor: .secondarySystemBackground),
+                            in: Circle()
+                        )
                 }
             }
+            .buttonStyle(.plain)
 
-            if viewModel.uiImage != nil {
-                editButton
+            Button(Inc.Profile.changePhoto.localized) {
+                openPhotoOptions()
             }
+            .font(.system(size: 16, weight: .semibold))
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
         }
-        .frame(width: currentImageSize, height: currentImageSize)
-        .padding(.vertical, 40)
-        .confirmationDialog(Inc.Profile.photoOptions.localized, isPresented: $showPhotoOptions) {
-            
-            Button(Inc.Profile.takePhoto.localized) {
-                showCameraPicker = UIImagePickerController.isSourceTypeAvailable(.camera)
-            }
-            
-            Button(Inc.Profile.galleryPhoto.localized) { showGalleryPicker = true }
-            
-            if viewModel.uiImage != nil {
-                Button(Inc.Profile.deletePhoto.localized, role: .destructive) {
-                    viewModel.updateProfileImage(with: nil)
-                }
-            }
-            
-            Button(Inc.Common.cancel.localized, role: .cancel) {}
+        .sheet(isPresented: $showPhotoOptions) {
+            ProfilePhotoOptionsSheet(
+                image: viewModel.uiImage,
+                onClose: { showPhotoOptions = false },
+                onCamera: openCamera,
+                onGallery: openGallery,
+                onDelete: deletePhoto
+            )
+            .presentationDetents([
+                .height(viewModel.uiImage == nil ? 250 : 310)
+            ])
+            .presentationDragIndicator(.hidden)
         }
         .fullScreenCover(isPresented: $showCameraPicker) {
-            CameraPicker(image: $tempCameraImage)
-                .onDisappear {
-                    if let selected = tempCameraImage {
-                        viewModel.updateProfileImage(with: selected)
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
+
+                CameraPicker(image: $tempCameraImage)
+                    .ignoresSafeArea()
+                    .onDisappear {
+                        if let selected = tempCameraImage {
+                            viewModel.updateProfileImage(with: selected)
+                        }
+                        tempCameraImage = nil
                     }
-                    tempCameraImage = nil
-                }
+            }
+            .background(Color.black.ignoresSafeArea())
+            .presentationBackground(.black)
         }
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let uiImage = viewModel.uiImage {
@@ -130,6 +117,146 @@ struct ProfilePhotoView: View {
                 }
             }
         }
+    }
+
+    private func openCamera() {
+        showPhotoOptions = false
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            showCameraPicker = true
+        }
+    }
+
+    private func openGallery() {
+        showPhotoOptions = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            showGalleryPicker = true
+        }
+    }
+
+    private func deletePhoto() {
+        showPhotoOptions = false
+        viewModel.updateProfileImage(with: nil)
+    }
+}
+
+private struct ProfilePhotoOptionsSheet: View {
+    let image: UIImage?
+    let onClose: () -> Void
+    let onCamera: () -> Void
+    let onGallery: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            HStack(spacing: 12) {
+                thumbnail
+
+                Text(Inc.Profile.changePhotoTitle.localized)
+                    .font(.system(size: 17, weight: .semibold))
+
+                Spacer(minLength: 8)
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 42, height: 42)
+                        .background(
+                            Color(uiColor: .tertiarySystemFill),
+                            in: Circle()
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Inc.Common.close.localized)
+            }
+
+            VStack(spacing: 0) {
+                ProfilePhotoOptionRow(
+                    title: Inc.Profile.takePhoto.localized,
+                    systemImage: "camera",
+                    role: nil,
+                    action: onCamera
+                )
+
+                optionDivider
+
+                ProfilePhotoOptionRow(
+                    title: Inc.Profile.galleryPhoto.localized,
+                    systemImage: "photo",
+                    role: nil,
+                    action: onGallery
+                )
+
+                if image != nil {
+                    optionDivider
+
+                    ProfilePhotoOptionRow(
+                        title: Inc.Profile.deletePhoto.localized,
+                        systemImage: "trash",
+                        role: .destructive,
+                        action: onDelete
+                    )
+                }
+            }
+            .background(
+                Color(uiColor: .secondarySystemBackground),
+                in: RoundedRectangle(cornerRadius: 20)
+            )
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
+        .padding(.bottom, 18)
+    }
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        if let image {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 44, height: 44)
+                .clipShape(Circle())
+        } else {
+            Image(systemName: "person.crop.circle.fill")
+                .resizable()
+                .foregroundStyle(.secondary)
+                .frame(width: 44, height: 44)
+        }
+    }
+
+    private var optionDivider: some View {
+        Divider()
+            .padding(.leading, 58)
+    }
+}
+
+private struct ProfilePhotoOptionRow: View {
+    let title: String
+    let systemImage: String
+    let role: ButtonRole?
+    let action: () -> Void
+
+    var body: some View {
+        Button(role: role, action: action) {
+            HStack(spacing: 18) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .regular))
+                    .frame(width: 22)
+
+                Text(title)
+                    .font(.system(size: 16))
+
+                Spacer()
+            }
+            .foregroundStyle(role == .destructive ? Color.red : Color.primary)
+            .padding(.horizontal, 18)
+            .frame(height: 54)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -6,7 +6,6 @@
 "ok" = "Okey";
 "cancel" = "Cancel";
 "close" = "Close";
-"copied_sheet" = "Copied";
 "nearby" = "Nearby";
 "distanceMetersFormat" = "%d m";
 "disappearsInSecondsFormat" = "Hides in %d s";
@@ -53,6 +52,25 @@
 "encounterHistoryClearMessage" = "All encounters saved on this device will be removed.";
 "encounterHistoryLastSeenFormat" = "Met %@";
 
+/* People filters */
+"peopleDistanceFilterTitle" = "Distance";
+"peopleDistanceFilterDescription" = "Choose the maximum distance. Nearby will only show people within the selected scanning range.";
+"peopleDistanceFilterUnlimited" = "No limit";
+"peopleDistanceFilterValueFormat" = "Up to %d m";
+"peopleFilterMaximum" = "max";
+"peopleDistanceFilterEmptyTitle" = "No one in this range";
+"peopleDistanceFilterEmptyMessage" = "Increase the distance to see more people.";
+"peopleTimeFilterTitle" = "Encounter time";
+"peopleTimeFilterDescription" = "The range covers the last 24 hours. Move the right edge left to keep the earliest encounters, or the left edge right to keep the latest ones.";
+"peopleTimeFilterOldest" = "24 hr ago";
+"peopleTimeFilterNow" = "Now";
+"peopleTimeFilterAll" = "All in 24 hours";
+"peopleTimeFilterFirst" = "Earliest encounters";
+"peopleTimeFilterLatest" = "Latest encounters";
+"peopleTimeFilterSelected" = "Selected interval";
+"peopleTimeFilterEmptyTitle" = "No one in this interval";
+"peopleTimeFilterEmptyMessage" = "Expand the range to see more encounters.";
+
 /* Registration */
 "telegramLinkTitle" = "Link Telegram";
 "placeCode" = "Code";
@@ -71,6 +89,16 @@
 "profileBioEmpty" = "Add BIO";
 "profileBioApply" = "Apply";
 "profileBioSaveFailed" = "Couldn’t save BIO. Please try again.";
+"profileNameTitle" = "Name";
+"profileInformationTitle" = "Info";
+"profileTelegramTitle" = "Telegram";
+"profileNotSpecified" = "Not set";
+"profileLinkTelegram" = "Link";
+"profileChangePhoto" = "Change photo";
+"profileChangePhotoTitle" = "Change profile photo";
+"profileSaveName" = "Save";
+"profileNamePlaceholder" = "Your name";
+"profileNameDescription" = "This is the name other Telescan users will see.";
 
 /* Onboarding */
 "appleSignInFailed" = "Couldn’t sign in with Apple. Please try again.";
@@ -108,8 +136,9 @@
 /* Nearby profile moderation */
 "nearbyProfileClose" = "Close profile";
 "nearbyProfileActions" = "Profile actions";
-"nearbyProfileUsernameFallback" = "My Telegram Username";
-"nearbyProfileChat" = "Chat";
+"nearbyProfileWrite" = "Write";
+"nearbyProfileInternalChatHint" = "Conversation in the in-app chat";
+"nearbyProfileTelegramChatHint" = "You can message in Telegram above";
 "nearbyProfileTelegramChat" = "Telegram Chat";
 "nearbyProfileReport" = "Report user";
 "nearbyProfileBlock" = "Block user";
@@ -145,7 +174,6 @@
 "shareUtg" = "Share your profile";
 "creatorCredit" = "from Ruslan Chukavin";
 "profileMoreActions" = "More";
-"profileMyCard" = "My card";
 "developerLinksTitle" = "App developer";
 "developerLinksMessage" = "Ruslan Chukavin is the developer of Telescan. Where would you like to go?";
 "telegramChannel" = "Telegram channel";
@@ -168,7 +196,6 @@
 "info_why_telescan" = "Why Telescan";
 "info_how_it_works" = "How it works";
 "info_how_it_works_description" = "Telescan uses Bluetooth to discover nearby users and displays their name, photo, and Telegram username: copy the username, paste it into Telegram’s search field, find the user, and continue the conversation.";
-"copyUsername" = "Copy and paste into Telegram search";
 "proprietaryLicense" = "Copyright © 2021 - 2026 Ruslan Chukavin. All rights reserved.";
 "info_story" = "Every day, we find ourselves near people we could have talked to, gotten to know, spent an evening with, or one day remembered the encounter as something important. We cross paths on the metro, at school, in cafés, and on the street. We look at one another and almost always simply keep walking.\n\nToo many good stories end before they have a chance to begin. Telescan is an attempt to give those encounters another chance.";
 "rulesAndPrivacy" = "Documents";

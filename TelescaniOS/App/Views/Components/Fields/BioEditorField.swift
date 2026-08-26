@@ -7,7 +7,6 @@ struct BioEditorField: View {
     let saveFailed: Bool
 
     private let characterLimit = 60
-    private let fieldWidth: CGFloat = 360
     private let cornerRadius: CGFloat = 13
 
     private var characterCount: String {
@@ -18,10 +17,6 @@ struct BioEditorField: View {
         VStack(alignment: .leading, spacing: 6) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text(Inc.Profile.bioTitle.localized)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-
                     Spacer()
 
                     if isSaving {
@@ -50,7 +45,7 @@ struct BioEditorField: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .frame(width: fieldWidth, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             .frame(minHeight: 96, alignment: .topLeading)
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius)
@@ -68,7 +63,7 @@ struct BioEditorField: View {
                 Text(Inc.Profile.bioSaveFailed.localized)
                     .font(.system(size: 12))
                     .foregroundStyle(.red)
-                    .frame(width: fieldWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: saveFailed)
@@ -128,7 +123,7 @@ struct BioProfileField: View {
     }
 }
 
-private struct BioEditorSheet: View {
+struct BioEditorSheet: View {
     @Binding var draftBio: String
     @Binding var isPresented: Bool
 
@@ -152,27 +147,30 @@ private struct BioEditorSheet: View {
                 )
 
                 Spacer(minLength: 0)
-
-                Button(action: apply) {
-                    Text(Inc.Profile.bioApply.localized)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
-                .disabled(authVM.isSavingBio)
-                .frame(width: 360)
             }
-            .padding(.top, 20)
-            .padding(.bottom, 16)
-            .navigationTitle("BIO")
+            .padding(.horizontal, 20)
+            .padding(.top, 28)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(Inc.Common.cancel.localized) {
                         isPresented = false
                     }
+                    .frame(width: 92, alignment: .leading)
                     .disabled(authVM.isSavingBio)
+                }
+
+                ToolbarItem(placement: .principal) {
+                    Text(Inc.Profile.informationTitle.localized)
+                        .font(.headline)
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(Inc.Profile.saveName.localized, action: apply)
+                        .frame(width: 92, alignment: .trailing)
+                        .fontWeight(.semibold)
+                        .disabled(authVM.isSavingBio)
                 }
             }
         }

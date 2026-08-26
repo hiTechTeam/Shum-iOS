@@ -6,7 +6,7 @@ struct BotButton: View {
     
     private let title: String = Inc.Profile.telescanBot
     private let fontSize: CGFloat = 14
-    private let buttonWidth: CGFloat = 100
+    private let buttonWidth: CGFloat = 92
     private let buttonHeight: CGFloat = 36
     private let cornerRadius: CGFloat = 13
     

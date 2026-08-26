@@ -6,7 +6,6 @@
 "ok" = "Хорошо";
 "cancel" = "Отмена";
 "close" = "Закрыть";
-"copied_sheet" = "Скопированно";
 "nearby" = "Рядом";
 "distanceMetersFormat" = "%d м";
 "disappearsInSecondsFormat" = "Исчезнет через %d с";
@@ -53,6 +52,25 @@
 "encounterHistoryClearMessage" = "Все сохранённые на этом устройстве встречи будут удалены.";
 "encounterHistoryLastSeenFormat" = "Виделись %@";
 
+/* Фильтры людей */
+"peopleDistanceFilterTitle" = "Расстояние";
+"peopleDistanceFilterDescription" = "Выберите максимальное расстояние. В разделе «Рядом» останутся только люди в выбранном диапазоне сканирования.";
+"peopleDistanceFilterUnlimited" = "Без ограничения";
+"peopleDistanceFilterValueFormat" = "До %d м";
+"peopleFilterMaximum" = "max";
+"peopleDistanceFilterEmptyTitle" = "В этом диапазоне никого";
+"peopleDistanceFilterEmptyMessage" = "Увеличьте расстояние, чтобы увидеть больше людей.";
+"peopleTimeFilterTitle" = "Время пересечения";
+"peopleTimeFilterDescription" = "Диапазон охватывает последние 24 часа. Сдвиньте правую границу влево, чтобы оставить первые пересечения, или левую вправо — чтобы оставить последние.";
+"peopleTimeFilterOldest" = "24 ч назад";
+"peopleTimeFilterNow" = "Сейчас";
+"peopleTimeFilterAll" = "Все за 24 часа";
+"peopleTimeFilterFirst" = "Первые пересечения";
+"peopleTimeFilterLatest" = "Последние пересечения";
+"peopleTimeFilterSelected" = "Выбранный интервал";
+"peopleTimeFilterEmptyTitle" = "В этом интервале никого";
+"peopleTimeFilterEmptyMessage" = "Расширьте диапазон, чтобы увидеть больше встреч.";
+
 /* Registration */
 "telegramLinkTitle" = "Привязка Telegram";
 "placeCode" = "Код";
@@ -71,6 +89,16 @@
 "profileBioEmpty" = "Добавить BIO";
 "profileBioApply" = "Применить";
 "profileBioSaveFailed" = "Не удалось сохранить BIO. Попробуйте ещё раз.";
+"profileNameTitle" = "Имя";
+"profileInformationTitle" = "Информация";
+"profileTelegramTitle" = "Telegram";
+"profileNotSpecified" = "Не указано";
+"profileLinkTelegram" = "Привязать";
+"profileChangePhoto" = "Изменить фото";
+"profileChangePhotoTitle" = "Изменить фото профиля";
+"profileSaveName" = "Сохранить";
+"profileNamePlaceholder" = "Ваше имя";
+"profileNameDescription" = "Это имя будут видеть другие пользователи Telescan.";
 
 /* Onboarding */
 "appleSignInFailed" = "Не удалось войти с Apple. Попробуйте ещё раз.";
@@ -108,8 +136,9 @@
 /* Модерация профиля пользователя рядом */
 "nearbyProfileClose" = "Закрыть профиль";
 "nearbyProfileActions" = "Действия с профилем";
-"nearbyProfileUsernameFallback" = "Мой Telegram Username";
-"nearbyProfileChat" = "Чат";
+"nearbyProfileWrite" = "Написать";
+"nearbyProfileInternalChatHint" = "Переписка во внутреннем чате";
+"nearbyProfileTelegramChatHint" = "Выше можно написать в Telegram";
 "nearbyProfileTelegramChat" = "Чат Telegram";
 "nearbyProfileReport" = "Пожаловаться";
 "nearbyProfileBlock" = "Заблокировать";
@@ -145,7 +174,6 @@
 "shareUtg" = "Поделиться профилем";
 "creatorCredit" = "from Ruslan Chukavin";
 "profileMoreActions" = "Ещё";
-"profileMyCard" = "Моя карточка";
 "developerLinksTitle" = "Разработчик приложения";
 "developerLinksMessage" = "Ruslan Chukavin — разработчик Telescan. Куда вы хотите перейти?";
 "telegramChannel" = "Telegram-канал";
@@ -167,7 +195,6 @@
 "info_why_telescan" = "Зачем нужен Telescan";
 "info_how_it_works" = "Как это работает";
 "info_how_it_works_description" = "Telescan с помощью Bluetooth обнаруживает пользователей поблизости и показывает их имя, фотографию и Telegram username: скопируйте username, вставьте его в строку поиска Telegram, найдите пользователя и продолжите общение.";
-"copyUsername" = "Скопируйте и вставьте в поле поиска Telegram";
 "proprietaryLicense" = "© 2021 - 2026 Ruslan Chukavin. Все права защищены.";
 "info_story" = "Каждый день мы оказываемся рядом с людьми, с которыми могли бы заговорить, познакомиться, провести вечер или однажды вспомнить эту встречу как что-то важное. Мы пересекаемся в метро, на учебе, в кафе, на улице, смотрим друг на друга и почти всегда просто идем дальше.\n\nСлишком много хороших историй заканчиваются еще до того, как успевают начаться. Telescan - это попытка дать таким встречам еще один шанс.";
 "rulesAndPrivacy" = "Документы";

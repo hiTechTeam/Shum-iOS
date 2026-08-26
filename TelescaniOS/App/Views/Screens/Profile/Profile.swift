@@ -13,7 +13,7 @@ struct Profile: View {
                 authCodeViewModel: authVM,
                 photoViewModel: photoViewModel
             )
-                .navigationTitle(authVM.tgName ?? profileInc)
+                .navigationTitle(profileInc)
                 .navigationBarTitleDisplayMode(.inline)
         }
         .onAppear {

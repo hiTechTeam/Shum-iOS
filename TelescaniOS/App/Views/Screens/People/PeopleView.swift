@@ -11,6 +11,9 @@ struct PeopleView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var selectedUser: NearbyUser?
+    @State private var showsDistanceFilter = false
+    @AppStorage("peopleNearbyMaximumDistance")
+    private var maximumDistance = NearbyDistanceFilter.maximum
 
     private let gridColumns = Array(
         repeating: GridItem(.flexible(), spacing: 18),
@@ -41,10 +44,28 @@ struct PeopleView: View {
                             await peopleViewModel.refreshNearbyPeople()
                         }
                     }
+                } else if filteredUsers.isEmpty {
+                    GeometryReader { geometry in
+                        ScrollView {
+                            ContentUnavailableView(
+                                Inc.PeopleFilters.nearbyEmptyTitle.localized,
+                                systemImage: "ruler",
+                                description: Text(
+                                    Inc.PeopleFilters.nearbyEmptyMessage.localized
+                                )
+                            )
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: geometry.size.height)
+                        }
+                        .scrollBounceBehavior(.always)
+                        .refreshable {
+                            await peopleViewModel.refreshNearbyPeople()
+                        }
+                    }
                 } else {
                     ScrollView {
                         LazyVGrid(columns: gridColumns, spacing: 22) {
-                            ForEach(peopleViewModel.visibleUsers) { user in
+                            ForEach(filteredUsers) { user in
                                 ProfileAvatarButton(
                                     user: user,
                                     presenceState: presenceState(for: user)
@@ -62,6 +83,20 @@ struct PeopleView: View {
                         await peopleViewModel.refreshNearbyPeople()
                     }
                 }
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                    showsDistanceFilter = true
+                } label: {
+                    Image(systemName: "ruler")
+                }
+                .accessibilityLabel(
+                    Inc.PeopleFilters.distanceTitle.localized
+                )
+                .tint(.primary)
             }
         }
         .onChange(of: scenePhase) {  _, newPhase in
@@ -86,12 +121,33 @@ struct PeopleView: View {
         .sheet(item: $selectedUser) { user in
             ProfileSheetView(user: user, onOpenChat: onOpenChat)
                 .environmentObject(peopleViewModel)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
-                .presentationContentInteraction(.resizes)
+        }
+        .sheet(isPresented: $showsDistanceFilter) {
+            NearbyDistanceFilterSheet(
+                maximumDistance: $maximumDistance
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
         }
         .task {
             await peopleViewModel.synchronizeBlockedProfiles()
+        }
+    }
+
+    private var filteredUsers: [NearbyUser] {
+        guard maximumDistance < NearbyDistanceFilter.maximum else {
+            return peopleViewModel.visibleUsers
+        }
+
+        return peopleViewModel.visibleUsers.filter { user in
+            guard let distance = peopleViewModel.distances[
+                user.discoveryID
+            ] else {
+                return false
+            }
+            return distance <= Int(maximumDistance)
         }
     }
 
@@ -108,9 +164,87 @@ struct PeopleView: View {
     }
 }
 
+private enum NearbyDistanceFilter {
+    static let minimum: Double = 10
+    static let maximum: Double = 100
+    static let step: Double = 10
+    static let range = minimum...maximum
+}
+
+private struct NearbyDistanceFilterSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @Binding var maximumDistance: Double
+
+    var body: some View {
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                Text(Inc.PeopleFilters.distanceDescription.localized)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: .topLeading
+                    )
+
+                VStack(spacing: 14) {
+                    Text(selectionTitle)
+                        .font(.title2.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+
+                    Slider(
+                        value: $maximumDistance,
+                        in: NearbyDistanceFilter.range,
+                        step: NearbyDistanceFilter.step
+                    )
+                    .tint(.accentColor)
+
+                    HStack {
+                        Text(
+                            String.localizedStringWithFormat(
+                                Inc.Common.distanceMetersFormat.localized,
+                                Int(NearbyDistanceFilter.minimum)
+                            )
+                        )
+                        Spacer()
+                        Text(Inc.PeopleFilters.maximum.localized)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(.bottom, 70)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .navigationTitle(Inc.PeopleFilters.distanceTitle.localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(Inc.Common.close.localized) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private var selectionTitle: String {
+        guard maximumDistance < NearbyDistanceFilter.maximum else {
+            return Inc.PeopleFilters.distanceUnlimited.localized
+        }
+
+        return String.localizedStringWithFormat(
+            Inc.PeopleFilters.distanceValueFormat.localized,
+            Int(maximumDistance)
+        )
+    }
+}
+
 enum NearbyAvatarPresenceState {
     case active
     case disappearing(seconds: Int)
+    case reappearing(seconds: Int)
 }
 
 enum ProfileAvatarPresentation: Equatable {
@@ -185,18 +319,42 @@ struct ProfileAvatarButton: View {
                 .aspectRatio(1, contentMode: .fit)
                 .contentShape(Circle())
 
-                Text(user.name)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .frame(maxWidth: .infinity)
+                VStack(spacing: 2) {
+                    Text(user.name)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+
+                    if let reappearingSeconds {
+                        Text(
+                            "\(Inc.Common.nearby.localized) · "
+                                + String.localizedStringWithFormat(
+                                    Inc.Common.countdownSecondsFormat.localized,
+                                    reappearingSeconds
+                                )
+                        )
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.accentColor)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(ProfileAvatarButtonStyle())
         .accessibilityLabel(user.name)
         .accessibilityAddTraits(.isButton)
+    }
+
+    private var reappearingSeconds: Int? {
+        guard let presenceState,
+              case let .reappearing(seconds) = presenceState else {
+            return nil
+        }
+        return seconds
     }
 
     @ViewBuilder
@@ -267,6 +425,19 @@ private struct NearbyAvatarPresenceRing: View {
                     )
                     .rotationEffect(.degrees(-90))
                     .padding(lineWidth / 2)
+
+            case .reappearing:
+                Circle()
+                    .trim(from: 0, to: remainingProgress)
+                    .stroke(
+                        Color.accentColor,
+                        style: StrokeStyle(
+                            lineWidth: lineWidth,
+                            lineCap: .round
+                        )
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .padding(lineWidth / 2)
             }
         }
         .animation(
@@ -278,13 +449,20 @@ private struct NearbyAvatarPresenceRing: View {
     }
 
     private var remainingProgress: CGFloat {
-        guard case let .disappearing(seconds) = state else { return 1 }
+        let seconds: Int
+        let countdownDuration: TimeInterval
 
-        let countdownDuration = max(
-            1,
-            BLEPresencePolicy.activeTimeout
-                - BLEPresencePolicy.signalLossIndicatorDelay
-        )
+        switch state {
+        case .active:
+            return 1
+        case .disappearing(let remainingSeconds):
+            seconds = remainingSeconds
+            countdownDuration = BLEPresencePolicy.transitionCountdownDuration
+        case .reappearing(let remainingSeconds):
+            seconds = remainingSeconds
+            countdownDuration = BLEPresencePolicy.transitionCountdownDuration
+        }
+
         return min(
             max(CGFloat(Double(seconds) / countdownDuration), 0),
             1
@@ -354,12 +532,12 @@ private struct NearbyPresenceLabel: View {
 
 struct ProfileSheetView: View {
 
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
     @State private var showPhotoPreview = false
 
     let user: NearbyUser
-    var showsNearbyControls = true
     var lastMetAt: Date? = nil
     var onOpenChat: (NearbyUser) -> Void = { _ in }
 
@@ -368,12 +546,29 @@ struct ProfileSheetView: View {
         return URL(string: url)
     }
 
+    private var telegramUsername: String? {
+        let value = user.username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let handle = value.trimmingCharacters(
+            in: CharacterSet(charactersIn: "@")
+        )
+        return handle.isEmpty ? nil : value
+    }
+
     private func openPhotoPreview() {
         var transaction = Transaction()
         transaction.disablesAnimations = true
 
         withTransaction(transaction) {
             showPhotoPreview = true
+        }
+    }
+
+    private func openInternalChat() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            onOpenChat(user)
         }
     }
 
@@ -443,27 +638,37 @@ struct ProfileSheetView: View {
 
                     }
 
-                    Group {
-                        if let bio = user.bio, !bio.isEmpty {
-                            Text(bio)
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(3)
-                                .fixedSize(horizontal: false, vertical: true)
-                        } else {
-                            Text(Inc.NearbyProfile.usernameFallback.localized)
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
+                    if let bio = user.bio, !bio.isEmpty {
+                        Text(bio)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(width: 360, alignment: .leading)
+                            .frame(minHeight: 48, alignment: .leading)
+                    } else {
+                        Color.clear
+                            .frame(width: 360, height: 48)
                     }
-                    .frame(
-                        width: 360,
-                        height: 48,
-                        alignment: .leading
-                    )
 
-                    CopyUsernameField(username: user.username)
+                    VStack(spacing: 7) {
+                        RegistrationPrimaryButton(
+                            title: Inc.NearbyProfile.write.localized,
+                            accentColor: .blue,
+                            action: openInternalChat
+                        )
+                        .frame(width: 360)
+
+                        Text(
+                            telegramUsername == nil
+                                ? Inc.NearbyProfile.internalChatHint.localized
+                                : Inc.NearbyProfile.telegramChatHint.localized
+                        )
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(width: 360)
+                    }
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
@@ -472,13 +677,10 @@ struct ProfileSheetView: View {
             }
             .padding(.top, 60)
 
-            if showsNearbyControls {
-                ProfileSheetControls(
-                    user: user,
-                    lastMetAt: lastMetAt,
-                    onOpenChat: onOpenChat
-                )
-            }
+            ProfileSheetControls(
+                user: user,
+                lastMetAt: lastMetAt
+            )
         }
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let imageURL {
@@ -490,8 +692,26 @@ struct ProfileSheetView: View {
                 }
             }
         }
-        .presentationBackground {
-            ProfileSheetBackground(imageURL: imageURL)
+        .modifier(ProfileSheetPresentationBackground(imageURL: imageURL))
+    }
+}
+
+private struct ProfileSheetPresentationBackground: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency)
+    private var reduceTransparency
+
+    let imageURL: URL?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *),
+           colorScheme != .dark || imageURL == nil || reduceTransparency {
+            content
+        } else {
+            content.presentationBackground {
+                ProfileSheetBackground(imageURL: imageURL)
+            }
         }
     }
 }
@@ -595,7 +815,7 @@ private struct ProfileSheetBackground: View {
     }
 }
 
-private struct ProfileSheetControlSurface: ViewModifier {
+private struct ProfileSheetActionGroupSurface: ViewModifier {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -603,13 +823,13 @@ private struct ProfileSheetControlSurface: ViewModifier {
     @ViewBuilder
     private var fallbackBackground: some View {
         if colorScheme == .light {
-            Circle()
+            Capsule()
                 .fill(Color(uiColor: .systemGray6))
         } else if reduceTransparency {
-            Circle()
+            Capsule()
                 .fill(Color(uiColor: .secondarySystemBackground))
         } else {
-            Circle()
+            Capsule()
                 .fill(.ultraThinMaterial)
         }
     }
@@ -618,7 +838,7 @@ private struct ProfileSheetControlSurface: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content
-                .glassEffect(.regular.interactive(), in: Circle())
+                .glassEffect(.regular.interactive(), in: Capsule())
         } else if colorScheme == .light {
             content
                 .background { fallbackBackground }
@@ -626,7 +846,7 @@ private struct ProfileSheetControlSurface: ViewModifier {
             content
                 .background { fallbackBackground }
                 .overlay {
-                    Circle()
+                    Capsule()
                         .stroke(
                             colorScheme == .dark
                                 ? Color.white.opacity(0.24)
@@ -646,8 +866,8 @@ private struct ProfileSheetControlSurface: ViewModifier {
 }
 
 private extension View {
-    func profileSheetControlSurface() -> some View {
-        modifier(ProfileSheetControlSurface())
+    func profileSheetActionGroupSurface() -> some View {
+        modifier(ProfileSheetActionGroupSurface())
     }
 }
 
@@ -709,12 +929,20 @@ private struct ProfileSheetControls: View {
 
     let user: NearbyUser
     let lastMetAt: Date?
-    let onOpenChat: (NearbyUser) -> Void
 
     @State private var moderationDialog: ModerationDialog?
     @State private var moderationAlert: ModerationAlert?
     @State private var reportDetails = ""
     @State private var isSubmitting = false
+
+    private var telegramUsername: String? {
+        let value = user.username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let handle = value.trimmingCharacters(
+            in: CharacterSet(charactersIn: "@")
+        )
+        return handle.isEmpty ? nil : value
+    }
 
     private var isModerationDialogPresented: Binding<Bool> {
         Binding(
@@ -792,25 +1020,6 @@ private struct ProfileSheetControls: View {
 
     private var moderationMenu: some View {
         Menu {
-            Button(action: openInternalChat) {
-                Label(
-                    Inc.NearbyProfile.chat.localized,
-                    systemImage: "bubble.left.and.bubble.right"
-                )
-                .foregroundStyle(.primary)
-            }
-            .tint(.primary)
-
-            Button(action: openTelegramChat) {
-                Label {
-                    Text(Inc.NearbyProfile.telegramChat.localized)
-                } icon: {
-                    Image(uiImage: Self.telegramMenuIcon)
-                }
-                .foregroundStyle(.primary)
-            }
-            .tint(.primary)
-
             Button(role: .destructive) {
                 moderationDialog = .report
             } label: {
@@ -845,7 +1054,6 @@ private struct ProfileSheetControls: View {
             }
             .frame(width: 44, height: 44)
             .contentShape(Circle())
-            .profileSheetControlSurface()
         }
         .buttonStyle(.plain)
         .menuOrder(.fixed)
@@ -853,17 +1061,33 @@ private struct ProfileSheetControls: View {
         .accessibilityLabel(Inc.NearbyProfile.actions.localized)
     }
 
-    private func openInternalChat() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        dismiss()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-            onOpenChat(user)
+    private var telegramChatButton: some View {
+        Button(action: openTelegramChat) {
+            Image(uiImage: Self.telegramMenuIcon)
+                .renderingMode(.template)
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Inc.NearbyProfile.telegramChat.localized)
+    }
+
+    private var actionGroup: some View {
+        HStack(spacing: 0) {
+            if telegramUsername != nil {
+                telegramChatButton
+            }
+
+            moderationMenu
+        }
+        .padding(4)
+        .profileSheetActionGroupSurface()
     }
 
     private func openTelegramChat() {
-        let username = user.username
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let telegramUsername else { return }
+        let username = telegramUsername
             .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
         guard !username.isEmpty else { return }
 
@@ -893,7 +1117,22 @@ private struct ProfileSheetControls: View {
 
     private var presenceInfo: some View {
         Group {
-            if let lastMetAt {
+            if let seconds = peopleViewModel.reappearanceCountdowns[
+                user.discoveryID
+            ] {
+                HStack(spacing: 6) {
+                    Text(Inc.Common.nearby.localized)
+                    Text(
+                        String.localizedStringWithFormat(
+                            Inc.Common.countdownSecondsFormat.localized,
+                            seconds
+                        )
+                    )
+                    .monospacedDigit()
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color.accentColor)
+            } else if let lastMetAt {
                 EncounterRelativeTimeText(
                     date: lastMetAt,
                     includesMetPrefix: true
@@ -1029,7 +1268,7 @@ private struct ProfileSheetControls: View {
 
             HStack {
                 Spacer()
-                moderationMenu
+                actionGroup
             }
             .padding(.horizontal, 8)
         }
