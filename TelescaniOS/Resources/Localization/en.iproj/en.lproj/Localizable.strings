@@ -18,6 +18,7 @@
 "chats" = "Chats";
 "settings" = "Settings";
 "profile" = "Profile";
+"me" = "Me";
 "metTitle" = "Met";
 "metHeader" = "Met recently";
 
@@ -60,16 +61,7 @@
 "peopleFilterMaximum" = "max";
 "peopleDistanceFilterEmptyTitle" = "No one in this range";
 "peopleDistanceFilterEmptyMessage" = "Increase the distance to see more people.";
-"peopleTimeFilterTitle" = "Encounter time";
-"peopleTimeFilterDescription" = "The range covers the last 24 hours. Move the right edge left to keep the earliest encounters, or the left edge right to keep the latest ones.";
-"peopleTimeFilterOldest" = "24 hr ago";
-"peopleTimeFilterNow" = "Now";
-"peopleTimeFilterAll" = "All in 24 hours";
-"peopleTimeFilterFirst" = "Earliest encounters";
-"peopleTimeFilterLatest" = "Latest encounters";
-"peopleTimeFilterSelected" = "Selected interval";
-"peopleTimeFilterEmptyTitle" = "No one in this interval";
-"peopleTimeFilterEmptyMessage" = "Expand the range to see more encounters.";
+"peopleHistoryButton" = "Time";
 
 /* Registration */
 "telegramLinkTitle" = "Link Telegram";
@@ -81,7 +73,7 @@
 "incorrectCode" = "Invalid or expired code";
 "telegramUsernameRequired" = "Create a public Telegram username and request a new code";
 "warningCharactersEight" = "Maximum of 8 characters";
-"regDescription" = "Enter the code sent to you by Telescan_bot so the app can link your Telegram.";
+"regDescription" = "Enter the code from Telescan_bot to link your Telegram account to the app.";
 "tgUsername" = "Telegram username";
 "usernamePlaceholder" = "@_";
 "profileBioTitle" = "BIO";
@@ -99,6 +91,14 @@
 "profileSaveName" = "Save";
 "profileNamePlaceholder" = "Your name";
 "profileNameDescription" = "This is the name other Telescan users will see.";
+"profileInformationDescription" = "Briefly describe yourself.";
+"profileEdit" = "Edit profile";
+"profileOpenPhoto" = "Open photo";
+"profileUnlinkTelegram" = "Unlink Telegram";
+"profileUnlinkTelegramAction" = "Unlink";
+"profileUnlinkTelegramTitle" = "Unlink Telegram?";
+"profileUnlinkTelegramMessage" = "Your Telegram account will be unlinked from your Telescan profile. You can link it again later.";
+"profileUnlinkTelegramFailed" = "Couldn’t unlink Telegram. Please try again.";
 
 /* Onboarding */
 "appleSignInFailed" = "Couldn’t sign in with Apple. Please try again.";
@@ -137,8 +137,6 @@
 "nearbyProfileClose" = "Close profile";
 "nearbyProfileActions" = "Profile actions";
 "nearbyProfileWrite" = "Write";
-"nearbyProfileInternalChatHint" = "Conversation in the in-app chat";
-"nearbyProfileTelegramChatHint" = "You can message in Telegram above";
 "nearbyProfileTelegramChat" = "Telegram Chat";
 "nearbyProfileReport" = "Report user";
 "nearbyProfileBlock" = "Block user";

@@ -6,11 +6,8 @@ struct MainContentView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
-    @StateObject private var chatStore = ChatUIStore()
     @StateObject private var profilePhotoViewModel = ProfilePhotoViewModel()
     @State private var selectedMainTab: MainTab = .nearby
-    @State private var chatsPath: [ChatsDestination] = []
-    @State private var showScanAlert = false
 
     var body: some View {
         TabView(selection: mainTabBinding) {
@@ -25,29 +22,10 @@ struct MainContentView: View {
                 )
                 .tag(MainTab.nearby)
 
-            recentlyMetTab
-                .tabItem {
-                    Label(
-                        Inc.Tabs.metTitle.localized,
-                        systemImage: "clock.arrow.circlepath"
-                    )
-                }
-                .badge(peopleViewModel.encounterHistory.count)
-                .tag(MainTab.recentlyMet)
-
-            chatsTab
-                .tabItem {
-                    Label(
-                        Inc.Tabs.chats.localized,
-                        systemImage: "bubble.left.and.bubble.right"
-                    )
-                }
-                .tag(MainTab.chats)
-
             profileTab
                 .tabItem {
                     Label {
-                        Text(Inc.Tabs.profile.localized)
+                        Text(Inc.Tabs.me.localized)
                     } icon: {
                         profileTabIcon
                     }
@@ -61,42 +39,12 @@ struct MainContentView: View {
                 selectedTab: selectedMainTab
             )
         )
-        .alert(
-            Inc.Common.nearby.localized,
-            isPresented: $showScanAlert
-        ) {
-            Button(Inc.Common.okey.localized, role: .cancel) {}
-        } message: {
-            Text(Inc.Scanning.scanAlertText.localized)
-        }
-        .onAppear {
-            if !coordinator.isScaning {
-                selectedMainTab = .recentlyMet
-            }
-        }
-        .onChange(of: coordinator.isScaning) { _, isScanning in
-            if !isScanning, selectedMainTab == .nearby {
-                selectedMainTab = .recentlyMet
-            }
-        }
     }
 
     private var nearbyTab: some View {
         NavigationStack {
-            PeopleView { user in
-                openChat(with: user, isNearby: true)
-            }
+            PeopleView()
             .navigationTitle(Inc.Common.nearby.localized)
-            .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-
-    private var recentlyMetTab: some View {
-        NavigationStack {
-            EncounterHistoryView { user in
-                openChat(with: user, isNearby: false)
-            }
-            .navigationTitle(Inc.Tabs.metTitle.localized)
             .navigationBarTitleDisplayMode(.inline)
         }
     }
@@ -108,27 +56,13 @@ struct MainContentView: View {
         )
     }
 
-    private var chatsTab: some View {
-        NavigationStack(path: $chatsPath) {
-            ChatsListView(store: chatStore) { contact in
-                chatsPath.append(.conversation(contact))
-            }
-            .navigationDestination(for: ChatsDestination.self) { destination in
-                switch destination {
-                case .conversation(let contact):
-                    conversationView(for: contact)
-                }
-            }
-        }
-    }
-
     private var profileTab: some View {
         NavigationStack {
-            ProfileDataView(
+            ProfileOverviewView(
                 authCodeViewModel: coordinator.authCodeViewModel,
                 photoViewModel: profilePhotoViewModel
             )
-            .navigationTitle(Inc.Tabs.profile.localized)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 coordinator.authCodeViewModel.restoreLocalProfile()
@@ -138,15 +72,12 @@ struct MainContentView: View {
 
     @ViewBuilder
     private var nearbyTabItem: some View {
-        if coordinator.isScaning {
-            Label(
-                Inc.Common.nearby.localized,
-                systemImage: "person.2.fill"
-            )
-        } else {
-            Image(systemName: "eye.slash")
-                .accessibilityLabel(Inc.Common.nearby.localized)
-        }
+        Label(
+            Inc.Tabs.people.localized,
+            systemImage: coordinator.isScaning
+                ? "person.2.fill"
+                : "eye.slash"
+        )
     }
 
     @ViewBuilder
@@ -160,66 +91,14 @@ struct MainContentView: View {
 
     private func selectMainTab(_ tab: MainTab) {
         guard tab != selectedMainTab else { return }
-
-        if tab == .nearby, !coordinator.isScaning {
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-            showScanAlert = true
-            return
-        }
-
         selectedMainTab = tab
     }
 
-    private func conversationView(
-        for contact: ChatContact
-    ) -> some View {
-        ChatConversationView(
-            contact: contact,
-            store: chatStore,
-            isNearby: peopleViewModel.visibleUsers.contains {
-                $0.id == contact.id
-            },
-            lastMetAt: lastMetAt(for: contact)
-        )
-        .toolbar(.hidden, for: .tabBar)
-    }
-
-    private func openChat(with user: NearbyUser, isNearby: Bool) {
-        let encounterDate = peopleViewModel.encounterHistory
-            .first(where: { $0.id == user.id })?
-            .lastSeen
-        let contact = ChatContact(
-            user: user,
-            isNearby: isNearby,
-            lastMetAt: isNearby ? .now : encounterDate ?? .now
-        )
-        chatsPath.removeAll()
-        selectedMainTab = .chats
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
-            withAnimation {
-                chatsPath.append(.conversation(contact))
-            }
-        }
-    }
-
-    private func lastMetAt(for contact: ChatContact) -> Date {
-        peopleViewModel.encounterHistory
-            .first(where: { $0.id == contact.id })?
-            .lastSeen
-            ?? contact.lastMetAt
-    }
 }
 
 private enum MainTab: Hashable {
     case nearby
-    case recentlyMet
-    case chats
     case profile
-}
-
-private enum ChatsDestination: Hashable {
-    case conversation(ChatContact)
 }
 
 private struct TabBarBadgeAppearanceConfigurator:
@@ -240,15 +119,19 @@ private struct TabBarBadgeAppearanceConfigurator:
         _ uiViewController: TabBarBadgeAppearanceController,
         context: Context
     ) {
-        uiViewController.colorScheme = colorScheme
-        uiViewController.selectedTab = selectedTab
-        uiViewController.applyAppearanceWhenAvailable()
+        uiViewController.update(
+            colorScheme: colorScheme,
+            selectedTab: selectedTab
+        )
     }
 }
 
 private final class TabBarBadgeAppearanceController: UIViewController {
-    var colorScheme: ColorScheme
-    var selectedTab: MainTab
+    private var colorScheme: ColorScheme
+    private var selectedTab: MainTab
+    private weak var configuredTabBar: UITabBar?
+    private var configuredColorScheme: ColorScheme?
+    private var configuredSelectedTab: MainTab?
 
     init(colorScheme: ColorScheme, selectedTab: MainTab) {
         self.colorScheme = colorScheme
@@ -277,6 +160,17 @@ private final class TabBarBadgeAppearanceController: UIViewController {
         applyAppearance()
     }
 
+    func update(colorScheme: ColorScheme, selectedTab: MainTab) {
+        guard self.colorScheme != colorScheme
+                || self.selectedTab != selectedTab else {
+            return
+        }
+
+        self.colorScheme = colorScheme
+        self.selectedTab = selectedTab
+        applyAppearanceWhenAvailable()
+    }
+
     func applyAppearanceWhenAvailable() {
         DispatchQueue.main.async { [weak self] in
             self?.applyAppearance()
@@ -284,8 +178,15 @@ private final class TabBarBadgeAppearanceController: UIViewController {
     }
 
     private func applyAppearance() {
-        guard let items = enclosingTabBarController?.tabBar.items,
-              items.count >= 3 else {
+        if let configuredTabBar,
+           configuredColorScheme == colorScheme,
+           configuredSelectedTab == selectedTab {
+            return
+        }
+
+        guard let tabBar = enclosingTabBarController?.tabBar,
+              let items = tabBar.items,
+              !items.isEmpty else {
             return
         }
 
@@ -298,16 +199,9 @@ private final class TabBarBadgeAppearanceController: UIViewController {
             isSelected: selectedTab == .nearby,
             inactiveTextColor: inactiveBadgeTextColor
         )
-        configurePeopleBadge(
-            for: items[1],
-            isSelected: selectedTab == .recentlyMet,
-            inactiveTextColor: inactiveBadgeTextColor
-        )
-        configureBadge(
-            for: items[2],
-            backgroundColor: .systemRed,
-            textColor: .white
-        )
+        configuredTabBar = tabBar
+        configuredColorScheme = colorScheme
+        configuredSelectedTab = selectedTab
     }
 
     private func configurePeopleBadge(

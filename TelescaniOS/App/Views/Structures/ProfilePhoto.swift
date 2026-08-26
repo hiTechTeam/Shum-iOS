@@ -156,6 +156,9 @@ private struct ProfilePhotoOptionsSheet: View {
 
                 Text(Inc.Profile.changePhotoTitle.localized)
                     .font(.system(size: 17, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .allowsTightening(true)
 
                 Spacer(minLength: 8)
 

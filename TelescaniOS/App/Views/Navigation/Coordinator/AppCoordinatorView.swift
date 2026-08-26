@@ -44,18 +44,10 @@ struct AppCoordinatorView: View {
 }
 
 private struct AuthenticatedOnboardingView: View {
-    @EnvironmentObject private var coordinator: AppCoordinator
-
     var body: some View {
         NavigationStack {
-            switch coordinator.onboardingStage {
-            case .telegram:
-                AuthCode()
-                    .navigationBarBackButtonHidden(true)
-            case .scanning:
-                ScanToggleView()
-                    .navigationBarBackButtonHidden(true)
-            }
+            AuthCode()
+                .navigationBarBackButtonHidden(true)
         }
     }
 }

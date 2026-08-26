@@ -1,11 +1,9 @@
 import Foundation
 
 enum BLEPresencePolicy {
-    static let transitionCountdownDuration: TimeInterval = 10
-    static let signalLossIndicatorDelay: TimeInterval = 3
-    static let activeTimeout: TimeInterval = signalLossIndicatorDelay
-        + transitionCountdownDuration
+    static let activeTimeout: TimeInterval = 60
     static let backgroundTimeout: TimeInterval = 60
+    static let signalLossIndicatorDelay: TimeInterval = 3
     static let countdownUpdateInterval: TimeInterval = 1
     static let cleanupInterval: TimeInterval = 1
 }

@@ -21,16 +21,12 @@ final class PeopleViewModel: ObservableObject {
     @Published private(set) var distances: [String: Int] = [:]
     @Published private(set) var userCache: [String: NearbyUser] = [:]
     @Published private(set) var disappearanceCountdowns: [String: Int] = [:]
-    @Published private(set) var reappearanceCountdowns: [String: Int] = [:]
     @Published private(set) var blockedProfiles: [BlockedProfileResponse] = []
     @Published private(set) var encounterHistory: [EncounterHistoryEntry] = []
     @Published private(set) var discoveryError: String?
 
     var visibleUsers: [NearbyUser] {
-        discoveryOrder.compactMap { id in
-            guard reappearanceStartedAt[id] == nil else { return nil }
-            return userCache[id]
-        }
+        discoveryOrder.compactMap { userCache[$0] }
     }
 
     private let bleManager: BLEManagerProtocol
@@ -54,7 +50,6 @@ final class PeopleViewModel: ObservableObject {
     private var discoveryOrder: [String] = []
     private var rssiSamples: [String: [Int]] = [:]
     private var lastSignals: [String: Date] = [:]
-    private var reappearanceStartedAt: [String: Date] = [:]
     private var profileTasks: [String: Task<Void, Never>] = [:]
     private var resolutionAttempts: [String: Int] = [:]
     private var lastHistoryUpdates: [String: Date] = [:]
@@ -236,8 +231,6 @@ final class PeopleViewModel: ObservableObject {
         encounterHistoryStore.removeAll()
         encounterHistory.removeAll()
         lastHistoryUpdates.removeAll()
-        reappearanceCountdowns.removeAll()
-        reappearanceStartedAt.removeAll()
     }
 
     func refreshEncounterHistory(at now: Date = Date()) {
@@ -252,8 +245,7 @@ final class PeopleViewModel: ObservableObject {
         )
         encounterHistoryStore.remove(ids: hiddenHistoryIDs)
         encounterHistory = encounterHistoryStore.entries.filter { entry in
-            let id = entry.user.discoveryID
-            return devices[id] == nil || reappearanceStartedAt[id] != nil
+            devices[entry.user.discoveryID] == nil
         }
     }
 
@@ -341,9 +333,6 @@ final class PeopleViewModel: ObservableObject {
             if !disappearanceCountdowns.isEmpty {
                 disappearanceCountdowns.removeAll()
             }
-            if !reappearanceCountdowns.isEmpty {
-                reappearanceCountdowns.removeAll()
-            }
             return
         }
 
@@ -360,42 +349,6 @@ final class PeopleViewModel: ObservableObject {
 
         if updated != disappearanceCountdowns {
             disappearanceCountdowns = updated
-        }
-
-        updateReappearanceCountdowns(at: now)
-    }
-
-    private func updateReappearanceCountdowns(at now: Date) {
-        var updated: [String: Int] = [:]
-        var expiredIDs: [String] = []
-
-        for (id, startedAt) in reappearanceStartedAt {
-            guard devices[id] != nil else {
-                expiredIDs.append(id)
-                continue
-            }
-
-            let elapsed = now.timeIntervalSince(startedAt)
-            let remaining = BLEPresencePolicy.transitionCountdownDuration
-                - elapsed
-
-            if remaining > 0 {
-                updated[id] = max(1, Int(ceil(remaining)))
-            } else {
-                expiredIDs.append(id)
-            }
-        }
-
-        for id in expiredIDs {
-            reappearanceStartedAt.removeValue(forKey: id)
-        }
-
-        if updated != reappearanceCountdowns {
-            reappearanceCountdowns = updated
-        }
-
-        if !expiredIDs.isEmpty {
-            refreshEncounterHistory(at: now)
         }
     }
 
@@ -443,8 +396,6 @@ final class PeopleViewModel: ObservableObject {
         userCache.removeAll()
         discoveryOrder.removeAll()
         disappearanceCountdowns.removeAll()
-        reappearanceCountdowns.removeAll()
-        reappearanceStartedAt.removeAll()
         rssiSamples.removeAll()
         lastSignals.removeAll()
         lastHistoryUpdates.removeAll()
@@ -455,14 +406,13 @@ final class PeopleViewModel: ObservableObject {
         guard let uuid = UUID(uuidString: id) else { return }
         let canonicalID = uuid.uuidString.lowercased()
         guard !blockedProfileStore.ids.contains(canonicalID) else { return }
-        let now = nowProvider()
         let isNew = devices[canonicalID] == nil
         devices[canonicalID] = rssi
         if isNew {
-            beginReappearanceCountdownIfNeeded(for: canonicalID, at: now)
             discoveryOrder.insert(canonicalID, at: 0)
-            refreshEncounterHistory(at: now)
+            refreshEncounterHistory(at: nowProvider())
         }
+        let now = nowProvider()
         lastSignals[canonicalID] = now
         if let user = userCache[canonicalID] {
             recordEncounter(user, at: now)
@@ -481,22 +431,6 @@ final class PeopleViewModel: ObservableObject {
             discoveryError = nil
         }
         scheduleProfileResolution(for: canonicalID, immediately: isNew)
-    }
-
-    private func beginReappearanceCountdownIfNeeded(
-        for id: String,
-        at date: Date
-    ) {
-        guard encounterHistoryStore.entries.contains(where: {
-            $0.user.discoveryID == id
-        }) else {
-            return
-        }
-
-        reappearanceStartedAt[id] = date
-        reappearanceCountdowns[id] = Int(
-            BLEPresencePolicy.transitionCountdownDuration
-        )
     }
 
     private func scheduleProfileResolution(
@@ -668,8 +602,6 @@ final class PeopleViewModel: ObservableObject {
         userCache.removeValue(forKey: canonicalID)
         discoveryOrder.removeAll { $0 == canonicalID }
         disappearanceCountdowns.removeValue(forKey: canonicalID)
-        reappearanceCountdowns.removeValue(forKey: canonicalID)
-        reappearanceStartedAt.removeValue(forKey: canonicalID)
         rssiSamples.removeValue(forKey: canonicalID)
         lastSignals.removeValue(forKey: canonicalID)
         lastHistoryUpdates.removeValue(forKey: canonicalID)

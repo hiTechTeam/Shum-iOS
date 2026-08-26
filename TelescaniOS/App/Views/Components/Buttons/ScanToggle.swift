@@ -9,7 +9,6 @@ struct ScanToggle: View {
     
     @State private var showBluetoothAlert = false
     
-    private let frameWidth: CGFloat = 360
     private let frameHeight: CGFloat = 46
     private let cornerRadius: CGFloat = 13
     private let paddingHorizontal: CGFloat = 14
@@ -44,7 +43,7 @@ struct ScanToggle: View {
             scanToggle
         }
         .padding(.horizontal, paddingHorizontal)
-        .frame(width: frameWidth, height: frameHeight)
+        .frame(maxWidth: .infinity, minHeight: frameHeight)
         .background(Color.grOne)
         .cornerRadius(cornerRadius)
     }

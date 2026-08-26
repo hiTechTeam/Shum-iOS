@@ -6,8 +6,8 @@ struct BioEditorField: View {
     let isSaving: Bool
     let saveFailed: Bool
 
-    private let characterLimit = 60
-    private let cornerRadius: CGFloat = 13
+    private let characterLimit = 36
+    private let cornerRadius: CGFloat = 18
 
     private var characterCount: String {
         "\(text.count)/\(characterLimit)"
@@ -15,41 +15,41 @@ struct BioEditorField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Spacer()
-
-                    if isSaving {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Text(characterCount)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                }
-
+            HStack(spacing: 10) {
                 TextField(
                     Inc.Profile.bioPlaceholder.localized,
                     text: $text,
                     axis: .vertical
                 )
                 .font(.system(size: 16))
-                .lineLimit(2...3)
+                .lineLimit(1...2)
                 .disabled(isSaving)
                 .onChange(of: text) { _, value in
                     guard value.count > characterLimit else { return }
                     text = String(value.prefix(characterLimit))
                 }
+                .onAppear {
+                    guard text.count > characterLimit else { return }
+                    text = String(text.prefix(characterLimit))
+                }
+
+                if isSaving {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Text(characterCount)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .fixedSize()
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .frame(minHeight: 96, alignment: .topLeading)
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 64)
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(Color.tField.opacity(0.8))
+                    .fill(Color(uiColor: .secondarySystemBackground))
             }
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius)
@@ -94,7 +94,7 @@ struct BioProfileField: View {
 
             Button(action: openEditor) {
                 Color.clear
-                    .frame(width: 360, height: 96)
+                    .frame(width: 360, height: 64)
                     .contentShape(RoundedRectangle(cornerRadius: 13))
             }
             .buttonStyle(.plain)
@@ -131,7 +131,7 @@ struct BioEditorSheet: View {
 
     private func apply() {
         Task {
-            if await authVM.updateBio(draftBio) {
+            if await authVM.updateBio(String(draftBio.prefix(36))) {
                 isPresented = false
             }
         }
@@ -139,12 +139,19 @@ struct BioEditorSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: 12) {
                 BioEditorField(
                     text: $draftBio,
                     isSaving: authVM.isSavingBio,
                     saveFailed: authVM.bioSaveFailed
                 )
+
+                Text(Inc.Profile.informationDescription.localized)
+                    .telescanDescriptionStyle()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .allowsTightening(true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer(minLength: 0)
             }
@@ -154,23 +161,29 @@ struct BioEditorSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(Inc.Common.cancel.localized) {
+                    Button {
                         isPresented = false
+                    } label: {
+                        Text(Inc.Common.cancel.localized)
+                            .fixedSize()
+                            .frame(width: 92, alignment: .leading)
                     }
-                    .frame(width: 92, alignment: .leading)
                     .disabled(authVM.isSavingBio)
                 }
 
                 ToolbarItem(placement: .principal) {
                     Text(Inc.Profile.informationTitle.localized)
-                        .font(.headline)
+                        .telescanSheetTitleStyle()
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(Inc.Profile.saveName.localized, action: apply)
-                        .frame(width: 92, alignment: .trailing)
-                        .fontWeight(.semibold)
-                        .disabled(authVM.isSavingBio)
+                    Button(action: apply) {
+                        Text(Inc.Profile.saveName.localized)
+                            .fontWeight(.semibold)
+                            .fixedSize()
+                            .frame(width: 92, alignment: .trailing)
+                    }
+                    .disabled(authVM.isSavingBio)
                 }
             }
         }

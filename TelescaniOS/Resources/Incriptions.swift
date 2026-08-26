@@ -60,6 +60,10 @@ struct Inc {
         static let profile: String = "profile"
         // EN: Profile
         // RU: Профиль
+
+        static let me: String = "me"
+        // EN: Me
+        // RU: Я
         
         static let metTitle: String = "metTitle"
         // EN: Met recently
@@ -118,16 +122,7 @@ struct Inc {
         static let nearbyEmptyTitle: String = "peopleDistanceFilterEmptyTitle"
         static let nearbyEmptyMessage: String =
             "peopleDistanceFilterEmptyMessage"
-        static let timeTitle: String = "peopleTimeFilterTitle"
-        static let timeDescription: String = "peopleTimeFilterDescription"
-        static let timeOldest: String = "peopleTimeFilterOldest"
-        static let timeNow: String = "peopleTimeFilterNow"
-        static let timeAll: String = "peopleTimeFilterAll"
-        static let timeFirst: String = "peopleTimeFilterFirst"
-        static let timeLatest: String = "peopleTimeFilterLatest"
-        static let timeSelected: String = "peopleTimeFilterSelected"
-        static let timeEmptyTitle: String = "peopleTimeFilterEmptyTitle"
-        static let timeEmptyMessage: String = "peopleTimeFilterEmptyMessage"
+        static let historyButton: String = "peopleHistoryButton"
     }
     
     // MARK: - Registration
@@ -256,8 +251,6 @@ struct Inc {
         static let close: String = "nearbyProfileClose"
         static let actions: String = "nearbyProfileActions"
         static let write: String = "nearbyProfileWrite"
-        static let internalChatHint: String = "nearbyProfileInternalChatHint"
-        static let telegramChatHint: String = "nearbyProfileTelegramChatHint"
         static let telegramChat: String = "nearbyProfileTelegramChat"
         static let report: String = "nearbyProfileReport"
         static let block: String = "nearbyProfileBlock"
@@ -339,6 +332,19 @@ struct Inc {
         static let saveName: String = "profileSaveName"
         static let namePlaceholder: String = "profileNamePlaceholder"
         static let nameDescription: String = "profileNameDescription"
+        static let informationDescription: String =
+            "profileInformationDescription"
+        static let editProfile: String = "profileEdit"
+        static let openPhoto: String = "profileOpenPhoto"
+        static let unlinkTelegram: String = "profileUnlinkTelegram"
+        static let unlinkTelegramAction: String =
+            "profileUnlinkTelegramAction"
+        static let unlinkTelegramTitle: String =
+            "profileUnlinkTelegramTitle"
+        static let unlinkTelegramMessage: String =
+            "profileUnlinkTelegramMessage"
+        static let unlinkTelegramFailed: String =
+            "profileUnlinkTelegramFailed"
 
         static let logout: String = "logout"
         static let accountActionsTitle: String = "accountActionsTitle"

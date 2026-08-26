@@ -18,6 +18,7 @@
 "chats" = "Чаты";
 "settings" = "Настройки";
 "profile" = "Профиль";
+"me" = "Я";
 "metTitle" = "Виделись";
 "metHeader" = "Виделись недавно";
 
@@ -60,16 +61,7 @@
 "peopleFilterMaximum" = "max";
 "peopleDistanceFilterEmptyTitle" = "В этом диапазоне никого";
 "peopleDistanceFilterEmptyMessage" = "Увеличьте расстояние, чтобы увидеть больше людей.";
-"peopleTimeFilterTitle" = "Время пересечения";
-"peopleTimeFilterDescription" = "Диапазон охватывает последние 24 часа. Сдвиньте правую границу влево, чтобы оставить первые пересечения, или левую вправо — чтобы оставить последние.";
-"peopleTimeFilterOldest" = "24 ч назад";
-"peopleTimeFilterNow" = "Сейчас";
-"peopleTimeFilterAll" = "Все за 24 часа";
-"peopleTimeFilterFirst" = "Первые пересечения";
-"peopleTimeFilterLatest" = "Последние пересечения";
-"peopleTimeFilterSelected" = "Выбранный интервал";
-"peopleTimeFilterEmptyTitle" = "В этом интервале никого";
-"peopleTimeFilterEmptyMessage" = "Расширьте диапазон, чтобы увидеть больше встреч.";
+"peopleHistoryButton" = "Время";
 
 /* Registration */
 "telegramLinkTitle" = "Привязка Telegram";
@@ -81,7 +73,7 @@
 "incorrectCode" = "Код недействителен или истёк";
 "telegramUsernameRequired" = "Создайте публичный Telegram username и запросите новый код";
 "warningCharactersEight" = "Максимум 8 символов";
-"regDescription" = "Введите код, который отправил вам Telescan_bot, для того чтобы приложение могло привязать ваш Telegram.";
+"regDescription" = "Введите код от Telescan_bot, чтобы привязать ваш Telegram-аккаунт к приложению.";
 "tgUsername" = "Telegram username";
 "usernamePlaceholder" = "@_";
 "profileBioTitle" = "BIO";
@@ -99,6 +91,14 @@
 "profileSaveName" = "Сохранить";
 "profileNamePlaceholder" = "Ваше имя";
 "profileNameDescription" = "Это имя будут видеть другие пользователи Telescan.";
+"profileInformationDescription" = "Коротко расскажите о себе.";
+"profileEdit" = "Изменить профиль";
+"profileOpenPhoto" = "Открыть фото";
+"profileUnlinkTelegram" = "Отвязать Telegram";
+"profileUnlinkTelegramAction" = "Отвязать";
+"profileUnlinkTelegramTitle" = "Отвязать Telegram?";
+"profileUnlinkTelegramMessage" = "Telegram-аккаунт будет отвязан от профиля Telescan. Вы сможете привязать его снова позже.";
+"profileUnlinkTelegramFailed" = "Не удалось отвязать Telegram. Попробуйте ещё раз.";
 
 /* Onboarding */
 "appleSignInFailed" = "Не удалось войти с Apple. Попробуйте ещё раз.";
@@ -137,8 +137,6 @@
 "nearbyProfileClose" = "Закрыть профиль";
 "nearbyProfileActions" = "Действия с профилем";
 "nearbyProfileWrite" = "Написать";
-"nearbyProfileInternalChatHint" = "Переписка во внутреннем чате";
-"nearbyProfileTelegramChatHint" = "Выше можно написать в Telegram";
 "nearbyProfileTelegramChat" = "Чат Telegram";
 "nearbyProfileReport" = "Пожаловаться";
 "nearbyProfileBlock" = "Заблокировать";
@@ -175,7 +173,7 @@
 "creatorCredit" = "from Ruslan Chukavin";
 "profileMoreActions" = "Ещё";
 "developerLinksTitle" = "Разработчик приложения";
-"developerLinksMessage" = "Ruslan Chukavin — разработчик Telescan. Куда вы хотите перейти?";
+"developerLinksMessage" = "Ruslan Chukavin, разработчик Telescan. Куда вы хотите перейти?";
 "telegramChannel" = "Telegram-канал";
 "logout" = "Выйти";
 "accountActionsTitle" = "Действия с аккаунтом";

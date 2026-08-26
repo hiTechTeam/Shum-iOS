@@ -4,19 +4,10 @@ struct ProfileDataView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @ObservedObject var authCodeViewModel: CodeViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
-    @State private var showScanningSettings = false
-    @State private var showInfoSheet = false
-    @State private var showLogoutOptions = false
-    @State private var showBlockedProfiles = false
-    @State private var showLogoutConfirmation = false
-    @State private var showLogoutError = false
-    @State private var showDeleteConfirmation = false
-    @State private var showDeleteError = false
     @State private var showNameEditor = false
     @State private var showBioEditor = false
     @State private var showTelegramLink = false
     @State private var draftBio = ""
-    @State private var isWorking = false
 
     init(
         authCodeViewModel: CodeViewModel,
@@ -80,7 +71,7 @@ struct ProfileDataView: View {
     }
 
     private var displayBio: String {
-        normalized(authCodeViewModel.bio)
+        normalized(authCodeViewModel.bio).map { String($0.prefix(36)) }
             ?? Inc.Profile.notSpecified.localized
     }
 
@@ -105,7 +96,7 @@ struct ProfileDataView: View {
 
     private func openBioEditor() {
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        draftBio = authCodeViewModel.bio ?? ""
+        draftBio = String((authCodeViewModel.bio ?? "").prefix(36))
         authCodeViewModel.resetBioSaveState()
         showBioEditor = true
     }
@@ -114,63 +105,6 @@ struct ProfileDataView: View {
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         authCodeViewModel.resetCodeEntry()
         showTelegramLink = true
-    }
-
-    private var profileActionsMenu: some View {
-        Menu {
-            Button {
-                showScanningSettings = true
-            } label: {
-                Label(
-                    Inc.Scanning.scanning.localized,
-                    systemImage: "dot.radiowaves.left.and.right"
-                )
-                .foregroundStyle(.primary)
-            }
-            .tint(.primary)
-
-            Button {
-                showInfoSheet = true
-            } label: {
-                Label(
-                    Inc.Info.title.localized,
-                    systemImage: "info.circle"
-                )
-                .foregroundStyle(.primary)
-            }
-            .tint(.primary)
-
-            Button {
-                showBlockedProfiles = true
-            } label: {
-                Label(
-                    Inc.NearbyProfile.blockedMenu.localized,
-                    systemImage: "person.crop.circle.badge.xmark"
-                )
-                .foregroundStyle(.primary)
-            }
-            .tint(.primary)
-
-            Button(role: .destructive) {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                showLogoutOptions = true
-            } label: {
-                Label(
-                    Inc.Profile.logout.localized,
-                    systemImage: "rectangle.portrait.and.arrow.right"
-                )
-                .foregroundStyle(.red)
-            }
-            .tint(.red)
-            .disabled(isWorking)
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.gray)
-                .frame(width: 32, height: 32)
-                .contentShape(Rectangle())
-        }
-        .accessibilityLabel(Inc.Profile.moreActions.localized)
     }
 
     private var scrollContent: some View {
@@ -184,30 +118,6 @@ struct ProfileDataView: View {
         .refreshable { await coordinator.refreshSession() }
     }
 
-    private func logoutCurrent() {
-        isWorking = true
-        Task {
-            do {
-                try await coordinator.logoutCurrentSession()
-            } catch {
-                isWorking = false
-                showLogoutError = true
-            }
-        }
-    }
-
-    private func deleteAccount() {
-        isWorking = true
-        Task {
-            do {
-                try await coordinator.deleteAccount()
-            } catch {
-                isWorking = false
-                showDeleteError = true
-            }
-        }
-    }
-
     var body: some View {
         ZStack {
             Color.tsBackground.ignoresSafeArea()
@@ -215,29 +125,6 @@ struct ProfileDataView: View {
         }
         .onChange(of: authCodeViewModel.photoS3URL) { _, value in
             photoVM.loadPhotoFromURL(value)
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                profileActionsMenu
-            }
-        }
-        .sheet(isPresented: $showScanningSettings) {
-            ScanningSettingsSheet()
-                .environmentObject(coordinator)
-                .environmentObject(coordinator.peopleViewModel)
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showInfoSheet) {
-            InfoSheetView()
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showBlockedProfiles) {
-            BlockedProfilesView()
-                .environmentObject(coordinator.peopleViewModel)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showNameEditor) {
             ProfileNameEditorSheet(authVM: authCodeViewModel)
@@ -258,56 +145,6 @@ struct ProfileDataView: View {
             TelegramLinkProfileSheet(authVM: authCodeViewModel)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
-        }
-        .alert(
-            Inc.Profile.accountActionsTitle.localized,
-            isPresented: $showLogoutOptions
-        ) {
-            Button(Inc.Profile.logoutCurrent.localized, role: .destructive) {
-                DispatchQueue.main.async {
-                    showLogoutConfirmation = true
-                }
-            }
-            Button(Inc.Profile.deleteAccount.localized, role: .destructive) {
-                DispatchQueue.main.async {
-                    showDeleteConfirmation = true
-                }
-            }
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-        }
-        .alert(
-            Inc.Profile.logoutCurrentTitle.localized,
-            isPresented: $showLogoutConfirmation
-        ) {
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-            Button(
-                Inc.Profile.logoutCurrent.localized,
-                role: .destructive,
-                action: logoutCurrent
-            )
-        } message: {
-            Text(Inc.Profile.logoutCurrentMessage.localized)
-        }
-        .alert(Inc.Profile.logoutFailed.localized, isPresented: $showLogoutError) {
-            Button(Inc.Common.okey.localized, role: .cancel) { }
-        }
-        .alert(
-            Inc.Profile.deleteAccountTitle.localized,
-            isPresented: $showDeleteConfirmation
-        ) {
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-            Button(
-                Inc.Profile.deleteAccount.localized,
-                role: .destructive,
-                action: deleteAccount
-            )
-        } message: {
-            Text(Inc.Profile.deleteAccountMessage.localized)
-        }
-        .alert(Inc.Profile.deleteAccountFailed.localized, isPresented: $showDeleteError) {
-            Button(Inc.Common.okey.localized, role: .cancel) { }
-        } message: {
-            Text(Inc.Profile.deleteAccountFailedMessage.localized)
         }
     }
 }
@@ -386,9 +223,11 @@ private struct ProfileNameEditorSheet: View {
                 .onSubmit(save)
 
                 Text(Inc.Profile.nameDescription.localized)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .telescanDescriptionStyle()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .allowsTightening(true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer(minLength: 0)
             }
@@ -398,21 +237,27 @@ private struct ProfileNameEditorSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(Inc.Common.cancel.localized) {
+                    Button {
                         dismiss()
+                    } label: {
+                        Text(Inc.Common.cancel.localized)
+                            .fixedSize()
+                            .frame(width: 92, alignment: .leading)
                     }
-                    .frame(width: 92, alignment: .leading)
                 }
 
                 ToolbarItem(placement: .principal) {
                     Text(Inc.Profile.nameTitle.localized)
-                        .font(.headline)
+                        .telescanSheetTitleStyle()
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(Inc.Profile.saveName.localized, action: save)
-                        .frame(width: 92, alignment: .trailing)
-                        .fontWeight(.semibold)
+                    Button(action: save) {
+                        Text(Inc.Profile.saveName.localized)
+                            .fontWeight(.semibold)
+                            .fixedSize()
+                            .frame(width: 92, alignment: .trailing)
+                    }
                 }
             }
         }
@@ -441,31 +286,25 @@ private struct TelegramLinkProfileSheet: View {
 
                 Spacer(minLength: 8)
 
-                RegistrationPrimaryButton(
-                    title: linkButtonTitle,
-                    isEnabled: authVM.codeStatus == true
-                        && !authVM.isLoading,
-                    accentColor: .blue,
-                    action: confirmTelegramCode
-                )
+                VStack(spacing: 14) {
+                    RegistrationPrimaryButton(
+                        title: Inc.Profile.linkTelegram.localized,
+                        isEnabled: authVM.codeStatus == true
+                            && !authVM.isLoading,
+                        accentColor: .blue,
+                        action: confirmTelegramCode
+                    )
+                }
                 .frame(maxWidth: 360)
-                .padding(.bottom, 16)
             }
-            .padding(.horizontal, 20)
             .padding(.top, 10)
+            .padding(.bottom, 16)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(Inc.Common.cancel.localized) {
-                        dismiss()
-                    }
-                    .frame(width: 92, alignment: .leading)
-                }
-
                 ToolbarItem(placement: .principal) {
                     Text(Inc.Profile.telegramTitle.localized)
-                        .font(.headline)
+                        .telescanSheetTitleStyle()
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
@@ -476,12 +315,9 @@ private struct TelegramLinkProfileSheet: View {
         .onAppear {
             authVM.resetCodeEntry()
         }
-    }
-
-    private var linkButtonTitle: String {
-        authVM.codeStatus == true
-            ? Inc.Profile.linkTelegram.localized
-            : Inc.Onboarding.confirmButton.localized
+        .onDisappear {
+            authVM.resetCodeEntry()
+        }
     }
 
     private func confirmTelegramCode() {
@@ -496,9 +332,10 @@ private struct TelegramLinkProfileSheet: View {
             }
         }
     }
+
 }
 
-private struct ScanningSettingsSheet: View {
+struct ScanningSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var coordinator: AppCoordinator
     @State private var showBluetoothAlert = false
@@ -507,10 +344,7 @@ private struct ScanningSettingsSheet: View {
         NavigationStack {
             VStack(spacing: 20) {
                 Text(Inc.Scanning.scanToggleDescription.localized)
-                    .font(.system(size: 15))
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .telescanDescriptionStyle()
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Toggle(
@@ -532,9 +366,14 @@ private struct ScanningSettingsSheet: View {
             }
             .padding(.top, 20)
             .padding(.horizontal, 20)
-            .navigationTitle(Inc.Scanning.scanning.localized)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(Inc.Scanning.scanning.localized)
+                        .telescanSheetTitleStyle()
+                }
+
                 ToolbarItem(placement: .confirmationAction) {
                     Button(Inc.Common.close.localized) {
                         dismiss()

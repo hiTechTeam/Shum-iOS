@@ -6,6 +6,7 @@ struct Profile: View {
     @StateObject private var photoViewModel = ProfilePhotoViewModel()
     
     private let profileInc: String = Inc.Tabs.profile.localized
+    private let profileTabInc: String = Inc.Tabs.me.localized
     
     var body: some View {
         NavigationStack {
@@ -19,7 +20,9 @@ struct Profile: View {
         .onAppear {
             authVM.restoreLocalProfile()
         }
-        .tabItem { Label(profileInc, systemImage: IncLogos.personFillViewwfinder) }
+        .tabItem {
+            Label(profileTabInc, systemImage: IncLogos.personFillViewwfinder)
+        }
         .tag(SelectedTab.profile)
     }
 }

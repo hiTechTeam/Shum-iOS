@@ -6,13 +6,19 @@ struct TitleField: View {
     var text: String
     
     private let fontSize: CGFloat = 12
-    private let frameWidth: CGFloat = 360
     private let frameHeight: CGFloat = 32
     
     private var content: some View {
         Text(text)
             .font(.system(size: fontSize, weight: .regular))
-            .frame(width: frameWidth, height: frameHeight, alignment: .leading)
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .allowsTightening(true)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: frameHeight,
+                alignment: .leading
+            )
     }
     
     // MARK: - Body

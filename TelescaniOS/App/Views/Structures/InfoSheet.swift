@@ -33,12 +33,9 @@ struct InfoSheetView: View {
 
     private func sectionDescription(_ description: String) -> some View {
         Text(description)
-            .font(.system(size: 15))
-            .foregroundStyle(.primary)
-            .lineSpacing(4)
+            .telescanDescriptionStyle()
             .frame(maxWidth: .infinity, alignment: .leading)
             .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, 6)
     }
 

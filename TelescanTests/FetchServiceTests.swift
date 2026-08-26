@@ -90,7 +90,47 @@ struct FetchServiceTests {
 
         let longBio = String(repeating: "a", count: 61)
         #expect(await viewModel.updateBio(longBio))
-        #expect(submittedBio == String(repeating: "a", count: 60))
+        #expect(submittedBio == String(repeating: "a", count: 36))
+    }
+
+    @Test("A validated code can be edited and checked again")
+    @MainActor
+    func validatedCodeCanBeReplaced() async {
+        clearStoredProfile()
+        defer { clearStoredProfile() }
+        let profileID = UUID()
+        let viewModel = CodeViewModel { code in
+            TelegramLinkResponse(
+                access: AccessTokenResponse(
+                    accessToken: "linked-access",
+                    tokenType: "bearer",
+                    expiresIn: 900
+                ),
+                profile: TelescanProfileResponse(
+                    telescanId: profileID,
+                    name: "Ada",
+                    username: code == "AB12CD34" ? "first" : "second",
+                    photoUrl: nil
+                )
+            )
+        }
+
+        viewModel.tmpCode = "AB12CD34"
+        viewModel.checkCode(viewModel.tmpCode)
+        await waitForCodeCheck(viewModel)
+        #expect(viewModel.codeStatus == true)
+        #expect(viewModel.tmpTgUsername == "@first")
+
+        viewModel.tmpCode = "AB12CD3"
+        viewModel.checkCode(viewModel.tmpCode)
+        #expect(viewModel.codeStatus == nil)
+        #expect(viewModel.tmpTgUsername == nil)
+
+        viewModel.tmpCode = "ZX98YU76"
+        viewModel.checkCode(viewModel.tmpCode)
+        await waitForCodeCheck(viewModel)
+        #expect(viewModel.codeStatus == true)
+        #expect(viewModel.tmpTgUsername == "@second")
     }
 
     @Test("A rejected complete code exposes the visual error state")
@@ -504,6 +544,46 @@ struct FetchServiceTests {
         #expect(profile.bio == "Open to networking")
         #expect(cleared.bio == nil)
         #expect(requestCount == 2)
+    }
+
+    @Test("Registration account actions issue authenticated deletes")
+    func registrationAccountActionsUseAuthenticatedDeletes() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        try sessions.save(
+            TokenResponse(
+                accessToken: "access-token",
+                refreshToken: "refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        var requests: [(method: String?, path: String?)] = []
+        MockURLProtocol.handler = { request in
+            requests.append((request.httpMethod, request.url?.path))
+            #expect(
+                request.value(forHTTPHeaderField: "Authorization")
+                    == "Bearer access-token"
+            )
+            return (204, Data())
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        try await client.logoutCurrentSession()
+        try await client.deleteAccount()
+
+        #expect(requests.count == 2)
+        #expect(requests[0].method == "DELETE")
+        #expect(requests[0].path == "/api/v1/auth/session")
+        #expect(requests[1].method == "DELETE")
+        #expect(requests[1].path == "/api/v1/users/me")
     }
 
     @Test("401 refreshes, rotates Keychain tokens, and retries once")

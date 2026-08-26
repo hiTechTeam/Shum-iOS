@@ -127,25 +127,35 @@ struct ChatsListView: View {
     }
 
     private var chatsList: some View {
-        List {
-            listContent
+        GeometryReader { geometry in
+            List {
+                listContent(availableHeight: geometry.size.height)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.always, axes: .vertical)
+            .refreshable {
+                await store.refresh()
+            }
+            .background(Color.tsBackground.ignoresSafeArea())
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.always, axes: .vertical)
-        .refreshable {
-            await store.refresh()
-        }
-        .overlay {
-            emptyState
-        }
-        .background(Color.tsBackground.ignoresSafeArea())
     }
 
     @ViewBuilder
-    private var listContent: some View {
-        if !store.conversations.isEmpty {
+    private func listContent(availableHeight: CGFloat) -> some View {
+        if store.conversations.isEmpty {
+            ContentUnavailableView(
+                Inc.Chats.emptyTitle.localized,
+                systemImage: "bubble.left.and.bubble.right",
+                description: Text(Inc.Chats.emptyMessage.localized)
+            )
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: max(0, availableHeight - 1))
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.tsBackground)
+        } else {
             ForEach(store.conversations) { conversation in
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -167,18 +177,6 @@ struct ChatsListView: View {
                 .listRowBackground(Color.tsBackground)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 84 }
             }
-        }
-    }
-
-    @ViewBuilder
-    private var emptyState: some View {
-        if store.conversations.isEmpty {
-            ContentUnavailableView(
-                Inc.Chats.emptyTitle.localized,
-                systemImage: "bubble.left.and.bubble.right",
-                description: Text(Inc.Chats.emptyMessage.localized)
-            )
-            .allowsHitTesting(false)
         }
     }
 }

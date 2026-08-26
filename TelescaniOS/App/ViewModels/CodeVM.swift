@@ -28,13 +28,18 @@ final class CodeViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isSavingBio = false
     @Published var bioSaveFailed = false
+    @Published var isUnlinkingTelegram = false
+    @Published var telegramUnlinkFailed = false
     @Published var tmpTgUsername: String?
     @Published var tmpCode = ""
 
     private let linkAction: @MainActor (String) async throws -> TelegramLinkResponse
     private let updateBioAction: @MainActor (String?) async throws
         -> TelescanProfileResponse
+    private let unlinkTelegramAction: @MainActor () async throws
+        -> TelescanProfileResponse
     private var linkTask: Task<Void, Never>?
+    private var pendingCode: String?
     private let codeCount = 8
 
     init(
@@ -46,15 +51,23 @@ final class CodeViewModel: ObservableObject {
         self.updateBioAction = {
             try await FetchService.fetch.updateProfile(bio: $0)
         }
+        self.unlinkTelegramAction = {
+            try await FetchService.fetch.unlinkTelegram()
+        }
     }
 
     init(
         linkAction: @escaping @MainActor (String) async throws -> TelegramLinkResponse,
         updateBioAction: @escaping @MainActor (String?) async throws
-            -> TelescanProfileResponse
+            -> TelescanProfileResponse,
+        unlinkTelegramAction: @escaping @MainActor () async throws
+            -> TelescanProfileResponse = {
+                try await FetchService.fetch.unlinkTelegram()
+            }
     ) {
         self.linkAction = linkAction
         self.updateBioAction = updateBioAction
+        self.unlinkTelegramAction = unlinkTelegramAction
     }
 
     func checkCode(_ input: String) {
@@ -64,18 +77,14 @@ final class CodeViewModel: ObservableObject {
         }
 
         guard normalizedCode.count == codeCount else {
-            linkTask?.cancel()
-            linkTask = nil
-            isLoading = false
-            codeStatus = nil
-            codeError = nil
-            tmpTgUsername = nil
+            invalidateCodeCheck()
             return
         }
 
         guard allowed else {
             linkTask?.cancel()
             linkTask = nil
+            pendingCode = nil
             isLoading = false
             tmpTgUsername = nil
             codeError = .invalidCode
@@ -86,7 +95,11 @@ final class CodeViewModel: ObservableObject {
             return
         }
 
-        guard !isLoading, codeStatus != true else { return }
+        guard pendingCode != normalizedCode
+                || (!isLoading && codeStatus != true) else { return }
+
+        linkTask?.cancel()
+        pendingCode = normalizedCode
         isLoading = true
         codeStatus = nil
         codeError = nil
@@ -95,8 +108,10 @@ final class CodeViewModel: ObservableObject {
         linkTask = Task { [weak self] in
             guard let self else { return }
             defer {
-                isLoading = false
-                linkTask = nil
+                if pendingCode == normalizedCode {
+                    isLoading = false
+                    linkTask = nil
+                }
             }
 
             let feedback = UINotificationFeedbackGenerator()
@@ -160,6 +175,30 @@ final class CodeViewModel: ObservableObject {
         bioSaveFailed = false
     }
 
+    @discardableResult
+    func unlinkTelegram() async -> Bool {
+        guard !isUnlinkingTelegram else { return false }
+        isUnlinkingTelegram = true
+        telegramUnlinkFailed = false
+        defer { isUnlinkingTelegram = false }
+
+        do {
+            ProfileCache.clear()
+            applyProfile(try await unlinkTelegramAction())
+            resetCodeEntry()
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            return true
+        } catch {
+            telegramUnlinkFailed = true
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            return false
+        }
+    }
+
+    func resetTelegramUnlinkState() {
+        telegramUnlinkFailed = false
+    }
+
     func updateLocalName(_ value: String) {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedName = trimmed.isEmpty
@@ -184,11 +223,14 @@ final class CodeViewModel: ObservableObject {
     func resetCodeEntry() {
         linkTask?.cancel()
         linkTask = nil
+        pendingCode = nil
         codeStatus = nil
         codeError = nil
         isLoading = false
         isSavingBio = false
         bioSaveFailed = false
+        isUnlinkingTelegram = false
+        telegramUnlinkFailed = false
         tmpTgUsername = nil
         tmpCode = ""
     }
@@ -211,6 +253,7 @@ final class CodeViewModel: ObservableObject {
     func clearProfile() {
         linkTask?.cancel()
         linkTask = nil
+        pendingCode = nil
         telescanID = nil
         tgName = nil
         tgUsername = nil
@@ -222,6 +265,8 @@ final class CodeViewModel: ObservableObject {
         isLoading = false
         isSavingBio = false
         bioSaveFailed = false
+        isUnlinkingTelegram = false
+        telegramUnlinkFailed = false
         tmpTgUsername = nil
         tmpCode = ""
     }
@@ -263,6 +308,16 @@ final class CodeViewModel: ObservableObject {
     private static func normalizedBio(_ value: String?) -> String? {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : String(trimmed.prefix(60))
+        return trimmed.isEmpty ? nil : String(trimmed.prefix(36))
+    }
+
+    private func invalidateCodeCheck() {
+        linkTask?.cancel()
+        linkTask = nil
+        pendingCode = nil
+        isLoading = false
+        codeStatus = nil
+        codeError = nil
+        tmpTgUsername = nil
     }
 }

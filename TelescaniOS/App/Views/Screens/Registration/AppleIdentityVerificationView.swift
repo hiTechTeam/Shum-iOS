@@ -27,10 +27,8 @@ struct AppleIdentityVerificationView: View {
                 .multilineTextAlignment(.center)
 
             Text(Inc.Onboarding.appleIdentityDescription.localized)
-                .font(.system(size: 17 * scale, weight: .regular))
+                .telescanDescriptionStyle()
                 .multilineTextAlignment(.center)
-                .lineSpacing(4 * scale)
-                .foregroundStyle(.secondary)
                 .padding(.top, 12 * scale)
         }
         .frame(maxWidth: 340 * scale)

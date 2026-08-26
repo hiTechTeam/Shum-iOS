@@ -6,22 +6,20 @@ struct CodeSpace: View {
     @EnvironmentObject var authCodeViewModel: CodeViewModel
     @FocusState private var isCodeFocused: Bool
     
-    private let frameWidth: CGFloat = 360
-    
     private var content: some View {
         VStack(spacing: 16) {
             VStack(spacing: 4) {
                 TitleField(text: Inc.Registration.enterCode.localized)
-                CodeField(
-                    text: $authCodeViewModel.tmpCode,
-                    isDisabled: authCodeViewModel.isLoading
-                        || authCodeViewModel.codeStatus == true
-                )
+                CodeField(text: $authCodeViewModel.tmpCode)
                     .focused($isCodeFocused)
+                    .onSubmit {
+                        isCodeFocused = false
+                    }
                     .onTapGesture {
                         isCodeFocused = true
                     }
                     .onChange(of: authCodeViewModel.tmpCode) { _, newValue in
+                        guard newValue.count <= 8 else { return }
                         authCodeViewModel.checkCode(newValue.uppercased())
                     }
             }
@@ -38,9 +36,15 @@ struct CodeSpace: View {
             Description(text: Inc.Registration.regDescription.localized)
         }
         .padding(.top, 10)
-        .frame(width: frameWidth)
+        .frame(maxWidth: 360)
+        .padding(.horizontal, 20)
         .onTapGesture {
             isCodeFocused = false
+        }
+        .onChange(of: authCodeViewModel.codeStatus) { _, status in
+            if status == true {
+                isCodeFocused = false
+            }
         }
     }
     

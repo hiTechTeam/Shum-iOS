@@ -2,11 +2,6 @@ import SwiftUI
 
 @MainActor
 final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
-    enum OnboardingStage {
-        case telegram
-        case scanning
-    }
-
     private let regKey = Keys.isReg.rawValue
     private let scanningKey = Keys.isScaning.rawValue
     private let authSession = AuthSessionStore.shared
@@ -15,7 +10,6 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
 
     @Published var isRegistered: Bool
     @Published private(set) var isAuthenticated: Bool
-    @Published private(set) var onboardingStage: OnboardingStage
     @Published var showSplash = true
     @Published var isScaning: Bool
 
@@ -38,11 +32,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             || (locallyRegistered && hasPrimarySession)
         #endif
         isScaning = UserDefaults.standard.bool(forKey: scanningKey)
-        onboardingStage = .telegram
         authCodeViewModel.restoreLocalProfile()
-        onboardingStage = authCodeViewModel.isUsernameConfirmed
-            ? .scanning
-            : .telegram
         #if !TELESCAN_PERSONAL_TEAM
         if hasLegacySession || locallyRegistered && !hasPrimarySession,
            !AppConfig.skipRegistration {
@@ -74,15 +64,19 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         isAuthenticated = true
         isRegistered = true
         UserDefaults.standard.set(true, forKey: regKey)
+        setScanning(true)
         updateApplicationState(isActive: true)
     }
 
     func completedAppleSignIn(profile: TelescanProfileResponse) {
         authCodeViewModel.applyProfile(profile)
         isAuthenticated = true
-        isRegistered = false
-        UserDefaults.standard.set(false, forKey: regKey)
-        onboardingStage = profile.isTelegramLinked ? .scanning : .telegram
+        if profile.isTelegramLinked {
+            completedRegistration()
+        } else {
+            isRegistered = false
+            UserDefaults.standard.set(false, forKey: regKey)
+        }
     }
 
     func setScanning(_ enabled: Bool) {
@@ -130,7 +124,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         case .active(let profile):
             authCodeViewModel.applyProfile(profile)
             if !isRegistered {
-                onboardingStage = .scanning
+                completedRegistration()
             }
             if isScaning {
                 peopleViewModel.startAdvertising(
@@ -141,7 +135,6 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             authCodeViewModel.applyProfile(profile)
             isRegistered = false
             UserDefaults.standard.set(false, forKey: regKey)
-            onboardingStage = .telegram
         case .invalid:
             clearLocalSession()
         case .unavailable:

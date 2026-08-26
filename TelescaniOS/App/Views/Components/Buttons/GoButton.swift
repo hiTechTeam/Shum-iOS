@@ -21,6 +21,7 @@ struct GoButton: View {
             action: onGo
         )
         .frame(maxWidth: buttonWidth)
+        .padding(.horizontal, 20)
         .padding(.bottom, paddingBottom)
     }
 }
