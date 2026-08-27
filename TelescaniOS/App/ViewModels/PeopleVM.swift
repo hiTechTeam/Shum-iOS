@@ -245,6 +245,17 @@ final class PeopleViewModel: ObservableObject {
         lastHistoryUpdates.removeAll()
     }
 
+    func recordVisibleEncountersImmediately() {
+        let fallbackDate = nowProvider()
+        for (id, user) in userCache {
+            recordEncounter(
+                user,
+                at: lastSignals[id] ?? fallbackDate,
+                force: true
+            )
+        }
+    }
+
     func refreshEncounterHistory(at now: Date = Date()) {
         if let encounterRetention {
             let cutoff = now.addingTimeInterval(-encounterRetention)

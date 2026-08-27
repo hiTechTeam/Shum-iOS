@@ -173,4 +173,9 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             peopleViewModel.startAdvertising(telescanID: id)
         }
     }
+
+    func prepareForBackground() {
+        guard isRegistered, isScaning else { return }
+        peopleViewModel.recordVisibleEncountersImmediately()
+    }
 }
