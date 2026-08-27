@@ -270,7 +270,7 @@ final class PeopleViewModel: ObservableObject {
             bleManager.startScanning()
         } else {
             bleManager.stopScanning()
-            clearDevices()
+            clearDevices(recordEncountersImmediately: true)
         }
     }
 
@@ -312,7 +312,7 @@ final class PeopleViewModel: ObservableObject {
         nearbyPeopleNotifier.setScanningEnabled(false)
         bleManager.stopScanning()
         bleManager.stopAdvertising()
-        clearDevices()
+        clearDevices(recordEncountersImmediately: true)
     }
 
     private func startDistanceUpdater() {
@@ -388,7 +388,19 @@ final class PeopleViewModel: ObservableObject {
         return max(1, Int(pow(10, exponent).rounded()))
     }
 
-    func clearDevices() {
+    func clearDevices(recordEncountersImmediately: Bool = false) {
+        if recordEncountersImmediately {
+            let fallbackDate = nowProvider()
+            for (id, user) in userCache {
+                pendingEncounterTasks[id]?.cancel()
+                pendingEncounterTasks.removeValue(forKey: id)
+                recordEncounter(
+                    user,
+                    at: lastSignals[id] ?? fallbackDate,
+                    force: true
+                )
+            }
+        }
         for task in profileTasks.values {
             task.cancel()
         }
