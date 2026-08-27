@@ -336,15 +336,6 @@ struct Inc {
             "profileInformationDescription"
         static let editProfile: String = "profileEdit"
         static let openPhoto: String = "profileOpenPhoto"
-        static let unlinkTelegram: String = "profileUnlinkTelegram"
-        static let unlinkTelegramAction: String =
-            "profileUnlinkTelegramAction"
-        static let unlinkTelegramTitle: String =
-            "profileUnlinkTelegramTitle"
-        static let unlinkTelegramMessage: String =
-            "profileUnlinkTelegramMessage"
-        static let unlinkTelegramFailed: String =
-            "profileUnlinkTelegramFailed"
 
         static let logout: String = "logout"
         static let accountActionsTitle: String = "accountActionsTitle"

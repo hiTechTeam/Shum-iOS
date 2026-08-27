@@ -28,15 +28,11 @@ final class CodeViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isSavingBio = false
     @Published var bioSaveFailed = false
-    @Published var isUnlinkingTelegram = false
-    @Published var telegramUnlinkFailed = false
     @Published var tmpTgUsername: String?
     @Published var tmpCode = ""
 
     private let linkAction: @MainActor (String) async throws -> TelegramLinkResponse
     private let updateBioAction: @MainActor (String?) async throws
-        -> TelescanProfileResponse
-    private let unlinkTelegramAction: @MainActor () async throws
         -> TelescanProfileResponse
     private var linkTask: Task<Void, Never>?
     private var pendingCode: String?
@@ -51,23 +47,15 @@ final class CodeViewModel: ObservableObject {
         self.updateBioAction = {
             try await FetchService.fetch.updateProfile(bio: $0)
         }
-        self.unlinkTelegramAction = {
-            try await FetchService.fetch.unlinkTelegram()
-        }
     }
 
     init(
         linkAction: @escaping @MainActor (String) async throws -> TelegramLinkResponse,
         updateBioAction: @escaping @MainActor (String?) async throws
-            -> TelescanProfileResponse,
-        unlinkTelegramAction: @escaping @MainActor () async throws
-            -> TelescanProfileResponse = {
-                try await FetchService.fetch.unlinkTelegram()
-            }
+            -> TelescanProfileResponse
     ) {
         self.linkAction = linkAction
         self.updateBioAction = updateBioAction
-        self.unlinkTelegramAction = unlinkTelegramAction
     }
 
     func checkCode(_ input: String) {
@@ -175,30 +163,6 @@ final class CodeViewModel: ObservableObject {
         bioSaveFailed = false
     }
 
-    @discardableResult
-    func unlinkTelegram() async -> Bool {
-        guard !isUnlinkingTelegram else { return false }
-        isUnlinkingTelegram = true
-        telegramUnlinkFailed = false
-        defer { isUnlinkingTelegram = false }
-
-        do {
-            ProfileCache.clear()
-            applyProfile(try await unlinkTelegramAction())
-            resetCodeEntry()
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            return true
-        } catch {
-            telegramUnlinkFailed = true
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
-            return false
-        }
-    }
-
-    func resetTelegramUnlinkState() {
-        telegramUnlinkFailed = false
-    }
-
     func resetCodeEntry() {
         linkTask?.cancel()
         linkTask = nil
@@ -208,8 +172,6 @@ final class CodeViewModel: ObservableObject {
         isLoading = false
         isSavingBio = false
         bioSaveFailed = false
-        isUnlinkingTelegram = false
-        telegramUnlinkFailed = false
         tmpTgUsername = nil
         tmpCode = ""
     }
@@ -244,8 +206,6 @@ final class CodeViewModel: ObservableObject {
         isLoading = false
         isSavingBio = false
         bioSaveFailed = false
-        isUnlinkingTelegram = false
-        telegramUnlinkFailed = false
         tmpTgUsername = nil
         tmpCode = ""
     }

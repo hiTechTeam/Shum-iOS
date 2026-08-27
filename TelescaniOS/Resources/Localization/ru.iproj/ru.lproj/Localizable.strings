@@ -94,12 +94,6 @@
 "profileInformationDescription" = "Коротко расскажите о себе.";
 "profileEdit" = "Изменить профиль";
 "profileOpenPhoto" = "Открыть фото";
-"profileUnlinkTelegram" = "Отвязать Telegram";
-"profileUnlinkTelegramAction" = "Отвязать";
-"profileUnlinkTelegramTitle" = "Отвязать Telegram?";
-"profileUnlinkTelegramMessage" = "Telegram-аккаунт будет отвязан от профиля Telescan. Вы сможете привязать его снова позже.";
-"profileUnlinkTelegramFailed" = "Не удалось отвязать Telegram. Попробуйте ещё раз.";
-
 /* Onboarding */
 "appleSignInFailed" = "Не удалось войти с Apple. Попробуйте ещё раз.";
 "appleIdentityTitle" = "Подтвердите личность";

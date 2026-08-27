@@ -39,7 +39,7 @@ struct ProfilePhotoView: View {
     var body: some View {
         VStack(spacing: 14) {
             Button {
-                if let uiImage = viewModel.uiImage {
+                if viewModel.uiImage != nil {
                     openPhotoPreview()
                 } else {
                     openPhotoOptions()

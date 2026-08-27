@@ -204,7 +204,7 @@ private final class TabBarBadgeAppearanceController: UIViewController {
         peopleItem.title = isScanning ? Inc.Tabs.people.localized : nil
         peopleItem.accessibilityLabel = Inc.Tabs.people.localized
 
-        if let configuredTabBar,
+        if configuredTabBar === tabBar,
            configuredColorScheme == colorScheme,
            configuredSelectedTab == selectedTab,
            configuredIsScanning == isScanning {

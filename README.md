@@ -82,18 +82,20 @@ profile validation or token refresh leave the session, tokens, cached profile,
 and cached photo intact.
 Starting a new link clears local image and URL caches before applying the fresh
 Telegram profile returned by the API.
-The profile screen shows a BIO field. Tapping it opens a native medium-height
-editor where the optional 60-character BIO can be applied or cleared without
+The profile screen shows a BIO field. Tapping it opens a native resizable
+editor where the optional 36-character BIO can be applied or cleared without
 requesting another Telegram code. Bluetooth scanning is controlled from a
-medium-height settings sheet opened through the profile's More menu. Nearby
-profile sheets show a non-empty BIO in up to three lines above the Telegram
-username control; BIO text is rendered as plain text and never as an active link.
+settings sheet opened through the profile's More menu. Nearby profile sheets
+show a non-empty BIO in up to three lines above a primary action that opens the
+linked Telegram profile; BIO text is rendered as plain text and never as an
+active link.
 
-The main tab bar contains **Nearby**, **Met**, and **Profile**. **Nearby** keeps
+The main tab bar contains **People** and **Profile**. **People** keeps
 profiles in discovery order instead of re-sorting rows whenever RSSI changes;
-coarse distance labels are recalculated every 10 seconds. After a resolved
-profile leaves **Nearby**, it appears in the device-local **Met** history for up
-to 24 hours. A profile is never shown in both lists at once.
+coarse distance labels are recalculated every 10 seconds. The toolbar opens the
+full-height **Met** history. After a resolved profile remains absent for five
+minutes, its last-seen snapshot is kept locally for up to 24 hours. A later
+nearby discovery does not remove the existing history entry.
 
 The in-app information screen links directly to the current Terms of Service
 and Privacy Policy.

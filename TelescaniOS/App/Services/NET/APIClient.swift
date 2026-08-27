@@ -100,17 +100,6 @@ actor APIClient {
         return response
     }
 
-    func unlinkTelegram() async throws -> TelescanProfileResponse {
-        let request = try request(
-            path: "/api/v1/users/me/telegram",
-            method: "DELETE"
-        )
-        return try decoder.decode(
-            TelescanProfileResponse.self,
-            from: try await perform(request, authenticated: true)
-        )
-    }
-
     func currentProfile() async throws -> TelescanProfileResponse {
         try await decode(path: "/api/v1/users/me")
     }

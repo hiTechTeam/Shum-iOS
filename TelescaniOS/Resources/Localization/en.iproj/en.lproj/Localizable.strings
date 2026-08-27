@@ -94,12 +94,6 @@
 "profileInformationDescription" = "Briefly describe yourself.";
 "profileEdit" = "Edit profile";
 "profileOpenPhoto" = "Open photo";
-"profileUnlinkTelegram" = "Unlink Telegram";
-"profileUnlinkTelegramAction" = "Unlink";
-"profileUnlinkTelegramTitle" = "Unlink Telegram?";
-"profileUnlinkTelegramMessage" = "Your Telegram account will be unlinked from your Telescan profile. You can link it again later.";
-"profileUnlinkTelegramFailed" = "Couldn’t unlink Telegram. Please try again.";
-
 /* Onboarding */
 "appleSignInFailed" = "Couldn’t sign in with Apple. Please try again.";
 "appleIdentityTitle" = "Identity verification is required";

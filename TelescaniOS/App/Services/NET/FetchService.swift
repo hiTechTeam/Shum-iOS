@@ -29,10 +29,6 @@ final class FetchService {
         #endif
     }
 
-    func unlinkTelegram() async throws -> TelescanProfileResponse {
-        try await client.unlinkTelegram()
-    }
-
     func currentProfile() async throws -> TelescanProfileResponse {
         try await client.currentProfile()
     }

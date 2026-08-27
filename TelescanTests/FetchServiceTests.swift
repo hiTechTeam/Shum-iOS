@@ -992,7 +992,7 @@ struct FetchServiceTests {
         #expect(restored.entries.map(\.id) == [first.id])
     }
 
-    @Test("Encounter history shows profiles only after BLE loss")
+    @Test("Encounter history records a confirmed separation after the buffer")
     @MainActor
     func nearbyProfileUpdatesEncounterHistoryWithoutSignalWriteFlooding() async {
         let manager = FakeBLEManager()
@@ -1004,6 +1004,7 @@ struct FetchServiceTests {
             bleManager: manager,
             encounterHistoryStore: historyStore,
             historyUpdateInterval: 60,
+            encounterSeparationDelay: 0.01,
             profileLoader: { requestedID in
                 TelescanProfileResponse(
                     telescanId: requestedID,
@@ -1023,35 +1024,37 @@ struct FetchServiceTests {
         )
 
         #expect(viewModel.encounterHistory.isEmpty)
-        #expect(historyStore.entries.first?.id == profileID)
-        #expect(historyStore.entries.first?.lastSeen == start)
-        #expect(historyStore.recordCount == 1)
+        #expect(historyStore.entries.isEmpty)
+        #expect(historyStore.recordCount == 0)
 
         now = start.addingTimeInterval(30)
         manager.emitUpdate(id: profileID.uuidString, rssi: -58)
         await Task.yield()
-        #expect(historyStore.recordCount == 1)
+        #expect(historyStore.recordCount == 0)
 
         now = start.addingTimeInterval(70)
         manager.emitUpdate(id: profileID.uuidString, rssi: -57)
         await Task.yield()
-        #expect(historyStore.recordCount == 2)
+        #expect(historyStore.recordCount == 0)
         #expect(viewModel.encounterHistory.isEmpty)
-        #expect(historyStore.entries.first?.lastSeen == now)
 
         manager.emitLoss(id: profileID.uuidString)
-        await Task.yield()
+        try? await Task.sleep(for: .milliseconds(30))
         #expect(viewModel.visibleUsers.isEmpty)
         #expect(viewModel.encounterHistory.first?.id == profileID)
+        #expect(historyStore.entries.first?.lastSeen == now)
+        #expect(historyStore.recordCount == 1)
 
         now = start.addingTimeInterval(80)
         manager.emitDiscovery(id: profileID.uuidString, rssi: -56)
         await Task.yield()
-        #expect(viewModel.encounterHistory.isEmpty)
+        #expect(viewModel.encounterHistory.first?.id == profileID)
 
         manager.emitLoss(id: profileID.uuidString)
-        await Task.yield()
+        try? await Task.sleep(for: .milliseconds(30))
         #expect(viewModel.encounterHistory.first?.id == profileID)
+        #expect(historyStore.entries.first?.lastSeen == now)
+        #expect(historyStore.recordCount == 2)
         viewModel.stopAllBluetoothActivity()
     }
 
@@ -1441,7 +1444,7 @@ struct FetchServiceTests {
         )
         let user = try #require(viewModel.visibleUsers.first)
         #expect(viewModel.encounterHistory.isEmpty)
-        #expect(historyStore.entries.map(\.id) == [profileID])
+        #expect(historyStore.entries.isEmpty)
         try await viewModel.block(user)
 
         #expect(viewModel.visibleUsers.isEmpty)
