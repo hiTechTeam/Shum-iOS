@@ -58,12 +58,13 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     private var identityResolutionFailures: [UUID: Int] = [:]
     private var resolvingPeripheralIDs: Set<UUID> = []
     private var retryNotBefore: [UUID: Date] = [:]
+    private var identityResolutionTimeoutGenerations: [UUID: Int] = [:]
     private var devicesLastSeen: [String: Date] = [:]
 
-    private let identityResolutionTimeout: TimeInterval = 8
+    private let foregroundIdentityResolutionTimeout: TimeInterval = 8
     private let identityRetryDelay: TimeInterval = 3
     private let identityRevalidationInterval: TimeInterval = 30
-    private var isApplicationActive = true
+    private var isApplicationActive = false
     private var cleanupTimer: DispatchSourceTimer?
 
     public var isBluetoothAvailable: Bool {
@@ -224,7 +225,15 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             self.isApplicationActive = isActive
             if isActive {
                 self.reconcileWithPersistedState()
+                for id in self.resolvingPeripheralIDs {
+                    guard let peripheral = self.discoveredPeripherals[id] else {
+                        continue
+                    }
+                    self.scheduleForegroundIdentityTimeout(for: peripheral)
+                }
                 self.removeExpiredDevices()
+            } else {
+                self.identityResolutionTimeoutGenerations.removeAll()
             }
         }
     }
@@ -246,6 +255,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             self.identityResolutionFailures.removeAll()
             self.resolvingPeripheralIDs.removeAll()
             self.retryNotBefore.removeAll()
+            self.identityResolutionTimeoutGenerations.removeAll()
             self.devicesLastSeen.removeAll()
 
             self.clearPublishedServiceState()
@@ -488,15 +498,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         peripheralRSSI[peripheral.identifier] = rssi
         peripheral.delegate = self
 
-        queue.asyncAfter(deadline: .now() + identityResolutionTimeout) {
-            [weak self, weak peripheral] in
-            guard let self,
-                  let peripheral,
-                  self.resolvingPeripheralIDs.contains(peripheralID) else {
-                return
-            }
-            self.finishIdentityResolution(peripheral, shouldRetry: true)
-        }
+        scheduleForegroundIdentityTimeout(for: peripheral)
 
         switch peripheral.state {
         case .disconnected:
@@ -513,6 +515,36 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
 
         @unknown default:
             break
+        }
+    }
+
+    private func scheduleForegroundIdentityTimeout(
+        for peripheral: CBPeripheral
+    ) {
+        guard isApplicationActive else {
+            logger.info(
+                "Identity connection remains pending in the background"
+            )
+            return
+        }
+
+        let id = peripheral.identifier
+        let generation = identityResolutionTimeoutGenerations[id, default: 0]
+            + 1
+        identityResolutionTimeoutGenerations[id] = generation
+
+        queue.asyncAfter(
+            deadline: .now() + foregroundIdentityResolutionTimeout
+        ) { [weak self, weak peripheral] in
+            guard let self,
+                  let peripheral,
+                  self.isApplicationActive,
+                  self.resolvingPeripheralIDs.contains(id),
+                  self.identityResolutionTimeoutGenerations[id]
+                    == generation else {
+                return
+            }
+            self.finishIdentityResolution(peripheral, shouldRetry: true)
         }
     }
 
@@ -564,6 +596,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         peripheralRSSI.removeAll()
         resolvingPeripheralIDs.removeAll()
         retryNotBefore.removeAll()
+        identityResolutionTimeoutGenerations.removeAll()
         identityResolutionFailures.removeAll()
     }
 
@@ -572,15 +605,16 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         shouldRetry: Bool
     ) {
         let id = peripheral.identifier
+        let rssi = peripheralRSSI[id] ?? -100
         resolvingPeripheralIDs.remove(id)
         discoveredPeripherals.removeValue(forKey: id)
         peripheralRSSI.removeValue(forKey: id)
+        identityResolutionTimeoutGenerations.removeValue(forKey: id)
         if shouldRetry {
             identityResolutionFailures[id, default: 0] += 1
-            if identityResolutionFailures[id, default: 0] >= 3 {
+            if identityResolutionFailures[id] == 3 {
                 peripheralIdentities.removeValue(forKey: id)
                 peripheralIdentityValidatedAt.removeValue(forKey: id)
-                identityResolutionFailures.removeValue(forKey: id)
             }
             retryNotBefore[id] = Date().addingTimeInterval(identityRetryDelay)
         } else {
@@ -588,6 +622,35 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             identityResolutionFailures.removeValue(forKey: id)
         }
         cancelPeripheralConnectionIfPossible(peripheral)
+
+        if shouldRetry,
+           !isApplicationActive,
+           shouldScan,
+           identityResolutionFailures[id, default: 0] < 3 {
+            scheduleBackgroundIdentityRetry(
+                peripheral: peripheral,
+                rssi: rssi
+            )
+        }
+    }
+
+    private func scheduleBackgroundIdentityRetry(
+        peripheral: CBPeripheral,
+        rssi: Int
+    ) {
+        let id = peripheral.identifier
+        queue.asyncAfter(deadline: .now() + identityRetryDelay) {
+            [weak self] in
+            guard let self,
+                  self.shouldScan,
+                  !self.isApplicationActive,
+                  !self.resolvingPeripheralIDs.contains(id) else {
+                return
+            }
+            self.retryNotBefore.removeValue(forKey: id)
+            self.logger.info("Retrying background identity resolution")
+            self.connectAndReadIdentity(peripheral: peripheral, rssi: rssi)
+        }
     }
 
     private func clearPresence(notify: Bool) {
@@ -759,8 +822,18 @@ extension BLEManager: CBCentralManagerDelegate {
                 discoveredPeripherals[peripheral.identifier] = peripheral
                 peripheral.delegate = self
 
-                if shouldScan, peripheral.state == .connected {
+                guard shouldScan else { continue }
+                switch peripheral.state {
+                case .connected, .disconnected:
                     connectAndReadIdentity(peripheral: peripheral, rssi: -100)
+                case .connecting:
+                    resolvingPeripheralIDs.insert(peripheral.identifier)
+                    peripheralRSSI[peripheral.identifier] = -100
+                    scheduleForegroundIdentityTimeout(for: peripheral)
+                case .disconnecting:
+                    break
+                @unknown default:
+                    break
                 }
             }
         }

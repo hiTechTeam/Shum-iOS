@@ -101,6 +101,13 @@ that timeout can run, the persisted buffer is published on the next launch
 before scanning restarts. Met snapshots remain local for up to 24 hours, and a
 later nearby discovery does not remove the existing history entry.
 
+Both Core Bluetooth background modes and state restoration remain enabled while
+scanning is on. Background identity connections are left pending for iOS to
+complete instead of being cancelled by the foreground timeout. Restored pending
+connections are reattached before scanning resumes, and failed background GATT
+reads receive a bounded retry because iOS coalesces duplicate scan events while
+both apps are suspended.
+
 The in-app information screen links directly to the current Terms of Service
 and Privacy Policy.
 
