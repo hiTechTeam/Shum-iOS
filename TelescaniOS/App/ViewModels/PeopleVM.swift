@@ -63,7 +63,7 @@ final class PeopleViewModel: ObservableObject {
     private let maximumRetryDelay: TimeInterval
     private let encounterRetention: TimeInterval?
     private let historyUpdateInterval: TimeInterval
-    private let encounterSeparationDelay: TimeInterval
+    private let encounterInactivityDelay: TimeInterval
     private let nowProvider: () -> Date
 
     init(
@@ -74,7 +74,8 @@ final class PeopleViewModel: ObservableObject {
             EncounterHistoryStore.shared,
         encounterRetention: TimeInterval? = EncounterHistoryPolicy.retention,
         historyUpdateInterval: TimeInterval = 60,
-        encounterSeparationDelay: TimeInterval = 5 * 60,
+        encounterInactivityDelay: TimeInterval =
+            BLEPresencePolicy.activeTimeout,
         maximumProfileResolutionAttempts: Int = 5,
         profileRetryBaseDelay: TimeInterval = 2,
         maximumRetryDelay: TimeInterval = 30,
@@ -113,7 +114,7 @@ final class PeopleViewModel: ObservableObject {
         self.encounterHistoryStore = encounterHistoryStore
         self.encounterRetention = encounterRetention.map { max(1, $0) }
         self.historyUpdateInterval = max(0, historyUpdateInterval)
-        self.encounterSeparationDelay = max(0, encounterSeparationDelay)
+        self.encounterInactivityDelay = max(0, encounterInactivityDelay)
         self.nowProvider = nowProvider
         self.maximumProfileResolutionAttempts = max(
             1,
@@ -388,13 +389,6 @@ final class PeopleViewModel: ObservableObject {
     }
 
     func clearDevices() {
-        let now = nowProvider()
-        for (id, user) in userCache {
-            scheduleEncounterAfterSeparation(
-                user,
-                lastSeenAt: lastSignals[id] ?? now
-            )
-        }
         for task in profileTasks.values {
             task.cancel()
         }
@@ -426,6 +420,9 @@ final class PeopleViewModel: ObservableObject {
         }
         let now = nowProvider()
         lastSignals[canonicalID] = now
+        if let user = userCache[canonicalID] {
+            scheduleEncounterAfterInactivity(user, lastSeenAt: now)
+        }
         if disappearanceCountdowns[canonicalID] != nil {
             disappearanceCountdowns.removeValue(forKey: canonicalID)
         }
@@ -498,6 +495,10 @@ final class PeopleViewModel: ObservableObject {
                 return
             }
             userCache[id] = user
+            scheduleEncounterAfterInactivity(
+                user,
+                lastSeenAt: lastSignals[id] ?? nowProvider()
+            )
             nearbyPeopleNotifier.detect(id: id)
             resolutionAttempts[id] = 0
             profileTasks[id] = nil
@@ -589,12 +590,6 @@ final class PeopleViewModel: ObservableObject {
     private func loseDevice(id: String) {
         guard let uuid = UUID(uuidString: id) else { return }
         let canonicalID = uuid.uuidString.lowercased()
-        if let user = userCache[canonicalID] {
-            scheduleEncounterAfterSeparation(
-                user,
-                lastSeenAt: lastSignals[canonicalID] ?? nowProvider()
-            )
-        }
         nearbyPeopleNotifier.lose(id: canonicalID)
         profileTasks[canonicalID]?.cancel()
         profileTasks.removeValue(forKey: canonicalID)
@@ -611,7 +606,7 @@ final class PeopleViewModel: ObservableObject {
         refreshEncounterHistory(at: nowProvider())
     }
 
-    private func scheduleEncounterAfterSeparation(
+    private func scheduleEncounterAfterInactivity(
         _ user: NearbyUser,
         lastSeenAt: Date
     ) {
@@ -619,7 +614,7 @@ final class PeopleViewModel: ObservableObject {
         guard !blockedProfileStore.ids.contains(canonicalID) else { return }
 
         pendingEncounterTasks[canonicalID]?.cancel()
-        let delay = encounterSeparationDelay
+        let delay = encounterInactivityDelay
         pendingEncounterTasks[canonicalID] = Task { @MainActor [weak self] in
             do {
                 try await Task.sleep(for: .seconds(delay))
@@ -629,7 +624,10 @@ final class PeopleViewModel: ObservableObject {
 
             guard let self else { return }
             self.pendingEncounterTasks.removeValue(forKey: canonicalID)
-            guard self.devices[canonicalID] == nil else { return }
+            guard !self.blockedProfileStore.ids.contains(canonicalID) else {
+                return
+            }
+            self.loseDevice(id: canonicalID)
             self.recordEncounter(user, at: lastSeenAt, force: true)
         }
     }

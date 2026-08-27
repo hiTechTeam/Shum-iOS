@@ -93,9 +93,10 @@ active link.
 The main tab bar contains **People** and **Profile**. **People** keeps
 profiles in discovery order instead of re-sorting rows whenever RSSI changes;
 coarse distance labels are recalculated every 10 seconds. The toolbar opens the
-full-height **Met** history. After a resolved profile remains absent for five
-minutes, its last-seen snapshot is kept locally for up to 24 hours. A later
-nearby discovery does not remove the existing history entry.
+full-height **Met** history. A resolved encounter starts a one-minute heartbeat
+buffer that is refreshed by every BLE signal. After a full minute without a
+signal, its last-seen snapshot is kept locally for up to 24 hours. A later nearby
+discovery does not remove the existing history entry.
 
 The in-app information screen links directly to the current Terms of Service
 and Privacy Policy.
