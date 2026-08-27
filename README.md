@@ -94,9 +94,12 @@ The main tab bar contains **People** and **Profile**. **People** keeps
 profiles in discovery order instead of re-sorting rows whenever RSSI changes;
 coarse distance labels are recalculated every 10 seconds. The toolbar opens the
 full-height **Met** history. A resolved encounter starts a one-minute heartbeat
-buffer that is refreshed by every BLE signal. After a full minute without a
-signal, its last-seen snapshot is kept locally for up to 24 hours. A later nearby
-discovery does not remove the existing history entry.
+buffer that is refreshed by every BLE signal and persisted at bounded intervals.
+After a full minute without a signal, the last real signal is published to
+**Met** and removed from the pending buffer. If iOS terminates the app before
+that timeout can run, the persisted buffer is published on the next launch
+before scanning restarts. Met snapshots remain local for up to 24 hours, and a
+later nearby discovery does not remove the existing history entry.
 
 The in-app information screen links directly to the current Terms of Service
 and Privacy Policy.

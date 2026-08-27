@@ -103,3 +103,41 @@ final class EncounterHistoryStore: EncounterHistoryStoring {
             .map { $0 }
     }
 }
+
+final class EncounterBufferStore: EncounterHistoryStoring {
+    static let shared = EncounterBufferStore()
+
+    private let storage: EncounterHistoryStore
+
+    var entries: [EncounterHistoryEntry] {
+        storage.entries
+    }
+
+    init(
+        defaults: UserDefaults = .standard,
+        key: String = "telescan.encounter-buffer.v1",
+        maximumEntries: Int = 500
+    ) {
+        storage = EncounterHistoryStore(
+            defaults: defaults,
+            key: key,
+            maximumEntries: maximumEntries
+        )
+    }
+
+    func record(_ user: NearbyUser, seenAt: Date) {
+        storage.record(user, seenAt: seenAt)
+    }
+
+    func remove(ids: Set<UUID>) {
+        storage.remove(ids: ids)
+    }
+
+    func prune(olderThan cutoff: Date) {
+        storage.prune(olderThan: cutoff)
+    }
+
+    func removeAll() {
+        storage.removeAll()
+    }
+}

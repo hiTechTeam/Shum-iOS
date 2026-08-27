@@ -997,12 +997,14 @@ struct FetchServiceTests {
     func encounterHeartbeatPublishesAfterInactivity() async {
         let manager = FakeBLEManager()
         let historyStore = FakeEncounterHistoryStore()
+        let bufferStore = FakeEncounterHistoryStore()
         let profileID = UUID()
         let start = Date(timeIntervalSince1970: 20_000)
         var now = start
         let viewModel = PeopleViewModel(
             bleManager: manager,
             encounterHistoryStore: historyStore,
+            encounterBufferStore: bufferStore,
             historyUpdateInterval: 60,
             encounterInactivityDelay: 0.5,
             profileLoader: { requestedID in
@@ -1026,6 +1028,7 @@ struct FetchServiceTests {
         #expect(viewModel.encounterHistory.isEmpty)
         #expect(historyStore.entries.isEmpty)
         #expect(historyStore.recordCount == 0)
+        #expect(bufferStore.entries.first?.id == profileID)
 
         try? await Task.sleep(for: .milliseconds(350))
         now = start.addingTimeInterval(70)
@@ -1035,12 +1038,14 @@ struct FetchServiceTests {
         #expect(!viewModel.visibleUsers.isEmpty)
         #expect(historyStore.recordCount == 0)
         #expect(viewModel.encounterHistory.isEmpty)
+        #expect(bufferStore.entries.first?.lastSeen == now)
 
         try? await Task.sleep(for: .milliseconds(300))
         #expect(viewModel.visibleUsers.isEmpty)
         #expect(viewModel.encounterHistory.first?.id == profileID)
         #expect(historyStore.entries.first?.lastSeen == now)
         #expect(historyStore.recordCount == 1)
+        #expect(bufferStore.entries.isEmpty)
 
         now = start.addingTimeInterval(80)
         manager.emitDiscovery(id: profileID.uuidString, rssi: -56)
@@ -1056,6 +1061,38 @@ struct FetchServiceTests {
         #expect(viewModel.encounterHistory.first?.id == profileID)
         #expect(historyStore.entries.first?.lastSeen == now)
         #expect(historyStore.recordCount == 2)
+        #expect(bufferStore.entries.isEmpty)
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("Buffered encounters publish before the next scan starts")
+    @MainActor
+    func bufferedEncounterPublishesOnNextLaunch() {
+        let historyStore = FakeEncounterHistoryStore()
+        let bufferStore = FakeEncounterHistoryStore()
+        let user = NearbyUser(
+            id: UUID(),
+            name: "Interrupted encounter",
+            username: "@interrupted",
+            bio: nil,
+            photoURL: nil
+        )
+        let lastSignal = Date(timeIntervalSince1970: 30_000)
+        bufferStore.record(user, seenAt: lastSignal)
+
+        let viewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            encounterHistoryStore: historyStore,
+            encounterBufferStore: bufferStore,
+            encounterRetention: nil,
+            nowProvider: { lastSignal.addingTimeInterval(10) }
+        )
+
+        #expect(bufferStore.entries.isEmpty)
+        #expect(historyStore.entries.first?.id == user.id)
+        #expect(historyStore.entries.first?.lastSeen == lastSignal)
+        #expect(viewModel.encounterHistory.first?.id == user.id)
+        #expect(viewModel.visibleUsers.isEmpty)
         viewModel.stopAllBluetoothActivity()
     }
 

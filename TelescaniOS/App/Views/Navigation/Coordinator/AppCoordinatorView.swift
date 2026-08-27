@@ -34,9 +34,6 @@ struct AppCoordinatorView: View {
             coordinator.showSplash = false
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background {
-                coordinator.prepareForBackground()
-            }
             coordinator.updateApplicationState(isActive: phase == .active)
             if phase == .active {
                 Task {
