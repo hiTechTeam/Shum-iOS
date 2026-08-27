@@ -131,30 +131,34 @@ struct InfoSheetView: View {
     }
 
     var body: some View {
-        listContent
-            .environment(
-                \.openURL,
-                OpenURLAction { url in
-                    guard url == developerActionURL else {
-                        return .systemAction
-                    }
-                    showDeveloperLinks = true
-                    return .handled
+        NavigationStack {
+            listContent
+                .navigationTitle(Inc.Common.Telescan.localized)
+                .navigationBarTitleDisplayMode(.inline)
+        }
+        .environment(
+            \.openURL,
+            OpenURLAction { url in
+                guard url == developerActionURL else {
+                    return .systemAction
                 }
-            )
-            .alert(
-                Inc.Profile.developerLinksTitle.localized,
-                isPresented: $showDeveloperLinks
-            ) {
-                Button("GitHub") {
-                    openURL(developerGitHubURL)
-                }
-                Button(Inc.Profile.telegramChannel.localized) {
-                    openURL(developerTelegramURL)
-                }
-                Button(Inc.Common.cancel.localized, role: .cancel) { }
-            } message: {
-                Text(Inc.Profile.developerLinksMessage.localized)
+                showDeveloperLinks = true
+                return .handled
             }
+        )
+        .alert(
+            Inc.Profile.developerLinksTitle.localized,
+            isPresented: $showDeveloperLinks
+        ) {
+            Button("GitHub") {
+                openURL(developerGitHubURL)
+            }
+            Button(Inc.Profile.telegramChannel.localized) {
+                openURL(developerTelegramURL)
+            }
+            Button(Inc.Common.cancel.localized, role: .cancel) { }
+        } message: {
+            Text(Inc.Profile.developerLinksMessage.localized)
+        }
     }
 }

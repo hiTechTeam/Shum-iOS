@@ -10,6 +10,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
 
     @Published var isRegistered: Bool
     @Published private(set) var isAuthenticated: Bool
+    @Published private(set) var authenticationFlowID = UUID()
     @Published var showSplash = true
     @Published var isScaning: Bool
 
@@ -156,6 +157,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         isScaning = false
         isAuthenticated = false
         isRegistered = false
+        authenticationFlowID = UUID()
     }
 
     func updateApplicationState(isActive: Bool) {

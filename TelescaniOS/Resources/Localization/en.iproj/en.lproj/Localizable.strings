@@ -123,7 +123,7 @@
 "nearbyEmptyTitle" = "No one nearby yet";
 "scanning" = "Scanning";
 "justTurnScaning" = "Turn on scanning";
-"scanToggleDescription" = "The switch enables Bluetooth scanning and broadcasts your Telescan ID. While scanning is active, you can see nearby Telescan users and they can see you.";
+"scanToggleDescription" = "While scanning is active, you can see nearby Telescan users and they can see you.";
 "turnedOffScaning" = "Scanning is turned off. Enable scanning in the app to see nearby people.";
 "noPeopleNearby" = "Scanning is active. When Telescan users are nearby, they will appear on this screen.";
 "scanAlertText" = "Enable scanning in Settings to open the Nearby section.";
@@ -193,7 +193,7 @@
 "info_title" = "Information";
 "info_why_telescan" = "Why Telescan";
 "info_how_it_works" = "How it works";
-"info_how_it_works_description" = "Telescan uses Bluetooth to discover nearby users and displays their name, photo, and Telegram username: copy the username, paste it into Telegram’s search field, find the user, and continue the conversation.";
+"info_how_it_works_description" = "Telescan uses Bluetooth to find people nearby, then lets you contact them through Telegram. The app continues searching in the background: you can minimize it, but do not quit it. When a Telescan user is detected nearby, the app sends a notification.";
 "proprietaryLicense" = "Copyright © 2021 - 2026 Ruslan Chukavin. All rights reserved.";
 "info_story" = "Every day, we find ourselves near people we could have talked to, gotten to know, spent an evening with, or one day remembered the encounter as something important. We cross paths on the metro, at school, in cafés, and on the street. We look at one another and almost always simply keep walking.\n\nToo many good stories end before they have a chance to begin. Telescan is an attempt to give those encounters another chance.";
 "rulesAndPrivacy" = "Documents";

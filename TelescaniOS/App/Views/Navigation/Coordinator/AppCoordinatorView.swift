@@ -13,6 +13,7 @@ struct AppCoordinatorView: View {
                     AuthenticatedOnboardingView()
                 } else {
                     Welcome()
+                        .id(coordinator.authenticationFlowID)
                 }
             }
 

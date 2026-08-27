@@ -128,7 +128,7 @@ struct ProfileDataView: View {
         }
         .sheet(isPresented: $showNameEditor) {
             ProfileNameEditorSheet(authVM: authCodeViewModel)
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showBioEditor) {
@@ -137,13 +137,13 @@ struct ProfileDataView: View {
                 isPresented: $showBioEditor,
                 authVM: authCodeViewModel
             )
-            .presentationDetents([.medium])
+            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
             .interactiveDismissDisabled(authCodeViewModel.isSavingBio)
         }
         .sheet(isPresented: $showTelegramLink) {
             TelegramLinkProfileSheet(authVM: authCodeViewModel)
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
     }

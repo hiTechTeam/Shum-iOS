@@ -87,7 +87,7 @@ struct ProfileOverviewView: View {
             ScanningSettingsSheet()
                 .environmentObject(coordinator)
                 .environmentObject(coordinator.peopleViewModel)
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showInfoSheet) {

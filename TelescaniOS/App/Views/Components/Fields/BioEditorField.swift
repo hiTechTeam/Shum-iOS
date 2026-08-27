@@ -116,7 +116,7 @@ struct BioProfileField: View {
                 isPresented: $showEditor,
                 authVM: authVM
             )
-            .presentationDetents([.medium])
+            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
             .interactiveDismissDisabled(authVM.isSavingBio)
         }

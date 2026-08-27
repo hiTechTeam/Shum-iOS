@@ -11,11 +11,6 @@ struct PeopleView: View {
     @State private var selectedUser: NearbyUser?
     @State private var showsEncounterHistory = false
 
-    private let gridColumns = Array(
-        repeating: GridItem(.flexible(), spacing: 18),
-        count: 3
-    )
-
     var body: some View {
         ZStack {
             Color.tsBackground
@@ -41,22 +36,22 @@ struct PeopleView: View {
                         }
                     }
                 } else {
-                    ScrollView {
-                        LazyVGrid(columns: gridColumns, spacing: 22) {
-                            ForEach(peopleViewModel.visibleUsers) { user in
-                                ProfileAvatarButton(
-                                    user: user,
-                                    presenceState: presenceState(for: user)
-                                ) {
-                                    selectedUser = user
-                                }
-                            }
+                    List(peopleViewModel.visibleUsers) { user in
+                        ProfileAvatarButton(user: user) {
+                            selectedUser = user
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 18)
-                        .padding(.bottom, 18)
+                        .listRowInsets(
+                            EdgeInsets(
+                                top: 8,
+                                leading: 16,
+                                bottom: 8,
+                                trailing: 16
+                            )
+                        )
+                        .listRowBackground(Color.clear)
                     }
-                    .scrollBounceBehavior(.always)
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .refreshable {
                         await peopleViewModel.refreshNearbyPeople()
                     }
@@ -83,11 +78,6 @@ struct PeopleView: View {
                     )
                 }
                 .accessibilityLabel(Inc.PeopleFilters.historyButton.localized)
-                .tint(
-                    peopleViewModel.encounterHistory.isEmpty
-                        ? Color.gray
-                        : Color.blue
-                )
             }
         }
         .onChange(of: scenePhase) {  _, newPhase in
@@ -127,17 +117,6 @@ struct PeopleView: View {
         }
     }
 
-    private func presenceState(
-        for user: NearbyUser
-    ) -> NearbyAvatarPresenceState {
-        guard let seconds = peopleViewModel.disappearanceCountdowns[
-            user.discoveryID
-        ] else {
-            return .active
-        }
-
-        return .disappearing(seconds: seconds)
-    }
 }
 
 private struct EncounterHistoryToolbarIcon: View {
@@ -150,64 +129,54 @@ private struct EncounterHistoryToolbarIcon: View {
     }
 }
 
-enum NearbyAvatarPresenceState {
-    case active
-    case disappearing(seconds: Int)
-}
-
 struct ProfileAvatarButton: View {
     let user: NearbyUser
-    let presenceState: NearbyAvatarPresenceState?
     let action: () -> Void
 
-    init(
-        user: NearbyUser,
-        presenceState: NearbyAvatarPresenceState? = nil,
-        action: @escaping () -> Void
-    ) {
-        self.user = user
-        self.presenceState = presenceState
-        self.action = action
-    }
+    private let avatarSize: CGFloat = 52
 
     var body: some View {
         Button {
             UIImpactFeedbackGenerator(style: .soft).impactOccurred()
             action()
         } label: {
-            VStack(spacing: 8) {
-                GeometryReader { geometry in
-                    let diameter = min(
-                        geometry.size.width,
-                        geometry.size.height
-                    )
+            HStack(spacing: 12) {
+                profileImage
 
-                    profileImage(diameter: diameter)
-                        .frame(
-                            maxWidth: .infinity,
-                            maxHeight: .infinity,
-                            alignment: .center
-                        )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(user.name)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    if let bio = user.bio?.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    ), !bio.isEmpty {
+                        Text(bio)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
-                .aspectRatio(1, contentMode: .fit)
-                .contentShape(Circle())
 
-                Text(user.name)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .frame(maxWidth: .infinity)
+                Spacer(minLength: 8)
+
+                NearbyPresenceLabel(
+                    user: user,
+                    usesCompactCountdown: true,
+                    fontSize: 14
+                )
             }
+            .frame(maxWidth: .infinity, minHeight: avatarSize)
             .contentShape(Rectangle())
         }
-        .buttonStyle(ProfileAvatarButtonStyle())
+        .buttonStyle(.plain)
         .accessibilityLabel(user.name)
         .accessibilityAddTraits(.isButton)
     }
 
     @ViewBuilder
-    private func profileImage(diameter: CGFloat) -> some View {
+    private var profileImage: some View {
         Group {
             if let url = user.photoURL,
                let imageURL = URL(string: url) {
@@ -226,82 +195,9 @@ struct ProfileAvatarButton: View {
                     .foregroundStyle(.gray)
             }
         }
-        .frame(width: diameter, height: diameter)
+        .frame(width: avatarSize, height: avatarSize)
         .background(Color(uiColor: .secondarySystemBackground), in: Circle())
         .clipShape(Circle())
-        .overlay {
-            if let presenceState {
-                NearbyAvatarPresenceRing(state: presenceState)
-            } else {
-                Circle()
-                    .strokeBorder(
-                        Color.primary.opacity(0.13),
-                        lineWidth: 2
-                    )
-            }
-        }
-    }
-}
-
-private struct NearbyAvatarPresenceRing: View {
-    let state: NearbyAvatarPresenceState
-
-    private let lineWidth: CGFloat = 3
-
-    var body: some View {
-        Group {
-            switch state {
-            case .active:
-                Circle()
-                    .strokeBorder(Color.primary.opacity(0.13), lineWidth: 2)
-
-            case .disappearing:
-                Circle()
-                    .trim(from: 0, to: remainingProgress)
-                    .stroke(
-                        Color.orange,
-                        style: StrokeStyle(
-                            lineWidth: lineWidth,
-                            lineCap: .round
-                        )
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .padding(lineWidth / 2)
-            }
-        }
-        .animation(
-            .linear(duration: BLEPresencePolicy.countdownUpdateInterval),
-            value: remainingProgress
-        )
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private var remainingProgress: CGFloat {
-        guard case let .disappearing(seconds) = state else { return 1 }
-
-        let countdownDuration = max(
-            1,
-            BLEPresencePolicy.activeTimeout
-                - BLEPresencePolicy.signalLossIndicatorDelay
-        )
-
-        return min(
-            max(CGFloat(Double(seconds) / countdownDuration), 0),
-            1
-        )
-    }
-}
-
-private struct ProfileAvatarButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
-            .opacity(configuration.isPressed ? 0.78 : 1)
-            .animation(
-                .spring(response: 0.22, dampingFraction: 0.68),
-                value: configuration.isPressed
-            )
     }
 }
 

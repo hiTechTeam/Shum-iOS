@@ -36,7 +36,8 @@ struct MainContentView: View {
         .background(
             TabBarBadgeAppearanceConfigurator(
                 colorScheme: colorScheme,
-                selectedTab: selectedMainTab
+                selectedTab: selectedMainTab,
+                isScanning: coordinator.isScaning
             )
         )
     }
@@ -72,12 +73,15 @@ struct MainContentView: View {
 
     @ViewBuilder
     private var nearbyTabItem: some View {
-        Label(
-            Inc.Tabs.people.localized,
-            systemImage: coordinator.isScaning
-                ? "person.2.fill"
-                : "eye.slash"
-        )
+        if coordinator.isScaning {
+            Label(
+                Inc.Tabs.people.localized,
+                systemImage: "person.2.fill"
+            )
+        } else {
+            Image(systemName: "eye.slash")
+                .accessibilityLabel(Inc.Tabs.people.localized)
+        }
     }
 
     @ViewBuilder
@@ -105,13 +109,15 @@ private struct TabBarBadgeAppearanceConfigurator:
     UIViewControllerRepresentable {
     let colorScheme: ColorScheme
     let selectedTab: MainTab
+    let isScanning: Bool
 
     func makeUIViewController(
         context: Context
     ) -> TabBarBadgeAppearanceController {
         TabBarBadgeAppearanceController(
             colorScheme: colorScheme,
-            selectedTab: selectedTab
+            selectedTab: selectedTab,
+            isScanning: isScanning
         )
     }
 
@@ -121,7 +127,8 @@ private struct TabBarBadgeAppearanceConfigurator:
     ) {
         uiViewController.update(
             colorScheme: colorScheme,
-            selectedTab: selectedTab
+            selectedTab: selectedTab,
+            isScanning: isScanning
         )
     }
 }
@@ -129,13 +136,20 @@ private struct TabBarBadgeAppearanceConfigurator:
 private final class TabBarBadgeAppearanceController: UIViewController {
     private var colorScheme: ColorScheme
     private var selectedTab: MainTab
+    private var isScanning: Bool
     private weak var configuredTabBar: UITabBar?
     private var configuredColorScheme: ColorScheme?
     private var configuredSelectedTab: MainTab?
+    private var configuredIsScanning: Bool?
 
-    init(colorScheme: ColorScheme, selectedTab: MainTab) {
+    init(
+        colorScheme: ColorScheme,
+        selectedTab: MainTab,
+        isScanning: Bool
+    ) {
         self.colorScheme = colorScheme
         self.selectedTab = selectedTab
+        self.isScanning = isScanning
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -160,14 +174,20 @@ private final class TabBarBadgeAppearanceController: UIViewController {
         applyAppearance()
     }
 
-    func update(colorScheme: ColorScheme, selectedTab: MainTab) {
+    func update(
+        colorScheme: ColorScheme,
+        selectedTab: MainTab,
+        isScanning: Bool
+    ) {
         guard self.colorScheme != colorScheme
-                || self.selectedTab != selectedTab else {
+                || self.selectedTab != selectedTab
+                || self.isScanning != isScanning else {
             return
         }
 
         self.colorScheme = colorScheme
         self.selectedTab = selectedTab
+        self.isScanning = isScanning
         applyAppearanceWhenAvailable()
     }
 
@@ -178,15 +198,20 @@ private final class TabBarBadgeAppearanceController: UIViewController {
     }
 
     private func applyAppearance() {
-        if let configuredTabBar,
-           configuredColorScheme == colorScheme,
-           configuredSelectedTab == selectedTab {
-            return
-        }
-
         guard let tabBar = enclosingTabBarController?.tabBar,
               let items = tabBar.items,
               !items.isEmpty else {
+            return
+        }
+
+        let peopleItem = items[0]
+        peopleItem.title = isScanning ? Inc.Tabs.people.localized : nil
+        peopleItem.accessibilityLabel = Inc.Tabs.people.localized
+
+        if let configuredTabBar,
+           configuredColorScheme == colorScheme,
+           configuredSelectedTab == selectedTab,
+           configuredIsScanning == isScanning {
             return
         }
 
@@ -195,13 +220,14 @@ private final class TabBarBadgeAppearanceController: UIViewController {
             : .black
 
         configurePeopleBadge(
-            for: items[0],
+            for: peopleItem,
             isSelected: selectedTab == .nearby,
             inactiveTextColor: inactiveBadgeTextColor
         )
         configuredTabBar = tabBar
         configuredColorScheme = colorScheme
         configuredSelectedTab = selectedTab
+        configuredIsScanning = isScanning
     }
 
     private func configurePeopleBadge(
