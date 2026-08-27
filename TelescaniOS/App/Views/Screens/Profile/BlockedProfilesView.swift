@@ -1,9 +1,10 @@
 import SwiftUI
+import Kingfisher
 
 struct BlockedProfilesView: View {
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
-    @State private var isWorking = false
+    @State private var profileBeingUnblocked: UUID?
     @State private var showError = false
 
     var body: some View {
@@ -17,50 +18,47 @@ struct BlockedProfilesView: View {
                 } else {
                     List(peopleViewModel.blockedProfiles) { profile in
                         HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(profile.name ?? profile.username ?? "—")
-                                    .font(.body)
-                                if let username = profile.username {
-                                    Text(username.hasPrefix("@") ? username : "@\(username)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
+                            BlockedProfileAvatar(profile: profile)
+
+                            Text(profile.name ?? profile.username ?? "—")
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
 
                             Spacer()
 
-                            Button(Inc.NearbyProfile.unblock.localized) {
-                                unblock(profile)
+                            if profileBeingUnblocked == profile.id {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .frame(minWidth: 44)
+                            } else {
+                                Button(Inc.NearbyProfile.unblock.localized) {
+                                    unblock(profile)
+                                }
+                                .buttonStyle(.borderless)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                                .disabled(profileBeingUnblocked != nil)
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(Color(uiColor: .systemBlue))
-                            .disabled(isWorking)
                         }
-                        .padding(12)
-                        .background(
-                            Color(uiColor: .secondarySystemGroupedBackground),
-                            in: RoundedRectangle(cornerRadius: 13)
-                        )
                         .listRowInsets(
                             EdgeInsets(
-                                top: 6,
+                                top: 8,
                                 leading: 16,
-                                bottom: 6,
+                                bottom: 8,
                                 trailing: 16
                             )
                         )
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
                     }
+                    .listStyle(.plain)
                 }
             }
-            .navigationTitle(Inc.NearbyProfile.blockedProfiles.localized)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .overlay {
-                if isWorking {
-                    ProgressView()
-                        .padding(16)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(Inc.NearbyProfile.blockedProfiles.localized)
+                        .telescanSheetTitleStyle()
                 }
             }
         }
@@ -78,14 +76,48 @@ struct BlockedProfilesView: View {
     }
 
     private func unblock(_ profile: BlockedProfileResponse) {
-        isWorking = true
+        guard profileBeingUnblocked == nil else { return }
+        profileBeingUnblocked = profile.id
         Task {
             do {
                 try await peopleViewModel.unblock(profile)
             } catch {
                 showError = true
             }
-            isWorking = false
+            profileBeingUnblocked = nil
         }
+    }
+}
+
+private struct BlockedProfileAvatar: View {
+    let profile: BlockedProfileResponse
+
+    private let size: CGFloat = 44
+
+    var body: some View {
+        Group {
+            if let photoURL = profile.photoUrl,
+               let url = URL(string: photoURL) {
+                KFImage(url)
+                    .placeholder { placeholder }
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+    }
+
+    private var placeholder: some View {
+        Circle()
+            .fill(Color(uiColor: .tertiarySystemFill))
+            .overlay {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 19))
+                    .foregroundStyle(.secondary)
+            }
     }
 }

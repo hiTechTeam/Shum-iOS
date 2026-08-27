@@ -2,147 +2,283 @@ import SwiftUI
 import UIKit
 
 struct MainContentView: View {
-    
-    @EnvironmentObject var coordinator: AppCoordinator
-    
-    @State private var selectedTab: SelectedTab = .near
-    @State private var previousTab: SelectedTab = .near
-    @State private var showScanAlert = false
-    
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @EnvironmentObject private var peopleViewModel: PeopleViewModel
+
+    @StateObject private var profilePhotoViewModel = ProfilePhotoViewModel()
+    @State private var selectedMainTab: MainTab = .nearby
+
     var body: some View {
-        TabView(selection: $selectedTab) {
-            People(authVM: coordinator.authCodeViewModel)
-            EncounterHistoryTab()
-            Profile(authVM: coordinator.authCodeViewModel)
+        TabView(selection: mainTabBinding) {
+            nearbyTab
+                .tabItem {
+                    nearbyTabItem
+                }
+                .badge(
+                    coordinator.isScaning
+                        ? peopleViewModel.visibleUsers.count
+                        : 0
+                )
+                .tag(MainTab.nearby)
+
+            profileTab
+                .tabItem {
+                    Label {
+                        Text(Inc.Tabs.profile.localized)
+                    } icon: {
+                        profileTabIcon
+                    }
+                }
+                .tag(MainTab.profile)
         }
-        .background {
-            TabBarBadgeColorConfigurator(
-                nearbyTitle: Inc.Tabs.people.localized,
-                encountersTitle: Inc.Tabs.metTitle.localized
+        .tint(Color(uiColor: .systemBlue))
+        .background(
+            TabBarBadgeAppearanceConfigurator(
+                colorScheme: colorScheme,
+                selectedTab: selectedMainTab,
+                isScanning: coordinator.isScaning
             )
-            .frame(width: 0, height: 0)
-            .allowsHitTesting(false)
-        }
-        .onAppear {
-            if coordinator.isScaning == false {
-                selectedTab = .profile
-                previousTab = .profile
-            }
-        }
-        .onChange(of: selectedTab) { _, newValue in
-            if newValue == .near && coordinator.isScaning == false {
-                showScanAlert = true
-                selectedTab = previousTab
-            } else {
-                previousTab = newValue
-            }
-        }
-        .alert(Inc.Scanning.justTurnScaning.localized, isPresented: $showScanAlert) {
-            Button(Inc.Common.okey, role: .cancel) { }
-        } message: {
-            Text(Inc.Scanning.scanAlertText.localized)
+        )
+    }
+
+    private var nearbyTab: some View {
+        NavigationStack {
+            PeopleView()
+            .navigationTitle(Inc.Common.nearby.localized)
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
+
+    private var mainTabBinding: Binding<MainTab> {
+        Binding(
+            get: { selectedMainTab },
+            set: selectMainTab
+        )
+    }
+
+    private var profileTab: some View {
+        NavigationStack {
+            ProfileOverviewView(
+                authCodeViewModel: coordinator.authCodeViewModel,
+                photoViewModel: profilePhotoViewModel
+            )
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                coordinator.authCodeViewModel.restoreLocalProfile()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var nearbyTabItem: some View {
+        if coordinator.isScaning {
+            Label(
+                Inc.Tabs.people.localized,
+                systemImage: "person.2.fill"
+            )
+        } else {
+            Image(systemName: "eye.slash")
+                .accessibilityLabel(Inc.Tabs.people.localized)
+        }
+    }
+
+    @ViewBuilder
+    private var profileTabIcon: some View {
+        Image(systemName: "person.circle.fill")
+    }
+
+    private func selectMainTab(_ tab: MainTab) {
+        guard tab != selectedMainTab else { return }
+        selectedMainTab = tab
+    }
+
 }
 
-private struct TabBarBadgeColorConfigurator: UIViewControllerRepresentable {
-    let nearbyTitle: String
-    let encountersTitle: String
+private enum MainTab: Hashable {
+    case nearby
+    case profile
+}
 
-    func makeUIViewController(context: Context) -> BadgeColorController {
-        BadgeColorController(
-            nearbyTitle: nearbyTitle,
-            encountersTitle: encountersTitle
+private struct TabBarBadgeAppearanceConfigurator:
+    UIViewControllerRepresentable {
+    let colorScheme: ColorScheme
+    let selectedTab: MainTab
+    let isScanning: Bool
+
+    func makeUIViewController(
+        context: Context
+    ) -> TabBarBadgeAppearanceController {
+        TabBarBadgeAppearanceController(
+            colorScheme: colorScheme,
+            selectedTab: selectedTab,
+            isScanning: isScanning
         )
     }
 
     func updateUIViewController(
-        _ controller: BadgeColorController,
+        _ uiViewController: TabBarBadgeAppearanceController,
         context: Context
     ) {
-        controller.updateTitles(
-            nearby: nearbyTitle,
-            encounters: encountersTitle
+        uiViewController.update(
+            colorScheme: colorScheme,
+            selectedTab: selectedTab,
+            isScanning: isScanning
         )
-        controller.applyColors()
+    }
+}
+
+private final class TabBarBadgeAppearanceController: UIViewController {
+    private var colorScheme: ColorScheme
+    private var selectedTab: MainTab
+    private var isScanning: Bool
+    private weak var configuredTabBar: UITabBar?
+    private var configuredColorScheme: ColorScheme?
+    private var configuredSelectedTab: MainTab?
+    private var configuredIsScanning: Bool?
+
+    init(
+        colorScheme: ColorScheme,
+        selectedTab: MainTab,
+        isScanning: Bool
+    ) {
+        self.colorScheme = colorScheme
+        self.selectedTab = selectedTab
+        self.isScanning = isScanning
+        super.init(nibName: nil, bundle: nil)
     }
 
-    final class BadgeColorController: UIViewController {
-        private var nearbyTitle: String
-        private var encountersTitle: String
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
-        init(nearbyTitle: String, encountersTitle: String) {
-            self.nearbyTitle = nearbyTitle
-            self.encountersTitle = encountersTitle
-            super.init(nibName: nil, bundle: nil)
+    override func loadView() {
+        let view = UIView()
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+        self.view = view
+    }
+
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
+        applyAppearanceWhenAvailable()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        applyAppearance()
+    }
+
+    func update(
+        colorScheme: ColorScheme,
+        selectedTab: MainTab,
+        isScanning: Bool
+    ) {
+        guard self.colorScheme != colorScheme
+                || self.selectedTab != selectedTab
+                || self.isScanning != isScanning else {
+            return
         }
 
-        @available(*, unavailable)
-        required init?(coder: NSCoder) {
-            fatalError("init(coder:) has not been implemented")
+        self.colorScheme = colorScheme
+        self.selectedTab = selectedTab
+        self.isScanning = isScanning
+        applyAppearanceWhenAvailable()
+    }
+
+    func applyAppearanceWhenAvailable() {
+        DispatchQueue.main.async { [weak self] in
+            self?.applyAppearance()
+        }
+    }
+
+    private func applyAppearance() {
+        guard let tabBar = enclosingTabBarController?.tabBar,
+              let items = tabBar.items,
+              !items.isEmpty else {
+            return
         }
 
-        override func loadView() {
-            let view = UIView(frame: .zero)
-            view.backgroundColor = .clear
-            view.isUserInteractionEnabled = false
-            self.view = view
+        let peopleItem = items[0]
+        peopleItem.title = isScanning ? Inc.Tabs.people.localized : nil
+        peopleItem.accessibilityLabel = Inc.Tabs.people.localized
+
+        if let configuredTabBar,
+           configuredColorScheme == colorScheme,
+           configuredSelectedTab == selectedTab,
+           configuredIsScanning == isScanning {
+            return
         }
 
-        override func viewDidAppear(_ animated: Bool) {
-            super.viewDidAppear(animated)
-            applyColors()
-        }
+        let inactiveBadgeTextColor: UIColor = colorScheme == .dark
+            ? .white
+            : .black
 
-        override func viewDidLayoutSubviews() {
-            super.viewDidLayoutSubviews()
-            applyColors()
-        }
+        configurePeopleBadge(
+            for: peopleItem,
+            isSelected: selectedTab == .nearby,
+            inactiveTextColor: inactiveBadgeTextColor
+        )
+        configuredTabBar = tabBar
+        configuredColorScheme = colorScheme
+        configuredSelectedTab = selectedTab
+        configuredIsScanning = isScanning
+    }
 
-        func updateTitles(nearby: String, encounters: String) {
-            nearbyTitle = nearby
-            encountersTitle = encounters
-        }
+    private func configurePeopleBadge(
+        for item: UITabBarItem,
+        isSelected: Bool,
+        inactiveTextColor: UIColor
+    ) {
+        configureBadge(
+            for: item,
+            backgroundColor: isSelected ? .systemBlue : .systemGray,
+            textColor: isSelected ? .white : inactiveTextColor
+        )
+    }
 
-        func applyColors() {
-            guard let tabBarController = resolvedTabBarController(),
-                  let items = tabBarController.tabBar.items,
-                  !items.isEmpty else {
-                return
-            }
+    private var enclosingTabBarController: UITabBarController? {
+        var current: UIViewController? = self
 
-            let nearbyItem = items.first { $0.title == nearbyTitle }
-                ?? items.first
-            let encountersItem = items.first { $0.title == encountersTitle }
-                ?? (items.count > 1 ? items[1] : nil)
-
-            nearbyItem?.badgeColor = .systemGreen
-            encountersItem?.badgeColor = .systemOrange
-        }
-
-        private func resolvedTabBarController() -> UITabBarController? {
-            if let tabBarController {
+        while let viewController = current {
+            if let tabBarController = viewController as? UITabBarController {
                 return tabBarController
             }
-            return findTabBarController(in: view.window?.rootViewController)
+            current = viewController.parent
         }
 
-        private func findTabBarController(
-            in controller: UIViewController?
-        ) -> UITabBarController? {
-            guard let controller else { return nil }
-            if let tabBarController = controller as? UITabBarController {
+        return findTabBarController(in: view.window?.rootViewController)
+    }
+
+    private func findTabBarController(
+        in viewController: UIViewController?
+    ) -> UITabBarController? {
+        guard let viewController else { return nil }
+        if let tabBarController = viewController as? UITabBarController {
+            return tabBarController
+        }
+
+        for child in viewController.children {
+            if let tabBarController = findTabBarController(in: child) {
                 return tabBarController
             }
-            for child in controller.children {
-                if let tabBarController = findTabBarController(in: child) {
-                    return tabBarController
-                }
-            }
-            if let presented = controller.presentedViewController {
-                return findTabBarController(in: presented)
-            }
-            return nil
         }
+
+        return nil
+    }
+
+    private func configureBadge(
+        for item: UITabBarItem,
+        backgroundColor: UIColor,
+        textColor: UIColor
+    ) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: textColor
+        ]
+
+        item.badgeColor = backgroundColor
+        item.setBadgeTextAttributes(attributes, for: .normal)
+        item.setBadgeTextAttributes(attributes, for: .selected)
     }
 }

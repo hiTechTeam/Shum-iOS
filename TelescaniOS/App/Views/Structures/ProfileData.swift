@@ -3,138 +3,88 @@ import SwiftUI
 struct ProfileDataView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @ObservedObject var authCodeViewModel: CodeViewModel
-    @StateObject private var photoVM = ProfilePhotoViewModel()
-    @State private var showScanningSettings = false
-    @State private var showInfoSheet = false
-    @State private var showLogoutOptions = false
-    @State private var showBlockedProfiles = false
-    @State private var showLogoutConfirmation = false
-    @State private var showLogoutError = false
-    @State private var showDeleteConfirmation = false
-    @State private var showDeleteError = false
-    @State private var ownProfilePreview: NearbyUser?
-    @State private var isWorking = false
+    @ObservedObject private var photoVM: ProfilePhotoViewModel
+    @State private var showBioEditor = false
+    @State private var showTelegramLink = false
+    @State private var draftBio = ""
 
-    init(authCodeViewModel: CodeViewModel) {
+    init(
+        authCodeViewModel: CodeViewModel,
+        photoViewModel: ProfilePhotoViewModel
+    ) {
         self.authCodeViewModel = authCodeViewModel
-    }
-
-    private var headerInfo: some View {
-        VStack(spacing: 8) {
-            Text(Inc.Registration.tgUsername.localized)
-                .font(.system(size: 12))
-                .frame(width: 350, alignment: .leading)
-
-            UsernamePlaceholderProfile(authVM: authCodeViewModel)
-        }
+        self.photoVM = photoViewModel
     }
 
     private var profileSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 34) {
             ProfilePhotoView(viewModel: photoVM)
-            headerInfo
-            BioProfileField(authVM: authCodeViewModel)
+            profileInformationCard
         }
         .frame(maxWidth: .infinity)
+        .padding(.top, 22)
     }
 
-    private var profileActionsMenu: some View {
-        Menu {
-            Button(action: showOwnProfile) {
-                Label(
-                    Inc.Profile.myCard.localized,
-                    systemImage: "person.crop.rectangle"
-                )
-            }
-            .disabled(ownProfile == nil)
+    private var profileInformationCard: some View {
+        VStack(spacing: 0) {
+            ProfileInformationRow(
+                title: Inc.Profile.informationTitle.localized,
+                value: displayBio,
+                showsAccentValue: false,
+                action: openBioEditor
+            )
 
-            Button {
-                showScanningSettings = true
-            } label: {
-                Label(
-                    Inc.Scanning.scanning.localized,
-                    systemImage: "dot.radiowaves.left.and.right"
-                )
-            }
+            profileRowDivider
 
-            Button {
-                showInfoSheet = true
-            } label: {
-                Label(
-                    Inc.Info.title.localized,
-                    systemImage: "info.circle"
-                )
-            }
-
-            Button {
-                showBlockedProfiles = true
-            } label: {
-                Label(
-                    Inc.NearbyProfile.blockedMenu.localized,
-                    systemImage: "person.crop.circle.badge.xmark"
-                )
-            }
-
-            Button(role: .destructive) {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                showLogoutOptions = true
-            } label: {
-                Label(
-                    Inc.Profile.logout.localized,
-                    systemImage: "rectangle.portrait.and.arrow.right"
-                )
-            }
-            .disabled(isWorking)
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.gray)
-                .frame(width: 32, height: 32)
-                .contentShape(Rectangle())
+            ProfileInformationRow(
+                title: Inc.Profile.telegramTitle.localized,
+                value: displayTelegram,
+                showsAccentValue: telegramUsername == nil,
+                action: openTelegramLink
+            )
         }
-        .accessibilityLabel(Inc.Profile.moreActions.localized)
-    }
-
-    private var ownProfile: NearbyUser? {
-        guard let id = authCodeViewModel.telescanID,
-              let usernameValue = authCodeViewModel.tgUsername?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-              !usernameValue.isEmpty else {
-            return nil
-        }
-
-        let username = usernameValue.hasPrefix("@")
-            ? usernameValue
-            : "@" + usernameValue
-        let trimmedName = authCodeViewModel.tgName?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = trimmedName.flatMap { $0.isEmpty ? nil : $0 }
-            ?? username
-        let storedPhotoURL = UserDefaults.standard.string(
-            forKey: Keys.photoS3URLKey.rawValue
+        .background(
+            Color(uiColor: .secondarySystemBackground),
+            in: RoundedRectangle(cornerRadius: 22)
         )
-        let photoURL = storedPhotoURL.flatMap { value -> String? in
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty,
-                  URL(string: trimmed) != nil else {
-                return nil
-            }
-            return trimmed
-        }
-
-        return NearbyUser(
-            id: id,
-            name: name,
-            username: username,
-            bio: authCodeViewModel.bio,
-            photoURL: photoURL
-        )
+        .padding(.horizontal, 20)
     }
 
-    private func showOwnProfile() {
-        guard let ownProfile else { return }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        ownProfilePreview = ownProfile
+    private var profileRowDivider: some View {
+        Divider()
+            .padding(.leading, 20)
+    }
+
+    private var displayBio: String {
+        normalized(authCodeViewModel.bio).map { String($0.prefix(36)) }
+            ?? Inc.Profile.notSpecified.localized
+    }
+
+    private var telegramUsername: String? {
+        normalized(authCodeViewModel.tgUsername)
+    }
+
+    private var displayTelegram: String {
+        telegramUsername ?? Inc.Profile.linkTelegram.localized
+    }
+
+    private func normalized(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func openBioEditor() {
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        draftBio = String((authCodeViewModel.bio ?? "").prefix(36))
+        authCodeViewModel.resetBioSaveState()
+        showBioEditor = true
+    }
+
+    private func openTelegramLink() {
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        authCodeViewModel.resetCodeEntry()
+        showTelegramLink = true
     }
 
     private var scrollContent: some View {
@@ -144,31 +94,8 @@ struct ProfileDataView: View {
             }
             .padding(.bottom, 32)
         }
+        .scrollBounceBehavior(.always, axes: .vertical)
         .refreshable { await coordinator.refreshSession() }
-    }
-
-    private func logoutCurrent() {
-        isWorking = true
-        Task {
-            do {
-                try await coordinator.logoutCurrentSession()
-            } catch {
-                isWorking = false
-                showLogoutError = true
-            }
-        }
-    }
-
-    private func deleteAccount() {
-        isWorking = true
-        Task {
-            do {
-                try await coordinator.deleteAccount()
-            } catch {
-                isWorking = false
-                showDeleteError = true
-            }
-        }
     }
 
     var body: some View {
@@ -179,117 +106,196 @@ struct ProfileDataView: View {
         .onChange(of: authCodeViewModel.photoS3URL) { _, value in
             photoVM.loadPhotoFromURL(value)
         }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                profileActionsMenu
-            }
+        .sheet(isPresented: $showBioEditor) {
+            BioEditorSheet(
+                draftBio: $draftBio,
+                isPresented: $showBioEditor,
+                authVM: authCodeViewModel
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .interactiveDismissDisabled(authCodeViewModel.isSavingBio)
         }
-        .sheet(item: $ownProfilePreview) { user in
-            ProfileSheetView(user: user, showsNearbyControls: false)
-                .environmentObject(coordinator.peopleViewModel)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .presentationContentInteraction(.resizes)
-        }
-        .sheet(isPresented: $showScanningSettings) {
-            ScanningSettingsSheet(isScanning: $coordinator.isScaning)
-                .environmentObject(coordinator)
-                .environmentObject(coordinator.peopleViewModel)
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showInfoSheet) {
-            InfoSheetView()
+        .sheet(isPresented: $showTelegramLink) {
+            TelegramLinkProfileSheet(authVM: authCodeViewModel)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showBlockedProfiles) {
-            BlockedProfilesView()
-                .environmentObject(coordinator.peopleViewModel)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
-        .alert(
-            Inc.Profile.accountActionsTitle.localized,
-            isPresented: $showLogoutOptions
-        ) {
-            Button(Inc.Profile.logoutCurrent.localized, role: .destructive) {
-                DispatchQueue.main.async {
-                    showLogoutConfirmation = true
-                }
-            }
-            Button(Inc.Profile.deleteAccount.localized, role: .destructive) {
-                DispatchQueue.main.async {
-                    showDeleteConfirmation = true
-                }
-            }
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-        }
-        .alert(
-            Inc.Profile.logoutCurrentTitle.localized,
-            isPresented: $showLogoutConfirmation
-        ) {
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-            Button(
-                Inc.Profile.logoutCurrent.localized,
-                role: .destructive,
-                action: logoutCurrent
-            )
-        } message: {
-            Text(Inc.Profile.logoutCurrentMessage.localized)
-        }
-        .alert(Inc.Profile.logoutFailed.localized, isPresented: $showLogoutError) {
-            Button(Inc.Common.okey.localized, role: .cancel) { }
-        }
-        .alert(
-            Inc.Profile.deleteAccountTitle.localized,
-            isPresented: $showDeleteConfirmation
-        ) {
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-            Button(
-                Inc.Profile.deleteAccount.localized,
-                role: .destructive,
-                action: deleteAccount
-            )
-        } message: {
-            Text(Inc.Profile.deleteAccountMessage.localized)
-        }
-        .alert(Inc.Profile.deleteAccountFailed.localized, isPresented: $showDeleteError) {
-            Button(Inc.Common.okey.localized, role: .cancel) { }
-        } message: {
-            Text(Inc.Profile.deleteAccountFailedMessage.localized)
         }
     }
 }
 
-private struct ScanningSettingsSheet: View {
+private struct ProfileInformationRow: View {
+    let title: String
+    let value: String
+    let showsAccentValue: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Text(title)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 12)
+
+                Text(value)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundStyle(
+                        showsAccentValue ? Color.accentColor : Color.secondary
+                    )
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 20)
+            .frame(maxWidth: .infinity)
+            .frame(height: 60)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(value)
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+private struct TelegramLinkProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Binding var isScanning: Bool
+
+    @ObservedObject var authVM: CodeViewModel
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                ScrollView {
+                    CodeSpace()
+                        .environmentObject(authVM)
+                        .padding(.top, 4)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+
+                Spacer(minLength: 8)
+
+                VStack(spacing: 14) {
+                    RegistrationPrimaryButton(
+                        title: Inc.Profile.linkTelegram.localized,
+                        isEnabled: authVM.codeStatus == true
+                            && !authVM.isLoading,
+                        accentColor: .blue,
+                        action: confirmTelegramCode
+                    )
+                }
+                .frame(maxWidth: 360)
+            }
+            .padding(.top, 10)
+            .padding(.bottom, 16)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(Inc.Profile.telegramTitle.localized)
+                        .telescanSheetTitleStyle()
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    BotButton()
+                }
+            }
+        }
+        .onAppear {
+            authVM.resetCodeEntry()
+        }
+        .onDisappear {
+            authVM.resetCodeEntry()
+        }
+    }
+
+    private func confirmTelegramCode() {
+        Task {
+            guard await authVM.confirmCode() else { return }
+            dismiss()
+
+            if let telescanID = authVM.telescanID {
+                BLEManager.shared.restartAdvertising(
+                    id: telescanID.uuidString.lowercased()
+                )
+            }
+        }
+    }
+
+}
+
+struct ScanningSettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @State private var showBluetoothAlert = false
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
                 Text(Inc.Scanning.scanToggleDescription.localized)
-                    .font(.system(size: 15))
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(width: 360, alignment: .leading)
+                    .telescanDescriptionStyle()
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                ScanToggle(isScaning: $isScanning)
+                Toggle(
+                    Inc.Scanning.scanning.localized,
+                    isOn: scanningBinding
+                )
+                .font(.body.weight(.medium))
+                .toggleStyle(.switch)
+                .tint(.green)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .background(
+                    Color.grOne,
+                    in: RoundedRectangle(cornerRadius: 13)
+                )
 
                 Spacer(minLength: 0)
             }
             .padding(.top, 20)
-            .navigationTitle(Inc.Scanning.scanning.localized)
+            .padding(.horizontal, 20)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(Inc.Scanning.scanning.localized)
+                        .telescanSheetTitleStyle()
+                }
+
                 ToolbarItem(placement: .confirmationAction) {
                     Button(Inc.Common.close.localized) {
                         dismiss()
                     }
                 }
             }
+            .alert(
+                Inc.Alerts.turnOnBLE.localized,
+                isPresented: $showBluetoothAlert
+            ) {
+                Button(Inc.Common.okey.localized, role: .cancel) { }
+            }
         }
+    }
+
+    private var scanningBinding: Binding<Bool> {
+        Binding(
+            get: { coordinator.isScaning },
+            set: { isScanning in
+                guard isScanning != coordinator.isScaning else { return }
+
+                coordinator.setScanning(isScanning)
+                UISelectionFeedbackGenerator().selectionChanged()
+
+                if isScanning, !BLEManager.shared.isBluetoothAvailable {
+                    showBluetoothAlert = true
+                }
+            }
+        )
     }
 }

@@ -6,19 +6,44 @@
 "ok" = "Хорошо";
 "cancel" = "Отмена";
 "close" = "Закрыть";
-"copied_sheet" = "Скопированно";
 "nearby" = "Рядом";
 "distanceMetersFormat" = "%d м";
 "disappearsInSecondsFormat" = "Исчезнет через %d с";
-"countdownSecondsFormat" = "%d с";
+"countdownSecondsFormat" = "%d сек";
 "signalLostCountdownFormat" = "Сигнал потерян. Профиль исчезнет через %d секунд.";
 
 /* Tabs */
 "peopleNearby" = "Люди рядом";
-"people" = "Рядом";
+"people" = "Люди";
 "chats" = "Чаты";
+"settings" = "Настройки";
 "profile" = "Профиль";
+"me" = "Я";
 "metTitle" = "Виделись";
+"metHeader" = "Виделись недавно";
+
+/* Чаты */
+"chatsEmptyTitle" = "Пока нет чатов";
+"chatsEmptyMessage" = "Начните чат из карточки человека.";
+"chatSearch" = "Поиск";
+"chatNewConversation" = "Новый чат";
+"chatNoMessagesTitle" = "Сообщений пока нет";
+"chatNoMessagesMessage" = "Напишите первое сообщение.";
+"chatMessagePlaceholder" = "Сообщение";
+"chatToday" = "Сегодня";
+"chatSend" = "Отправить";
+"chatActions" = "Действия с чатом";
+"chatMute" = "Выключить уведомления";
+"chatUnmute" = "Включить уведомления";
+"chatAttachment" = "Добавить вложение";
+"chatPhoto" = "Фото";
+"chatCamera" = "Камера";
+"chatFile" = "Файл";
+"chatTimeRemaining" = "Время для общения";
+"chatTimeExpired" = "Время истекло";
+"chatWaitForNextMeeting" = "Ждём следующей встречи";
+"chatNearbyWithYou" = "Рядом с вами";
+"chatRecentlyMet" = "Виделись недавно";
 
 /* История встреч */
 "encounterHistoryEmptyTitle" = "Пока никого";
@@ -28,7 +53,18 @@
 "encounterHistoryClearMessage" = "Все сохранённые на этом устройстве встречи будут удалены.";
 "encounterHistoryLastSeenFormat" = "Виделись %@";
 
+/* Фильтры людей */
+"peopleDistanceFilterTitle" = "Расстояние";
+"peopleDistanceFilterDescription" = "Выберите максимальное расстояние. В разделе «Рядом» останутся только люди в выбранном диапазоне сканирования.";
+"peopleDistanceFilterUnlimited" = "Без ограничения";
+"peopleDistanceFilterValueFormat" = "До %d м";
+"peopleFilterMaximum" = "max";
+"peopleDistanceFilterEmptyTitle" = "В этом диапазоне никого";
+"peopleDistanceFilterEmptyMessage" = "Увеличьте расстояние, чтобы увидеть больше людей.";
+"peopleHistoryButton" = "Время";
+
 /* Registration */
+"telegramLinkTitle" = "Привязка Telegram";
 "placeCode" = "Код";
 "codePlaceholder" = "Код";
 "code" = "Код";
@@ -37,7 +73,7 @@
 "incorrectCode" = "Код недействителен или истёк";
 "telegramUsernameRequired" = "Создайте публичный Telegram username и запросите новый код";
 "warningCharactersEight" = "Максимум 8 символов";
-"regDescription" = "Введите код, который отправил бот, для того чтобы приложение могло привязать ваш Telegram username.";
+"regDescription" = "Введите код от Telescan_bot, чтобы привязать ваш Telegram-аккаунт к приложению.";
 "tgUsername" = "Telegram username";
 "usernamePlaceholder" = "@_";
 "profileBioTitle" = "BIO";
@@ -45,8 +81,31 @@
 "profileBioEmpty" = "Добавить BIO";
 "profileBioApply" = "Применить";
 "profileBioSaveFailed" = "Не удалось сохранить BIO. Попробуйте ещё раз.";
+"profileNameTitle" = "Имя";
+"profileInformationTitle" = "Информация";
+"profileTelegramTitle" = "Telegram";
+"profileNotSpecified" = "Не указано";
+"profileLinkTelegram" = "Привязать";
+"profileChangePhoto" = "Изменить фото";
+"profileChangePhotoTitle" = "Изменить фото профиля";
+"profileSaveName" = "Сохранить";
+"profileNamePlaceholder" = "Ваше имя";
+"profileNameDescription" = "Это имя будут видеть другие пользователи Telescan.";
+"profileInformationDescription" = "Коротко расскажите о себе.";
+"profileEdit" = "Изменить профиль";
+"profileOpenPhoto" = "Открыть фото";
+"profileUnlinkTelegram" = "Отвязать Telegram";
+"profileUnlinkTelegramAction" = "Отвязать";
+"profileUnlinkTelegramTitle" = "Отвязать Telegram?";
+"profileUnlinkTelegramMessage" = "Telegram-аккаунт будет отвязан от профиля Telescan. Вы сможете привязать его снова позже.";
+"profileUnlinkTelegramFailed" = "Не удалось отвязать Telegram. Попробуйте ещё раз.";
 
 /* Onboarding */
+"appleSignInFailed" = "Не удалось войти с Apple. Попробуйте ещё раз.";
+"appleIdentityTitle" = "Подтвердите личность";
+"appleIdentityDescription" = "Войдите с помощью Apple ID. После подтверждения вам будет необходимо привязать свой профиль Telegram.";
+"appleSignInButton" = "Войти с Apple";
+"appleSignInHint" = "В режиме разработки продолжает регистрацию без обращения к Apple";
 "welcome_title" = "Добро пожаловать в";
 "poweredByTG" = "Работает от Telegram";
 "aboutOnBoardingMsg" = "Telescan позволяет быстро находить и обмениваться Telegram-профилями.";
@@ -55,7 +114,7 @@
 "legalAgreement" = "Продолжая, вы соглашаетесь с документами\n«%@» и «%@»";
 "privacyPolicy" = "Политика конфиденциальности";
 "termsOfService" = "Условия использования";
-"continueHint" = "Открывает экран ввода кода регистрации Telegram";
+"continueHint" = "Открывает экран подтверждения личности";
 "goNext" = "Далее";
 "go" = "Начать";
 "confirmButton" = "Применить";
@@ -64,10 +123,10 @@
 "nearbyEmptyTitle" = "Пока никого";
 "scanning" = "Сканирование";
 "justTurnScaning" = "Включите сканирование";
-"scanToggleDescription" = "Переключатель включает Bluetooth-сканирование и передачу вашего Telescan ID. Пока сканирование активно, вы видите пользователей Telescan рядом, а они могут увидеть вас.";
+"scanToggleDescription" = "Пока сканирование активно, вы видите пользователей Telescan рядом, а они могут увидеть вас.";
 "turnedOffScaning" = "Сканирование отключено. Включите сканирование в приложении, чтобы видеть людей, находящихся поблизости. ";
 "noPeopleNearby" = "Сканирование активно. Когда рядом появятся пользователи Telescan, они отобразятся на этом экране.";
-"scanAlertText" = "Для перехода необходимо включить режим сканирования.";
+"scanAlertText" = "Включите сканирование в настройках, чтобы открыть раздел «Рядом».";
 
 /* Уведомления о людях поблизости */
 "nearbyNotificationTitle" = "Люди поблизости";
@@ -77,8 +136,8 @@
 /* Модерация профиля пользователя рядом */
 "nearbyProfileClose" = "Закрыть профиль";
 "nearbyProfileActions" = "Действия с профилем";
-"nearbyProfileUsernameFallback" = "Мой Telegram Username";
-"nearbyProfileMessage" = "Написать";
+"nearbyProfileWrite" = "Написать";
+"nearbyProfileTelegramChat" = "Чат Telegram";
 "nearbyProfileReport" = "Пожаловаться";
 "nearbyProfileBlock" = "Заблокировать";
 "nearbyProfileReportTitle" = "Почему вы хотите пожаловаться?";
@@ -113,15 +172,14 @@
 "shareUtg" = "Поделиться профилем";
 "creatorCredit" = "from Ruslan Chukavin";
 "profileMoreActions" = "Ещё";
-"profileMyCard" = "Моя карточка";
 "developerLinksTitle" = "Разработчик приложения";
-"developerLinksMessage" = "Ruslan Chukavin — разработчик Telescan. Куда вы хотите перейти?";
+"developerLinksMessage" = "Ruslan Chukavin, разработчик Telescan. Куда вы хотите перейти?";
 "telegramChannel" = "Telegram-канал";
 "logout" = "Выйти";
 "accountActionsTitle" = "Действия с аккаунтом";
 "logoutCurrent" = "Выйти на этом устройстве";
 "logoutCurrentTitle" = "Выйти на этом устройстве?";
-"logoutCurrentMessage" = "Для повторного входа на этом устройстве потребуется новый код из Telegram.";
+"logoutCurrentMessage" = "Для повторного входа на этом устройстве потребуется войти с Apple.";
 "logoutFailed" = "Не удалось выполнить выход. Попробуйте ещё раз.";
 "deleteAccount" = "Удалить аккаунт";
 "deleteAccountTitle" = "Удалить аккаунт?";
@@ -134,8 +192,7 @@
 "info_title" = "Информация";
 "info_why_telescan" = "Зачем нужен Telescan";
 "info_how_it_works" = "Как это работает";
-"info_how_it_works_description" = "Telescan с помощью Bluetooth обнаруживает пользователей поблизости и показывает их имя, фотографию и Telegram username: скопируйте username, вставьте его в строку поиска Telegram, найдите пользователя и продолжите общение.";
-"copyUsername" = "Скопируйте и вставьте в поле поиска Telegram";
+"info_how_it_works_description" = "Telescan с помощью Bluetooth находит людей поблизости, после чего с ними можно связаться через Telegram. Приложение продолжает поиск в фоне: его можно свернуть, но не закрывать. Когда рядом появится пользователь Telescan, приложение отправит уведомление.";
 "proprietaryLicense" = "© 2021 - 2026 Ruslan Chukavin. Все права защищены.";
 "info_story" = "Каждый день мы оказываемся рядом с людьми, с которыми могли бы заговорить, познакомиться, провести вечер или однажды вспомнить эту встречу как что-то важное. Мы пересекаемся в метро, на учебе, в кафе, на улице, смотрим друг на друга и почти всегда просто идем дальше.\n\nСлишком много хороших историй заканчиваются еще до того, как успевают начаться. Telescan - это попытка дать таким встречам еще один шанс.";
 "rulesAndPrivacy" = "Документы";

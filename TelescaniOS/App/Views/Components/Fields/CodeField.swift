@@ -1,53 +1,50 @@
 import SwiftUI
-import Combine
 
 struct CodeField: View {
     
     @Binding var text: String
     var isDisabled = false
-    
-    @State private var showWarning = false
-    @State private var warningCancellable: AnyCancellable?
+
+    @State private var showLimitWarning = false
+    @State private var warningTask: Task<Void, Never>?
     
     private let maxLength: Int = 8
-    private let fieldWidth: CGFloat = 360
     private let fieldHeight: CGFloat = 46
     private let cornerRadius: CGFloat = 13
     private let paddingH: CGFloat = 13
     private let lineWidth: CGFloat = 1
     private let fontSizeCode: CGFloat = 20
-    private let fontSizeSmall: CGFloat = 12
-    private let delayWarning: TimeInterval = 3
     private let generator = UINotificationFeedbackGenerator()
-    
-    private var paddingLeading: CGFloat {
-        fieldWidth / 2
-    }
     
     private func handleTextChange(_ newValue: String) {
         let uppercased = newValue.uppercased()
         
         guard uppercased.count <= maxLength else {
             text = String(uppercased.prefix(maxLength))
-            showLimitWarning()
+            showWarning()
             return
         }
-        
-        text = uppercased
+
+        if text != uppercased {
+            text = uppercased
+        }
     }
-    
-    private func showLimitWarning() {
-        showWarning = true
+
+    private func showWarning() {
         generator.notificationOccurred(.warning)
-        
-        warningCancellable?.cancel()
-        warningCancellable = Just(())
-            .delay(for: .seconds(delayWarning), scheduler: RunLoop.main)
-            .sink {
-                withAnimation {
-                    showWarning = false
-                }
+        warningTask?.cancel()
+
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showLimitWarning = true
+        }
+
+        warningTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showLimitWarning = false
             }
+        }
     }
     
     private var textField: some View {
@@ -55,15 +52,20 @@ struct CodeField: View {
             Inc.Registration.codePlaceholder.localized,
             text: $text
         )
-        .padding(.horizontal, paddingH)
-        .frame(width: fieldWidth, height: fieldHeight)
+        .padding(.leading, paddingH)
+        .padding(.trailing, showLimitWarning ? 145 : paddingH)
+        .frame(maxWidth: .infinity, minHeight: fieldHeight)
         .background(Color.tField)
         .cornerRadius(cornerRadius)
         .overlay(fieldBorder)
         .foregroundColor(.primary)
         .font(.system(size: fontSizeCode))
         .tint(.blue)
+        .keyboardType(.asciiCapable)
+        .textContentType(.oneTimeCode)
         .textInputAutocapitalization(.characters)
+        .autocorrectionDisabled()
+        .submitLabel(.done)
         .disabled(isDisabled)
         .onChange(of: text) { _, newValue in
             handleTextChange(newValue)
@@ -75,31 +77,25 @@ struct CodeField: View {
             .stroke(Color.gray, lineWidth: lineWidth)
     }
     
-    private var warningText: some View {
-        Text(Inc.Registration.warningCharactersEight.localized)
-            .foregroundColor(.gray)
-            .font(.system(size: fontSizeSmall))
-            .frame(
-                width: fieldWidth,
-                height: fieldHeight,
-                alignment: .center
-            )
-            .padding(.leading, paddingLeading)
-            .transition(.opacity)
-    }
-    
-    private var content: some View {
-        ZStack {
-            textField
-            if showWarning {
-                warningText
-            }
-        }
-    }
-    
     // MARK: - Body
     var body: some View {
-        content
-            .animation(.easeInOut, value: showWarning)
+        ZStack(alignment: .trailing) {
+            textField
+
+            if showLimitWarning {
+                Text(Inc.Registration.warningCharactersEight.localized)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .allowsTightening(true)
+                    .padding(.trailing, paddingH)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onDisappear {
+            warningTask?.cancel()
+        }
     }
 }

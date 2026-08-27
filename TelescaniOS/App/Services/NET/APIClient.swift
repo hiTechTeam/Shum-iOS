@@ -36,7 +36,30 @@ actor APIClient {
         self.sessionStore = sessionStore
     }
 
-    func link(code: String) async throws -> LinkDeviceResponse {
+    func signInWithApple(
+        identityToken: String,
+        nonce: String,
+        name: String?
+    ) async throws -> AuthenticatedAccountResponse {
+        let deviceID = try sessionStore.installationDeviceID()
+        let request = try jsonRequest(
+            path: "/api/v1/auth/apple",
+            method: "POST",
+            body: AppleSignInRequest(
+                identityToken: identityToken,
+                nonce: nonce,
+                deviceId: deviceID,
+                name: name
+            )
+        )
+        let data = try await perform(request, authenticated: false)
+        let response = try decoder.decode(AuthenticatedAccountResponse.self, from: data)
+        try sessionStore.saveAppleSession(response.tokens)
+        return response
+    }
+
+    #if TELESCAN_PERSONAL_TEAM
+    func linkForDevelopment(code: String) async throws -> TelegramLinkResponse {
         let deviceID = try sessionStore.installationDeviceID()
         let request = try jsonRequest(
             path: "/api/v1/auth/link",
@@ -44,9 +67,48 @@ actor APIClient {
             body: LinkDeviceRequest(code: code, deviceId: deviceID)
         )
         let data = try await perform(request, authenticated: false)
-        let response = try decoder.decode(LinkDeviceResponse.self, from: data)
-        try sessionStore.save(response.tokens)
+        let response = try decoder.decode(AuthenticatedAccountResponse.self, from: data)
+        try sessionStore.saveLegacySession(response.tokens)
+        return TelegramLinkResponse(
+            access: AccessTokenResponse(
+                accessToken: response.tokens.accessToken,
+                tokenType: response.tokens.tokenType,
+                expiresIn: response.tokens.expiresIn
+            ),
+            profile: response.profile
+        )
+    }
+
+    func linkTelegramForPersonalTeam(code: String) async throws
+        -> TelegramLinkResponse {
+        if sessionStore.hasPrimarySession {
+            return try await linkTelegram(code: code)
+        }
+        return try await linkForDevelopment(code: code)
+    }
+    #endif
+
+    func linkTelegram(code: String) async throws -> TelegramLinkResponse {
+        let request = try jsonRequest(
+            path: "/api/v1/users/me/telegram/link",
+            method: "POST",
+            body: TelegramLinkRequest(code: code)
+        )
+        let data = try await perform(request, authenticated: true)
+        let response = try decoder.decode(TelegramLinkResponse.self, from: data)
+        try sessionStore.saveAccessToken(response.access.accessToken)
         return response
+    }
+
+    func unlinkTelegram() async throws -> TelescanProfileResponse {
+        let request = try request(
+            path: "/api/v1/users/me/telegram",
+            method: "DELETE"
+        )
+        return try decoder.decode(
+            TelescanProfileResponse.self,
+            from: try await perform(request, authenticated: true)
+        )
     }
 
     func currentProfile() async throws -> TelescanProfileResponse {

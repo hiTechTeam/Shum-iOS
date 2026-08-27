@@ -6,7 +6,6 @@
 "ok" = "Okey";
 "cancel" = "Cancel";
 "close" = "Close";
-"copied_sheet" = "Copied";
 "nearby" = "Nearby";
 "distanceMetersFormat" = "%d m";
 "disappearsInSecondsFormat" = "Hides in %d s";
@@ -15,10 +14,36 @@
 
 /* Tabs */
 "peopleNearby" = "People nearby";
-"people" = "Nearby";
+"people" = "People";
 "chats" = "Chats";
+"settings" = "Settings";
 "profile" = "Profile";
+"me" = "Me";
 "metTitle" = "Met";
+"metHeader" = "Met recently";
+
+/* Chats */
+"chatsEmptyTitle" = "No chats yet";
+"chatsEmptyMessage" = "Start a chat from someone’s profile.";
+"chatSearch" = "Search";
+"chatNewConversation" = "New chat";
+"chatNoMessagesTitle" = "No messages yet";
+"chatNoMessagesMessage" = "Send the first message.";
+"chatMessagePlaceholder" = "Message";
+"chatToday" = "Today";
+"chatSend" = "Send";
+"chatActions" = "Chat actions";
+"chatMute" = "Mute notifications";
+"chatUnmute" = "Unmute notifications";
+"chatAttachment" = "Add attachment";
+"chatPhoto" = "Photo";
+"chatCamera" = "Camera";
+"chatFile" = "File";
+"chatTimeRemaining" = "Time remaining";
+"chatTimeExpired" = "Time expired";
+"chatWaitForNextMeeting" = "Wait for the next meeting";
+"chatNearbyWithYou" = "nearby with you";
+"chatRecentlyMet" = "recently met";
 
 /* Encounter history */
 "encounterHistoryEmptyTitle" = "No encounters yet";
@@ -28,7 +53,18 @@
 "encounterHistoryClearMessage" = "All encounters saved on this device will be removed.";
 "encounterHistoryLastSeenFormat" = "Met %@";
 
+/* People filters */
+"peopleDistanceFilterTitle" = "Distance";
+"peopleDistanceFilterDescription" = "Choose the maximum distance. Nearby will only show people within the selected scanning range.";
+"peopleDistanceFilterUnlimited" = "No limit";
+"peopleDistanceFilterValueFormat" = "Up to %d m";
+"peopleFilterMaximum" = "max";
+"peopleDistanceFilterEmptyTitle" = "No one in this range";
+"peopleDistanceFilterEmptyMessage" = "Increase the distance to see more people.";
+"peopleHistoryButton" = "Time";
+
 /* Registration */
+"telegramLinkTitle" = "Link Telegram";
 "placeCode" = "Code";
 "codePlaceholder" = "Code";
 "enterCode" = "Enter code";
@@ -37,7 +73,7 @@
 "incorrectCode" = "Invalid or expired code";
 "telegramUsernameRequired" = "Create a public Telegram username and request a new code";
 "warningCharactersEight" = "Maximum of 8 characters";
-"regDescription" = "Enter the code that the bot sent so that the application can link your Telegram username.";
+"regDescription" = "Enter the code from Telescan_bot to link your Telegram account to the app.";
 "tgUsername" = "Telegram username";
 "usernamePlaceholder" = "@_";
 "profileBioTitle" = "BIO";
@@ -45,8 +81,31 @@
 "profileBioEmpty" = "Add BIO";
 "profileBioApply" = "Apply";
 "profileBioSaveFailed" = "Couldn’t save BIO. Please try again.";
+"profileNameTitle" = "Name";
+"profileInformationTitle" = "Info";
+"profileTelegramTitle" = "Telegram";
+"profileNotSpecified" = "Not set";
+"profileLinkTelegram" = "Link";
+"profileChangePhoto" = "Change photo";
+"profileChangePhotoTitle" = "Change profile photo";
+"profileSaveName" = "Save";
+"profileNamePlaceholder" = "Your name";
+"profileNameDescription" = "This is the name other Telescan users will see.";
+"profileInformationDescription" = "Briefly describe yourself.";
+"profileEdit" = "Edit profile";
+"profileOpenPhoto" = "Open photo";
+"profileUnlinkTelegram" = "Unlink Telegram";
+"profileUnlinkTelegramAction" = "Unlink";
+"profileUnlinkTelegramTitle" = "Unlink Telegram?";
+"profileUnlinkTelegramMessage" = "Your Telegram account will be unlinked from your Telescan profile. You can link it again later.";
+"profileUnlinkTelegramFailed" = "Couldn’t unlink Telegram. Please try again.";
 
 /* Onboarding */
+"appleSignInFailed" = "Couldn’t sign in with Apple. Please try again.";
+"appleIdentityTitle" = "Identity verification is required";
+"appleIdentityDescription" = "Sign in with your Apple ID. After verification, you’ll need to link your Telegram profile.";
+"appleSignInButton" = "Sign in with Apple";
+"appleSignInHint" = "Continues registration without contacting Apple in development builds";
 "welcome_title" = "Welcome to";
 "poweredByTG" = "Powered by Telegram";
 "aboutOnBoardingMsg" = "Telescan lets you instantly find and share Telegram profiles with people nearby.";
@@ -55,7 +114,7 @@
 "legalAgreement" = "By continuing, you agree to Telescan’s\n%@ and %@";
 "privacyPolicy" = "Privacy Policy";
 "termsOfService" = "Terms of Service";
-"continueHint" = "Opens the Telegram registration code screen";
+"continueHint" = "Opens the identity verification screen";
 "goNext" = "Next";
 "go" = "Go";
 "confirmButton" = "Confirm";
@@ -63,11 +122,11 @@
 /* Scanning */
 "nearbyEmptyTitle" = "No one nearby yet";
 "scanning" = "Scanning";
-"justTurnScaning" = "Turn on scaning";
-"scanToggleDescription" = "The switch enables Bluetooth scanning and broadcasts your Telescan ID. While scanning is active, you can see nearby Telescan users and they can see you.";
+"justTurnScaning" = "Turn on scanning";
+"scanToggleDescription" = "While scanning is active, you can see nearby Telescan users and they can see you.";
 "turnedOffScaning" = "Scanning is turned off. Enable scanning in the app to see nearby people.";
 "noPeopleNearby" = "Scanning is active. When Telescan users are nearby, they will appear on this screen.";
-"scanAlertText" = "To switch over, you need to enable scanning mode.";
+"scanAlertText" = "Enable scanning in Settings to open the Nearby section.";
 
 /* Nearby notifications */
 "nearbyNotificationTitle" = "People nearby";
@@ -77,8 +136,8 @@
 /* Nearby profile moderation */
 "nearbyProfileClose" = "Close profile";
 "nearbyProfileActions" = "Profile actions";
-"nearbyProfileUsernameFallback" = "My Telegram Username";
-"nearbyProfileMessage" = "Message";
+"nearbyProfileWrite" = "Write";
+"nearbyProfileTelegramChat" = "Telegram Chat";
 "nearbyProfileReport" = "Report user";
 "nearbyProfileBlock" = "Block user";
 "nearbyProfileReportTitle" = "Why are you reporting this user?";
@@ -113,7 +172,6 @@
 "shareUtg" = "Share your profile";
 "creatorCredit" = "from Ruslan Chukavin";
 "profileMoreActions" = "More";
-"profileMyCard" = "My card";
 "developerLinksTitle" = "App developer";
 "developerLinksMessage" = "Ruslan Chukavin is the developer of Telescan. Where would you like to go?";
 "telegramChannel" = "Telegram channel";
@@ -121,7 +179,7 @@
 "accountActionsTitle" = "Account actions";
 "logoutCurrent" = "Sign out on this device";
 "logoutCurrentTitle" = "Sign out on this device?";
-"logoutCurrentMessage" = "You will need a new Telegram code to sign in again on this device.";
+"logoutCurrentMessage" = "You will need to sign in with Apple again on this device.";
 "logoutFailed" = "Couldn't sign out. Please try again.";
 "deleteAccount" = "Delete account";
 "deleteAccountTitle" = "Delete account?";
@@ -135,8 +193,7 @@
 "info_title" = "Information";
 "info_why_telescan" = "Why Telescan";
 "info_how_it_works" = "How it works";
-"info_how_it_works_description" = "Telescan uses Bluetooth to discover nearby users and displays their name, photo, and Telegram username: copy the username, paste it into Telegram’s search field, find the user, and continue the conversation.";
-"copyUsername" = "Copy and paste into Telegram search";
+"info_how_it_works_description" = "Telescan uses Bluetooth to find people nearby, then lets you contact them through Telegram. The app continues searching in the background: you can minimize it, but do not quit it. When a Telescan user is detected nearby, the app sends a notification.";
 "proprietaryLicense" = "Copyright © 2021 - 2026 Ruslan Chukavin. All rights reserved.";
 "info_story" = "Every day, we find ourselves near people we could have talked to, gotten to know, spent an evening with, or one day remembered the encounter as something important. We cross paths on the metro, at school, in cafés, and on the street. We look at one another and almost always simply keep walking.\n\nToo many good stories end before they have a chance to begin. Telescan is an attempt to give those encounters another chance.";
 "rulesAndPrivacy" = "Documents";

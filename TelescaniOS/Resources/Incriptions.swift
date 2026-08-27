@@ -20,7 +20,6 @@ struct Inc {
         // EN: Cancel
         // RU: Отмена
         
-        static let copiedSheet: String = "copied_sheet"
         // EN: Copied
         // RU: Скопировано
         
@@ -42,9 +41,13 @@ struct Inc {
     
     // MARK: - Tabs
     struct Tabs {
-        static let chats: String = "Chats"
+        static let chats: String = "chats"
         // EN: Chats
         // RU: Чаты
+
+        static let settings: String = "settings"
+        // EN: Settings
+        // RU: Настройки
         
         static let peopleNearby: String = "peopleNearby"
         // EN: People nearby
@@ -57,10 +60,43 @@ struct Inc {
         static let profile: String = "profile"
         // EN: Profile
         // RU: Профиль
+
+        static let me: String = "me"
+        // EN: Me
+        // RU: Я
         
         static let metTitle: String = "metTitle"
         // EN: Met recently
         // RU: Виделись недавно
+
+        static let metHeader: String = "metHeader"
+        // EN: Met recently
+        // RU: Виделись недавно
+    }
+
+    // MARK: - Chats
+    struct Chats {
+        static let emptyTitle: String = "chatsEmptyTitle"
+        static let emptyMessage: String = "chatsEmptyMessage"
+        static let search: String = "chatSearch"
+        static let newConversation: String = "chatNewConversation"
+        static let noMessagesTitle: String = "chatNoMessagesTitle"
+        static let noMessagesMessage: String = "chatNoMessagesMessage"
+        static let messagePlaceholder: String = "chatMessagePlaceholder"
+        static let today: String = "chatToday"
+        static let send: String = "chatSend"
+        static let actions: String = "chatActions"
+        static let mute: String = "chatMute"
+        static let unmute: String = "chatUnmute"
+        static let attachment: String = "chatAttachment"
+        static let photo: String = "chatPhoto"
+        static let camera: String = "chatCamera"
+        static let file: String = "chatFile"
+        static let timeRemaining: String = "chatTimeRemaining"
+        static let timeExpired: String = "chatTimeExpired"
+        static let waitForNextMeeting: String = "chatWaitForNextMeeting"
+        static let nearbyWithYou: String = "chatNearbyWithYou"
+        static let recentlyMet: String = "chatRecentlyMet"
     }
 
     // MARK: - Encounter history
@@ -72,9 +108,26 @@ struct Inc {
         static let clearMessage: String = "encounterHistoryClearMessage"
         static let lastSeenFormat: String = "encounterHistoryLastSeenFormat"
     }
+
+    // MARK: - People filters
+    struct PeopleFilters {
+        static let distanceTitle: String = "peopleDistanceFilterTitle"
+        static let distanceDescription: String =
+            "peopleDistanceFilterDescription"
+        static let distanceUnlimited: String =
+            "peopleDistanceFilterUnlimited"
+        static let distanceValueFormat: String =
+            "peopleDistanceFilterValueFormat"
+        static let maximum: String = "peopleFilterMaximum"
+        static let nearbyEmptyTitle: String = "peopleDistanceFilterEmptyTitle"
+        static let nearbyEmptyMessage: String =
+            "peopleDistanceFilterEmptyMessage"
+        static let historyButton: String = "peopleHistoryButton"
+    }
     
     // MARK: - Registration
     struct Registration {
+        static let telegramLinkTitle: String = "telegramLinkTitle"
         static let placeCode: String = "placeCode"
         // EN: Code
         // RU: Код
@@ -104,8 +157,8 @@ struct Inc {
         // RU: Максимум 8 символов
         
         static let regDescription: String = "regDescription"
-        // EN: Enter the code that the bot sent so that the application can link your tg username.
-        // RU: Введите код, который отправил бот, для того чтобы приложение могло привязать ваш tg username.
+        // EN: Enter the code sent to you by Telescan_bot so the app can link your Telegram.
+        // RU: Введите код, который отправил вам Telescan_bot, чтобы приложение могло привязать ваш Telegram.
         
         static let tgUsername: String = "Telegram username"
         static let usernamePlaceholder: String = "@_"
@@ -113,6 +166,11 @@ struct Inc {
     
     // MARK: - Onboarding
     struct Onboarding {
+        static let appleSignInFailed: String = "appleSignInFailed"
+        static let appleIdentityTitle: String = "appleIdentityTitle"
+        static let appleIdentityDescription: String = "appleIdentityDescription"
+        static let appleSignInButton: String = "appleSignInButton"
+        static let appleSignInHint: String = "appleSignInHint"
         static let welcomeTitle: String = "welcome_title"
         // EN: Welcome to Telescan
         // RU: Добро пожаловать в Telescan
@@ -174,8 +232,8 @@ struct Inc {
         // RU: Сканирование активно. Пользователи Telescan поблизости появятся здесь.
         
         static let scanAlertText: String = "scanAlertText"
-        // EN: To switch over, you need to enable scanning mode.
-        // RU: Для перехода необходимо включить режим сканирования.
+        // EN: Enable scanning in Settings to open the Nearby section.
+        // RU: Включите сканирование в настройках, чтобы открыть раздел «Рядом».
         
     }
 
@@ -192,8 +250,8 @@ struct Inc {
     struct NearbyProfile {
         static let close: String = "nearbyProfileClose"
         static let actions: String = "nearbyProfileActions"
-        static let usernameFallback: String = "nearbyProfileUsernameFallback"
-        static let message: String = "nearbyProfileMessage"
+        static let write: String = "nearbyProfileWrite"
+        static let telegramChat: String = "nearbyProfileTelegramChat"
         static let report: String = "nearbyProfileReport"
         static let block: String = "nearbyProfileBlock"
 
@@ -253,7 +311,6 @@ struct Inc {
         // EN/RU: from Ruslan Chukavin
 
         static let moreActions: String = "profileMoreActions"
-        static let myCard: String = "profileMyCard"
 
         static let developerLinksTitle: String = "developerLinksTitle"
         static let developerLinksMessage: String = "developerLinksMessage"
@@ -264,6 +321,30 @@ struct Inc {
         static let bioEmpty: String = "profileBioEmpty"
         static let bioApply: String = "profileBioApply"
         static let bioSaveFailed: String = "profileBioSaveFailed"
+
+        static let nameTitle: String = "profileNameTitle"
+        static let informationTitle: String = "profileInformationTitle"
+        static let telegramTitle: String = "profileTelegramTitle"
+        static let notSpecified: String = "profileNotSpecified"
+        static let linkTelegram: String = "profileLinkTelegram"
+        static let changePhoto: String = "profileChangePhoto"
+        static let changePhotoTitle: String = "profileChangePhotoTitle"
+        static let saveName: String = "profileSaveName"
+        static let namePlaceholder: String = "profileNamePlaceholder"
+        static let nameDescription: String = "profileNameDescription"
+        static let informationDescription: String =
+            "profileInformationDescription"
+        static let editProfile: String = "profileEdit"
+        static let openPhoto: String = "profileOpenPhoto"
+        static let unlinkTelegram: String = "profileUnlinkTelegram"
+        static let unlinkTelegramAction: String =
+            "profileUnlinkTelegramAction"
+        static let unlinkTelegramTitle: String =
+            "profileUnlinkTelegramTitle"
+        static let unlinkTelegramMessage: String =
+            "profileUnlinkTelegramMessage"
+        static let unlinkTelegramFailed: String =
+            "profileUnlinkTelegramFailed"
 
         static let logout: String = "logout"
         static let accountActionsTitle: String = "accountActionsTitle"
@@ -290,7 +371,6 @@ struct Inc {
         // EN: Version
         // RU: Версия
         
-        static let copyUsername = "copyUsername"
         // EN: Copy and paste into Telegram search
         // RU: Скопируйте и вставьте в поле поиска Telegram
         

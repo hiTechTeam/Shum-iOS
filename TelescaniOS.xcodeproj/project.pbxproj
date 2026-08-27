@@ -163,6 +163,11 @@
 				TargetAttributes = {
 					B9559D572EBC4A0200FC3377 = {
 						CreatedOnToolsVersion = 16.4;
+						SystemCapabilities = {
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
 					};
 					B98E8FEB2F00964600D882A0 = {
 						CreatedOnToolsVersion = 26.1;
@@ -416,6 +421,7 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) TELESCAN_PERSONAL_TEAM";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -432,6 +438,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = TelescaniOS/TelescaniOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = UF2FP85G5V;
@@ -540,7 +547,7 @@
 				B9559D622EBC4A0500FC3377 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		B9559D632EBC4A0500FC3377 /* Build configuration list for PBXNativeTarget "Telescan" */ = {
 			isa = XCConfigurationList;
@@ -549,7 +556,7 @@
 				B9559D652EBC4A0500FC3377 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		B98E8FF22F00964600D882A0 /* Build configuration list for PBXNativeTarget "TelescanTests" */ = {
 			isa = XCConfigurationList;
@@ -558,7 +565,7 @@
 				B98E8FF42F00964600D882A0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 

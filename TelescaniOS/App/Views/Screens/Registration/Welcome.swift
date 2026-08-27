@@ -3,7 +3,7 @@ import SwiftUI
 struct Welcome: View {
 
     @Environment(\.colorScheme) private var colorScheme
-    @State private var onStart = false
+    @State private var showIdentityVerification = false
 
     private let referenceWidth: CGFloat = 390
     private let accentColor = Color(
@@ -137,13 +137,16 @@ struct Welcome: View {
                 .tint(accentColor)
                 .frame(maxWidth: 340 * scale)
 
-            StartButton(
-                title: Inc.Onboarding.start.localized,
-                accentColor: accentColor
-            ) {
-                onStart = true
+            ZStack {
+                StartButton(
+                    title: Inc.Onboarding.start.localized,
+                    accentColor: accentColor
+                ) {
+                    showIdentityVerification = true
+                }
             }
-            .frame(maxWidth: min(360 * scale, width - 30))
+            .frame(height: 50)
+            .frame(maxWidth: min(360 * scale, max(0, width - 30)))
             .padding(.top, 27 * scale)
         }
     }
@@ -181,9 +184,8 @@ struct Welcome: View {
             }
             .tint(accentColor)
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(isPresented: $onStart) {
-                AuthCode()
-                    .navigationBarBackButtonHidden(true)
+            .navigationDestination(isPresented: $showIdentityVerification) {
+                AppleIdentityVerificationView()
             }
         }
     }

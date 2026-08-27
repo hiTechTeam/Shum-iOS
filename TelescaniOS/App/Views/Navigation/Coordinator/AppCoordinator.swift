@@ -9,6 +9,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     private var isValidatingSession = false
 
     @Published var isRegistered: Bool
+    @Published private(set) var isAuthenticated: Bool
+    @Published private(set) var authenticationFlowID = UUID()
     @Published var showSplash = true
     @Published var isScaning: Bool
 
@@ -18,15 +20,26 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     init(sessionValidator: SessionValidator? = nil) {
         self.sessionValidator = sessionValidator ?? SessionValidator()
         let locallyRegistered = UserDefaults.standard.bool(forKey: regKey)
+        let hasTokens = AuthSessionStore.shared.hasTokens
+        let hasPrimarySession = AuthSessionStore.shared.hasPrimarySession
+        let hasLegacySession = hasTokens && !hasPrimarySession
+        #if TELESCAN_PERSONAL_TEAM
+        isAuthenticated = AppConfig.skipRegistration || hasTokens
         isRegistered = AppConfig.skipRegistration
-            || (locallyRegistered && AuthSessionStore.shared.hasTokens)
+            || (locallyRegistered && hasTokens)
+        #else
+        isAuthenticated = AppConfig.skipRegistration || hasPrimarySession
+        isRegistered = AppConfig.skipRegistration
+            || (locallyRegistered && hasPrimarySession)
+        #endif
         isScaning = UserDefaults.standard.bool(forKey: scanningKey)
         authCodeViewModel.restoreLocalProfile()
-        if locallyRegistered,
-           !AuthSessionStore.shared.hasTokens,
+        #if !TELESCAN_PERSONAL_TEAM
+        if hasLegacySession || locallyRegistered && !hasPrimarySession,
            !AppConfig.skipRegistration {
             clearLocalSession()
         }
+        #endif
     }
 
     func start() -> AnyView {
@@ -45,9 +58,40 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
 
     func completedRegistration() {
+        guard AppConfig.skipRegistration || authSession.hasTokens else {
+            clearLocalSession()
+            return
+        }
+        isAuthenticated = true
         isRegistered = true
         UserDefaults.standard.set(true, forKey: regKey)
+        setScanning(true)
         updateApplicationState(isActive: true)
+    }
+
+    func completedAppleSignIn(profile: TelescanProfileResponse) {
+        authCodeViewModel.applyProfile(profile)
+        isAuthenticated = true
+        if profile.isTelegramLinked {
+            completedRegistration()
+        } else {
+            isRegistered = false
+            UserDefaults.standard.set(false, forKey: regKey)
+        }
+    }
+
+    func setScanning(_ enabled: Bool) {
+        isScaning = enabled
+        UserDefaults.standard.set(enabled, forKey: scanningKey)
+
+        if enabled {
+            peopleViewModel.toggleScanning(true)
+            if let id = authCodeViewModel.telescanID {
+                peopleViewModel.startAdvertising(telescanID: id)
+            }
+        } else {
+            peopleViewModel.stopAllBluetoothActivity()
+        }
     }
 
     func logoutCurrentSession() async throws {
@@ -71,18 +115,27 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
 
     func refreshSession() async {
-        guard isRegistered, !isValidatingSession else { return }
+        guard isAuthenticated, authSession.hasTokens, !isValidatingSession else {
+            return
+        }
         isValidatingSession = true
         defer { isValidatingSession = false }
 
         switch await sessionValidator.validate() {
         case .active(let profile):
             authCodeViewModel.applyProfile(profile)
+            if !isRegistered {
+                completedRegistration()
+            }
             if isScaning {
                 peopleViewModel.startAdvertising(
                     telescanID: profile.telescanId
                 )
             }
+        case .telegramLinkRequired(let profile):
+            authCodeViewModel.applyProfile(profile)
+            isRegistered = false
+            UserDefaults.standard.set(false, forKey: regKey)
         case .invalid:
             clearLocalSession()
         case .unavailable:
@@ -102,7 +155,9 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             UserDefaults.standard.removePersistentDomain(forName: bundleID)
         }
         isScaning = false
+        isAuthenticated = false
         isRegistered = false
+        authenticationFlowID = UUID()
     }
 
     func updateApplicationState(isActive: Bool) {

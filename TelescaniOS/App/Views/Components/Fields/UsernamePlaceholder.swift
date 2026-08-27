@@ -13,7 +13,6 @@ struct UsernamePlaceholder: View {
     
     private let usernameField: String = Inc.Registration.usernamePlaceholder
     private let incorrectCodeText: String = Inc.Registration.incorrectCode.localized
-    private let fieldWidth: CGFloat = 360
     private let fieldHeight: CGFloat = 46
     private let cornerRadius: CGFloat = 13
     private let paddingHorizontal: CGFloat = 12
@@ -100,7 +99,7 @@ struct UsernamePlaceholder: View {
     private var fieldBackground: some View {
         RoundedRectangle(cornerRadius: cornerRadius)
             .fill(backgroundColor)
-            .frame(width: fieldWidth, height: fieldHeight)
+            .frame(maxWidth: .infinity, minHeight: fieldHeight)
             .scaleEffect(animate ? scaleLarge : scaleSmall)
             .offset(x: shakeOffset)
             .animation(.easeInOut(duration: generalAnimDuration), value: animate)
@@ -119,7 +118,11 @@ struct UsernamePlaceholder: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
                     .padding(.horizontal, paddingHorizontal)
-                    .frame(width: fieldWidth, height: fieldHeight, alignment: .leading)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: fieldHeight,
+                        alignment: .leading
+                    )
             }
         }
     }

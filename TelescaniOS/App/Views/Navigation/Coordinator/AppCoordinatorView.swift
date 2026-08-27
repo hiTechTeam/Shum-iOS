@@ -9,8 +9,11 @@ struct AppCoordinatorView: View {
             Group {
                 if coordinator.isRegistered {
                     MainContentView()
+                } else if coordinator.isAuthenticated {
+                    AuthenticatedOnboardingView()
                 } else {
                     Welcome()
+                        .id(coordinator.authenticationFlowID)
                 }
             }
 
@@ -37,6 +40,15 @@ struct AppCoordinatorView: View {
                     await coordinator.refreshSession()
                 }
             }
+        }
+    }
+}
+
+private struct AuthenticatedOnboardingView: View {
+    var body: some View {
+        NavigationStack {
+            AuthCode()
+                .navigationBarBackButtonHidden(true)
         }
     }
 }

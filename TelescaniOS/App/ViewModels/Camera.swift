@@ -9,6 +9,9 @@ struct CameraPicker: UIViewControllerRepresentable {
         picker.sourceType = .camera
         picker.delegate = context.coordinator
         picker.allowsEditing = false
+        picker.modalPresentationStyle = .fullScreen
+        picker.view.backgroundColor = .black
+        picker.edgesForExtendedLayout = .all
         return picker
     }
     

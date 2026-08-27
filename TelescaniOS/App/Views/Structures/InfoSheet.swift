@@ -33,12 +33,9 @@ struct InfoSheetView: View {
 
     private func sectionDescription(_ description: String) -> some View {
         Text(description)
-            .font(.system(size: 15))
-            .foregroundStyle(.primary)
-            .lineSpacing(4)
+            .telescanDescriptionStyle()
             .frame(maxWidth: .infinity, alignment: .leading)
             .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, 6)
     }
 
@@ -134,30 +131,34 @@ struct InfoSheetView: View {
     }
 
     var body: some View {
-        listContent
-            .environment(
-                \.openURL,
-                OpenURLAction { url in
-                    guard url == developerActionURL else {
-                        return .systemAction
-                    }
-                    showDeveloperLinks = true
-                    return .handled
+        NavigationStack {
+            listContent
+                .navigationTitle(Inc.Common.Telescan.localized)
+                .navigationBarTitleDisplayMode(.inline)
+        }
+        .environment(
+            \.openURL,
+            OpenURLAction { url in
+                guard url == developerActionURL else {
+                    return .systemAction
                 }
-            )
-            .alert(
-                Inc.Profile.developerLinksTitle.localized,
-                isPresented: $showDeveloperLinks
-            ) {
-                Button("GitHub") {
-                    openURL(developerGitHubURL)
-                }
-                Button(Inc.Profile.telegramChannel.localized) {
-                    openURL(developerTelegramURL)
-                }
-                Button(Inc.Common.cancel.localized, role: .cancel) { }
-            } message: {
-                Text(Inc.Profile.developerLinksMessage.localized)
+                showDeveloperLinks = true
+                return .handled
             }
+        )
+        .alert(
+            Inc.Profile.developerLinksTitle.localized,
+            isPresented: $showDeveloperLinks
+        ) {
+            Button("GitHub") {
+                openURL(developerGitHubURL)
+            }
+            Button(Inc.Profile.telegramChannel.localized) {
+                openURL(developerTelegramURL)
+            }
+            Button(Inc.Common.cancel.localized, role: .cancel) { }
+        } message: {
+            Text(Inc.Profile.developerLinksMessage.localized)
+        }
     }
 }

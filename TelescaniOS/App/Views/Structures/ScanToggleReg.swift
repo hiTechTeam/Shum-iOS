@@ -15,5 +15,7 @@ struct ScanToggleReg: View {
     
     var body: some View {
         content
+            .frame(maxWidth: 360)
+            .padding(.horizontal, 20)
     }
 }

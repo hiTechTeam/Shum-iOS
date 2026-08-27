@@ -6,6 +6,7 @@ final class AuthSessionStore: @unchecked Sendable {
     private enum Key {
         static let accessToken = "telescan.auth.access-token"
         static let refreshToken = "telescan.auth.refresh-token"
+        static let primarySession = "telescan.auth.apple-primary-session-v1"
     }
 
     private let store: SecureStoring
@@ -28,6 +29,10 @@ final class AuthSessionStore: @unchecked Sendable {
         accessToken != nil && refreshToken != nil
     }
 
+    var hasPrimarySession: Bool {
+        hasTokens && string(for: Key.primarySession) == "apple-v1"
+    }
+
     func installationDeviceID() throws -> UUID {
         try deviceIdentity.value()
     }
@@ -42,9 +47,35 @@ final class AuthSessionStore: @unchecked Sendable {
         }
     }
 
+    func saveAppleSession(_ tokens: TokenResponse) throws {
+        do {
+            try save(tokens)
+            try store.set(Data("apple-v1".utf8), for: Key.primarySession)
+        } catch {
+            clearTokens()
+            throw error
+        }
+    }
+
+    func saveLegacySession(_ tokens: TokenResponse) throws {
+        do {
+            try save(tokens)
+            try store.remove(Key.primarySession)
+        } catch {
+            clearTokens()
+            throw error
+        }
+    }
+
+    func saveAccessToken(_ token: String) throws {
+        guard !token.isEmpty else { throw SecureStoreError.invalidData }
+        try store.set(Data(token.utf8), for: Key.accessToken)
+    }
+
     func clearTokens() {
         try? store.remove(Key.accessToken)
         try? store.remove(Key.refreshToken)
+        try? store.remove(Key.primarySession)
     }
 
     private func string(for key: String) -> String? {

@@ -1,87 +1,55 @@
 import SwiftUI
 import Kingfisher
+import UIKit
 
-struct EncounterHistoryTab: View {
-    @EnvironmentObject var peopleViewModel: PeopleViewModel
-
-    var body: some View {
-        NavigationStack {
-            EncounterHistoryView()
-                .navigationTitle(Inc.Tabs.metTitle.localized)
-                .navigationBarTitleDisplayMode(.large)
-        }
-        .tabItem {
-            Label(
-                Inc.Tabs.metTitle.localized,
-                systemImage: "clock.arrow.circlepath"
-            )
-        }
-        .tag(SelectedTab.met)
-        .badge(peopleViewModel.encounterHistory.count)
-    }
-}
-
-private struct EncounterHistoryView: View {
+struct EncounterHistorySheet: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @EnvironmentObject var peopleViewModel: PeopleViewModel
+    @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
     @State private var selectedEncounter: EncounterHistoryEntry?
     @State private var showsClearConfirmation = false
 
     var body: some View {
-        ZStack {
-            Color.tsBackground
-                .ignoresSafeArea()
+        NavigationStack {
+            ZStack {
+                Color.tsBackground
+                    .ignoresSafeArea()
 
-            if peopleViewModel.encounterHistory.isEmpty {
-                GeometryReader { geometry in
-                    ScrollView {
-                        ContentUnavailableView(
-                            Inc.EncounterHistory.emptyTitle.localized,
-                            systemImage: "clock.arrow.circlepath",
-                            description: Text(
-                                Inc.EncounterHistory.emptyMessage.localized
-                            )
+                if peopleViewModel.encounterHistory.isEmpty {
+                    ContentUnavailableView(
+                        Inc.EncounterHistory.emptyTitle.localized,
+                        systemImage: "clock.arrow.circlepath",
+                        description: Text(
+                            Inc.EncounterHistory.emptyMessage.localized
                         )
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: geometry.size.height)
-                    }
-                    .scrollBounceBehavior(.always)
-                    .refreshable {
-                        await peopleViewModel.synchronizeBlockedProfiles()
-                        peopleViewModel.refreshEncounterHistory()
-                    }
-                }
-            } else {
-                List(peopleViewModel.encounterHistory) { encounter in
-                    Button {
-                        selectedEncounter = encounter
-                    } label: {
-                        EncounterHistoryRow(encounter: encounter)
-                    }
-                    .listRowBackground(
-                        Color(uiColor: .systemOrange).opacity(0.20)
                     )
-                }
-                .scrollContentBackground(.hidden)
-                .refreshable {
-                    await peopleViewModel.synchronizeBlockedProfiles()
-                    peopleViewModel.refreshEncounterHistory()
+                } else {
+                    encounterList
                 }
             }
-        }
-        .toolbar {
-            if !peopleViewModel.encounterHistory.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(
-                        Inc.EncounterHistory.clear.localized,
-                        systemImage: "trash"
-                    ) {
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
                         showsClearConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
                     }
-                    .accessibilityLabel(
-                        Inc.EncounterHistory.clear.localized
-                    )
+                    .disabled(peopleViewModel.encounterHistory.isEmpty)
+                    .accessibilityLabel(Inc.EncounterHistory.clear.localized)
+                }
+
+                ToolbarItem(placement: .principal) {
+                    Text(Inc.Tabs.metTitle.localized)
+                        .telescanSheetTitleStyle()
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(Inc.Common.close.localized) {
+                        dismiss()
+                    }
                 }
             }
         }
@@ -91,19 +59,15 @@ private struct EncounterHistoryView: View {
                 lastMetAt: encounter.lastSeen
             )
             .environmentObject(peopleViewModel)
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
-            .presentationContentInteraction(.resizes)
         }
         .alert(
             Inc.EncounterHistory.clearTitle.localized,
             isPresented: $showsClearConfirmation
         ) {
             Button(Inc.Common.cancel.localized, role: .cancel) { }
-            Button(
-                Inc.EncounterHistory.clear.localized,
-                role: .destructive
-            ) {
+            Button(Inc.EncounterHistory.clear.localized, role: .destructive) {
                 peopleViewModel.clearEncounterHistory()
             }
         } message: {
@@ -124,63 +88,92 @@ private struct EncounterHistoryView: View {
             peopleViewModel.refreshEncounterHistory()
         }
     }
+
+    private var encounterList: some View {
+        List(peopleViewModel.encounterHistory) { encounter in
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                selectedEncounter = encounter
+            } label: {
+                EncounterHistoryRow(encounter: encounter)
+            }
+            .buttonStyle(.plain)
+            .listRowBackground(Color.clear)
+            .listRowInsets(
+                EdgeInsets(
+                    top: 4,
+                    leading: 16,
+                    bottom: 4,
+                    trailing: 16
+                )
+            )
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .refreshable {
+            await peopleViewModel.synchronizeBlockedProfiles()
+            peopleViewModel.refreshEncounterHistory()
+        }
+    }
+
 }
 
 private struct EncounterHistoryRow: View {
     let encounter: EncounterHistoryEntry
 
-    private var user: NearbyUser {
-        encounter.user
-    }
-
     var body: some View {
-        HStack(spacing: 12) {
-            profileImage
+        HStack(spacing: 10) {
+            EncounterHistoryAvatar(user: encounter.user)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(user.name)
-                    .foregroundStyle(.gray)
-                    .font(.system(size: 14))
-                    .lineLimit(1)
-
-                Text(user.username)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color(uiColor: .systemBlue))
-                    .lineLimit(1)
-            }
+            Text(encounter.user.name)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
 
             Spacer(minLength: 8)
 
-            EncounterRelativeTimeText(date: encounter.lastSeen)
-                .font(.system(size: 12))
-                .foregroundStyle(.gray)
-                .lineLimit(2)
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: 100, alignment: .trailing)
+            EncounterRelativeTimeText(
+                date: encounter.lastSeen,
+                includesMetPrefix: true
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.trailing)
+            .lineLimit(1)
         }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct EncounterHistoryAvatar: View {
+    let user: NearbyUser
+
+    private let size: CGFloat = 40
+
+    var body: some View {
+        Group {
+            if let photoURL = user.photoURL,
+               let url = URL(string: photoURL) {
+                KFImage(url)
+                    .placeholder { placeholder }
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
     }
 
-    @ViewBuilder
-    private var profileImage: some View {
-        if let photoURL = user.photoURL,
-           let imageURL = URL(string: photoURL) {
-            KFImage(imageURL)
-                .placeholder {
-                    Image.personCropCircleFill
-                        .resizable()
-                        .foregroundStyle(.gray)
-                }
-                .resizable()
-                .scaledToFill()
-                .frame(width: 62, height: 62)
-                .clipShape(Circle())
-                .clipped()
-        } else {
-            Image.personCropCircleFill
-                .resizable()
-                .foregroundStyle(.gray)
-                .frame(width: 56, height: 56)
-        }
+    private var placeholder: some View {
+        Image.personCropCircleFill
+            .resizable()
+            .scaledToFit()
+            .foregroundStyle(.gray)
     }
 }
 
@@ -195,6 +188,28 @@ struct EncounterRelativeTimeText: View {
     }
 
     private func label(relativeTo now: Date) -> String {
+        let calendar = Calendar.current
+        let dayDifference = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: date),
+            to: calendar.startOfDay(for: now)
+        ).day ?? 0
+
+        if dayDifference == 1 {
+            let formatter = DateFormatter()
+            formatter.locale = .current
+            formatter.dateStyle = .medium
+            formatter.doesRelativeDateFormatting = true
+            return formatted(formatter.string(from: date))
+        }
+
+        if dayDifference != 0 {
+            let formatter = DateFormatter()
+            formatter.locale = .current
+            formatter.dateStyle = .medium
+            return formatted(formatter.string(from: date))
+        }
+
         let formatter = RelativeDateTimeFormatter()
         formatter.locale = .current
         formatter.unitsStyle = .short
@@ -204,10 +219,14 @@ struct EncounterRelativeTimeText: View {
             relativeTo: now
         )
 
-        guard includesMetPrefix else { return relative }
+        return formatted(relative)
+    }
+
+    private func formatted(_ value: String) -> String {
+        guard includesMetPrefix else { return value }
         return String.localizedStringWithFormat(
             Inc.EncounterHistory.lastSeenFormat.localized,
-            relative
+            value
         )
     }
 }

@@ -1,14 +1,15 @@
 import SwiftUI
 import Kingfisher
+import UIKit
 
 struct PeopleView: View {
-
     @EnvironmentObject var coordinator: AppCoordinator
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var selectedUser: NearbyUser?
+    @State private var showsEncounterHistory = false
 
     var body: some View {
         ZStack {
@@ -35,22 +36,48 @@ struct PeopleView: View {
                         }
                     }
                 } else {
-                    List {
-                        ForEach(
-                            peopleViewModel.visibleUsers
-                        ) { user in
-                            Button {
-                                selectedUser = user
-                            } label: {
-                                PeopleRowContent(user: user)
-                            }
+                    List(peopleViewModel.visibleUsers) { user in
+                        ProfileAvatarButton(user: user) {
+                            selectedUser = user
                         }
+                        .listRowInsets(
+                            EdgeInsets(
+                                top: 8,
+                                leading: 16,
+                                bottom: 8,
+                                trailing: 16
+                            )
+                        )
+                        .listRowBackground(Color.clear)
                     }
+                    .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                     .refreshable {
                         await peopleViewModel.refreshNearbyPeople()
                     }
                 }
+            } else {
+                ContentUnavailableView(
+                    Inc.Scanning.scanning.localized,
+                    systemImage: "eye.slash",
+                    description: Text(
+                        Inc.Scanning.turnedOffScanning.localized
+                    )
+                )
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                    peopleViewModel.refreshEncounterHistory()
+                    showsEncounterHistory = true
+                } label: {
+                    EncounterHistoryToolbarIcon(
+                        hasEncounters: !peopleViewModel.encounterHistory.isEmpty
+                    )
+                }
+                .accessibilityLabel(Inc.PeopleFilters.historyButton.localized)
             }
         }
         .onChange(of: scenePhase) {  _, newPhase in
@@ -75,63 +102,102 @@ struct PeopleView: View {
         .sheet(item: $selectedUser) { user in
             ProfileSheetView(user: user)
                 .environmentObject(peopleViewModel)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
-                .presentationContentInteraction(.resizes)
+        }
+        .sheet(isPresented: $showsEncounterHistory) {
+            EncounterHistorySheet()
+                .environmentObject(peopleViewModel)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
         .task {
             await peopleViewModel.synchronizeBlockedProfiles()
+            peopleViewModel.refreshEncounterHistory()
         }
+    }
+
+}
+
+private struct EncounterHistoryToolbarIcon: View {
+    let hasEncounters: Bool
+
+    var body: some View {
+        Image(systemName: "clock.arrow.circlepath")
+            .foregroundStyle(hasEncounters ? Color.blue : Color.gray)
+            .frame(width: 28, height: 28)
     }
 }
 
-struct PeopleRowContent: View {
-
-    @EnvironmentObject var peopleViewModel: PeopleViewModel
-
+struct ProfileAvatarButton: View {
     let user: NearbyUser
+    let action: () -> Void
+
+    private let avatarSize: CGFloat = 52
 
     var body: some View {
-        HStack(spacing: 12) {
+        Button {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            action()
+        } label: {
+            HStack(spacing: 12) {
+                profileImage
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(user.name)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    if let bio = user.bio?.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    ), !bio.isEmpty {
+                        Text(bio)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                NearbyPresenceLabel(
+                    user: user,
+                    usesCompactCountdown: true,
+                    fontSize: 14
+                )
+            }
+            .frame(maxWidth: .infinity, minHeight: avatarSize)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(user.name)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    @ViewBuilder
+    private var profileImage: some View {
+        Group {
             if let url = user.photoURL,
                let imageURL = URL(string: url) {
                 KFImage(imageURL)
                     .placeholder {
                         Image.personCropCircleFill
                             .resizable()
-                            .foregroundColor(.gray)
+                            .foregroundStyle(.gray)
                     }
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 62, height: 62)
-                    .clipShape(Circle())
-                    .clipped()
             } else {
                 Image.personCropCircleFill
                     .resizable()
-                    .foregroundColor(.gray)
-                    .frame(width: 56, height: 56)
+                    .scaledToFit()
+                    .foregroundStyle(.gray)
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(
-                    user.name
-                )
-                .foregroundColor(.gray)
-                .font(.system(size: 14))
-
-                Text(
-                    user.username
-                )
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color(uiColor: .systemBlue))
-            }
-
-            Spacer()
-
-            NearbyPresenceLabel(user: user, usesCompactCountdown: true)
-                .padding(.trailing, 20)
         }
+        .frame(width: avatarSize, height: avatarSize)
+        .background(Color(uiColor: .secondarySystemBackground), in: Circle())
+        .clipShape(Circle())
     }
 }
 
@@ -185,12 +251,12 @@ private struct NearbyPresenceLabel: View {
 
 struct ProfileSheetView: View {
 
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
     @State private var showPhotoPreview = false
 
     let user: NearbyUser
-    var showsNearbyControls = true
     var lastMetAt: Date? = nil
 
     private var imageURL: URL? {
@@ -204,6 +270,40 @@ struct ProfileSheetView: View {
 
         withTransaction(transaction) {
             showPhotoPreview = true
+        }
+    }
+
+    private var telegramUsername: String? {
+        let value = user.username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+        return value.isEmpty ? nil : value
+    }
+
+    private func openTelegramChat() {
+        guard let telegramUsername else { return }
+
+        var appComponents = URLComponents()
+        appComponents.scheme = "tg"
+        appComponents.host = "resolve"
+        appComponents.queryItems = [
+            URLQueryItem(name: "domain", value: telegramUsername)
+        ]
+
+        var webComponents = URLComponents()
+        webComponents.scheme = "https"
+        webComponents.host = "t.me"
+        webComponents.path = "/\(telegramUsername)"
+
+        guard let appURL = appComponents.url,
+              let webURL = webComponents.url else {
+            return
+        }
+
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        openURL(appURL) { accepted in
+            guard !accepted else { return }
+            openURL(webURL)
         }
     }
 
@@ -263,37 +363,39 @@ struct ProfileSheetView: View {
 
                 Spacer()
 
-                VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .center, spacing: 0) {
+                    VStack(alignment: .center, spacing: 12) {
                         Text(
                             user.name
                         )
                         .font(.title)
                         .bold()
+                        .multilineTextAlignment(.center)
+                        .frame(width: 360, alignment: .center)
 
                     }
 
-                    Group {
-                        if let bio = user.bio, !bio.isEmpty {
-                            Text(bio)
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(3)
-                                .fixedSize(horizontal: false, vertical: true)
-                        } else {
-                            Text(Inc.NearbyProfile.usernameFallback.localized)
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
+                    if let bio = user.bio, !bio.isEmpty {
+                        Text(bio)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 360, alignment: .center)
+                            .frame(minHeight: 48, alignment: .center)
+                    } else {
+                        Color.clear
+                            .frame(width: 360, height: 48)
                     }
-                    .frame(
-                        width: 360,
-                        height: 48,
-                        alignment: .leading
+
+                    RegistrationPrimaryButton(
+                        title: Inc.NearbyProfile.write.localized,
+                        isEnabled: telegramUsername != nil,
+                        accentColor: .blue,
+                        action: openTelegramChat
                     )
-
-                    CopyUsernameField(username: user.username)
+                    .frame(width: 360)
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
@@ -301,10 +403,12 @@ struct ProfileSheetView: View {
                 .compositingGroup()
             }
             .padding(.top, 60)
+            .ignoresSafeArea(.keyboard, edges: .bottom)
 
-            if showsNearbyControls {
-                ProfileSheetControls(user: user, lastMetAt: lastMetAt)
-            }
+            ProfileSheetControls(
+                user: user,
+                lastMetAt: lastMetAt
+            )
         }
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let imageURL {
@@ -316,8 +420,26 @@ struct ProfileSheetView: View {
                 }
             }
         }
-        .presentationBackground {
-            ProfileSheetBackground(imageURL: imageURL)
+        .modifier(ProfileSheetPresentationBackground(imageURL: imageURL))
+    }
+}
+
+private struct ProfileSheetPresentationBackground: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency)
+    private var reduceTransparency
+
+    let imageURL: URL?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *),
+           colorScheme != .dark || imageURL == nil || reduceTransparency {
+            content
+        } else {
+            content.presentationBackground {
+                ProfileSheetBackground(imageURL: imageURL)
+            }
         }
     }
 }
@@ -421,91 +543,25 @@ private struct ProfileSheetBackground: View {
     }
 }
 
-private struct ProfileSheetControlSurface: ViewModifier {
-
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    @ViewBuilder
-    private var fallbackBackground: some View {
-        if colorScheme == .light {
-            Circle()
-                .fill(Color(uiColor: .systemGray6))
-        } else if reduceTransparency {
-            Circle()
-                .fill(Color(uiColor: .secondarySystemBackground))
-        } else {
-            Circle()
-                .fill(.ultraThinMaterial)
-        }
-    }
-
+private struct ProfileSheetActionGroupSurface: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content
-                .glassEffect(.regular.interactive(), in: Circle())
-        } else if colorScheme == .light {
-            content
-                .background { fallbackBackground }
+                .glassEffect(.regular.interactive(), in: Capsule())
         } else {
             content
-                .background { fallbackBackground }
-                .overlay {
-                    Circle()
-                        .stroke(
-                            colorScheme == .dark
-                                ? Color.white.opacity(0.24)
-                                : Color.black.opacity(0.10),
-                            lineWidth: 0.75
-                        )
-                }
-                .shadow(
-                    color: Color.black.opacity(
-                        colorScheme == .dark ? 0.28 : 0.14
-                    ),
-                    radius: 4,
-                    y: 2
-                )
         }
     }
 }
 
 private extension View {
-    func profileSheetControlSurface() -> some View {
-        modifier(ProfileSheetControlSurface())
+    func profileSheetActionGroupSurface() -> some View {
+        modifier(ProfileSheetActionGroupSurface())
     }
 }
 
 private struct ProfileSheetControls: View {
-
-    private static let telegramMenuIcon: UIImage = {
-        guard let source = UIImage(named: "tg-icon"),
-              source.size.width > 0,
-              source.size.height > 0 else {
-            return UIImage()
-        }
-
-        let targetSize = CGSize(width: 17, height: 17)
-        let scale = min(
-            targetSize.width / source.size.width,
-            targetSize.height / source.size.height
-        )
-        let drawSize = CGSize(
-            width: source.size.width * scale,
-            height: source.size.height * scale
-        )
-        let drawRect = CGRect(
-            x: (targetSize.width - drawSize.width) / 2,
-            y: (targetSize.height - drawSize.height) / 2,
-            width: drawSize.width,
-            height: drawSize.height
-        )
-        let image = UIGraphicsImageRenderer(size: targetSize).image { _ in
-            source.draw(in: drawRect)
-        }
-        return image.withRenderingMode(.alwaysTemplate)
-    }()
 
     private enum ModerationDialog {
         case report
@@ -530,7 +586,6 @@ private struct ProfileSheetControls: View {
     }
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
     let user: NearbyUser
@@ -617,14 +672,6 @@ private struct ProfileSheetControls: View {
 
     private var moderationMenu: some View {
         Menu {
-            Button(action: openTelegramChat) {
-                Label {
-                    Text(Inc.NearbyProfile.message.localized)
-                } icon: {
-                    Image(uiImage: Self.telegramMenuIcon)
-                }
-            }
-
             Button(role: .destructive) {
                 moderationDialog = .report
             } label: {
@@ -632,7 +679,9 @@ private struct ProfileSheetControls: View {
                     Inc.NearbyProfile.report.localized,
                     systemImage: "exclamationmark.bubble"
                 )
+                .foregroundStyle(.red)
             }
+            .tint(.red)
 
             Button(role: .destructive) {
                 moderationDialog = .block
@@ -641,7 +690,9 @@ private struct ProfileSheetControls: View {
                     Inc.NearbyProfile.block.localized,
                     systemImage: "person.crop.circle.badge.xmark"
                 )
+                .foregroundStyle(.red)
             }
+            .tint(.red)
         } label: {
             Group {
                 if isSubmitting {
@@ -655,7 +706,6 @@ private struct ProfileSheetControls: View {
             }
             .frame(width: 44, height: 44)
             .contentShape(Circle())
-            .profileSheetControlSurface()
         }
         .buttonStyle(.plain)
         .menuOrder(.fixed)
@@ -663,34 +713,12 @@ private struct ProfileSheetControls: View {
         .accessibilityLabel(Inc.NearbyProfile.actions.localized)
     }
 
-    private func openTelegramChat() {
-        let username = user.username
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
-        guard !username.isEmpty else { return }
-
-        var appComponents = URLComponents()
-        appComponents.scheme = "tg"
-        appComponents.host = "resolve"
-        appComponents.queryItems = [
-            URLQueryItem(name: "domain", value: username)
-        ]
-
-        var webComponents = URLComponents()
-        webComponents.scheme = "https"
-        webComponents.host = "t.me"
-        webComponents.path = "/\(username)"
-
-        guard let appURL = appComponents.url,
-              let webURL = webComponents.url else {
-            return
+    private var actionGroup: some View {
+        HStack(spacing: 0) {
+            moderationMenu
         }
-
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        openURL(appURL) { accepted in
-            guard !accepted else { return }
-            openURL(webURL)
-        }
+        .padding(4)
+        .profileSheetActionGroupSurface()
     }
 
     private var presenceInfo: some View {
@@ -831,7 +859,7 @@ private struct ProfileSheetControls: View {
 
             HStack {
                 Spacer()
-                moderationMenu
+                actionGroup
             }
             .padding(.horizontal, 8)
         }
