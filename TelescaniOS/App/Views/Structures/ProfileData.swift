@@ -4,7 +4,6 @@ struct ProfileDataView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @ObservedObject var authCodeViewModel: CodeViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
-    @State private var showNameEditor = false
     @State private var showBioEditor = false
     @State private var showTelegramLink = false
     @State private var draftBio = ""
@@ -28,15 +27,6 @@ struct ProfileDataView: View {
 
     private var profileInformationCard: some View {
         VStack(spacing: 0) {
-            ProfileInformationRow(
-                title: Inc.Profile.nameTitle.localized,
-                value: displayName,
-                showsAccentValue: false,
-                action: openNameEditor
-            )
-
-            profileRowDivider
-
             ProfileInformationRow(
                 title: Inc.Profile.informationTitle.localized,
                 value: displayBio,
@@ -65,11 +55,6 @@ struct ProfileDataView: View {
             .padding(.leading, 20)
     }
 
-    private var displayName: String {
-        normalized(authCodeViewModel.tgName)
-            ?? Inc.Profile.notSpecified.localized
-    }
-
     private var displayBio: String {
         normalized(authCodeViewModel.bio).map { String($0.prefix(36)) }
             ?? Inc.Profile.notSpecified.localized
@@ -87,11 +72,6 @@ struct ProfileDataView: View {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private func openNameEditor() {
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        showNameEditor = true
     }
 
     private func openBioEditor() {
@@ -126,11 +106,6 @@ struct ProfileDataView: View {
         .onChange(of: authCodeViewModel.photoS3URL) { _, value in
             photoVM.loadPhotoFromURL(value)
         }
-        .sheet(isPresented: $showNameEditor) {
-            ProfileNameEditorSheet(authVM: authCodeViewModel)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
         .sheet(isPresented: $showBioEditor) {
             BioEditorSheet(
                 draftBio: $draftBio,
@@ -143,7 +118,7 @@ struct ProfileDataView: View {
         }
         .sheet(isPresented: $showTelegramLink) {
             TelegramLinkProfileSheet(authVM: authCodeViewModel)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
     }
@@ -185,87 +160,6 @@ private struct ProfileInformationRow: View {
         .accessibilityLabel(title)
         .accessibilityValue(value)
         .accessibilityAddTraits(.isButton)
-    }
-}
-
-private struct ProfileNameEditorSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    @ObservedObject var authVM: CodeViewModel
-    @State private var draftName: String
-
-    init(authVM: CodeViewModel) {
-        self.authVM = authVM
-        _draftName = State(initialValue: authVM.tgName ?? "")
-    }
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 12) {
-                TextField(
-                    Inc.Profile.namePlaceholder.localized,
-                    text: $draftName
-                )
-                .font(.system(size: 16))
-                .textInputAutocapitalization(.words)
-                .autocorrectionDisabled(false)
-                .submitLabel(.done)
-                .padding(.horizontal, 18)
-                .frame(height: 56)
-                .background(
-                    Color(uiColor: .secondarySystemBackground),
-                    in: RoundedRectangle(cornerRadius: 18)
-                )
-                .onChange(of: draftName) { _, value in
-                    guard value.count > 50 else { return }
-                    draftName = String(value.prefix(50))
-                }
-                .onSubmit(save)
-
-                Text(Inc.Profile.nameDescription.localized)
-                    .telescanDescriptionStyle()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-                    .allowsTightening(true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 28)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Text(Inc.Common.cancel.localized)
-                            .fixedSize()
-                            .frame(width: 92, alignment: .leading)
-                    }
-                }
-
-                ToolbarItem(placement: .principal) {
-                    Text(Inc.Profile.nameTitle.localized)
-                        .telescanSheetTitleStyle()
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(action: save) {
-                        Text(Inc.Profile.saveName.localized)
-                            .fontWeight(.semibold)
-                            .fixedSize()
-                            .frame(width: 92, alignment: .trailing)
-                    }
-                }
-            }
-        }
-    }
-
-    private func save() {
-        authVM.updateLocalName(draftName)
-        dismiss()
     }
 }
 

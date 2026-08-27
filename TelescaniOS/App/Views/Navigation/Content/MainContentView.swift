@@ -25,7 +25,7 @@ struct MainContentView: View {
             profileTab
                 .tabItem {
                     Label {
-                        Text(Inc.Tabs.me.localized)
+                        Text(Inc.Tabs.profile.localized)
                     } icon: {
                         profileTabIcon
                     }
@@ -86,11 +86,7 @@ struct MainContentView: View {
 
     @ViewBuilder
     private var profileTabIcon: some View {
-        if let image = profilePhotoViewModel.uiImage {
-            Image(uiImage: ProfileTabBarIcon.make(from: image))
-        } else {
-            Image(systemName: "person.crop.circle")
-        }
+        Image(systemName: "person.circle.fill")
     }
 
     private func selectMainTab(_ tab: MainTab) {
@@ -284,44 +280,5 @@ private final class TabBarBadgeAppearanceController: UIViewController {
         item.badgeColor = backgroundColor
         item.setBadgeTextAttributes(attributes, for: .normal)
         item.setBadgeTextAttributes(attributes, for: .selected)
-    }
-}
-
-private enum ProfileTabBarIcon {
-    private static let canvasSize = CGSize(width: 25, height: 25)
-
-    static func make(from source: UIImage) -> UIImage {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = UIScreen.main.scale
-        format.opaque = false
-
-        let renderer = UIGraphicsImageRenderer(
-            size: canvasSize,
-            format: format
-        )
-        let image = renderer.image { _ in
-            let bounds = CGRect(origin: .zero, size: canvasSize)
-            UIBezierPath(ovalIn: bounds).addClip()
-
-            let sourceSize = source.size
-            let scale = max(
-                canvasSize.width / sourceSize.width,
-                canvasSize.height / sourceSize.height
-            )
-            let drawSize = CGSize(
-                width: sourceSize.width * scale,
-                height: sourceSize.height * scale
-            )
-            source.draw(
-                in: CGRect(
-                    x: (canvasSize.width - drawSize.width) / 2,
-                    y: (canvasSize.height - drawSize.height) / 2,
-                    width: drawSize.width,
-                    height: drawSize.height
-                )
-            )
-        }
-
-        return image.withRenderingMode(.alwaysOriginal)
     }
 }

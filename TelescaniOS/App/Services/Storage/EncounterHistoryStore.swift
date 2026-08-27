@@ -21,7 +21,7 @@ final class EncounterHistoryStore: EncounterHistoryStoring {
     init(
         defaults: UserDefaults = .standard,
         key: String = "telescan.encounter-history.v1",
-        maximumEntries: Int = 500
+        maximumEntries: Int = .max
     ) {
         self.defaults = defaults
         self.key = key

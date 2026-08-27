@@ -108,7 +108,7 @@ struct PeopleView: View {
         .sheet(isPresented: $showsEncounterHistory) {
             EncounterHistorySheet()
                 .environmentObject(peopleViewModel)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
         .task {
@@ -403,6 +403,7 @@ struct ProfileSheetView: View {
                 .compositingGroup()
             }
             .padding(.top, 60)
+            .ignoresSafeArea(.keyboard, edges: .bottom)
 
             ProfileSheetControls(
                 user: user,
@@ -543,51 +544,13 @@ private struct ProfileSheetBackground: View {
 }
 
 private struct ProfileSheetActionGroupSurface: ViewModifier {
-
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    @ViewBuilder
-    private var fallbackBackground: some View {
-        if colorScheme == .light {
-            Capsule()
-                .fill(Color(uiColor: .systemGray6))
-        } else if reduceTransparency {
-            Capsule()
-                .fill(Color(uiColor: .secondarySystemBackground))
-        } else {
-            Capsule()
-                .fill(.ultraThinMaterial)
-        }
-    }
-
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content
                 .glassEffect(.regular.interactive(), in: Capsule())
-        } else if colorScheme == .light {
-            content
-                .background { fallbackBackground }
         } else {
             content
-                .background { fallbackBackground }
-                .overlay {
-                    Capsule()
-                        .stroke(
-                            colorScheme == .dark
-                                ? Color.white.opacity(0.24)
-                                : Color.black.opacity(0.10),
-                            lineWidth: 0.75
-                        )
-                }
-                .shadow(
-                    color: Color.black.opacity(
-                        colorScheme == .dark ? 0.28 : 0.14
-                    ),
-                    radius: 4,
-                    y: 2
-                )
         }
     }
 }

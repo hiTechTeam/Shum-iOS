@@ -199,27 +199,6 @@ final class CodeViewModel: ObservableObject {
         telegramUnlinkFailed = false
     }
 
-    func updateLocalName(_ value: String) {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedName = trimmed.isEmpty
-            ? nil
-            : String(trimmed.prefix(50))
-
-        tgName = normalizedName
-        if let normalizedName {
-            UserDefaults.standard.set(
-                normalizedName,
-                forKey: Keys.tgNameKey.rawValue
-            )
-        } else {
-            UserDefaults.standard.removeObject(
-                forKey: Keys.tgNameKey.rawValue
-            )
-        }
-
-        UISelectionFeedbackGenerator().selectionChanged()
-    }
-
     func resetCodeEntry() {
         linkTask?.cancel()
         linkTask = nil

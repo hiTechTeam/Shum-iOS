@@ -8,6 +8,7 @@ struct EncounterHistorySheet: View {
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
     @State private var selectedEncounter: EncounterHistoryEntry?
+    @State private var showsClearConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -30,6 +31,16 @@ struct EncounterHistorySheet: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        showsClearConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .disabled(peopleViewModel.encounterHistory.isEmpty)
+                    .accessibilityLabel(Inc.EncounterHistory.clear.localized)
+                }
+
                 ToolbarItem(placement: .principal) {
                     Text(Inc.Tabs.metTitle.localized)
                         .telescanSheetTitleStyle()
@@ -50,6 +61,17 @@ struct EncounterHistorySheet: View {
             .environmentObject(peopleViewModel)
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
+        }
+        .alert(
+            Inc.EncounterHistory.clearTitle.localized,
+            isPresented: $showsClearConfirmation
+        ) {
+            Button(Inc.Common.cancel.localized, role: .cancel) { }
+            Button(Inc.EncounterHistory.clear.localized, role: .destructive) {
+                peopleViewModel.clearEncounterHistory()
+            }
+        } message: {
+            Text(Inc.EncounterHistory.clearMessage.localized)
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
@@ -166,6 +188,28 @@ struct EncounterRelativeTimeText: View {
     }
 
     private func label(relativeTo now: Date) -> String {
+        let calendar = Calendar.current
+        let dayDifference = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: date),
+            to: calendar.startOfDay(for: now)
+        ).day ?? 0
+
+        if dayDifference == 1 {
+            let formatter = DateFormatter()
+            formatter.locale = .current
+            formatter.dateStyle = .medium
+            formatter.doesRelativeDateFormatting = true
+            return formatted(formatter.string(from: date))
+        }
+
+        if dayDifference != 0 {
+            let formatter = DateFormatter()
+            formatter.locale = .current
+            formatter.dateStyle = .medium
+            return formatted(formatter.string(from: date))
+        }
+
         let formatter = RelativeDateTimeFormatter()
         formatter.locale = .current
         formatter.unitsStyle = .short
@@ -175,10 +219,14 @@ struct EncounterRelativeTimeText: View {
             relativeTo: now
         )
 
-        guard includesMetPrefix else { return relative }
+        return formatted(relative)
+    }
+
+    private func formatted(_ value: String) -> String {
+        guard includesMetPrefix else { return value }
         return String.localizedStringWithFormat(
             Inc.EncounterHistory.lastSeenFormat.localized,
-            relative
+            value
         )
     }
 }
