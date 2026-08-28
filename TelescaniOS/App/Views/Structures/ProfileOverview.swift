@@ -1,12 +1,16 @@
 import SwiftUI
+import UserNotifications
 
 struct ProfileOverviewView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var coordinator: AppCoordinator
+    @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
     @ObservedObject var authCodeViewModel: CodeViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
 
     @State private var showScanningSettings = false
+    @State private var showQuickChatSettings = false
     @State private var showInfoSheet = false
     @State private var showLogoutOptions = false
     @State private var showBlockedProfiles = false
@@ -16,6 +20,10 @@ struct ProfileOverviewView: View {
     @State private var showDeleteError = false
     @State private var showPhotoPreview = false
     @State private var isWorking = false
+    @State private var notificationAuthorizationStatus:
+        UNAuthorizationStatus = .notDetermined
+    @AppStorage(Keys.isQuickChatEnabled.rawValue)
+    private var isQuickChatEnabled = false
 
     init(
         authCodeViewModel: CodeViewModel,
@@ -64,6 +72,17 @@ struct ProfileOverviewView: View {
         .onChange(of: authCodeViewModel.photoS3URL) { _, value in
             photoVM.loadPhotoFromURL(value)
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task {
+                await refreshNotificationAuthorizationStatus()
+                await peopleViewModel.synchronizeBlockedProfiles()
+            }
+        }
+        .task {
+            await refreshNotificationAuthorizationStatus()
+            await peopleViewModel.synchronizeBlockedProfiles()
+        }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 profileMenu
@@ -87,6 +106,11 @@ struct ProfileOverviewView: View {
             ScanningSettingsSheet()
                 .environmentObject(coordinator)
                 .environmentObject(coordinator.peopleViewModel)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showQuickChatSettings) {
+            QuickChatSettingsSheet(isEnabled: $isQuickChatEnabled)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -206,7 +230,8 @@ struct ProfileOverviewView: View {
         VStack(spacing: 0) {
             ProfileOverviewRow(
                 title: Inc.Scanning.scanning.localized,
-                systemImage: "dot.radiowaves.left.and.right"
+                systemImage: "dot.radiowaves.left.and.right",
+                value: scanningStatusTitle
             ) {
                 showScanningSettings = true
             }
@@ -214,8 +239,28 @@ struct ProfileOverviewView: View {
             Divider().padding(.leading, 60)
 
             ProfileOverviewRow(
+                title: Inc.NearbyNotifications.settingsTitle.localized,
+                systemImage: "bell",
+                value: notificationStatusTitle,
+                action: manageNotificationAuthorization
+            )
+
+            Divider().padding(.leading, 60)
+
+            ProfileOverviewRow(
+                title: Inc.Settings.quickChat.localized,
+                systemImage: "paperplane",
+                value: quickChatStatusTitle
+            ) {
+                showQuickChatSettings = true
+            }
+
+            Divider().padding(.leading, 60)
+
+            ProfileOverviewRow(
                 title: Inc.NearbyProfile.blockedMenu.localized,
-                systemImage: "person.crop.circle.badge.xmark"
+                systemImage: "person.crop.circle.badge.xmark",
+                value: blockedProfilesStatusTitle
             ) {
                 showBlockedProfiles = true
             }
@@ -262,6 +307,62 @@ struct ProfileOverviewView: View {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    private var notificationStatusTitle: String {
+        switch notificationAuthorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            Inc.Settings.statusOn.localized
+        case .denied, .notDetermined:
+            Inc.Settings.statusOff.localized
+        @unknown default:
+            Inc.Settings.statusOff.localized
+        }
+    }
+
+    private var scanningStatusTitle: String {
+        coordinator.isScaning
+            ? Inc.Settings.statusOn.localized
+            : Inc.Settings.statusOff.localized
+    }
+
+    private var quickChatStatusTitle: String {
+        isQuickChatEnabled
+            ? Inc.Settings.statusOn.localized
+            : Inc.Settings.statusOff.localized
+    }
+
+    private var blockedProfilesStatusTitle: String {
+        let count = peopleViewModel.blockedProfiles.count
+        return count == 0
+            ? Inc.NearbyProfile.noBlocked.localized
+            : String(count)
+    }
+
+    private func manageNotificationAuthorization() {
+        Task {
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
+
+            if settings.authorizationStatus == .notDetermined {
+                _ = try? await center.requestAuthorization(
+                    options: [.alert, .sound]
+                )
+                await refreshNotificationAuthorizationStatus()
+                return
+            }
+
+            guard let url = URL(
+                string: UIApplication.openNotificationSettingsURLString
+            ) else { return }
+            await UIApplication.shared.open(url)
+        }
+    }
+
+    private func refreshNotificationAuthorizationStatus() async {
+        let settings = await UNUserNotificationCenter.current()
+            .notificationSettings()
+        notificationAuthorizationStatus = settings.authorizationStatus
+    }
+
     private func logoutCurrent() {
         isWorking = true
         Task {
@@ -287,10 +388,74 @@ struct ProfileOverviewView: View {
     }
 }
 
+private struct QuickChatSettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var isEnabled: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Text(Inc.Settings.quickChatDescription.localized)
+                    .telescanDescriptionStyle()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Toggle(
+                    Inc.Settings.quickChat.localized,
+                    isOn: $isEnabled
+                )
+                .font(.body.weight(.medium))
+                .toggleStyle(.switch)
+                .tint(.green)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .background(
+                    Color.grOne,
+                    in: RoundedRectangle(cornerRadius: 13)
+                )
+
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 20)
+            .padding(.horizontal, 20)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(Inc.Settings.quickChat.localized)
+                        .telescanSheetTitleStyle()
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(Inc.Common.close.localized) {
+                        dismiss()
+                    }
+                }
+            }
+            .onChange(of: isEnabled) {
+                UISelectionFeedbackGenerator().selectionChanged()
+            }
+        }
+    }
+}
+
 private struct ProfileOverviewRow: View {
     let title: String
     let systemImage: String
+    let value: String?
     let action: () -> Void
+
+    init(
+        title: String,
+        systemImage: String,
+        value: String? = nil,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.value = value
+        self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
@@ -303,6 +468,13 @@ private struct ProfileOverviewRow: View {
                     .font(.system(size: 17))
 
                 Spacer()
+
+                if let value {
+                    Text(value)
+                        .font(.system(size: 15))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))

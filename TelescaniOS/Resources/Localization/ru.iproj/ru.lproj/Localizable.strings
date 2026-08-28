@@ -48,6 +48,7 @@
 /* История встреч */
 "encounterHistoryEmptyTitle" = "Пока никого";
 "encounterHistoryEmptyMessage" = "Здесь появятся люди, которых вы встретили за последние 24 часа.";
+"encounterHistoryListDescription" = "Люди, которых вы встречали за последние 24 часа";
 "encounterHistoryClear" = "Очистить историю";
 "encounterHistoryClearTitle" = "Очистить историю встреч?";
 "encounterHistoryClearMessage" = "Все сохранённые на этом устройстве встречи будут удалены.";
@@ -113,9 +114,18 @@
 "go" = "Начать";
 "confirmButton" = "Применить";
 
+/* Настройки */
+"settingsStatusOn" = "Вкл";
+"settingsStatusOff" = "Выкл";
+"settingsQuickChat" = "Быстрый чат";
+"settingsQuickChatDescription" = "Когда быстрый чат включён, нажатие на пользователя сразу открывает чат с ним в Telegram.";
+
 /* Scanning */
 "nearbyEmptyTitle" = "Пока никого";
+"nearbyListDescription" = "Люди, которые находятся вокруг вас";
 "scanning" = "Сканирование";
+"scanningStatusActive" = "Активно";
+"scanningStatusInactive" = "Неактивно";
 "justTurnScaning" = "Включите сканирование";
 "scanToggleDescription" = "Пока сканирование активно, вы видите пользователей Telescan рядом, а они могут увидеть вас.";
 "turnedOffScaning" = "Сканирование отключено. Включите сканирование в приложении, чтобы видеть людей, находящихся поблизости. ";
@@ -126,6 +136,10 @@
 "nearbyNotificationTitle" = "Люди поблизости";
 "nearbyNotificationInitialCountFormat" = "Рядом с вами: %d";
 "nearbyNotificationUpdateCountFormat" = "Новых рядом: +%d · Всего: %d";
+"nearbyNotificationSettingsTitle" = "Уведомления";
+"nearbyNotificationEnabled" = "Включены";
+"nearbyNotificationDisabled" = "Выключены";
+"nearbyNotificationConfigure" = "Настроить";
 
 /* Модерация профиля пользователя рядом */
 "nearbyProfileClose" = "Закрыть профиль";
@@ -153,6 +167,7 @@
 "nearbyProfileBlockedMenu" = "Заблокированные";
 "nearbyProfileBlockedProfiles" = "Заблокированные профили";
 "nearbyProfileNoBlockedProfiles" = "Нет заблокированных профилей";
+"nearbyProfileNoBlocked" = "Нет";
 "nearbyProfileUnblock" = "Разблокировать";
 "nearbyProfileActionFailedTitle" = "Не удалось выполнить действие";
 "nearbyProfileActionFailedMessage" = "Проверьте подключение к сети и повторите попытку.";

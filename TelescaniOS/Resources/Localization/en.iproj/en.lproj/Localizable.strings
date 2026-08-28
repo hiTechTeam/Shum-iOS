@@ -48,6 +48,7 @@
 /* Encounter history */
 "encounterHistoryEmptyTitle" = "No encounters yet";
 "encounterHistoryEmptyMessage" = "People you meet during the last 24 hours will appear here.";
+"encounterHistoryListDescription" = "People you met during the last 24 hours";
 "encounterHistoryClear" = "Clear history";
 "encounterHistoryClearTitle" = "Clear encounter history?";
 "encounterHistoryClearMessage" = "All encounters saved on this device will be removed.";
@@ -113,9 +114,18 @@
 "go" = "Go";
 "confirmButton" = "Confirm";
 
+/* Settings */
+"settingsStatusOn" = "On";
+"settingsStatusOff" = "Off";
+"settingsQuickChat" = "Quick Chat";
+"settingsQuickChatDescription" = "When Quick Chat is on, tapping a user opens your chat with them directly in Telegram.";
+
 /* Scanning */
 "nearbyEmptyTitle" = "No one nearby yet";
+"nearbyListDescription" = "People who are around you";
 "scanning" = "Scanning";
+"scanningStatusActive" = "Active";
+"scanningStatusInactive" = "Inactive";
 "justTurnScaning" = "Turn on scanning";
 "scanToggleDescription" = "While scanning is active, you can see nearby Telescan users and they can see you.";
 "turnedOffScaning" = "Scanning is turned off. Enable scanning in the app to see nearby people.";
@@ -126,6 +136,10 @@
 "nearbyNotificationTitle" = "People nearby";
 "nearbyNotificationInitialCountFormat" = "Nearby: %d";
 "nearbyNotificationUpdateCountFormat" = "New nearby: +%d · Total: %d";
+"nearbyNotificationSettingsTitle" = "Notifications";
+"nearbyNotificationEnabled" = "On";
+"nearbyNotificationDisabled" = "Off";
+"nearbyNotificationConfigure" = "Set Up";
 
 /* Nearby profile moderation */
 "nearbyProfileClose" = "Close profile";
@@ -153,6 +167,7 @@
 "nearbyProfileBlockedMenu" = "Blocked";
 "nearbyProfileBlockedProfiles" = "Blocked profiles";
 "nearbyProfileNoBlockedProfiles" = "No blocked profiles";
+"nearbyProfileNoBlocked" = "None";
 "nearbyProfileUnblock" = "Unblock";
 "nearbyProfileActionFailedTitle" = "Couldn’t complete action";
 "nearbyProfileActionFailedMessage" = "Check your connection and try again.";

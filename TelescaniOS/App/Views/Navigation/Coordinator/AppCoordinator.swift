@@ -7,10 +7,13 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     private let authSession = AuthSessionStore.shared
     private let sessionValidator: SessionValidator
     private var isValidatingSession = false
+    private var hasStartedInitialSessionRefresh = false
 
     @Published var isRegistered: Bool
     @Published private(set) var isAuthenticated: Bool
     @Published private(set) var authenticationFlowID = UUID()
+    @Published private(set) var hasCompletedInitialSessionRefresh = false
+    @Published private(set) var nearbyNotificationNavigationRequest = UUID()
     @Published var showSplash = true
     @Published var isScaning: Bool
 
@@ -40,6 +43,10 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             clearLocalSession()
         }
         #endif
+
+        AppNotificationRouter.shared.configure { [weak self] in
+            self?.nearbyNotificationNavigationRequest = UUID()
+        }
     }
 
     func start() -> AnyView {
@@ -49,9 +56,17 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
                 .environmentObject(authCodeViewModel)
                 .environmentObject(peopleViewModel)
                 .task {
-                    await self.refreshSession()
+                    await self.refreshInitialSession()
                 }
         )
+    }
+
+    private func refreshInitialSession() async {
+        guard !hasStartedInitialSessionRefresh else { return }
+        hasStartedInitialSessionRefresh = true
+
+        await refreshSession()
+        hasCompletedInitialSessionRefresh = true
     }
 
     func completedRegistration() {
@@ -163,7 +178,10 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             peopleViewModel.stopAllBluetoothActivity()
             return
         }
-        peopleViewModel.reconcileBluetoothState(isActive: isActive)
+        peopleViewModel.reconcileBluetoothState(
+            isActive: isActive,
+            scanningEnabled: isScaning
+        )
         guard isActive, isScaning else { return }
         peopleViewModel.toggleScanning(true)
         if let id = authCodeViewModel.telescanID {

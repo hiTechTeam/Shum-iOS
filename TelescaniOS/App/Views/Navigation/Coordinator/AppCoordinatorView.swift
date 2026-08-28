@@ -4,6 +4,11 @@ struct AppCoordinatorView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var coordinator: AppCoordinator
 
+    @State private var hasReachedMinimumSplashDuration = false
+
+    private let minimumSplashDuration: UInt64 = 600_000_000
+    private let remainingFallbackDuration: UInt64 = 1_400_000_000
+
     var body: some View {
         ZStack {
             Group {
@@ -19,6 +24,7 @@ struct AppCoordinatorView: View {
 
             if coordinator.showSplash {
                 AppSplashView()
+                    .transition(.opacity)
                     .zIndex(1)
             }
         }
@@ -31,11 +37,26 @@ struct AppCoordinatorView: View {
             guard coordinator.showSplash else { return }
 
             try? await Task.sleep(
-                nanoseconds: 2_000_000_000
+                nanoseconds: minimumSplashDuration
             )
 
             guard !Task.isCancelled else { return }
-            coordinator.showSplash = false
+            hasReachedMinimumSplashDuration = true
+            hideSplashIfReady()
+
+            guard coordinator.showSplash else { return }
+
+            try? await Task.sleep(
+                nanoseconds: remainingFallbackDuration
+            )
+
+            guard !Task.isCancelled, coordinator.showSplash else { return }
+            hideSplash()
+        }
+        .onChange(of: coordinator.hasCompletedInitialSessionRefresh) {
+            _, isComplete in
+            guard isComplete else { return }
+            hideSplashIfReady()
         }
         .onChange(of: scenePhase) { _, phase in
             coordinator.updateApplicationState(isActive: phase == .active)
@@ -44,6 +65,23 @@ struct AppCoordinatorView: View {
                     await coordinator.refreshSession()
                 }
             }
+        }
+    }
+
+    private func hideSplashIfReady() {
+        guard hasReachedMinimumSplashDuration,
+              coordinator.hasCompletedInitialSessionRefresh else {
+            return
+        }
+
+        hideSplash()
+    }
+
+    private func hideSplash() {
+        guard coordinator.showSplash else { return }
+
+        withAnimation(.easeOut(duration: 0.18)) {
+            coordinator.showSplash = false
         }
     }
 }
@@ -61,13 +99,13 @@ private struct AppSplashView: View {
     var body: some View {
         ZStack {
             Color("ls-Background")
-                .ignoresSafeArea()
 
             Image.telescanLogo
                 .resizable()
                 .scaledToFit()
                 .frame(width: 82, height: 82)
         }
+        .ignoresSafeArea()
         .accessibilityHidden(true)
     }
 }

@@ -1458,6 +1458,97 @@ struct FetchServiceTests {
         #expect(batch.totalCount == 1)
     }
 
+    @Test("Nearby notification batch survives process recreation")
+    func nearbyNotificationBatchSurvivesProcessRecreation() throws {
+        let start = Date(timeIntervalSince1970: 3_000)
+        var original = NearbyEncounterAggregator(
+            initialCollectionWindow: 12,
+            updateCollectionWindow: 25,
+            encounterResetDelay: 180
+        )
+
+        _ = original.detect(id: "first", at: start)
+        var restored = NearbyEncounterAggregator(
+            initialCollectionWindow: 12,
+            updateCollectionWindow: 25,
+            encounterResetDelay: 180,
+            restoring: original.persistentState
+        )
+
+        #expect(
+            restored.detect(
+                id: "first",
+                at: start.addingTimeInterval(2)
+            ) == nil
+        )
+
+        let update = restored.detect(
+            id: "second",
+            at: start.addingTimeInterval(3)
+        )
+        guard case .schedule(let batch) = update else {
+            Issue.record("Expected the restored pending batch")
+            return
+        }
+        #expect(batch.kind == .initial)
+        #expect(batch.addedCount == 2)
+        #expect(batch.totalCount == 2)
+        #expect(batch.deliveryDate == start.addingTimeInterval(12))
+    }
+
+    @Test("Nearby notification state persists in defaults")
+    func nearbyNotificationStatePersistsInDefaults() throws {
+        let suiteName = "NearbyNotificationStateTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        var aggregator = NearbyEncounterAggregator()
+        _ = aggregator.detect(id: "person", at: Date())
+        let firstStore = NearbyNotificationStateStore(
+            defaults: defaults,
+            key: "state"
+        )
+        firstStore.save(aggregator.persistentState)
+
+        let restoredStore = NearbyNotificationStateStore(
+            defaults: defaults,
+            key: "state"
+        )
+        #expect(restoredStore.state == aggregator.persistentState)
+    }
+
+    @Test("Background notification does not wait for profile loading")
+    @MainActor
+    func backgroundNotificationDoesNotWaitForProfileLoading() async {
+        let manager = FakeBLEManager()
+        let notifier = FakeNearbyPeopleNotifier()
+        let profileID = UUID()
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            nearbyPeopleNotifier: notifier,
+            profileLoader: { _ in
+                try await Task.sleep(for: .seconds(30))
+                throw CancellationError()
+            }
+        )
+
+        viewModel.toggleScanning(true)
+        viewModel.reconcileBluetoothState(
+            isActive: false,
+            scanningEnabled: true
+        )
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -55)
+        await Task.yield()
+
+        #expect(notifier.scanningEnabled == true)
+        #expect(
+            notifier.detectedIDs == [
+                profileID.uuidString.lowercased()
+            ]
+        )
+        viewModel.stopAllBluetoothActivity()
+    }
+
     @Test("Entering background synchronizes recently seen people")
     @MainActor
     func enteringBackgroundSynchronizesRecentlySeenPeople() async {
@@ -1755,8 +1846,11 @@ private final class FakeBLEManager: BLEManagerProtocol {
 private final class FakeNearbyPeopleNotifier: NearbyPeopleNotifying {
     private(set) var synchronizedIDs: Set<String> = []
     private(set) var detectedIDs: Set<String> = []
+    private(set) var scanningEnabled = false
 
-    func setScanningEnabled(_ enabled: Bool) { }
+    func setScanningEnabled(_ enabled: Bool) {
+        scanningEnabled = enabled
+    }
     func setApplicationActive(_ isActive: Bool) { }
     func synchronizeNearby(ids: Set<String>) {
         synchronizedIDs = ids

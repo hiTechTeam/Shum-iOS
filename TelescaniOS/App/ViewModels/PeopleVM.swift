@@ -315,9 +315,15 @@ final class PeopleViewModel: ObservableObject {
         bleManager.stopAdvertising()
     }
 
-    func reconcileBluetoothState(isActive: Bool) {
+    func reconcileBluetoothState(
+        isActive: Bool,
+        scanningEnabled: Bool? = nil
+    ) {
         isApplicationActive = isActive
         nearbyPeopleNotifier.setApplicationActive(isActive)
+        if let scanningEnabled {
+            nearbyPeopleNotifier.setScanningEnabled(scanningEnabled)
+        }
         updateDisappearanceCountdowns()
         bleManager.setApplicationActive(isActive)
         if isActive {
@@ -328,7 +334,7 @@ final class PeopleViewModel: ObservableObject {
             let recentlySeenIDs = Set(
                 lastSignals.compactMap { id, lastSignal in
                     now.timeIntervalSince(lastSignal)
-                        < BLEPresencePolicy.signalLossIndicatorDelay
+                        < BLEPresencePolicy.activeTimeout
                         && userCache[id] != nil
                         ? id
                         : nil
@@ -464,6 +470,7 @@ final class PeopleViewModel: ObservableObject {
         if isNew {
             discoveryOrder.insert(canonicalID, at: 0)
             refreshEncounterHistory(at: nowProvider())
+            nearbyPeopleNotifier.detect(id: canonicalID)
         }
         lastSignals[canonicalID] = now
         if let user = userCache[canonicalID] {
@@ -549,7 +556,6 @@ final class PeopleViewModel: ObservableObject {
                 user,
                 lastSeenAt: lastSeenAt
             )
-            nearbyPeopleNotifier.detect(id: id)
             resolutionAttempts[id] = 0
             profileTasks[id] = nil
         } catch is CancellationError {
@@ -557,6 +563,7 @@ final class PeopleViewModel: ObservableObject {
         } catch {
             profileTasks[id] = nil
             if isTerminalProfileError(error) {
+                nearbyPeopleNotifier.lose(id: id)
                 userCache.removeValue(forKey: id)
                 resolutionAttempts.removeValue(forKey: id)
                 suppressedProfileIDs.insert(id)

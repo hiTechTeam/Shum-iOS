@@ -1,9 +1,10 @@
 import Foundation
+import Logging
 import UIKit
 import UserNotifications
 
 struct NearbyNotificationBatch: Equatable {
-    enum Kind: Equatable {
+    enum Kind: String, Codable, Equatable {
         case initial
         case update
     }
@@ -17,6 +18,81 @@ struct NearbyNotificationBatch: Equatable {
 enum NearbyNotificationUpdate: Equatable {
     case schedule(NearbyNotificationBatch)
     case cancel
+}
+
+struct NearbyNotificationState: Codable, Equatable {
+    let encounteredIDs: [String]
+    let nearbyIDs: [String]
+    let pendingIDs: [String]
+    let pendingKind: NearbyNotificationBatch.Kind?
+    let deliveryDate: Date?
+    let emptySince: Date?
+    let hasDeliveredInitialBatch: Bool
+}
+
+protocol NearbyNotificationStateStoring: AnyObject {
+    var state: NearbyNotificationState? { get }
+    func save(_ state: NearbyNotificationState)
+    func remove()
+}
+
+final class NearbyNotificationStateStore: NearbyNotificationStateStoring {
+    static let shared = NearbyNotificationStateStore()
+
+    private struct Envelope: Codable {
+        let state: NearbyNotificationState
+        let savedAt: Date
+    }
+
+    private let defaults: UserDefaults
+    private let key: String
+    private let maximumAge: TimeInterval
+
+    init(
+        defaults: UserDefaults = .standard,
+        key: String = "telescan.nearby-notification-state.v1",
+        maximumAge: TimeInterval = 30 * 60
+    ) {
+        self.defaults = defaults
+        self.key = key
+        self.maximumAge = maximumAge
+    }
+
+    var state: NearbyNotificationState? {
+        guard let data = defaults.data(forKey: key),
+              let envelope = try? JSONDecoder().decode(
+                Envelope.self,
+                from: data
+              ),
+              Date().timeIntervalSince(envelope.savedAt) <= maximumAge else {
+            defaults.removeObject(forKey: key)
+            return nil
+        }
+        return envelope.state
+    }
+
+    func save(_ state: NearbyNotificationState) {
+        let envelope = Envelope(state: state, savedAt: Date())
+        guard let data = try? JSONEncoder().encode(envelope) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    func remove() {
+        defaults.removeObject(forKey: key)
+    }
+}
+
+final class InMemoryNearbyNotificationStateStore:
+    NearbyNotificationStateStoring {
+    private(set) var state: NearbyNotificationState?
+
+    func save(_ state: NearbyNotificationState) {
+        self.state = state
+    }
+
+    func remove() {
+        state = nil
+    }
 }
 
 struct NearbyEncounterAggregator {
@@ -36,11 +112,32 @@ struct NearbyEncounterAggregator {
     init(
         initialCollectionWindow: TimeInterval = 12,
         updateCollectionWindow: TimeInterval = 25,
-        encounterResetDelay: TimeInterval = 180
+        encounterResetDelay: TimeInterval = 180,
+        restoring state: NearbyNotificationState? = nil
     ) {
         self.initialCollectionWindow = initialCollectionWindow
         self.updateCollectionWindow = updateCollectionWindow
         self.encounterResetDelay = encounterResetDelay
+        guard let state else { return }
+        encounteredIDs = Set(state.encounteredIDs)
+        nearbyIDs = Set(state.nearbyIDs)
+        pendingIDs = Set(state.pendingIDs)
+        pendingKind = state.pendingKind
+        deliveryDate = state.deliveryDate
+        emptySince = state.emptySince
+        hasDeliveredInitialBatch = state.hasDeliveredInitialBatch
+    }
+
+    var persistentState: NearbyNotificationState {
+        NearbyNotificationState(
+            encounteredIDs: encounteredIDs.sorted(),
+            nearbyIDs: nearbyIDs.sorted(),
+            pendingIDs: pendingIDs.sorted(),
+            pendingKind: pendingKind,
+            deliveryDate: deliveryDate,
+            emptySince: emptySince,
+            hasDeliveredInitialBatch: hasDeliveredInitialBatch
+        )
     }
 
     mutating func detect(
@@ -151,18 +248,27 @@ protocol NearbyPeopleNotifying: AnyObject {
 @MainActor
 final class NearbyPeopleNotifier: NearbyPeopleNotifying {
     private let notificationCenter: UNUserNotificationCenter
-    private var aggregator = NearbyEncounterAggregator()
+    private let stateStore: NearbyNotificationStateStoring
+    private let logger = Logger(label: "NearbyPeopleNotifier")
+    private var aggregator: NearbyEncounterAggregator
     private var isScanningEnabled = false
-    private var isApplicationActive = true
+    private var isApplicationActive: Bool?
     private var scheduleGeneration = 0
+    private var isRequestingAuthorization = false
 
     private let requestIdentifier = "telescan.nearby-people.batch"
     private let threadIdentifier = "telescan.nearby-people"
 
     init(
-        notificationCenter: UNUserNotificationCenter = .current()
+        notificationCenter: UNUserNotificationCenter = .current(),
+        stateStore: NearbyNotificationStateStoring =
+            NearbyNotificationStateStore.shared
     ) {
         self.notificationCenter = notificationCenter
+        self.stateStore = stateStore
+        aggregator = NearbyEncounterAggregator(
+            restoring: stateStore.state
+        )
     }
 
     func setScanningEnabled(_ enabled: Bool) {
@@ -176,62 +282,92 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
 
     func setApplicationActive(_ isActive: Bool) {
         guard isApplicationActive != isActive else { return }
+        let hadKnownApplicationState = isApplicationActive != nil
         isApplicationActive = isActive
+
+        // Preserve an unfinished batch when CoreBluetooth relaunches the
+        // process directly into the background. Every normal foreground /
+        // background transition starts a fresh notification session.
+        guard isActive || hadKnownApplicationState else { return }
         aggregator.reset()
+        stateStore.remove()
         cancelPendingNotification()
     }
 
     func detect(id: String) {
         guard isScanningEnabled,
-              !isApplicationActive,
-              UIApplication.shared.applicationState == .background,
-              let update = aggregator.detect(id: id) else {
+              isApplicationActive == false,
+              UIApplication.shared.applicationState == .background else {
             return
         }
-        apply(update)
+        let update = aggregator.detect(id: id)
+        persistAggregatorState()
+        if let update {
+            apply(update)
+        }
     }
 
     func synchronizeNearby(ids: Set<String>) {
         guard isScanningEnabled,
-              !isApplicationActive,
+              isApplicationActive == false,
               UIApplication.shared.applicationState == .background else {
             return
         }
 
+        var latestUpdate: NearbyNotificationUpdate?
         for id in ids {
             if let update = aggregator.detect(id: id) {
-                apply(update)
+                latestUpdate = update
             }
+        }
+        persistAggregatorState()
+        if let latestUpdate {
+            apply(latestUpdate)
         }
     }
 
     func lose(id: String) {
         guard isScanningEnabled,
-              !isApplicationActive,
-              UIApplication.shared.applicationState == .background,
-              let update = aggregator.lose(id: id) else {
+              isApplicationActive == false,
+              UIApplication.shared.applicationState == .background else {
             return
         }
-        apply(update)
+        let update = aggregator.lose(id: id)
+        persistAggregatorState()
+        if let update {
+            apply(update)
+        }
     }
 
     func reset() {
         aggregator.reset()
+        stateStore.remove()
         cancelPendingNotification()
     }
 
     private func requestAuthorizationIfNeeded() {
-        guard isApplicationActive else { return }
+        guard isApplicationActive == true,
+              !isRequestingAuthorization else {
+            return
+        }
+        isRequestingAuthorization = true
 
         Task { [weak self] in
             guard let self else { return }
+            defer { isRequestingAuthorization = false }
             let settings = await notificationCenter.notificationSettings()
             guard settings.authorizationStatus == .notDetermined else {
                 return
             }
-            _ = try? await notificationCenter.requestAuthorization(
-                options: [.alert, .sound]
-            )
+            do {
+                _ = try await notificationCenter.requestAuthorization(
+                    options: [.alert, .sound]
+                )
+            } catch {
+                logger.error(
+                    "Notification authorization failed: \(error.localizedDescription)"
+                )
+            }
         }
     }
 
@@ -256,7 +392,7 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
             let settings = await notificationCenter.notificationSettings()
             guard generation == scheduleGeneration,
                   isScanningEnabled,
-                  !isApplicationActive,
+                  isApplicationActive == false,
                   Self.canDeliver(settings.authorizationStatus) else {
                 return
             }
@@ -278,6 +414,10 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
             }
             content.sound = .default
             content.threadIdentifier = threadIdentifier
+            content.userInfo = [
+                AppNotificationRouter.routeKey:
+                    AppNotificationRouter.nearbyRoute
+            ]
 
             let interval = max(
                 1,
@@ -292,8 +432,18 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
                 content: content,
                 trigger: trigger
             )
-            try? await notificationCenter.add(request)
+            do {
+                try await notificationCenter.add(request)
+            } catch {
+                logger.error(
+                    "Nearby notification scheduling failed: \(error.localizedDescription)"
+                )
+            }
         }
+    }
+
+    private func persistAggregatorState() {
+        stateStore.save(aggregator.persistentState)
     }
 
     private func cancelPendingNotification() {
@@ -313,6 +463,48 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
             false
         @unknown default:
             false
+        }
+    }
+}
+
+@MainActor
+final class AppNotificationRouter: NSObject,
+    UNUserNotificationCenterDelegate {
+    nonisolated static let routeKey = "telescan.route"
+    nonisolated static let nearbyRoute = "nearby"
+
+    static let shared = AppNotificationRouter()
+
+    private var openNearbyAction: (() -> Void)?
+
+    func configure(openNearby: @escaping () -> Void) {
+        openNearbyAction = openNearby
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler:
+            @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        // People are already visible while the app is active.
+        completionHandler([])
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let route = response.notification.request.content.userInfo[
+            Self.routeKey
+        ] as? String
+        completionHandler()
+
+        guard route == Self.nearbyRoute else { return }
+        Task { @MainActor [weak self] in
+            self?.openNearbyAction?()
         }
     }
 }

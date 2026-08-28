@@ -3,13 +3,16 @@ import Kingfisher
 import UIKit
 
 struct PeopleView: View {
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject var coordinator: AppCoordinator
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var selectedUser: NearbyUser?
-    @State private var showsEncounterHistory = false
+    @State private var photoPreviewUser: NearbyUser?
+    @AppStorage(Keys.isQuickChatEnabled.rawValue)
+    private var isQuickChatEnabled = false
 
     var body: some View {
         ZStack {
@@ -36,21 +39,40 @@ struct PeopleView: View {
                         }
                     }
                 } else {
-                    List(peopleViewModel.visibleUsers) { user in
-                        ProfileAvatarButton(user: user) {
-                            selectedUser = user
-                        }
-                        .listRowInsets(
-                            EdgeInsets(
-                                top: 8,
-                                leading: 16,
-                                bottom: 8,
-                                trailing: 16
+                    List {
+                        Text(Inc.Scanning.listDescription.localized)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .listRowInsets(
+                                EdgeInsets(
+                                    top: 10,
+                                    leading: 16,
+                                    bottom: 10,
+                                    trailing: 16
+                                )
                             )
-                        )
-                        .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+
+                        ForEach(peopleViewModel.visibleUsers) { user in
+                            ProfileAvatarButton(
+                                user: user,
+                                action: { openUser(user) },
+                                photoAction: { openPhoto(of: user) }
+                            )
+                            .listRowInsets(
+                                EdgeInsets(
+                                    top: 8,
+                                    leading: 16,
+                                    bottom: 8,
+                                    trailing: 16
+                                )
+                            )
+                            .listRowBackground(Color.clear)
+                        }
                     }
                     .listStyle(.plain)
+                    .environment(\.defaultMinListRowHeight, 0)
                     .scrollContentBackground(.hidden)
                     .refreshable {
                         await peopleViewModel.refreshNearbyPeople()
@@ -68,10 +90,9 @@ struct PeopleView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-                    peopleViewModel.refreshEncounterHistory()
-                    showsEncounterHistory = true
+                NavigationLink {
+                    EncounterHistoryView()
+                        .environmentObject(peopleViewModel)
                 } label: {
                     EncounterHistoryToolbarIcon(
                         hasEncounters: !peopleViewModel.encounterHistory.isEmpty
@@ -105,18 +126,106 @@ struct PeopleView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $showsEncounterHistory) {
-            EncounterHistorySheet()
-                .environmentObject(peopleViewModel)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
+        .nearbyUserPhotoPreview(user: $photoPreviewUser)
         .task {
             await peopleViewModel.synchronizeBlockedProfiles()
             peopleViewModel.refreshEncounterHistory()
         }
     }
 
+    private func openUser(_ user: NearbyUser) {
+        guard isQuickChatEnabled,
+              let destination = TelegramChatDestination(user: user) else {
+            selectedUser = user
+            return
+        }
+
+        openURL(destination.appURL) { accepted in
+            guard !accepted else { return }
+            openURL(destination.webURL)
+        }
+    }
+
+    private func openPhoto(of user: NearbyUser) {
+        guard let photoURL = user.photoURL,
+              URL(string: photoURL) != nil else { return }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            photoPreviewUser = user
+        }
+    }
+
+}
+
+private struct NearbyUserPhotoPreviewModifier: ViewModifier {
+    @Binding var user: NearbyUser?
+
+    private var isPresented: Binding<Bool> {
+        Binding(
+            get: { user != nil },
+            set: { isPresented in
+                if !isPresented {
+                    user = nil
+                }
+            }
+        )
+    }
+
+    func body(content: Content) -> some View {
+        content.fullScreenCover(item: $user) { selectedUser in
+            if let photoURL = selectedUser.photoURL,
+               let imageURL = URL(string: photoURL) {
+                FullScreenPhotoView(isPresented: isPresented) {
+                    KFImage(imageURL)
+                        .placeholder { ProgressView() }
+                        .resizable()
+                        .scaledToFit()
+                }
+            }
+        }
+    }
+}
+
+extension View {
+    func nearbyUserPhotoPreview(
+        user: Binding<NearbyUser?>
+    ) -> some View {
+        modifier(NearbyUserPhotoPreviewModifier(user: user))
+    }
+}
+
+struct TelegramChatDestination {
+    let appURL: URL
+    let webURL: URL
+
+    init?(user: NearbyUser) {
+        let username = user.username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+        guard !username.isEmpty else { return nil }
+
+        var appComponents = URLComponents()
+        appComponents.scheme = "tg"
+        appComponents.host = "resolve"
+        appComponents.queryItems = [
+            URLQueryItem(name: "domain", value: username)
+        ]
+
+        var webComponents = URLComponents()
+        webComponents.scheme = "https"
+        webComponents.host = "t.me"
+        webComponents.path = "/\(username)"
+
+        guard let appURL = appComponents.url,
+              let webURL = webComponents.url else {
+            return nil
+        }
+
+        self.appURL = appURL
+        self.webURL = webURL
+    }
 }
 
 private struct EncounterHistoryToolbarIcon: View {
@@ -132,47 +241,64 @@ private struct EncounterHistoryToolbarIcon: View {
 struct ProfileAvatarButton: View {
     let user: NearbyUser
     let action: () -> Void
+    let photoAction: () -> Void
 
     private let avatarSize: CGFloat = 52
 
     var body: some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-            action()
-        } label: {
-            HStack(spacing: 12) {
+        HStack(spacing: 12) {
+            Button {
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                photoAction()
+            } label: {
                 profileImage
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(user.name)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    if let bio = user.bio?.trimmingCharacters(
-                        in: .whitespacesAndNewlines
-                    ), !bio.isEmpty {
-                        Text(bio)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer(minLength: 8)
-
-                NearbyPresenceLabel(
-                    user: user,
-                    usesCompactCountdown: true,
-                    fontSize: 14
-                )
             }
-            .frame(maxWidth: .infinity, minHeight: avatarSize)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .disabled(!hasPhoto)
+            .accessibilityLabel(Inc.Profile.openPhoto.localized)
+
+            Button {
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                action()
+            } label: {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(user.name)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+
+                        if let bio = user.bio?.trimmingCharacters(
+                            in: .whitespacesAndNewlines
+                        ), !bio.isEmpty {
+                            Text(bio)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer(minLength: 8)
+
+                    NearbyPresenceLabel(
+                        user: user,
+                        usesCompactCountdown: true,
+                        fontSize: 14
+                    )
+                }
+                .frame(maxWidth: .infinity, minHeight: avatarSize)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(user.name)
+            .accessibilityAddTraits(.isButton)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(user.name)
-        .accessibilityAddTraits(.isButton)
+        .frame(maxWidth: .infinity, minHeight: avatarSize)
+    }
+
+    private var hasPhoto: Bool {
+        guard let photoURL = user.photoURL else { return false }
+        return URL(string: photoURL) != nil
     }
 
     @ViewBuilder

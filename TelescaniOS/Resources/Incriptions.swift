@@ -38,6 +38,15 @@ struct Inc {
         static let close: String = "close"
         static let Telescan: String = "Telescan"
     }
+
+    // MARK: - Settings
+    struct Settings {
+        static let statusOn: String = "settingsStatusOn"
+        static let statusOff: String = "settingsStatusOff"
+        static let quickChat: String = "settingsQuickChat"
+        static let quickChatDescription: String =
+            "settingsQuickChatDescription"
+    }
     
     // MARK: - Tabs
     struct Tabs {
@@ -103,6 +112,8 @@ struct Inc {
     struct EncounterHistory {
         static let emptyTitle: String = "encounterHistoryEmptyTitle"
         static let emptyMessage: String = "encounterHistoryEmptyMessage"
+        static let listDescription: String =
+            "encounterHistoryListDescription"
         static let clear: String = "encounterHistoryClear"
         static let clearTitle: String = "encounterHistoryClearTitle"
         static let clearMessage: String = "encounterHistoryClearMessage"
@@ -210,8 +221,11 @@ struct Inc {
     // MARK: - Scanning
     struct Scanning {
         static let emptyTitle: String = "nearbyEmptyTitle"
+        static let listDescription: String = "nearbyListDescription"
 
         static let scanning: String = "scanning"
+        static let active: String = "scanningStatusActive"
+        static let inactive: String = "scanningStatusInactive"
         // EN: Scanning
         // RU: Сканирование
         
@@ -244,6 +258,10 @@ struct Inc {
             "nearbyNotificationInitialCountFormat"
         static let updateCountFormat: String =
             "nearbyNotificationUpdateCountFormat"
+        static let settingsTitle: String = "nearbyNotificationSettingsTitle"
+        static let enabled: String = "nearbyNotificationEnabled"
+        static let disabled: String = "nearbyNotificationDisabled"
+        static let configure: String = "nearbyNotificationConfigure"
     }
 
     // MARK: - Nearby profile moderation
@@ -276,6 +294,7 @@ struct Inc {
         static let blockedMenu: String = "nearbyProfileBlockedMenu"
         static let blockedProfiles: String = "nearbyProfileBlockedProfiles"
         static let noBlockedProfiles: String = "nearbyProfileNoBlockedProfiles"
+        static let noBlocked: String = "nearbyProfileNoBlocked"
         static let unblock: String = "nearbyProfileUnblock"
 
         static let actionFailedTitle: String = "nearbyProfileActionFailedTitle"
@@ -409,6 +428,7 @@ enum Keys: String {
     case bioKey = "bio"
     case photoS3URLKey = "photoS3Url"
     case isScaning = "isScaning"
+    case isQuickChatEnabled = "isQuickChatEnabled"
     case isReg = "isReg"
 }
 

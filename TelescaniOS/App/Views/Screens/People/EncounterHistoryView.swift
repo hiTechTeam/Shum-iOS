@@ -2,55 +2,45 @@ import SwiftUI
 import Kingfisher
 import UIKit
 
-struct EncounterHistorySheet: View {
-    @Environment(\.dismiss) private var dismiss
+struct EncounterHistoryView: View {
+    @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
     @State private var selectedEncounter: EncounterHistoryEntry?
+    @State private var photoPreviewUser: NearbyUser?
     @State private var showsClearConfirmation = false
+    @AppStorage(Keys.isQuickChatEnabled.rawValue)
+    private var isQuickChatEnabled = false
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.tsBackground
-                    .ignoresSafeArea()
+        ZStack {
+            Color.tsBackground
+                .ignoresSafeArea()
 
-                if peopleViewModel.encounterHistory.isEmpty {
-                    ContentUnavailableView(
-                        Inc.EncounterHistory.emptyTitle.localized,
-                        systemImage: "clock.arrow.circlepath",
-                        description: Text(
-                            Inc.EncounterHistory.emptyMessage.localized
-                        )
+            if peopleViewModel.encounterHistory.isEmpty {
+                ContentUnavailableView(
+                    Inc.EncounterHistory.emptyTitle.localized,
+                    systemImage: "clock.arrow.circlepath",
+                    description: Text(
+                        Inc.EncounterHistory.emptyMessage.localized
                     )
-                } else {
-                    encounterList
-                }
+                )
+            } else {
+                encounterList
             }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        showsClearConfirmation = true
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .disabled(peopleViewModel.encounterHistory.isEmpty)
-                    .accessibilityLabel(Inc.EncounterHistory.clear.localized)
+        }
+        .navigationTitle(Inc.Tabs.metTitle.localized)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showsClearConfirmation = true
+                } label: {
+                    Image(systemName: "trash")
                 }
-
-                ToolbarItem(placement: .principal) {
-                    Text(Inc.Tabs.metTitle.localized)
-                        .telescanSheetTitleStyle()
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(Inc.Common.close.localized) {
-                        dismiss()
-                    }
-                }
+                .disabled(peopleViewModel.encounterHistory.isEmpty)
+                .accessibilityLabel(Inc.EncounterHistory.clear.localized)
             }
         }
         .sheet(item: $selectedEncounter) { encounter in
@@ -62,6 +52,7 @@ struct EncounterHistorySheet: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
+        .nearbyUserPhotoPreview(user: $photoPreviewUser)
         .alert(
             Inc.EncounterHistory.clearTitle.localized,
             isPresented: $showsClearConfirmation
@@ -90,25 +81,47 @@ struct EncounterHistorySheet: View {
     }
 
     private var encounterList: some View {
-        List(peopleViewModel.encounterHistory) { encounter in
-            Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                selectedEncounter = encounter
-            } label: {
-                EncounterHistoryRow(encounter: encounter)
-            }
-            .buttonStyle(.plain)
-            .listRowBackground(Color.clear)
-            .listRowInsets(
-                EdgeInsets(
-                    top: 4,
-                    leading: 16,
-                    bottom: 4,
-                    trailing: 16
+        List {
+            Text(Inc.EncounterHistory.listDescription.localized)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .listRowInsets(
+                    EdgeInsets(
+                        top: 10,
+                        leading: 16,
+                        bottom: 10,
+                        trailing: 16
+                    )
                 )
-            )
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+
+            ForEach(peopleViewModel.encounterHistory) { encounter in
+                EncounterHistoryRow(
+                    encounter: encounter,
+                    action: {
+                        UIImpactFeedbackGenerator(
+                            style: .light
+                        ).impactOccurred()
+                        openEncounter(encounter)
+                    },
+                    photoAction: {
+                        openPhoto(of: encounter.user)
+                    }
+                )
+                .listRowBackground(Color.clear)
+                .listRowInsets(
+                    EdgeInsets(
+                        top: 4,
+                        leading: 16,
+                        bottom: 4,
+                        trailing: 16
+                    )
+                )
+            }
         }
         .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 0)
         .scrollContentBackground(.hidden)
         .refreshable {
             await peopleViewModel.synchronizeBlockedProfiles()
@@ -116,35 +129,80 @@ struct EncounterHistorySheet: View {
         }
     }
 
+    private func openEncounter(_ encounter: EncounterHistoryEntry) {
+        guard isQuickChatEnabled,
+              let destination = TelegramChatDestination(
+                user: encounter.user
+              ) else {
+            selectedEncounter = encounter
+            return
+        }
+
+        openURL(destination.appURL) { accepted in
+            guard !accepted else { return }
+            openURL(destination.webURL)
+        }
+    }
+
+    private func openPhoto(of user: NearbyUser) {
+        guard let photoURL = user.photoURL,
+              URL(string: photoURL) != nil else { return }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            photoPreviewUser = user
+        }
+    }
+
 }
 
 private struct EncounterHistoryRow: View {
     let encounter: EncounterHistoryEntry
+    let action: () -> Void
+    let photoAction: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
-            EncounterHistoryAvatar(user: encounter.user)
+            Button(action: photoAction) {
+                EncounterHistoryAvatar(user: encounter.user)
+            }
+            .buttonStyle(.plain)
+            .disabled(!hasPhoto)
+            .accessibilityLabel(Inc.Profile.openPhoto.localized)
 
-            Text(encounter.user.name)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            Button(action: action) {
+                HStack(spacing: 10) {
+                    Text(encounter.user.name)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
 
-            Spacer(minLength: 8)
+                    Spacer(minLength: 8)
 
-            EncounterRelativeTimeText(
-                date: encounter.lastSeen,
-                includesMetPrefix: true
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.trailing)
-            .lineLimit(1)
+                    EncounterRelativeTimeText(
+                        date: encounter.lastSeen,
+                        includesMetPrefix: true
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+                    .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(encounter.user.name)
         }
         .frame(maxWidth: .infinity)
         .frame(minHeight: 44)
-        .contentShape(Rectangle())
+    }
+
+    private var hasPhoto: Bool {
+        guard let photoURL = encounter.user.photoURL else { return false }
+        return URL(string: photoURL) != nil
     }
 }
 

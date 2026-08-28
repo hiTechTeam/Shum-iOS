@@ -8,6 +8,7 @@ struct MainContentView: View {
 
     @StateObject private var profilePhotoViewModel = ProfilePhotoViewModel()
     @State private var selectedMainTab: MainTab = .nearby
+    @State private var nearbyNavigationID = UUID()
 
     var body: some View {
         TabView(selection: mainTabBinding) {
@@ -40,6 +41,11 @@ struct MainContentView: View {
                 isScanning: coordinator.isScaning
             )
         )
+        .onChange(of: coordinator.nearbyNotificationNavigationRequest) {
+            _, _ in
+            selectedMainTab = .nearby
+            nearbyNavigationID = UUID()
+        }
     }
 
     private var nearbyTab: some View {
@@ -48,6 +54,7 @@ struct MainContentView: View {
             .navigationTitle(Inc.Common.nearby.localized)
             .navigationBarTitleDisplayMode(.inline)
         }
+        .id(nearbyNavigationID)
     }
 
     private var mainTabBinding: Binding<MainTab> {
