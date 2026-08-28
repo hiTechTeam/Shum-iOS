@@ -1065,6 +1065,23 @@ struct FetchServiceTests {
         viewModel.stopAllBluetoothActivity()
     }
 
+    @Test("Pending BLE identities persist across process recreation")
+    func pendingEncounterIdentityStorePersists() throws {
+        let suiteName = "telescan.tests.pending-encounters.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let profileID = UUID()
+        let seenAt = Date(timeIntervalSince1970: 25_000)
+
+        let store = PendingEncounterIdentityStore(defaults: defaults)
+        store.record(id: profileID, seenAt: seenAt)
+
+        let restored = PendingEncounterIdentityStore(defaults: defaults)
+        #expect(restored.entries.count == 1)
+        #expect(restored.entries.first?.id == profileID)
+        #expect(restored.entries.first?.lastSeen == seenAt)
+    }
+
     @Test("Buffered encounters publish before the next scan starts")
     @MainActor
     func bufferedEncounterPublishesOnNextLaunch() {
@@ -1094,6 +1111,64 @@ struct FetchServiceTests {
         #expect(viewModel.encounterHistory.first?.id == user.id)
         #expect(viewModel.visibleUsers.isEmpty)
         viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("A raw BLE identity survives a short background network window")
+    @MainActor
+    func pendingIdentityPublishesOnNextLaunch() async throws {
+        let profileID = UUID()
+        let firstManager = FakeBLEManager()
+        let pendingStore = InMemoryPendingEncounterIdentityStore()
+        let historyStore = FakeEncounterHistoryStore()
+        let seenAt = Date(timeIntervalSince1970: 40_000)
+
+        let firstViewModel = PeopleViewModel(
+            bleManager: firstManager,
+            encounterHistoryStore: historyStore,
+            encounterBufferStore: FakeEncounterHistoryStore(),
+            pendingEncounterIdentityStore: pendingStore,
+            encounterRetention: nil,
+            profileLoader: { requestedID in
+                try await Task.sleep(for: .seconds(5))
+                return TelescanProfileResponse(
+                    telescanId: requestedID,
+                    name: "Delayed",
+                    username: "delayed",
+                    photoUrl: nil
+                )
+            },
+            nowProvider: { seenAt }
+        )
+
+        firstManager.emitDiscovery(id: profileID.uuidString, rssi: -60)
+        await Task.yield()
+        #expect(pendingStore.entries.first?.id == profileID)
+        #expect(pendingStore.entries.first?.lastSeen == seenAt)
+        firstViewModel.stopAllBluetoothActivity()
+
+        let restoredViewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            encounterHistoryStore: historyStore,
+            encounterBufferStore: FakeEncounterHistoryStore(),
+            pendingEncounterIdentityStore: pendingStore,
+            encounterRetention: nil,
+            profileLoader: { requestedID in
+                TelescanProfileResponse(
+                    telescanId: requestedID,
+                    name: "Recovered",
+                    username: "recovered",
+                    photoUrl: nil
+                )
+            },
+            nowProvider: { seenAt.addingTimeInterval(10) }
+        )
+
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(pendingStore.entries.isEmpty)
+        #expect(historyStore.entries.first?.id == profileID)
+        #expect(historyStore.entries.first?.lastSeen == seenAt)
+        #expect(restoredViewModel.encounterHistory.first?.id == profileID)
+        restoredViewModel.stopAllBluetoothActivity()
     }
 
     @Test("Encounter history expires after 24 hours and clears locally")

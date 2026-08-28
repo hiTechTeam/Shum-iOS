@@ -48,11 +48,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
                 .environmentObject(self)
                 .environmentObject(authCodeViewModel)
                 .environmentObject(peopleViewModel)
-                .onAppear {
-                    self.updateApplicationState(isActive: true)
-                    Task {
-                        await self.refreshSession()
-                    }
+                .task {
+                    await self.refreshSession()
                 }
         )
     }

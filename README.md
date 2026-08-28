@@ -106,7 +106,14 @@ scanning is on. Background identity connections are left pending for iOS to
 complete instead of being cancelled by the foreground timeout. Restored pending
 connections are reattached before scanning resumes, and failed background GATT
 reads receive a bounded retry because iOS coalesces duplicate scan events while
-both apps are suspended.
+both apps are suspended. After reading a peer identity, the discovering phone
+writes its own identity back through a dedicated GATT characteristic, so one
+asymmetric system discovery records the encounter on both phones. The raw UUID
+and timestamp are persisted before profile lookup, preventing a short background
+network window or process termination from losing an already detected encounter.
+Core Bluetooth still provides no prompt-discovery guarantee when both iPhones
+are already backgrounded with their screens off; the bilateral exchange begins
+only after iOS delivers at least one discovery event.
 
 The in-app information screen links directly to the current Terms of Service
 and Privacy Policy.
@@ -139,13 +146,17 @@ ID or an access token.
 | Compact identity encoding | Full UUID as 16 lossless binary bytes |
 | Compatibility characteristic | `A6B50002-8A5D-4F7A-9E4C-123456789002` |
 | Compatibility encoding | Lowercase UUID text in UTF-8 |
-| Characteristic access | Readable |
+| Peer identity write characteristic | `A6B50004-8A5D-4F7A-9E4C-123456789004` |
+| Peer write encoding | 16 UUID bytes followed by one signed RSSI byte |
+| Characteristic access | Identity values readable; peer exchange writable |
 
 The advertisement contains only the fixed service UUID, so the user identity
 cannot be truncated by the local-name payload limit. A scanner reads the compact
-characteristic once, caches the peripheral-to-identity mapping, and periodically
-revalidates it. The text characteristic keeps staged upgrades compatible with
-older app versions. Nearby profile lookup uses the authenticated
+characteristic once, writes its identity and observed RSSI back when the peer
+supports the optional exchange characteristic, caches the peripheral-to-identity
+mapping, and periodically revalidates it. The text characteristic and optional
+write negotiation keep staged upgrades compatible with older app versions.
+Nearby profile lookup uses the authenticated
 `/api/v1/profiles/{telescan_id}` endpoint. A BLE candidate is not displayed until
 the API returns a matching profile with a usable Telegram username; incomplete
 or unavailable profiles never create `Unknown` rows. Devices expire after 60
@@ -174,8 +185,9 @@ temporarily unavailable.
 - `UserDefaults`: public `telescan_id`, profile metadata, registration state,
   discovery state, BLE restoration identity, and the current account's cached
   blocked-profile UUIDs. It also stores at most 500 resolved encounter-profile
-  snapshots with their last-seen timestamps; entries older than 24 hours are
-  removed and the history is never uploaded.
+  snapshots and at most 500 unresolved BLE identities with their last-seen
+  timestamps; entries older than 24 hours are removed and the history is never
+  uploaded.
 - App storage and caches: selected/cached profile images and HTTP responses.
 
 The encounter history can be cleared from **Met** and is also cleared on sign

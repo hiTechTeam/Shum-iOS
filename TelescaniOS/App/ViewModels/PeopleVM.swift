@@ -34,6 +34,8 @@ final class PeopleViewModel: ObservableObject {
     private let blockedProfileStore: BlockedProfileStoring
     private let encounterHistoryStore: EncounterHistoryStoring
     private let encounterBufferStore: EncounterHistoryStoring
+    private let pendingEncounterIdentityStore:
+        PendingEncounterIdentityStoring
     private let profileLoader: @MainActor (UUID) async throws
         -> TelescanProfileResponse
     private let blockedProfilesLoader: @MainActor () async throws
@@ -53,6 +55,7 @@ final class PeopleViewModel: ObservableObject {
     private var lastSignals: [String: Date] = [:]
     private var profileTasks: [String: Task<Void, Never>] = [:]
     private var pendingEncounterTasks: [String: Task<Void, Never>] = [:]
+    private var pendingIdentityRecoveryTasks: [String: Task<Void, Never>] = [:]
     private var resolutionAttempts: [String: Int] = [:]
     private var lastHistoryUpdates: [String: Date] = [:]
     private var lastBufferUpdates: [String: Date] = [:]
@@ -77,6 +80,7 @@ final class PeopleViewModel: ObservableObject {
             EncounterHistoryStore.shared,
         encounterBufferStore: EncounterHistoryStoring =
             EncounterBufferStore.shared,
+        pendingEncounterIdentityStore: PendingEncounterIdentityStoring? = nil,
         encounterRetention: TimeInterval? = EncounterHistoryPolicy.retention,
         historyUpdateInterval: TimeInterval = 60,
         encounterInactivityDelay: TimeInterval =
@@ -118,6 +122,15 @@ final class PeopleViewModel: ObservableObject {
         self.blockedProfileStore = blockedProfileStore
         self.encounterHistoryStore = encounterHistoryStore
         self.encounterBufferStore = encounterBufferStore
+        if let pendingEncounterIdentityStore {
+            self.pendingEncounterIdentityStore = pendingEncounterIdentityStore
+        } else if bleManager is BLEManager {
+            self.pendingEncounterIdentityStore =
+                PendingEncounterIdentityStore.shared
+        } else {
+            self.pendingEncounterIdentityStore =
+                InMemoryPendingEncounterIdentityStore()
+        }
         self.encounterRetention = encounterRetention.map { max(1, $0) }
         self.historyUpdateInterval = max(0, historyUpdateInterval)
         self.encounterInactivityDelay = max(0, encounterInactivityDelay)
@@ -139,6 +152,7 @@ final class PeopleViewModel: ObservableObject {
         bleManager.delegate = self
         flushBufferedEncounters()
         refreshEncounterHistory(at: nowProvider())
+        recoverPendingEncounterIdentities()
         startDistanceUpdater()
         startPresenceUpdater()
     }
@@ -150,6 +164,9 @@ final class PeopleViewModel: ObservableObject {
             task.cancel()
         }
         for task in pendingEncounterTasks.values {
+            task.cancel()
+        }
+        for task in pendingIdentityRecoveryTasks.values {
             task.cancel()
         }
     }
@@ -247,7 +264,12 @@ final class PeopleViewModel: ObservableObject {
             task.cancel()
         }
         pendingEncounterTasks.removeAll()
+        for task in pendingIdentityRecoveryTasks.values {
+            task.cancel()
+        }
+        pendingIdentityRecoveryTasks.removeAll()
         encounterHistoryStore.removeAll()
+        pendingEncounterIdentityStore.removeAll()
         encounterHistory.removeAll()
         lastHistoryUpdates.removeAll()
     }
@@ -300,6 +322,7 @@ final class PeopleViewModel: ObservableObject {
         bleManager.setApplicationActive(isActive)
         if isActive {
             bleManager.reconcileDiscoveryState()
+            recoverPendingEncounterIdentities()
         } else {
             let now = Date()
             let recentlySeenIDs = Set(
@@ -432,13 +455,16 @@ final class PeopleViewModel: ObservableObject {
         pendingEncounterTasks[canonicalID]?.cancel()
         pendingEncounterTasks.removeValue(forKey: canonicalID)
         guard !blockedProfileStore.ids.contains(canonicalID) else { return }
+        let now = nowProvider()
+        if userCache[canonicalID] == nil {
+            pendingEncounterIdentityStore.record(id: uuid, seenAt: now)
+        }
         let isNew = devices[canonicalID] == nil
         devices[canonicalID] = rssi
         if isNew {
             discoveryOrder.insert(canonicalID, at: 0)
             refreshEncounterHistory(at: nowProvider())
         }
-        let now = nowProvider()
         lastSignals[canonicalID] = now
         if let user = userCache[canonicalID] {
             bufferEncounter(user, at: now)
@@ -518,6 +544,7 @@ final class PeopleViewModel: ObservableObject {
             userCache[id] = user
             let lastSeenAt = lastSignals[id] ?? nowProvider()
             bufferEncounter(user, at: lastSeenAt, force: true)
+            pendingEncounterIdentityStore.remove(ids: [user.id])
             scheduleEncounterAfterInactivity(
                 user,
                 lastSeenAt: lastSeenAt
@@ -533,6 +560,7 @@ final class PeopleViewModel: ObservableObject {
                 userCache.removeValue(forKey: id)
                 resolutionAttempts.removeValue(forKey: id)
                 suppressedProfileIDs.insert(id)
+                pendingEncounterIdentityStore.remove(ids: [requestedID])
                 return
             }
             resolutionAttempts[id, default: 0] += 1
@@ -713,6 +741,7 @@ final class PeopleViewModel: ObservableObject {
         }
         encounterHistoryStore.remove(ids: ids)
         encounterBufferStore.remove(ids: ids)
+        pendingEncounterIdentityStore.remove(ids: ids)
         lastHistoryUpdates = lastHistoryUpdates.filter {
             !canonicalIDs.contains($0.key)
         }
@@ -742,6 +771,69 @@ final class PeopleViewModel: ObservableObject {
             )
         }
         encounterBufferStore.removeAll()
+    }
+
+    private func recoverPendingEncounterIdentities() {
+        let now = nowProvider()
+        if let encounterRetention {
+            pendingEncounterIdentityStore.prune(
+                olderThan: now.addingTimeInterval(-encounterRetention)
+            )
+        }
+
+        for entry in pendingEncounterIdentityStore.entries {
+            let canonicalID = entry.id.uuidString.lowercased()
+            if blockedProfileStore.ids.contains(canonicalID) {
+                pendingEncounterIdentityStore.remove(ids: [entry.id])
+                continue
+            }
+            guard pendingIdentityRecoveryTasks[canonicalID] == nil else {
+                continue
+            }
+
+            pendingIdentityRecoveryTasks[canonicalID] = Task {
+                [weak self] in
+                guard let self else { return }
+                defer {
+                    self.pendingIdentityRecoveryTasks.removeValue(
+                        forKey: canonicalID
+                    )
+                }
+
+                do {
+                    let response = try await self.profileLoader(entry.id)
+                    try Task.checkCancellation()
+                    let user = try self.validatedUser(
+                        response,
+                        requestedID: entry.id
+                    )
+                    guard !self.blockedProfileStore.ids.contains(
+                        canonicalID
+                    ) else {
+                        self.pendingEncounterIdentityStore.remove(
+                            ids: [entry.id]
+                        )
+                        return
+                    }
+                    self.recordEncounter(
+                        user,
+                        at: entry.lastSeen,
+                        force: true
+                    )
+                    self.pendingEncounterIdentityStore.remove(
+                        ids: [entry.id]
+                    )
+                } catch is CancellationError {
+                    return
+                } catch {
+                    if self.isTerminalProfileError(error) {
+                        self.pendingEncounterIdentityStore.remove(
+                            ids: [entry.id]
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

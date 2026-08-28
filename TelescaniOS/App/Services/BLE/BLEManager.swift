@@ -4,6 +4,11 @@ import Logging
 
 public final class BLEManager: NSObject, BLEManagerProtocol {
 
+    struct PeerIdentityWrite: Equatable {
+        let identity: UUID
+        let rssi: Int
+    }
+
     public static let shared = BLEManager()
 
     public weak var delegate: BLEManagerDelegate?
@@ -27,6 +32,10 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         string: "A6B50003-8A5D-4F7A-9E4C-123456789003"
     )
 
+    private let peerIdentityWriteCharacteristicUUID = CBUUID(
+        string: "A6B50004-8A5D-4F7A-9E4C-123456789004"
+    )
+
     private let centralRestoreIdentifier =
         "com.telescan.ble.central"
 
@@ -43,6 +52,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
 
     private var identityCharacteristic: CBMutableCharacteristic?
     private var compactIdentityCharacteristic: CBMutableCharacteristic?
+    private var peerIdentityWriteCharacteristic: CBMutableCharacteristic?
     private var publishedService: CBMutableService?
 
     private var shouldScan = false
@@ -326,6 +336,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     private func clearPublishedServiceState() {
         identityCharacteristic = nil
         compactIdentityCharacteristic = nil
+        peerIdentityWriteCharacteristic = nil
         publishedService = nil
         serviceIsPublished = false
     }
@@ -388,6 +399,13 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             permissions: [.readable]
         )
 
+        let peerIdentityWriteCharacteristic = CBMutableCharacteristic(
+            type: peerIdentityWriteCharacteristicUUID,
+            properties: [.write],
+            value: nil,
+            permissions: [.writeable]
+        )
+
         let service = CBMutableService(
             type: serviceUUID,
             primary: true
@@ -395,11 +413,13 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
 
         service.characteristics = [
             compactCharacteristic,
-            characteristic
+            characteristic,
+            peerIdentityWriteCharacteristic
         ]
 
         identityCharacteristic = characteristic
         compactIdentityCharacteristic = compactCharacteristic
+        self.peerIdentityWriteCharacteristic = peerIdentityWriteCharacteristic
         publishedService = service
         serviceIsPublished = false
 
@@ -681,6 +701,29 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         guard let value = String(data: data, encoding: .utf8) else { return nil }
         return UUID(uuidString: value)
     }
+
+    static func encodedPeerIdentityWrite(
+        _ identity: UUID,
+        rssi: Int
+    ) -> Data? {
+        guard var data = encodedIdentity(identity) else { return nil }
+        let boundedRSSI = max(-100, min(-20, rssi))
+        data.append(UInt8(bitPattern: Int8(boundedRSSI)))
+        return data
+    }
+
+    static func decodedPeerIdentityWrite(
+        _ data: Data
+    ) -> PeerIdentityWrite? {
+        guard data.count == 17,
+              let identity = decodedIdentity(Data(data.prefix(16))) else {
+            return nil
+        }
+        return PeerIdentityWrite(
+            identity: identity,
+            rssi: Int(Int8(bitPattern: data[16]))
+        )
+    }
 }
 
 extension BLEManager: CBCentralManagerDelegate {
@@ -876,7 +919,8 @@ extension BLEManager: CBPeripheralDelegate {
         peripheral.discoverCharacteristics(
             [
                 compactIdentityCharacteristicUUID,
-                identityCharacteristicUUID
+                identityCharacteristicUUID,
+                peerIdentityWriteCharacteristicUUID
             ],
             for: service
         )
@@ -947,6 +991,48 @@ extension BLEManager: CBPeripheralDelegate {
             rssi: rssi,
             peripheralID: peripheral.identifier
         )
+
+        guard identity.uuidString.lowercased() != currentIdentity,
+              let localIdentity = currentIdentity.flatMap(UUID.init(uuidString:)),
+              let localIdentityData = Self.encodedPeerIdentityWrite(
+                  localIdentity,
+                  rssi: rssi
+              ),
+              let writeCharacteristic = characteristic.service?.characteristics?
+                .first(where: {
+                    $0.uuid == peerIdentityWriteCharacteristicUUID
+                        && $0.properties.contains(.write)
+                }) else {
+            finishIdentityResolution(peripheral, shouldRetry: false)
+            return
+        }
+
+        peripheral.writeValue(
+            localIdentityData,
+            for: writeCharacteristic,
+            type: .withResponse
+        )
+        logger.info("Writing local identity to discovered Telescan device")
+    }
+
+    public func peripheral(
+        _ peripheral: CBPeripheral,
+        didWriteValueFor characteristic: CBCharacteristic,
+        error: Error?
+    ) {
+        guard characteristic.uuid == peerIdentityWriteCharacteristicUUID,
+              resolvingPeripheralIDs.contains(peripheral.identifier) else {
+            return
+        }
+
+        if let error {
+            logger.warning(
+                "Peer identity handshake failed: \(error.localizedDescription)"
+            )
+        } else {
+            logger.info("Peer identity handshake completed")
+        }
+
         finishIdentityResolution(peripheral, shouldRetry: false)
     }
 }
@@ -1029,6 +1115,42 @@ extension BLEManager: CBPeripheralManagerDelegate {
 
     public func peripheralManager(
         _ peripheral: CBPeripheralManager,
+        didReceiveWrite requests: [CBATTRequest]
+    ) {
+        for request in requests {
+            guard request.characteristic.uuid
+                    == peerIdentityWriteCharacteristicUUID else {
+                peripheral.respond(to: request, withResult: .requestNotSupported)
+                continue
+            }
+
+            guard request.offset == 0 else {
+                peripheral.respond(to: request, withResult: .invalidOffset)
+                continue
+            }
+
+            guard let data = request.value,
+                  let peer = Self.decodedPeerIdentityWrite(data) else {
+                peripheral.respond(
+                    to: request,
+                    withResult: .invalidAttributeValueLength
+                )
+                continue
+            }
+
+            let centralID = request.central.identifier
+            handleIdentity(
+                peer.identity.uuidString,
+                rssi: peer.rssi,
+                peripheralID: centralID
+            )
+            peripheral.respond(to: request, withResult: .success)
+            logger.info("Peer identity received through GATT handshake")
+        }
+    }
+
+    public func peripheralManager(
+        _ peripheral: CBPeripheralManager,
         willRestoreState dict: [String: Any]
     ) {
         logger.info("Restoring peripheral state")
@@ -1058,7 +1180,16 @@ extension BLEManager: CBPeripheralManagerDelegate {
                     }
                 ) as? CBMutableCharacteristic
 
-            serviceIsPublished = true
+            peerIdentityWriteCharacteristic =
+                restoredService.characteristics?.first(
+                    where: {
+                        $0.uuid == peerIdentityWriteCharacteristicUUID
+                    }
+                ) as? CBMutableCharacteristic
+
+            serviceIsPublished = identityCharacteristic != nil
+                && compactIdentityCharacteristic != nil
+                && peerIdentityWriteCharacteristic != nil
         }
 
         if shouldAdvertise {

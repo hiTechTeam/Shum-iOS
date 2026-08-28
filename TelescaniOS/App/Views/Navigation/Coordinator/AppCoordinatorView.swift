@@ -24,6 +24,10 @@ struct AppCoordinatorView: View {
         }
         .environmentObject(coordinator)
         .task {
+            coordinator.updateApplicationState(
+                isActive: scenePhase == .active
+            )
+
             guard coordinator.showSplash else { return }
 
             try? await Task.sleep(

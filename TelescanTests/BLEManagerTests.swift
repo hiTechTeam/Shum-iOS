@@ -62,6 +62,31 @@ struct BLEManagerTests {
         #expect(BLEManager.decodedIdentity(data) == identity)
     }
 
+    @Test("A peer handshake carries a compact UUID and observed RSSI.")
+    func peerHandshakeCarriesIdentityAndRSSI() throws {
+        let identity = UUID()
+        let compactData = try #require(
+            BLEManager.encodedPeerIdentityWrite(identity, rssi: -63)
+        )
+        let decoded = try #require(
+            BLEManager.decodedPeerIdentityWrite(compactData)
+        )
+
+        #expect(decoded.identity == identity)
+        #expect(decoded.rssi == -63)
+        #expect(
+            BLEManager.decodedPeerIdentityWrite(
+                Data(identity.uuidString.utf8)
+            ) == nil
+        )
+        #expect(BLEManager.decodedPeerIdentityWrite(Data()) == nil)
+        #expect(
+            BLEManager.decodedPeerIdentityWrite(
+                Data(repeating: 0, count: 18)
+            ) == nil
+        )
+    }
+
     @Test("reset() clean active operations and allows you to start over.")
     func resetClearsActiveOperations() async throws {
         let manager = BLEManager.shared
