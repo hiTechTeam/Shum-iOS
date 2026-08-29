@@ -11,8 +11,6 @@ struct PeopleView: View {
 
     @State private var selectedUser: NearbyUser?
     @State private var photoPreviewUser: NearbyUser?
-    @AppStorage(Keys.isQuickChatEnabled.rawValue)
-    private var isQuickChatEnabled = false
 
     var body: some View {
         ZStack {
@@ -58,7 +56,8 @@ struct PeopleView: View {
                             ProfileAvatarButton(
                                 user: user,
                                 action: { openUser(user) },
-                                photoAction: { openPhoto(of: user) }
+                                photoAction: { openPhoto(of: user) },
+                                infoAction: { selectedUser = user }
                             )
                             .listRowInsets(
                                 EdgeInsets(
@@ -67,6 +66,13 @@ struct PeopleView: View {
                                     bottom: 8,
                                     trailing: 16
                                 )
+                            )
+                            .listRowSeparator(.hidden, edges: .bottom)
+                            .listRowSeparator(
+                                user.id == peopleViewModel.visibleUsers.first?.id
+                                    ? .hidden
+                                    : .visible,
+                                edges: .top
                             )
                             .listRowBackground(Color.clear)
                         }
@@ -134,8 +140,7 @@ struct PeopleView: View {
     }
 
     private func openUser(_ user: NearbyUser) {
-        guard isQuickChatEnabled,
-              let destination = TelegramChatDestination(user: user) else {
+        guard let destination = TelegramChatDestination(user: user) else {
             selectedUser = user
             return
         }
@@ -242,6 +247,7 @@ struct ProfileAvatarButton: View {
     let user: NearbyUser
     let action: () -> Void
     let photoAction: () -> Void
+    let infoAction: () -> Void
 
     private let avatarSize: CGFloat = 52
 
@@ -268,14 +274,10 @@ struct ProfileAvatarButton: View {
                             .foregroundStyle(.primary)
                             .lineLimit(1)
 
-                        if let bio = user.bio?.trimmingCharacters(
-                            in: .whitespacesAndNewlines
-                        ), !bio.isEmpty {
-                            Text(bio)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
+                        Text(profileInformation)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
 
                     Spacer(minLength: 8)
@@ -292,13 +294,25 @@ struct ProfileAvatarButton: View {
             .buttonStyle(.plain)
             .accessibilityLabel(user.name)
             .accessibilityAddTraits(.isButton)
+
+            ProfileInfoButton(action: infoAction)
         }
         .frame(maxWidth: .infinity, minHeight: avatarSize)
+        .profileRowContextMenu(user: user, writeAction: action)
     }
 
     private var hasPhoto: Bool {
         guard let photoURL = user.photoURL else { return false }
         return URL(string: photoURL) != nil
+    }
+
+    private var profileInformation: String {
+        let bio = user.bio?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ) ?? ""
+        return bio.isEmpty
+            ? Inc.NearbyProfile.noInformation.localized
+            : bio
     }
 
     @ViewBuilder
@@ -324,6 +338,471 @@ struct ProfileAvatarButton: View {
         .frame(width: avatarSize, height: avatarSize)
         .background(Color(uiColor: .secondarySystemBackground), in: Circle())
         .clipShape(Circle())
+    }
+}
+
+struct ProfileInfoButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            action()
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(.blue)
+                .frame(width: 36, height: 36)
+                .background(
+                    Color.secondary.opacity(0.14),
+                    in: Circle()
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Inc.NearbyProfile.openCard.localized)
+    }
+}
+
+struct ProfileRowContextMenuModifier: ViewModifier {
+
+    private enum ModerationDialog {
+        case report
+        case block
+    }
+
+    private enum ModerationAlert: Identifiable {
+        case reportConfirmation(ReportReason)
+        case reportSent
+        case error
+
+        var id: String {
+            switch self {
+            case .reportConfirmation(let reason):
+                "report-confirmation-\(reason.rawValue)"
+            case .reportSent:
+                "report-sent"
+            case .error:
+                "error"
+            }
+        }
+    }
+
+    @EnvironmentObject private var peopleViewModel: PeopleViewModel
+
+    let user: NearbyUser
+    let lastMetAt: Date?
+    let relativeTimeReference: Date?
+    let writeAction: () -> Void
+    let deleteAction: (() -> Void)?
+
+    @State private var moderationDialog: ModerationDialog?
+    @State private var moderationAlert: ModerationAlert?
+    @State private var reportDetails = ""
+    @State private var isSubmitting = false
+
+    private var isModerationDialogPresented: Binding<Bool> {
+        Binding(
+            get: { moderationDialog != nil },
+            set: { isPresented in
+                if !isPresented {
+                    moderationDialog = nil
+                }
+            }
+        )
+    }
+
+    private var moderationDialogTitle: String {
+        switch moderationDialog {
+        case .report:
+            Inc.NearbyProfile.reportTitle.localized
+        case .block:
+            Inc.NearbyProfile.blockTitle.localized
+        case nil:
+            ""
+        }
+    }
+
+    private var moderationDialogMessage: String {
+        switch moderationDialog {
+        case .report:
+            Inc.NearbyProfile.reportMessage.localized
+        case .block:
+            Inc.NearbyProfile.blockMessage.localized
+        case nil:
+            ""
+        }
+    }
+
+    private var isModerationAlertPresented: Binding<Bool> {
+        Binding(
+            get: { moderationAlert != nil },
+            set: { isPresented in
+                if !isPresented {
+                    moderationAlert = nil
+                    reportDetails = ""
+                }
+            }
+        )
+    }
+
+    private var moderationAlertTitle: String {
+        switch moderationAlert {
+        case .reportConfirmation:
+            Inc.NearbyProfile.reportConfirmTitle.localized
+        case .reportSent:
+            Inc.NearbyProfile.reportSentTitle.localized
+        case .error:
+            Inc.NearbyProfile.actionFailedTitle.localized
+        case nil:
+            ""
+        }
+    }
+
+    private var moderationAlertMessage: String {
+        switch moderationAlert {
+        case .reportConfirmation(let reason):
+            String.localizedStringWithFormat(
+                Inc.NearbyProfile.reportConfirmMessage.localized,
+                reportReasonTitle(reason)
+            )
+        case .reportSent:
+            Inc.NearbyProfile.reportSentMessage.localized
+        case .error:
+            Inc.NearbyProfile.actionFailedMessage.localized
+        case nil:
+            ""
+        }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .contextMenu {
+                Button {
+                    writeAction()
+                } label: {
+                    Label(
+                        Inc.NearbyProfile.write.localized,
+                        systemImage: "paperplane"
+                    )
+                    .foregroundStyle(.primary)
+                }
+                .tint(.primary)
+
+                Divider()
+
+                Button(role: .destructive) {
+                    moderationDialog = .report
+                } label: {
+                    Label(
+                        Inc.NearbyProfile.report.localized,
+                        systemImage: "exclamationmark.bubble"
+                    )
+                    .foregroundStyle(.red)
+                }
+                .tint(.red)
+
+                Button(role: .destructive) {
+                    moderationDialog = .block
+                } label: {
+                    Label(
+                        Inc.NearbyProfile.block.localized,
+                        systemImage: "person.crop.circle.badge.xmark"
+                    )
+                    .foregroundStyle(.red)
+                }
+                .tint(.red)
+
+                if let deleteAction {
+                    Divider()
+
+                    Button(role: .destructive) {
+                        deleteAction()
+                    } label: {
+                        Label(
+                            Inc.EncounterHistory.delete.localized,
+                            systemImage: "trash"
+                        )
+                        .foregroundStyle(.red)
+                    }
+                    .tint(.red)
+                }
+            } preview: {
+                ProfileRowContextPreview(
+                    user: user,
+                    lastMetAt: lastMetAt,
+                    relativeTimeReference: relativeTimeReference,
+                    countdownSeconds: lastMetAt == nil
+                        ? peopleViewModel.disappearanceCountdowns[
+                            user.discoveryID
+                        ]
+                        : nil,
+                    distanceMeters: lastMetAt == nil
+                        ? peopleViewModel.distances[user.discoveryID]
+                        : nil
+                )
+            }
+            .disabled(isSubmitting)
+            .confirmationDialog(
+                moderationDialogTitle,
+                isPresented: isModerationDialogPresented,
+                titleVisibility: .visible
+            ) {
+                moderationDialogActions
+            } message: {
+                Text(moderationDialogMessage)
+            }
+            .alert(
+                moderationAlertTitle,
+                isPresented: isModerationAlertPresented
+            ) {
+                moderationAlertActions
+            } message: {
+                Text(moderationAlertMessage)
+            }
+    }
+
+    @ViewBuilder
+    private var moderationDialogActions: some View {
+        switch moderationDialog {
+        case .report:
+            Button(Inc.NearbyProfile.reportSpam.localized) {
+                confirmReport(.spam)
+            }
+            Button(Inc.NearbyProfile.reportHarassment.localized) {
+                confirmReport(.harassment)
+            }
+            Button(Inc.NearbyProfile.reportInappropriate.localized) {
+                confirmReport(.inappropriate)
+            }
+            Button(Inc.NearbyProfile.reportImpersonation.localized) {
+                confirmReport(.impersonation)
+            }
+            Button(Inc.NearbyProfile.reportOther.localized) {
+                confirmReport(.other)
+            }
+            Button(Inc.Common.cancel.localized, role: .cancel) { }
+        case .block:
+            Button(Inc.Common.cancel.localized, role: .cancel) { }
+            Button(
+                Inc.NearbyProfile.blockConfirm.localized,
+                role: .destructive,
+                action: submitBlock
+            )
+        case nil:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var moderationAlertActions: some View {
+        switch moderationAlert {
+        case .reportConfirmation(let reason):
+            TextField(
+                Inc.NearbyProfile.reportDetailsPlaceholder.localized,
+                text: $reportDetails
+            )
+            Button(Inc.Common.cancel.localized, role: .cancel) { }
+            Button(Inc.NearbyProfile.reportSend.localized, role: .destructive) {
+                submitReport(reason: reason)
+            }
+        case .reportSent, .error:
+            Button(Inc.NearbyProfile.acknowledge.localized, role: .cancel) { }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private func confirmReport(_ reason: ReportReason) {
+        moderationDialog = nil
+        reportDetails = ""
+        moderationAlert = .reportConfirmation(reason)
+    }
+
+    private func submitReport(reason: ReportReason) {
+        let details = reportDetails.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        isSubmitting = true
+        Task {
+            do {
+                try await peopleViewModel.submitReport(
+                    for: user,
+                    reason: reason,
+                    details: details.isEmpty ? nil : details
+                )
+                isSubmitting = false
+                reportDetails = ""
+                moderationAlert = .reportSent
+            } catch {
+                isSubmitting = false
+                moderationAlert = .error
+            }
+        }
+    }
+
+    private func submitBlock() {
+        moderationDialog = nil
+        isSubmitting = true
+        Task {
+            do {
+                try await peopleViewModel.block(user)
+                isSubmitting = false
+            } catch {
+                isSubmitting = false
+                moderationAlert = .error
+            }
+        }
+    }
+
+    private func reportReasonTitle(_ reason: ReportReason) -> String {
+        switch reason {
+        case .spam:
+            Inc.NearbyProfile.reportSpam.localized
+        case .harassment:
+            Inc.NearbyProfile.reportHarassment.localized
+        case .inappropriate:
+            Inc.NearbyProfile.reportInappropriate.localized
+        case .impersonation:
+            Inc.NearbyProfile.reportImpersonation.localized
+        case .other:
+            Inc.NearbyProfile.reportOther.localized
+        }
+    }
+}
+
+extension View {
+    func profileRowContextMenu(
+        user: NearbyUser,
+        lastMetAt: Date? = nil,
+        relativeTimeReference: Date? = nil,
+        writeAction: @escaping () -> Void,
+        deleteAction: (() -> Void)? = nil
+    ) -> some View {
+        modifier(
+            ProfileRowContextMenuModifier(
+                user: user,
+                lastMetAt: lastMetAt,
+                relativeTimeReference: relativeTimeReference,
+                writeAction: writeAction,
+                deleteAction: deleteAction
+            )
+        )
+    }
+}
+
+private struct ProfileRowContextPreview: View {
+    let user: NearbyUser
+    let lastMetAt: Date?
+    let relativeTimeReference: Date?
+    let countdownSeconds: Int?
+    let distanceMeters: Int?
+
+    private let avatarSize: CGFloat = 52
+
+    var body: some View {
+        HStack(spacing: 12) {
+            avatar
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(user.name)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(profileInformation)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            trailingInformation
+
+            Image(systemName: "info.circle")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(.blue)
+                .frame(width: 36, height: 36)
+                .background(
+                    Color.secondary.opacity(0.14),
+                    in: Circle()
+                )
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(width: max(320, UIScreen.main.bounds.width - 32))
+        .background(
+            Color(uiColor: .systemBackground),
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        )
+    }
+
+    @ViewBuilder
+    private var avatar: some View {
+        Group {
+            if let photoURL = user.photoURL,
+               let imageURL = URL(string: photoURL) {
+                KFImage(imageURL)
+                    .placeholder { placeholder }
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: avatarSize, height: avatarSize)
+        .clipShape(Circle())
+    }
+
+    private var placeholder: some View {
+        Image.personCropCircleFill
+            .resizable()
+            .scaledToFit()
+            .foregroundStyle(.gray)
+    }
+
+    @ViewBuilder
+    private var trailingInformation: some View {
+        if let lastMetAt {
+            EncounterRelativeTimeText(
+                date: lastMetAt,
+                relativeTo: relativeTimeReference ?? Date(),
+                includesMetPrefix: true
+            )
+            .font(.system(size: 14))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        } else if let countdownSeconds {
+            Text(
+                String.localizedStringWithFormat(
+                    Inc.Common.countdownSecondsFormat.localized,
+                    countdownSeconds
+                )
+            )
+            .font(.system(size: 14))
+            .foregroundStyle(.orange)
+            .monospacedDigit()
+            .lineLimit(1)
+        } else if let distanceMeters {
+            Text(
+                String.localizedStringWithFormat(
+                    Inc.Common.distanceMetersFormat.localized,
+                    distanceMeters
+                )
+            )
+            .font(.system(size: 14))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+    }
+
+    private var profileInformation: String {
+        let bio = user.bio?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ) ?? ""
+        return bio.isEmpty
+            ? Inc.NearbyProfile.noInformation.localized
+            : bio
     }
 }
 
@@ -458,17 +937,18 @@ struct ProfileSheetView: View {
 
     var body: some View {
         ZStack {
-            VStack {
+            VStack(spacing: 8) {
                 Spacer(minLength: 0)
 
                 GeometryReader { geo in
-                    let maxSize = max(
+                    let availableSize = max(
                         0,
                         min(
                             geo.size.width,
                             geo.size.height
                         ) - 24
                     )
+                    let maxSize = availableSize * 0.9 * 1.04
 
                     Group {
                         if let imageURL {
@@ -483,14 +963,14 @@ struct ProfileSheetView: View {
                     }
                     .frame(
                         maxWidth: .infinity,
-                        maxHeight: .infinity
+                        maxHeight: .infinity,
+                        alignment: .bottom
                     )
+                    .offset(y: -10)
                 }
 
-                Spacer()
-
                 VStack(alignment: .center, spacing: 0) {
-                    VStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .center, spacing: 3) {
                         Text(
                             user.name
                         )
@@ -499,21 +979,25 @@ struct ProfileSheetView: View {
                         .multilineTextAlignment(.center)
                         .frame(width: 360, alignment: .center)
 
+                        if let telegramUsername {
+                            Text("@\(telegramUsername)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .frame(width: 360, alignment: .center)
+                        }
                     }
+                    .offset(y: -10)
 
-                    if let bio = user.bio, !bio.isEmpty {
-                        Text(bio)
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(3)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .multilineTextAlignment(.center)
-                            .frame(width: 360, alignment: .center)
-                            .frame(minHeight: 48, alignment: .center)
-                    } else {
-                        Color.clear
-                            .frame(width: 360, height: 48)
-                    }
+                    Text(profileInformation)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.center)
+                        .frame(width: 360, alignment: .center)
+                        .frame(minHeight: 48, alignment: .center)
 
                     RegistrationPrimaryButton(
                         title: Inc.NearbyProfile.write.localized,
@@ -529,6 +1013,7 @@ struct ProfileSheetView: View {
                 .compositingGroup()
             }
             .padding(.top, 60)
+            .offset(y: -10)
             .ignoresSafeArea(.keyboard, edges: .bottom)
 
             ProfileSheetControls(
@@ -546,144 +1031,15 @@ struct ProfileSheetView: View {
                 }
             }
         }
-        .modifier(ProfileSheetPresentationBackground(imageURL: imageURL))
-    }
-}
-
-private struct ProfileSheetPresentationBackground: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceTransparency)
-    private var reduceTransparency
-
-    let imageURL: URL?
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *),
-           colorScheme != .dark || imageURL == nil || reduceTransparency {
-            content
-        } else {
-            content.presentationBackground {
-                ProfileSheetBackground(imageURL: imageURL)
-            }
-        }
-    }
-}
-
-private struct ProfileSheetBackground: View {
-
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    let imageURL: URL?
-
-    private var systemBackground: Color {
-        Color(uiColor: .systemBackground)
     }
 
-    private var photoBlurRadius: CGFloat {
-        if #available(iOS 26.0, *) {
-            return 44
-        }
-
-        return 58
-    }
-
-    private var photoSaturation: Double {
-        if #available(iOS 26.0, *) {
-            return 1.22
-        }
-
-        return 1.06
-    }
-
-    private var photoOpacity: Double {
-        if #available(iOS 26.0, *) {
-            return 0.60
-        }
-
-        return 0.32
-    }
-
-    var body: some View {
-        Group {
-            if let imageURL,
-               colorScheme == .dark,
-               !reduceTransparency {
-                photoBackground(imageURL: imageURL)
-            } else {
-                systemBackground
-            }
-        }
-        .ignoresSafeArea()
-    }
-
-    private func photoBackground(imageURL: URL) -> some View {
-        ZStack {
-            systemBackground
-
-            KFImage(imageURL)
-                .placeholder { systemBackground }
-                .resizable()
-                .scaledToFill()
-                .scaleEffect(1.35)
-                .blur(radius: photoBlurRadius, opaque: true)
-                .saturation(photoSaturation)
-                .contrast(0.96)
-                .opacity(photoOpacity)
-
-            adaptiveMaterial
-
-            LinearGradient(
-                stops: [
-                    .init(
-                        color: systemBackground.opacity(0.08),
-                        location: 0
-                    ),
-                    .init(
-                        color: systemBackground.opacity(0.34),
-                        location: 0.58
-                    ),
-                    .init(
-                        color: systemBackground.opacity(0.74),
-                        location: 1
-                    )
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .clipped()
-    }
-
-    @ViewBuilder
-    private var adaptiveMaterial: some View {
-        if #available(iOS 26.0, *) {
-            Color.clear
-                .glassEffect(.regular, in: .rect(cornerRadius: 0))
-        } else {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .opacity(0.20)
-        }
-    }
-}
-
-private struct ProfileSheetActionGroupSurface: ViewModifier {
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .glassEffect(.regular.interactive(), in: Capsule())
-        } else {
-            content
-        }
-    }
-}
-
-private extension View {
-    func profileSheetActionGroupSurface() -> some View {
-        modifier(ProfileSheetActionGroupSurface())
+    private var profileInformation: String {
+        let bio = user.bio?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ) ?? ""
+        return bio.isEmpty
+            ? Inc.NearbyProfile.noInformation.localized
+            : bio
     }
 }
 
@@ -833,18 +1189,24 @@ private struct ProfileSheetControls: View {
             .frame(width: 44, height: 44)
             .contentShape(Circle())
         }
-        .buttonStyle(.plain)
         .menuOrder(.fixed)
         .disabled(isSubmitting)
         .accessibilityLabel(Inc.NearbyProfile.actions.localized)
     }
 
+    @ViewBuilder
     private var actionGroup: some View {
-        HStack(spacing: 0) {
+        if #available(iOS 26.0, *) {
             moderationMenu
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .tint(.primary)
+        } else {
+            moderationMenu
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.circle)
+                .tint(.primary)
         }
-        .padding(4)
-        .profileSheetActionGroupSurface()
     }
 
     private var presenceInfo: some View {
@@ -852,6 +1214,7 @@ private struct ProfileSheetControls: View {
             if let lastMetAt {
                 EncounterRelativeTimeText(
                     date: lastMetAt,
+                    relativeTo: Date(),
                     includesMetPrefix: true
                 )
                 .font(.system(size: 13))

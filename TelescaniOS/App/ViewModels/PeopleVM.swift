@@ -218,7 +218,8 @@ final class PeopleViewModel: ObservableObject {
                 profiles.map { $0.telescanId.uuidString.lowercased() }
             )
             blockedProfileStore.replace(with: serverIDs)
-            removeEncounterHistory(canonicalIDs: serverIDs)
+            discardPendingEncounters(canonicalIDs: serverIDs)
+            refreshEncounterHistory(at: nowProvider())
             let visibleBlockedIDs = devices.keys.filter(serverIDs.contains)
             for id in visibleBlockedIDs {
                 loseDevice(id: id)
@@ -244,7 +245,8 @@ final class PeopleViewModel: ObservableObject {
         } else {
             blockedProfiles.insert(blockedProfile, at: 0)
         }
-        removeEncounterHistory(ids: [user.id])
+        discardPendingEncounters(canonicalIDs: [user.discoveryID])
+        refreshEncounterHistory(at: nowProvider())
         loseDevice(id: user.discoveryID)
     }
 
@@ -252,6 +254,7 @@ final class PeopleViewModel: ObservableObject {
         try await unblockSubmitter(profile.telescanId)
         blockedProfileStore.remove(profile.telescanId)
         blockedProfiles.removeAll { $0.id == profile.id }
+        refreshEncounterHistory(at: nowProvider())
     }
 
     func clearBlockedProfileCache() {
@@ -274,6 +277,12 @@ final class PeopleViewModel: ObservableObject {
         lastHistoryUpdates.removeAll()
     }
 
+    func removeEncounterFromHistory(_ user: NearbyUser) {
+        encounterHistoryStore.remove(ids: [user.id])
+        lastHistoryUpdates.removeValue(forKey: user.discoveryID)
+        refreshEncounterHistory(at: nowProvider())
+    }
+
     func refreshEncounterHistory(at now: Date = Date()) {
         if let encounterRetention {
             let cutoff = now.addingTimeInterval(-encounterRetention)
@@ -281,13 +290,9 @@ final class PeopleViewModel: ObservableObject {
         }
 
         let blockedIDs = blockedProfileStore.ids
-        let hiddenHistoryIDs = Set(
-            encounterHistoryStore.entries.compactMap { entry in
-                blockedIDs.contains(entry.user.discoveryID) ? entry.id : nil
-            }
-        )
-        encounterHistoryStore.remove(ids: hiddenHistoryIDs)
-        encounterHistory = encounterHistoryStore.entries
+        encounterHistory = encounterHistoryStore.entries.filter {
+            !blockedIDs.contains($0.user.discoveryID)
+        }
     }
 
     func toggleScanning(_ enabled: Bool) {
@@ -740,29 +745,17 @@ final class PeopleViewModel: ObservableObject {
         refreshEncounterHistory(at: max(nowProvider(), date))
     }
 
-    private func removeEncounterHistory(ids: Set<UUID>) {
-        let canonicalIDs = Set(ids.map { $0.uuidString.lowercased() })
+    private func discardPendingEncounters(canonicalIDs: Set<String>) {
+        let ids = Set(canonicalIDs.compactMap { UUID(uuidString: $0) })
         for canonicalID in canonicalIDs {
             pendingEncounterTasks[canonicalID]?.cancel()
             pendingEncounterTasks.removeValue(forKey: canonicalID)
         }
-        encounterHistoryStore.remove(ids: ids)
         encounterBufferStore.remove(ids: ids)
         pendingEncounterIdentityStore.remove(ids: ids)
-        lastHistoryUpdates = lastHistoryUpdates.filter {
-            !canonicalIDs.contains($0.key)
-        }
         lastBufferUpdates = lastBufferUpdates.filter {
             !canonicalIDs.contains($0.key)
         }
-        refreshEncounterHistory(at: nowProvider())
-    }
-
-    private func removeEncounterHistory(canonicalIDs: Set<String>) {
-        let ids = Set(
-            canonicalIDs.compactMap { UUID(uuidString: $0) }
-        )
-        removeEncounterHistory(ids: ids)
     }
 
     private func flushBufferedEncounters() {

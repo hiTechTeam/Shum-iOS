@@ -10,7 +10,6 @@ struct ProfileOverviewView: View {
     @ObservedObject private var photoVM: ProfilePhotoViewModel
 
     @State private var showScanningSettings = false
-    @State private var showQuickChatSettings = false
     @State private var showInfoSheet = false
     @State private var showLogoutOptions = false
     @State private var showBlockedProfiles = false
@@ -22,8 +21,6 @@ struct ProfileOverviewView: View {
     @State private var isWorking = false
     @State private var notificationAuthorizationStatus:
         UNAuthorizationStatus = .notDetermined
-    @AppStorage(Keys.isQuickChatEnabled.rawValue)
-    private var isQuickChatEnabled = false
 
     init(
         authCodeViewModel: CodeViewModel,
@@ -106,11 +103,6 @@ struct ProfileOverviewView: View {
             ScanningSettingsSheet()
                 .environmentObject(coordinator)
                 .environmentObject(coordinator.peopleViewModel)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showQuickChatSettings) {
-            QuickChatSettingsSheet(isEnabled: $isQuickChatEnabled)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -248,16 +240,6 @@ struct ProfileOverviewView: View {
             Divider().padding(.leading, 60)
 
             ProfileOverviewRow(
-                title: Inc.Settings.quickChat.localized,
-                systemImage: "paperplane",
-                value: quickChatStatusTitle
-            ) {
-                showQuickChatSettings = true
-            }
-
-            Divider().padding(.leading, 60)
-
-            ProfileOverviewRow(
                 title: Inc.NearbyProfile.blockedMenu.localized,
                 systemImage: "person.crop.circle.badge.xmark",
                 value: blockedProfilesStatusTitle
@@ -324,12 +306,6 @@ struct ProfileOverviewView: View {
             : Inc.Settings.statusOff.localized
     }
 
-    private var quickChatStatusTitle: String {
-        isQuickChatEnabled
-            ? Inc.Settings.statusOn.localized
-            : Inc.Settings.statusOff.localized
-    }
-
     private var blockedProfilesStatusTitle: String {
         let count = peopleViewModel.blockedProfiles.count
         return count == 0
@@ -383,57 +359,6 @@ struct ProfileOverviewView: View {
             } catch {
                 isWorking = false
                 showDeleteError = true
-            }
-        }
-    }
-}
-
-private struct QuickChatSettingsSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var isEnabled: Bool
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                Text(Inc.Settings.quickChatDescription.localized)
-                    .telescanDescriptionStyle()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Toggle(
-                    Inc.Settings.quickChat.localized,
-                    isOn: $isEnabled
-                )
-                .font(.body.weight(.medium))
-                .toggleStyle(.switch)
-                .tint(.green)
-                .padding(.horizontal, 14)
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
-                .background(
-                    Color.grOne,
-                    in: RoundedRectangle(cornerRadius: 13)
-                )
-
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 20)
-            .padding(.horizontal, 20)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text(Inc.Settings.quickChat.localized)
-                        .telescanSheetTitleStyle()
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(Inc.Common.close.localized) {
-                        dismiss()
-                    }
-                }
-            }
-            .onChange(of: isEnabled) {
-                UISelectionFeedbackGenerator().selectionChanged()
             }
         }
     }

@@ -50,6 +50,7 @@
 "encounterHistoryEmptyMessage" = "People you meet during the last 24 hours will appear here.";
 "encounterHistoryListDescription" = "People you met during the last 24 hours";
 "encounterHistoryClear" = "Clear history";
+"encounterHistoryDelete" = "Delete";
 "encounterHistoryClearTitle" = "Clear encounter history?";
 "encounterHistoryClearMessage" = "All encounters saved on this device will be removed.";
 "encounterHistoryLastSeenFormat" = "Met %@";
@@ -117,8 +118,6 @@
 /* Settings */
 "settingsStatusOn" = "On";
 "settingsStatusOff" = "Off";
-"settingsQuickChat" = "Quick Chat";
-"settingsQuickChatDescription" = "When Quick Chat is on, tapping a user opens your chat with them directly in Telegram.";
 
 /* Scanning */
 "nearbyEmptyTitle" = "No one nearby yet";
@@ -143,9 +142,11 @@
 
 /* Nearby profile moderation */
 "nearbyProfileClose" = "Close profile";
+"nearbyProfileOpenCard" = "Open profile card";
 "nearbyProfileActions" = "Profile actions";
 "nearbyProfileWrite" = "Write";
 "nearbyProfileTelegramChat" = "Telegram Chat";
+"nearbyProfileNoInformation" = "Message on Telegram";
 "nearbyProfileReport" = "Report user";
 "nearbyProfileBlock" = "Block user";
 "nearbyProfileReportTitle" = "Why are you reporting this user?";

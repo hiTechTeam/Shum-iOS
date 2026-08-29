@@ -10,8 +10,7 @@ struct EncounterHistoryView: View {
     @State private var selectedEncounter: EncounterHistoryEntry?
     @State private var photoPreviewUser: NearbyUser?
     @State private var showsClearConfirmation = false
-    @AppStorage(Keys.isQuickChatEnabled.rawValue)
-    private var isQuickChatEnabled = false
+    @State private var relativeTimeReference = Date()
 
     var body: some View {
         ZStack {
@@ -67,6 +66,7 @@ struct EncounterHistoryView: View {
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             peopleViewModel.refreshEncounterHistory()
+            relativeTimeReference = Date()
         }
         .onChange(of: peopleViewModel.encounterHistory.map(\.id)) { _, ids in
             if let selectedEncounter,
@@ -99,6 +99,7 @@ struct EncounterHistoryView: View {
             ForEach(peopleViewModel.encounterHistory) { encounter in
                 EncounterHistoryRow(
                     encounter: encounter,
+                    relativeTimeReference: relativeTimeReference,
                     action: {
                         UIImpactFeedbackGenerator(
                             style: .light
@@ -107,14 +108,37 @@ struct EncounterHistoryView: View {
                     },
                     photoAction: {
                         openPhoto(of: encounter.user)
+                    },
+                    infoAction: {
+                        selectedEncounter = encounter
+                    },
+                    deleteAction: {
+                        deleteEncounter(encounter)
                     }
+                )
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        deleteEncounter(encounter)
+                    } label: {
+                        Label(
+                            Inc.EncounterHistory.delete.localized,
+                            systemImage: "trash"
+                        )
+                    }
+                }
+                .listRowSeparator(.hidden, edges: .bottom)
+                .listRowSeparator(
+                    encounter.id == peopleViewModel.encounterHistory.first?.id
+                        ? .hidden
+                        : .visible,
+                    edges: .top
                 )
                 .listRowBackground(Color.clear)
                 .listRowInsets(
                     EdgeInsets(
-                        top: 4,
+                        top: 8,
                         leading: 16,
-                        bottom: 4,
+                        bottom: 8,
                         trailing: 16
                     )
                 )
@@ -126,12 +150,12 @@ struct EncounterHistoryView: View {
         .refreshable {
             await peopleViewModel.synchronizeBlockedProfiles()
             peopleViewModel.refreshEncounterHistory()
+            relativeTimeReference = Date()
         }
     }
 
     private func openEncounter(_ encounter: EncounterHistoryEntry) {
-        guard isQuickChatEnabled,
-              let destination = TelegramChatDestination(
+        guard let destination = TelegramChatDestination(
                 user: encounter.user
               ) else {
             selectedEncounter = encounter
@@ -141,6 +165,12 @@ struct EncounterHistoryView: View {
         openURL(destination.appURL) { accepted in
             guard !accepted else { return }
             openURL(destination.webURL)
+        }
+    }
+
+    private func deleteEncounter(_ encounter: EncounterHistoryEntry) {
+        withAnimation {
+            peopleViewModel.removeEncounterFromHistory(encounter.user)
         }
     }
 
@@ -159,57 +189,89 @@ struct EncounterHistoryView: View {
 
 private struct EncounterHistoryRow: View {
     let encounter: EncounterHistoryEntry
+    let relativeTimeReference: Date
     let action: () -> Void
     let photoAction: () -> Void
+    let infoAction: () -> Void
+    let deleteAction: () -> Void
+
+    private let avatarSize: CGFloat = 52
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Button(action: photoAction) {
-                EncounterHistoryAvatar(user: encounter.user)
+                EncounterHistoryAvatar(
+                    user: encounter.user,
+                    size: avatarSize
+                )
             }
             .buttonStyle(.plain)
             .disabled(!hasPhoto)
             .accessibilityLabel(Inc.Profile.openPhoto.localized)
 
             Button(action: action) {
-                HStack(spacing: 10) {
-                    Text(encounter.user.name)
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(encounter.user.name)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+
+                        Text(profileInformation)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
 
                     Spacer(minLength: 8)
 
                     EncounterRelativeTimeText(
                         date: encounter.lastSeen,
+                        relativeTo: relativeTimeReference,
                         includesMetPrefix: true
                     )
-                    .font(.caption)
+                    .font(.system(size: 14))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.trailing)
                     .lineLimit(1)
                 }
-                .frame(maxWidth: .infinity, minHeight: 44)
+                .frame(maxWidth: .infinity, minHeight: avatarSize)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(encounter.user.name)
+
+            ProfileInfoButton(action: infoAction)
         }
         .frame(maxWidth: .infinity)
-        .frame(minHeight: 44)
+        .frame(minHeight: avatarSize)
+        .profileRowContextMenu(
+            user: encounter.user,
+            lastMetAt: encounter.lastSeen,
+            relativeTimeReference: relativeTimeReference,
+            writeAction: action,
+            deleteAction: deleteAction
+        )
     }
 
     private var hasPhoto: Bool {
         guard let photoURL = encounter.user.photoURL else { return false }
         return URL(string: photoURL) != nil
     }
+
+    private var profileInformation: String {
+        let bio = encounter.user.bio?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ) ?? ""
+        return bio.isEmpty
+            ? Inc.NearbyProfile.noInformation.localized
+            : bio
+    }
 }
 
 private struct EncounterHistoryAvatar: View {
     let user: NearbyUser
-
-    private let size: CGFloat = 40
+    let size: CGFloat
 
     var body: some View {
         Group {
@@ -237,12 +299,11 @@ private struct EncounterHistoryAvatar: View {
 
 struct EncounterRelativeTimeText: View {
     let date: Date
+    let relativeTo: Date
     var includesMetPrefix = false
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-            Text(label(relativeTo: context.date))
-        }
+        Text(label(relativeTo: relativeTo))
     }
 
     private func label(relativeTo now: Date) -> String {

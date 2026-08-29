@@ -43,9 +43,6 @@ struct Inc {
     struct Settings {
         static let statusOn: String = "settingsStatusOn"
         static let statusOff: String = "settingsStatusOff"
-        static let quickChat: String = "settingsQuickChat"
-        static let quickChatDescription: String =
-            "settingsQuickChatDescription"
     }
     
     // MARK: - Tabs
@@ -115,6 +112,7 @@ struct Inc {
         static let listDescription: String =
             "encounterHistoryListDescription"
         static let clear: String = "encounterHistoryClear"
+        static let delete: String = "encounterHistoryDelete"
         static let clearTitle: String = "encounterHistoryClearTitle"
         static let clearMessage: String = "encounterHistoryClearMessage"
         static let lastSeenFormat: String = "encounterHistoryLastSeenFormat"
@@ -267,9 +265,11 @@ struct Inc {
     // MARK: - Nearby profile moderation
     struct NearbyProfile {
         static let close: String = "nearbyProfileClose"
+        static let openCard: String = "nearbyProfileOpenCard"
         static let actions: String = "nearbyProfileActions"
         static let write: String = "nearbyProfileWrite"
         static let telegramChat: String = "nearbyProfileTelegramChat"
+        static let noInformation: String = "nearbyProfileNoInformation"
         static let report: String = "nearbyProfileReport"
         static let block: String = "nearbyProfileBlock"
 
@@ -428,7 +428,6 @@ enum Keys: String {
     case bioKey = "bio"
     case photoS3URLKey = "photoS3Url"
     case isScaning = "isScaning"
-    case isQuickChatEnabled = "isQuickChatEnabled"
     case isReg = "isReg"
 }
 

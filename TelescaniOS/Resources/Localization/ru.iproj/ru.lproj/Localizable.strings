@@ -50,6 +50,7 @@
 "encounterHistoryEmptyMessage" = "Здесь появятся люди, которых вы встретили за последние 24 часа.";
 "encounterHistoryListDescription" = "Люди, которых вы встречали за последние 24 часа";
 "encounterHistoryClear" = "Очистить историю";
+"encounterHistoryDelete" = "Удалить";
 "encounterHistoryClearTitle" = "Очистить историю встреч?";
 "encounterHistoryClearMessage" = "Все сохранённые на этом устройстве встречи будут удалены.";
 "encounterHistoryLastSeenFormat" = "Виделись %@";
@@ -117,8 +118,6 @@
 /* Настройки */
 "settingsStatusOn" = "Вкл";
 "settingsStatusOff" = "Выкл";
-"settingsQuickChat" = "Быстрый чат";
-"settingsQuickChatDescription" = "Когда быстрый чат включён, нажатие на пользователя сразу открывает чат с ним в Telegram.";
 
 /* Scanning */
 "nearbyEmptyTitle" = "Пока никого";
@@ -143,9 +142,11 @@
 
 /* Модерация профиля пользователя рядом */
 "nearbyProfileClose" = "Закрыть профиль";
+"nearbyProfileOpenCard" = "Открыть карточку";
 "nearbyProfileActions" = "Действия с профилем";
 "nearbyProfileWrite" = "Написать";
 "nearbyProfileTelegramChat" = "Чат Telegram";
+"nearbyProfileNoInformation" = "Пишите в Telegram";
 "nearbyProfileReport" = "Пожаловаться";
 "nearbyProfileBlock" = "Заблокировать";
 "nearbyProfileReportTitle" = "Почему вы хотите пожаловаться?";
