@@ -3,7 +3,6 @@ import Kingfisher
 import UIKit
 
 struct PeopleView: View {
-    @Environment(\.openURL) private var openURL
     @EnvironmentObject var coordinator: AppCoordinator
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
@@ -12,6 +11,8 @@ struct PeopleView: View {
     @State private var selectedUser: NearbyUser?
     @State private var photoPreviewUser: NearbyUser?
     @State private var moderationRequest: ProfileModerationRequest?
+    @State private var telegramTransitionRequest: TelegramTransitionRequest?
+    @State private var showsEncounterHistory = false
 
     var body: some View {
         ZStack {
@@ -70,7 +71,8 @@ struct PeopleView: View {
                                         user: user,
                                         waitsForTransientUI: true
                                     )
-                                }
+                                },
+                                isSwipeSurfaceEnabled: !showsEncounterHistory
                             )
                             .listRowInsets(
                                 EdgeInsets()
@@ -79,6 +81,7 @@ struct PeopleView: View {
                             .listRowBackground(Color.clear)
                         }
                     }
+                    .coordinateSpace(name: ProfileRowCoordinateSpace.nearby)
                     .listStyle(.plain)
                     .environment(\.defaultMinListRowHeight, 0)
                     .scrollContentBackground(.hidden)
@@ -98,9 +101,8 @@ struct PeopleView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    EncounterHistoryView()
-                        .environmentObject(peopleViewModel)
+                Button {
+                    showsEncounterHistory = true
                 } label: {
                     EncounterHistoryToolbarIcon(
                         hasEncounters: !peopleViewModel.encounterHistory.isEmpty
@@ -108,6 +110,10 @@ struct PeopleView: View {
                 }
                 .accessibilityLabel(Inc.PeopleFilters.historyButton.localized)
             }
+        }
+        .navigationDestination(isPresented: $showsEncounterHistory) {
+            EncounterHistoryView()
+                .environmentObject(peopleViewModel)
         }
         .onChange(of: scenePhase) {  _, newPhase in
             guard newPhase == .active else {
@@ -135,6 +141,7 @@ struct PeopleView: View {
                 .presentationDragIndicator(.visible)
         }
         .nearbyUserPhotoPreview(user: $photoPreviewUser)
+        .telegramTransitionAlert(request: $telegramTransitionRequest)
         .profileModerationDialog(request: $moderationRequest)
         .task {
             await peopleViewModel.synchronizeBlockedProfiles()
@@ -148,10 +155,9 @@ struct PeopleView: View {
             return
         }
 
-        openURL(destination.appURL) { accepted in
-            guard !accepted else { return }
-            openURL(destination.webURL)
-        }
+        telegramTransitionRequest = TelegramTransitionRequest(
+            destination: destination
+        )
     }
 
     private func openPhoto(of user: NearbyUser) {
@@ -236,6 +242,58 @@ struct TelegramChatDestination {
     }
 }
 
+struct TelegramTransitionRequest: Identifiable {
+    let id = UUID()
+    let destination: TelegramChatDestination
+}
+
+private struct TelegramTransitionAlertModifier: ViewModifier {
+    @Environment(\.openURL) private var openURL
+
+    @Binding var request: TelegramTransitionRequest?
+
+    private var isPresented: Binding<Bool> {
+        Binding(
+            get: { request != nil },
+            set: { isPresented in
+                if !isPresented {
+                    request = nil
+                }
+            }
+        )
+    }
+
+    func body(content: Content) -> some View {
+        content.alert(
+            Inc.NearbyProfile.telegramTransitionTitle.localized,
+            isPresented: isPresented,
+            presenting: request
+        ) { request in
+            Button(Inc.Common.cancel.localized, role: .cancel) { }
+            Button(Inc.NearbyProfile.telegramTransitionContinue.localized) {
+                open(request.destination)
+            }
+        } message: { _ in
+            Text(Inc.NearbyProfile.telegramTransitionMessage.localized)
+        }
+    }
+
+    private func open(_ destination: TelegramChatDestination) {
+        openURL(destination.appURL) { accepted in
+            guard !accepted else { return }
+            openURL(destination.webURL)
+        }
+    }
+}
+
+extension View {
+    func telegramTransitionAlert(
+        request: Binding<TelegramTransitionRequest?>
+    ) -> some View {
+        modifier(TelegramTransitionAlertModifier(request: request))
+    }
+}
+
 private struct EncounterHistoryToolbarIcon: View {
     let hasEncounters: Bool
 
@@ -253,6 +311,7 @@ struct ProfileAvatarButton: View {
     let infoAction: () -> Void
     let blockAction: () -> Void
     let swipeBlockAction: () -> Void
+    let isSwipeSurfaceEnabled: Bool
 
     private let avatarSize: CGFloat = 52
 
@@ -306,7 +365,10 @@ struct ProfileAvatarButton: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background {
-            ProfileRowSwipeBackground()
+            ProfileRowSwipeBackground(
+                coordinateSpace: .nearby,
+                isEnabled: isSwipeSurfaceEnabled
+            )
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button {
@@ -366,8 +428,16 @@ struct ProfileAvatarButton: View {
     }
 }
 
+enum ProfileRowCoordinateSpace: Hashable {
+    case nearby
+    case history
+}
+
 struct ProfileRowSwipeBackground: View {
     @Environment(\.colorScheme) private var colorScheme
+
+    let coordinateSpace: ProfileRowCoordinateSpace
+    var isEnabled = true
 
     private var surfaceColor: Color {
         colorScheme == .dark
@@ -377,7 +447,10 @@ struct ProfileRowSwipeBackground: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let isVisible = geometry.frame(in: .global).minX < -0.5
+            let isVisible = isEnabled
+                && geometry.frame(
+                    in: .named(coordinateSpace)
+                ).minX < -0.5
 
             RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .fill(surfaceColor)
@@ -433,43 +506,45 @@ struct ProfileRowContextMenuModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contextMenu {
-                Button {
-                    writeAction()
-                } label: {
-                    Label(
-                        Inc.NearbyProfile.write.localized,
-                        systemImage: "paperplane"
-                    )
-                    .foregroundStyle(.primary)
-                }
-                .tint(.primary)
+                Group {
+                    Button {
+                        writeAction()
+                    } label: {
+                        Label(
+                            Inc.NearbyProfile.write.localized,
+                            systemImage: "paperplane"
+                        )
+                        .foregroundStyle(.primary)
+                    }
+                    .tint(.primary)
 
-                Divider()
-
-                Button(role: .destructive) {
-                    blockAction()
-                } label: {
-                    Label(
-                        Inc.NearbyProfile.block.localized,
-                        systemImage: "person.crop.circle.badge.xmark"
-                    )
-                    .foregroundStyle(.red)
-                }
-                .tint(.red)
-
-                if let deleteAction {
                     Divider()
 
                     Button(role: .destructive) {
-                        deleteAction()
+                        blockAction()
                     } label: {
                         Label(
-                            Inc.EncounterHistory.delete.localized,
-                            systemImage: "trash"
+                            Inc.NearbyProfile.block.localized,
+                            systemImage: "person.crop.circle.badge.xmark"
                         )
                         .foregroundStyle(.red)
                     }
                     .tint(.red)
+
+                    if let deleteAction {
+                        Divider()
+
+                        Button(role: .destructive) {
+                            deleteAction()
+                        } label: {
+                            Label(
+                                Inc.EncounterHistory.delete.localized,
+                                systemImage: "trash"
+                            )
+                            .foregroundStyle(.red)
+                        }
+                        .tint(.red)
+                    }
                 }
             } preview: {
                 ProfileRowContextPreview(
@@ -870,6 +945,25 @@ private struct ProfileRowContextPreview: View {
     let distanceMeters: Int?
 
     private let avatarSize: CGFloat = 52
+    private let horizontalPadding: CGFloat = 16
+    private let verticalPadding: CGFloat = 10
+
+    private var sourceWidth: CGFloat {
+        UIScreen.main.bounds.width
+    }
+
+    private var previewWidth: CGFloat {
+        min(sourceWidth, max(320, sourceWidth - 32))
+    }
+
+    private var previewScale: CGFloat {
+        guard sourceWidth > 0 else { return 1 }
+        return previewWidth / sourceWidth
+    }
+
+    private var sourceHeight: CGFloat {
+        avatarSize + verticalPadding * 2
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -900,12 +994,17 @@ private struct ProfileRowContextPreview: View {
                     in: Circle()
                 )
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(width: max(320, UIScreen.main.bounds.width - 32))
+        .padding(.horizontal, horizontalPadding)
+        .padding(.vertical, verticalPadding)
+        .frame(width: sourceWidth, height: sourceHeight)
         .background(
             Color(uiColor: .systemBackground),
             in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+        )
+        .scaleEffect(previewScale)
+        .frame(
+            width: previewWidth,
+            height: sourceHeight * previewScale
         )
     }
 

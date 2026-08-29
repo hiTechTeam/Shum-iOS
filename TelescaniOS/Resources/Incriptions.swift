@@ -269,6 +269,12 @@ struct Inc {
         static let actions: String = "nearbyProfileActions"
         static let write: String = "nearbyProfileWrite"
         static let telegramChat: String = "nearbyProfileTelegramChat"
+        static let telegramTransitionTitle: String =
+            "nearbyProfileTelegramTransitionTitle"
+        static let telegramTransitionMessage: String =
+            "nearbyProfileTelegramTransitionMessage"
+        static let telegramTransitionContinue: String =
+            "nearbyProfileTelegramTransitionContinue"
         static let noInformation: String = "nearbyProfileNoInformation"
         static let report: String = "nearbyProfileReport"
         static let block: String = "nearbyProfileBlock"

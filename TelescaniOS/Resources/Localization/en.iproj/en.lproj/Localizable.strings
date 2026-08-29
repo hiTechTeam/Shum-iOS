@@ -146,6 +146,9 @@
 "nearbyProfileActions" = "Profile actions";
 "nearbyProfileWrite" = "Write";
 "nearbyProfileTelegramChat" = "Telegram Chat";
+"nearbyProfileTelegramTransitionTitle" = "Continue in Telegram?";
+"nearbyProfileTelegramTransitionMessage" = "The conversation will continue in the Telegram app.";
+"nearbyProfileTelegramTransitionContinue" = "Continue";
 "nearbyProfileNoInformation" = "Message on Telegram";
 "nearbyProfileReport" = "Report user";
 "nearbyProfileBlock" = "Block user";

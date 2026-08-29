@@ -3,7 +3,6 @@ import Kingfisher
 import UIKit
 
 struct EncounterHistoryView: View {
-    @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
@@ -12,6 +11,7 @@ struct EncounterHistoryView: View {
     @State private var showsClearConfirmation = false
     @State private var relativeTimeReference = Date()
     @State private var moderationRequest: ProfileModerationRequest?
+    @State private var telegramTransitionRequest: TelegramTransitionRequest?
 
     var body: some View {
         ZStack {
@@ -53,6 +53,7 @@ struct EncounterHistoryView: View {
             .presentationDragIndicator(.visible)
         }
         .nearbyUserPhotoPreview(user: $photoPreviewUser)
+        .telegramTransitionAlert(request: $telegramTransitionRequest)
         .profileModerationDialog(request: $moderationRequest)
         .alert(
             Inc.EncounterHistory.clearTitle.localized,
@@ -137,6 +138,7 @@ struct EncounterHistoryView: View {
                 )
             }
         }
+        .coordinateSpace(name: ProfileRowCoordinateSpace.history)
         .listStyle(.plain)
         .environment(\.defaultMinListRowHeight, 0)
         .scrollContentBackground(.hidden)
@@ -155,10 +157,9 @@ struct EncounterHistoryView: View {
             return
         }
 
-        openURL(destination.appURL) { accepted in
-            guard !accepted else { return }
-            openURL(destination.webURL)
-        }
+        telegramTransitionRequest = TelegramTransitionRequest(
+            destination: destination
+        )
     }
 
     private func deleteEncounter(_ encounter: EncounterHistoryEntry) {
@@ -243,7 +244,7 @@ private struct EncounterHistoryRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background {
-            ProfileRowSwipeBackground()
+            ProfileRowSwipeBackground(coordinateSpace: .history)
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button {
