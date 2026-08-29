@@ -243,6 +243,8 @@ struct ProfileAvatarButton: View {
     let photoAction: () -> Void
     let infoAction: () -> Void
 
+    @State private var moderationRequest: ProfileRowModerationRequest?
+
     private let avatarSize: CGFloat = 52
 
     var body: some View {
@@ -292,7 +294,32 @@ struct ProfileAvatarButton: View {
             ProfileInfoButton(action: infoAction)
         }
         .frame(maxWidth: .infinity, minHeight: avatarSize)
-        .profileRowContextMenu(user: user, writeAction: action)
+        .profileRowContextMenu(
+            user: user,
+            writeAction: action,
+            moderationRequest: $moderationRequest
+        )
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                moderationRequest = .block
+            } label: {
+                Label(
+                    Inc.NearbyProfile.block.localized,
+                    systemImage: "person.crop.circle.badge.xmark"
+                )
+            }
+            .tint(.red)
+
+            Button(role: .destructive) {
+                moderationRequest = .report
+            } label: {
+                Label(
+                    Inc.NearbyProfile.report.localized,
+                    systemImage: "exclamationmark.bubble"
+                )
+            }
+            .tint(.red)
+        }
     }
 
     private var hasPhoto: Bool {
@@ -357,6 +384,11 @@ struct ProfileInfoButton: View {
     }
 }
 
+enum ProfileRowModerationRequest: Equatable {
+    case report
+    case block
+}
+
 struct ProfileRowContextMenuModifier: ViewModifier {
 
     private enum ModerationDialog {
@@ -388,6 +420,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
     let relativeTimeReference: Date?
     let writeAction: () -> Void
     let deleteAction: (() -> Void)?
+    @Binding var moderationRequest: ProfileRowModerationRequest?
 
     @State private var moderationDialog: ModerationDialog?
     @State private var moderationAlert: ModerationAlert?
@@ -553,6 +586,16 @@ struct ProfileRowContextMenuModifier: ViewModifier {
             } message: {
                 Text(moderationAlertMessage)
             }
+            .onChange(of: moderationRequest) { _, request in
+                guard let request else { return }
+                moderationRequest = nil
+                switch request {
+                case .report:
+                    moderationDialog = .report
+                case .block:
+                    moderationDialog = .block
+                }
+            }
     }
 
     @ViewBuilder
@@ -670,7 +713,8 @@ extension View {
         lastMetAt: Date? = nil,
         relativeTimeReference: Date? = nil,
         writeAction: @escaping () -> Void,
-        deleteAction: (() -> Void)? = nil
+        deleteAction: (() -> Void)? = nil,
+        moderationRequest: Binding<ProfileRowModerationRequest?>
     ) -> some View {
         modifier(
             ProfileRowContextMenuModifier(
@@ -678,7 +722,8 @@ extension View {
                 lastMetAt: lastMetAt,
                 relativeTimeReference: relativeTimeReference,
                 writeAction: writeAction,
-                deleteAction: deleteAction
+                deleteAction: deleteAction,
+                moderationRequest: moderationRequest
             )
         )
     }

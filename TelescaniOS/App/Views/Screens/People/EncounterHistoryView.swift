@@ -116,17 +116,6 @@ struct EncounterHistoryView: View {
                         deleteEncounter(encounter)
                     }
                 )
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button {
-                        deleteEncounter(encounter)
-                    } label: {
-                        Label(
-                            Inc.EncounterHistory.delete.localized,
-                            systemImage: "trash"
-                        )
-                    }
-                    .tint(.gray)
-                }
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
                 .listRowInsets(
@@ -190,6 +179,8 @@ private struct EncounterHistoryRow: View {
     let infoAction: () -> Void
     let deleteAction: () -> Void
 
+    @State private var moderationRequest: ProfileRowModerationRequest?
+
     private let avatarSize: CGFloat = 52
 
     var body: some View {
@@ -245,8 +236,40 @@ private struct EncounterHistoryRow: View {
             lastMetAt: encounter.lastSeen,
             relativeTimeReference: relativeTimeReference,
             writeAction: action,
-            deleteAction: deleteAction
+            deleteAction: deleteAction,
+            moderationRequest: $moderationRequest
         )
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                deleteAction()
+            } label: {
+                Label(
+                    Inc.EncounterHistory.delete.localized,
+                    systemImage: "trash"
+                )
+            }
+            .tint(.gray)
+
+            Button(role: .destructive) {
+                moderationRequest = .block
+            } label: {
+                Label(
+                    Inc.NearbyProfile.block.localized,
+                    systemImage: "person.crop.circle.badge.xmark"
+                )
+            }
+            .tint(.red)
+
+            Button(role: .destructive) {
+                moderationRequest = .report
+            } label: {
+                Label(
+                    Inc.NearbyProfile.report.localized,
+                    systemImage: "exclamationmark.bubble"
+                )
+            }
+            .tint(.red)
+        }
     }
 
     private var hasPhoto: Bool {
