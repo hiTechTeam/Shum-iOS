@@ -259,16 +259,6 @@ private struct EncounterHistoryRow: View {
                 )
             }
             .tint(.red)
-
-            Button(role: .destructive) {
-                moderationRequest = .report
-            } label: {
-                Label(
-                    Inc.NearbyProfile.report.localized,
-                    systemImage: "exclamationmark.bubble"
-                )
-            }
-            .tint(.red)
         }
     }
 

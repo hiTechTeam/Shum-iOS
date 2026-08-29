@@ -291,6 +291,8 @@ struct Inc {
         static let blockTitle: String = "nearbyProfileBlockTitle"
         static let blockMessage: String = "nearbyProfileBlockMessage"
         static let blockConfirm: String = "nearbyProfileBlockConfirm"
+        static let blockWithoutReport: String =
+            "nearbyProfileBlockWithoutReport"
         static let blockedMenu: String = "nearbyProfileBlockedMenu"
         static let blockedProfiles: String = "nearbyProfileBlockedProfiles"
         static let noBlockedProfiles: String = "nearbyProfileNoBlockedProfiles"

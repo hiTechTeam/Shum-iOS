@@ -309,16 +309,6 @@ struct ProfileAvatarButton: View {
                 )
             }
             .tint(.red)
-
-            Button(role: .destructive) {
-                moderationRequest = .report
-            } label: {
-                Label(
-                    Inc.NearbyProfile.report.localized,
-                    systemImage: "exclamationmark.bubble"
-                )
-            }
-            .tint(.red)
         }
     }
 
@@ -385,28 +375,23 @@ struct ProfileInfoButton: View {
 }
 
 enum ProfileRowModerationRequest: Equatable {
-    case report
     case block
 }
 
 struct ProfileRowContextMenuModifier: ViewModifier {
 
     private enum ModerationDialog {
-        case report
         case block
     }
 
     private enum ModerationAlert: Identifiable {
         case reportConfirmation(ReportReason)
-        case reportSent
         case error
 
         var id: String {
             switch self {
             case .reportConfirmation(let reason):
                 "report-confirmation-\(reason.rawValue)"
-            case .reportSent:
-                "report-sent"
             case .error:
                 "error"
             }
@@ -440,8 +425,6 @@ struct ProfileRowContextMenuModifier: ViewModifier {
 
     private var moderationDialogTitle: String {
         switch moderationDialog {
-        case .report:
-            Inc.NearbyProfile.reportTitle.localized
         case .block:
             Inc.NearbyProfile.blockTitle.localized
         case nil:
@@ -451,8 +434,6 @@ struct ProfileRowContextMenuModifier: ViewModifier {
 
     private var moderationDialogMessage: String {
         switch moderationDialog {
-        case .report:
-            Inc.NearbyProfile.reportMessage.localized
         case .block:
             Inc.NearbyProfile.blockMessage.localized
         case nil:
@@ -476,8 +457,6 @@ struct ProfileRowContextMenuModifier: ViewModifier {
         switch moderationAlert {
         case .reportConfirmation:
             Inc.NearbyProfile.reportConfirmTitle.localized
-        case .reportSent:
-            Inc.NearbyProfile.reportSentTitle.localized
         case .error:
             Inc.NearbyProfile.actionFailedTitle.localized
         case nil:
@@ -492,8 +471,6 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                 Inc.NearbyProfile.reportConfirmMessage.localized,
                 reportReasonTitle(reason)
             )
-        case .reportSent:
-            Inc.NearbyProfile.reportSentMessage.localized
         case .error:
             Inc.NearbyProfile.actionFailedMessage.localized
         case nil:
@@ -516,17 +493,6 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                 .tint(.primary)
 
                 Divider()
-
-                Button(role: .destructive) {
-                    moderationDialog = .report
-                } label: {
-                    Label(
-                        Inc.NearbyProfile.report.localized,
-                        systemImage: "exclamationmark.bubble"
-                    )
-                    .foregroundStyle(.red)
-                }
-                .tint(.red)
 
                 Button(role: .destructive) {
                     moderationDialog = .block
@@ -590,8 +556,6 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                 guard let request else { return }
                 moderationRequest = nil
                 switch request {
-                case .report:
-                    moderationDialog = .report
                 case .block:
                     moderationDialog = .block
                 }
@@ -601,30 +565,37 @@ struct ProfileRowContextMenuModifier: ViewModifier {
     @ViewBuilder
     private var moderationDialogActions: some View {
         switch moderationDialog {
-        case .report:
-            Button(Inc.NearbyProfile.reportSpam.localized) {
-                confirmReport(.spam)
-            }
-            Button(Inc.NearbyProfile.reportHarassment.localized) {
-                confirmReport(.harassment)
-            }
-            Button(Inc.NearbyProfile.reportInappropriate.localized) {
-                confirmReport(.inappropriate)
-            }
-            Button(Inc.NearbyProfile.reportImpersonation.localized) {
-                confirmReport(.impersonation)
-            }
-            Button(Inc.NearbyProfile.reportOther.localized) {
-                confirmReport(.other)
-            }
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
         case .block:
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
             Button(
-                Inc.NearbyProfile.blockConfirm.localized,
+                Inc.NearbyProfile.blockWithoutReport.localized,
                 role: .destructive,
                 action: submitBlock
             )
+            Button(Inc.NearbyProfile.reportSpam.localized, role: .destructive) {
+                confirmReport(.spam)
+            }
+            Button(
+                Inc.NearbyProfile.reportHarassment.localized,
+                role: .destructive
+            ) {
+                confirmReport(.harassment)
+            }
+            Button(
+                Inc.NearbyProfile.reportInappropriate.localized,
+                role: .destructive
+            ) {
+                confirmReport(.inappropriate)
+            }
+            Button(
+                Inc.NearbyProfile.reportImpersonation.localized,
+                role: .destructive
+            ) {
+                confirmReport(.impersonation)
+            }
+            Button(Inc.NearbyProfile.reportOther.localized, role: .destructive) {
+                confirmReport(.other)
+            }
+            Button(Inc.Common.cancel.localized, role: .cancel) { }
         case nil:
             EmptyView()
         }
@@ -640,9 +611,9 @@ struct ProfileRowContextMenuModifier: ViewModifier {
             )
             Button(Inc.Common.cancel.localized, role: .cancel) { }
             Button(Inc.NearbyProfile.reportSend.localized, role: .destructive) {
-                submitReport(reason: reason)
+                submitReportAndBlock(reason: reason)
             }
-        case .reportSent, .error:
+        case .error:
             Button(Inc.NearbyProfile.acknowledge.localized, role: .cancel) { }
         case nil:
             EmptyView()
@@ -655,7 +626,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
         moderationAlert = .reportConfirmation(reason)
     }
 
-    private func submitReport(reason: ReportReason) {
+    private func submitReportAndBlock(reason: ReportReason) {
         let details = reportDetails.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
@@ -667,9 +638,15 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                     reason: reason,
                     details: details.isEmpty ? nil : details
                 )
+            } catch {
+                // Blocking remains the primary safety action even if the
+                // report request cannot be delivered.
+            }
+
+            do {
+                try await peopleViewModel.block(user)
                 isSubmitting = false
                 reportDetails = ""
-                moderationAlert = .reportSent
             } catch {
                 isSubmitting = false
                 moderationAlert = .error
@@ -1083,170 +1060,10 @@ struct ProfileSheetView: View {
 }
 
 private struct ProfileSheetControls: View {
-
-    private enum ModerationDialog {
-        case report
-        case block
-    }
-
-    private enum ModerationAlert: Identifiable {
-        case reportConfirmation(ReportReason)
-        case reportSent
-        case error
-
-        var id: String {
-            switch self {
-            case .reportConfirmation(let reason):
-                "report-confirmation-\(reason.rawValue)"
-            case .reportSent:
-                "report-sent"
-            case .error:
-                "error"
-            }
-        }
-    }
-
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
     let user: NearbyUser
     let lastMetAt: Date?
-
-    @State private var moderationDialog: ModerationDialog?
-    @State private var moderationAlert: ModerationAlert?
-    @State private var reportDetails = ""
-    @State private var isSubmitting = false
-
-    private var isModerationDialogPresented: Binding<Bool> {
-        Binding(
-            get: { moderationDialog != nil },
-            set: { isPresented in
-                if !isPresented {
-                    moderationDialog = nil
-                }
-            }
-        )
-    }
-
-    private var moderationDialogTitle: String {
-        switch moderationDialog {
-        case .report:
-            Inc.NearbyProfile.reportTitle.localized
-        case .block:
-            Inc.NearbyProfile.blockTitle.localized
-        case nil:
-            ""
-        }
-    }
-
-    private var moderationDialogMessage: String {
-        switch moderationDialog {
-        case .report:
-            Inc.NearbyProfile.reportMessage.localized
-        case .block:
-            Inc.NearbyProfile.blockMessage.localized
-        case nil:
-            ""
-        }
-    }
-
-    private var isModerationAlertPresented: Binding<Bool> {
-        Binding(
-            get: { moderationAlert != nil },
-            set: { isPresented in
-                if !isPresented {
-                    moderationAlert = nil
-                    reportDetails = ""
-                }
-            }
-        )
-    }
-
-    private var moderationAlertTitle: String {
-        switch moderationAlert {
-        case .reportConfirmation:
-            Inc.NearbyProfile.reportConfirmTitle.localized
-        case .reportSent:
-            Inc.NearbyProfile.reportSentTitle.localized
-        case .error:
-            Inc.NearbyProfile.actionFailedTitle.localized
-        case nil:
-            ""
-        }
-    }
-
-    private var moderationAlertMessage: String {
-        switch moderationAlert {
-        case .reportConfirmation(let reason):
-            String.localizedStringWithFormat(
-                Inc.NearbyProfile.reportConfirmMessage.localized,
-                reportReasonTitle(reason)
-            )
-        case .reportSent:
-            Inc.NearbyProfile.reportSentMessage.localized
-        case .error:
-            Inc.NearbyProfile.actionFailedMessage.localized
-        case nil:
-            ""
-        }
-    }
-
-    private var moderationMenu: some View {
-        Menu {
-            Button(role: .destructive) {
-                moderationDialog = .report
-            } label: {
-                Label(
-                    Inc.NearbyProfile.report.localized,
-                    systemImage: "exclamationmark.bubble"
-                )
-                .foregroundStyle(.red)
-            }
-            .tint(.red)
-
-            Button(role: .destructive) {
-                moderationDialog = .block
-            } label: {
-                Label(
-                    Inc.NearbyProfile.block.localized,
-                    systemImage: "person.crop.circle.badge.xmark"
-                )
-                .foregroundStyle(.red)
-            }
-            .tint(.red)
-        } label: {
-            Group {
-                if isSubmitting {
-                    ProgressView()
-                        .tint(.primary)
-                } else {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(.primary)
-                }
-            }
-            .frame(width: 44, height: 44)
-            .contentShape(Circle())
-        }
-        .menuOrder(.fixed)
-        .disabled(isSubmitting)
-        .accessibilityLabel(Inc.NearbyProfile.actions.localized)
-    }
-
-    @ViewBuilder
-    private var actionGroup: some View {
-        if #available(iOS 26.0, *) {
-            moderationMenu
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .tint(.primary)
-        } else {
-            moderationMenu
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.circle)
-                .tint(.primary)
-        }
-    }
 
     private var presenceInfo: some View {
         Group {
@@ -1275,144 +1092,13 @@ private struct ProfileSheetControls: View {
         .frame(width: 360, height: 44, alignment: .leading)
     }
 
-    @ViewBuilder
-    private var moderationDialogActions: some View {
-        switch moderationDialog {
-        case .report:
-            Button(Inc.NearbyProfile.reportSpam.localized) {
-                confirmReport(.spam)
-            }
-            Button(Inc.NearbyProfile.reportHarassment.localized) {
-                confirmReport(.harassment)
-            }
-            Button(Inc.NearbyProfile.reportInappropriate.localized) {
-                confirmReport(.inappropriate)
-            }
-            Button(Inc.NearbyProfile.reportImpersonation.localized) {
-                confirmReport(.impersonation)
-            }
-            Button(Inc.NearbyProfile.reportOther.localized) {
-                confirmReport(.other)
-            }
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-        case .block:
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-            Button(Inc.NearbyProfile.blockConfirm.localized, role: .destructive) {
-                submitBlock()
-            }
-        case nil:
-            EmptyView()
-        }
-    }
-
-    private func confirmReport(_ reason: ReportReason) {
-        moderationDialog = nil
-        reportDetails = ""
-        moderationAlert = .reportConfirmation(reason)
-    }
-
-    private func submitReport(reason: ReportReason) {
-        let details = reportDetails
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        isSubmitting = true
-        Task {
-            do {
-                try await peopleViewModel.submitReport(
-                    for: user,
-                    reason: reason,
-                    details: details.isEmpty ? nil : details
-                )
-                isSubmitting = false
-                reportDetails = ""
-                moderationAlert = .reportSent
-            } catch {
-                isSubmitting = false
-                moderationAlert = .error
-            }
-        }
-    }
-
-    private func submitBlock() {
-        moderationDialog = nil
-        isSubmitting = true
-        Task {
-            do {
-                try await peopleViewModel.block(user)
-                isSubmitting = false
-                dismiss()
-            } catch {
-                isSubmitting = false
-                moderationAlert = .error
-            }
-        }
-    }
-
-    private func reportReasonTitle(_ reason: ReportReason) -> String {
-        switch reason {
-        case .spam:
-            Inc.NearbyProfile.reportSpam.localized
-        case .harassment:
-            Inc.NearbyProfile.reportHarassment.localized
-        case .inappropriate:
-            Inc.NearbyProfile.reportInappropriate.localized
-        case .impersonation:
-            Inc.NearbyProfile.reportImpersonation.localized
-        case .other:
-            Inc.NearbyProfile.reportOther.localized
-        }
-    }
-
-    @ViewBuilder
-    private var moderationAlertActions: some View {
-        switch moderationAlert {
-        case .reportConfirmation(let reason):
-            TextField(
-                Inc.NearbyProfile.reportDetailsPlaceholder.localized,
-                text: $reportDetails
-            )
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-            Button(Inc.NearbyProfile.reportSend.localized, role: .destructive) {
-                submitReport(reason: reason)
-            }
-        case .reportSent, .error:
-            Button(Inc.NearbyProfile.acknowledge.localized, role: .cancel) { }
-        case nil:
-            EmptyView()
-        }
-    }
-
     var body: some View {
-        ZStack(alignment: .top) {
-            presenceInfo
-
-            HStack {
-                Spacer()
-                actionGroup
-            }
-            .padding(.horizontal, 8)
-        }
+        presenceInfo
         .padding(.top, 8)
         .frame(
             maxWidth: .infinity,
             maxHeight: .infinity,
             alignment: .top
         )
-        .confirmationDialog(
-            moderationDialogTitle,
-            isPresented: isModerationDialogPresented,
-            titleVisibility: .visible
-        ) {
-            moderationDialogActions
-        } message: {
-            Text(moderationDialogMessage)
-        }
-        .alert(
-            moderationAlertTitle,
-            isPresented: isModerationAlertPresented
-        ) {
-            moderationAlertActions
-        } message: {
-            Text(moderationAlertMessage)
-        }
     }
 }
