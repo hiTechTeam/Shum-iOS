@@ -11,6 +11,7 @@ struct EncounterHistoryView: View {
     @State private var photoPreviewUser: NearbyUser?
     @State private var showsClearConfirmation = false
     @State private var relativeTimeReference = Date()
+    @State private var moderationRequest: ProfileModerationRequest?
 
     var body: some View {
         ZStack {
@@ -52,6 +53,7 @@ struct EncounterHistoryView: View {
             .presentationDragIndicator(.visible)
         }
         .nearbyUserPhotoPreview(user: $photoPreviewUser)
+        .profileModerationDialog(request: $moderationRequest)
         .alert(
             Inc.EncounterHistory.clearTitle.localized,
             isPresented: $showsClearConfirmation
@@ -114,17 +116,24 @@ struct EncounterHistoryView: View {
                     },
                     deleteAction: {
                         deleteEncounter(encounter)
+                    },
+                    blockAction: {
+                        moderationRequest = ProfileModerationRequest(
+                            user: encounter.user,
+                            waitsForTransientUI: false
+                        )
+                    },
+                    swipeBlockAction: {
+                        moderationRequest = ProfileModerationRequest(
+                            user: encounter.user,
+                            waitsForTransientUI: true
+                        )
                     }
                 )
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
                 .listRowInsets(
-                    EdgeInsets(
-                        top: 8,
-                        leading: 16,
-                        bottom: 8,
-                        trailing: 16
-                    )
+                    EdgeInsets()
                 )
             }
         }
@@ -178,8 +187,8 @@ private struct EncounterHistoryRow: View {
     let photoAction: () -> Void
     let infoAction: () -> Void
     let deleteAction: () -> Void
-
-    @State private var moderationRequest: ProfileRowModerationRequest?
+    let blockAction: () -> Void
+    let swipeBlockAction: () -> Void
 
     private let avatarSize: CGFloat = 52
 
@@ -231,14 +240,11 @@ private struct EncounterHistoryRow: View {
         }
         .frame(maxWidth: .infinity)
         .frame(minHeight: avatarSize)
-        .profileRowContextMenu(
-            user: encounter.user,
-            lastMetAt: encounter.lastSeen,
-            relativeTimeReference: relativeTimeReference,
-            writeAction: action,
-            deleteAction: deleteAction,
-            moderationRequest: $moderationRequest
-        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background {
+            ProfileRowSwipeBackground()
+        }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button {
                 deleteAction()
@@ -250,8 +256,8 @@ private struct EncounterHistoryRow: View {
             }
             .tint(.gray)
 
-            Button(role: .destructive) {
-                moderationRequest = .block
+            Button {
+                swipeBlockAction()
             } label: {
                 Label(
                     Inc.NearbyProfile.block.localized,
@@ -260,6 +266,14 @@ private struct EncounterHistoryRow: View {
             }
             .tint(.red)
         }
+        .profileRowContextMenu(
+            user: encounter.user,
+            lastMetAt: encounter.lastSeen,
+            relativeTimeReference: relativeTimeReference,
+            writeAction: action,
+            deleteAction: deleteAction,
+            blockAction: blockAction
+        )
     }
 
     private var hasPhoto: Bool {

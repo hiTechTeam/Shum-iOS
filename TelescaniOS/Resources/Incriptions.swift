@@ -284,6 +284,8 @@ struct Inc {
         static let reportConfirmMessage: String = "nearbyProfileReportConfirmMessage"
         static let reportDetailsPlaceholder: String =
             "nearbyProfileReportDetailsPlaceholder"
+        static let reportDetailsMessage: String =
+            "nearbyProfileReportDetailsMessage"
         static let reportSend: String = "nearbyProfileReportSend"
         static let reportSentTitle: String = "nearbyProfileReportSentTitle"
         static let reportSentMessage: String = "nearbyProfileReportSentMessage"

@@ -11,6 +11,7 @@ struct PeopleView: View {
 
     @State private var selectedUser: NearbyUser?
     @State private var photoPreviewUser: NearbyUser?
+    @State private var moderationRequest: ProfileModerationRequest?
 
     var body: some View {
         ZStack {
@@ -57,15 +58,22 @@ struct PeopleView: View {
                                 user: user,
                                 action: { openUser(user) },
                                 photoAction: { openPhoto(of: user) },
-                                infoAction: { selectedUser = user }
+                                infoAction: { selectedUser = user },
+                                blockAction: {
+                                    moderationRequest = ProfileModerationRequest(
+                                        user: user,
+                                        waitsForTransientUI: false
+                                    )
+                                },
+                                swipeBlockAction: {
+                                    moderationRequest = ProfileModerationRequest(
+                                        user: user,
+                                        waitsForTransientUI: true
+                                    )
+                                }
                             )
                             .listRowInsets(
-                                EdgeInsets(
-                                    top: 8,
-                                    leading: 16,
-                                    bottom: 8,
-                                    trailing: 16
-                                )
+                                EdgeInsets()
                             )
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
@@ -127,6 +135,7 @@ struct PeopleView: View {
                 .presentationDragIndicator(.visible)
         }
         .nearbyUserPhotoPreview(user: $photoPreviewUser)
+        .profileModerationDialog(request: $moderationRequest)
         .task {
             await peopleViewModel.synchronizeBlockedProfiles()
             peopleViewModel.refreshEncounterHistory()
@@ -242,8 +251,8 @@ struct ProfileAvatarButton: View {
     let action: () -> Void
     let photoAction: () -> Void
     let infoAction: () -> Void
-
-    @State private var moderationRequest: ProfileRowModerationRequest?
+    let blockAction: () -> Void
+    let swipeBlockAction: () -> Void
 
     private let avatarSize: CGFloat = 52
 
@@ -294,14 +303,14 @@ struct ProfileAvatarButton: View {
             ProfileInfoButton(action: infoAction)
         }
         .frame(maxWidth: .infinity, minHeight: avatarSize)
-        .profileRowContextMenu(
-            user: user,
-            writeAction: action,
-            moderationRequest: $moderationRequest
-        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background {
+            ProfileRowSwipeBackground()
+        }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                moderationRequest = .block
+            Button {
+                swipeBlockAction()
             } label: {
                 Label(
                     Inc.NearbyProfile.block.localized,
@@ -310,6 +319,11 @@ struct ProfileAvatarButton: View {
             }
             .tint(.red)
         }
+        .profileRowContextMenu(
+            user: user,
+            writeAction: action,
+            blockAction: blockAction
+        )
     }
 
     private var hasPhoto: Bool {
@@ -352,6 +366,24 @@ struct ProfileAvatarButton: View {
     }
 }
 
+struct ProfileRowSwipeBackground: View {
+    var body: some View {
+        GeometryReader { geometry in
+            let isVisible = geometry.frame(in: .global).minX < -0.5
+
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(uiColor: .systemBackground))
+                .opacity(isVisible ? 1 : 0)
+                .animation(
+                    isVisible
+                        ? .easeOut(duration: 0.1)
+                        : .easeOut(duration: 0.6),
+                    value: isVisible
+                )
+        }
+    }
+}
+
 struct ProfileInfoButton: View {
     let action: () -> Void
 
@@ -374,30 +406,13 @@ struct ProfileInfoButton: View {
     }
 }
 
-enum ProfileRowModerationRequest: Equatable {
-    case block
+struct ProfileModerationRequest: Identifiable {
+    let id = UUID()
+    let user: NearbyUser
+    let waitsForTransientUI: Bool
 }
 
 struct ProfileRowContextMenuModifier: ViewModifier {
-
-    private enum ModerationDialog {
-        case block
-    }
-
-    private enum ModerationAlert: Identifiable {
-        case reportConfirmation(ReportReason)
-        case error
-
-        var id: String {
-            switch self {
-            case .reportConfirmation(let reason):
-                "report-confirmation-\(reason.rawValue)"
-            case .error:
-                "error"
-            }
-        }
-    }
-
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
     let user: NearbyUser
@@ -405,78 +420,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
     let relativeTimeReference: Date?
     let writeAction: () -> Void
     let deleteAction: (() -> Void)?
-    @Binding var moderationRequest: ProfileRowModerationRequest?
-
-    @State private var moderationDialog: ModerationDialog?
-    @State private var moderationAlert: ModerationAlert?
-    @State private var reportDetails = ""
-    @State private var isSubmitting = false
-
-    private var isModerationDialogPresented: Binding<Bool> {
-        Binding(
-            get: { moderationDialog != nil },
-            set: { isPresented in
-                if !isPresented {
-                    moderationDialog = nil
-                }
-            }
-        )
-    }
-
-    private var moderationDialogTitle: String {
-        switch moderationDialog {
-        case .block:
-            Inc.NearbyProfile.blockTitle.localized
-        case nil:
-            ""
-        }
-    }
-
-    private var moderationDialogMessage: String {
-        switch moderationDialog {
-        case .block:
-            Inc.NearbyProfile.blockMessage.localized
-        case nil:
-            ""
-        }
-    }
-
-    private var isModerationAlertPresented: Binding<Bool> {
-        Binding(
-            get: { moderationAlert != nil },
-            set: { isPresented in
-                if !isPresented {
-                    moderationAlert = nil
-                    reportDetails = ""
-                }
-            }
-        )
-    }
-
-    private var moderationAlertTitle: String {
-        switch moderationAlert {
-        case .reportConfirmation:
-            Inc.NearbyProfile.reportConfirmTitle.localized
-        case .error:
-            Inc.NearbyProfile.actionFailedTitle.localized
-        case nil:
-            ""
-        }
-    }
-
-    private var moderationAlertMessage: String {
-        switch moderationAlert {
-        case .reportConfirmation(let reason):
-            String.localizedStringWithFormat(
-                Inc.NearbyProfile.reportConfirmMessage.localized,
-                reportReasonTitle(reason)
-            )
-        case .error:
-            Inc.NearbyProfile.actionFailedMessage.localized
-        case nil:
-            ""
-        }
-    }
+    let blockAction: () -> Void
 
     func body(content: Content) -> some View {
         content
@@ -495,7 +439,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                 Divider()
 
                 Button(role: .destructive) {
-                    moderationDialog = .block
+                    blockAction()
                 } label: {
                     Label(
                         Inc.NearbyProfile.block.localized,
@@ -534,15 +478,103 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                         : nil
                 )
             }
-            .disabled(isSubmitting)
-            .confirmationDialog(
-                moderationDialogTitle,
-                isPresented: isModerationDialogPresented,
-                titleVisibility: .visible
-            ) {
-                moderationDialogActions
-            } message: {
-                Text(moderationDialogMessage)
+    }
+}
+
+private struct ProfileModerationDialogModifier: ViewModifier {
+    private enum ModerationAlert: Identifiable {
+        case reportConfirmation
+        case error
+
+        var id: String {
+            switch self {
+            case .reportConfirmation:
+                "report-confirmation"
+            case .error:
+                "error"
+            }
+        }
+    }
+
+    @EnvironmentObject private var peopleViewModel: PeopleViewModel
+
+    @Binding var request: ProfileModerationRequest?
+
+    @State private var activeUser: NearbyUser?
+    @State private var showsBlockOptions = false
+    @State private var moderationAlert: ModerationAlert?
+    @State private var reportDetails = ""
+    @State private var isSubmitting = false
+    @State private var isOpeningReport = false
+    @State private var presentationToken: UUID?
+
+    private var isBlockDialogPresented: Binding<Bool> {
+        Binding(
+            get: { showsBlockOptions },
+            set: { isPresented in
+                showsBlockOptions = isPresented
+                if !isPresented,
+                   moderationAlert == nil,
+                   !isSubmitting,
+                   !isOpeningReport {
+                    activeUser = nil
+                    presentationToken = nil
+                }
+            }
+        )
+    }
+
+    private var isModerationAlertPresented: Binding<Bool> {
+        Binding(
+            get: { moderationAlert != nil },
+            set: { isPresented in
+                if !isPresented {
+                    moderationAlert = nil
+                    reportDetails = ""
+                    if !isSubmitting {
+                        activeUser = nil
+                        presentationToken = nil
+                    }
+                }
+            }
+        )
+    }
+
+    private var moderationAlertTitle: String {
+        switch moderationAlert {
+        case .reportConfirmation:
+            Inc.NearbyProfile.reportConfirmTitle.localized
+        case .error:
+            Inc.NearbyProfile.actionFailedTitle.localized
+        case nil:
+            ""
+        }
+    }
+
+    private var moderationAlertMessage: String {
+        switch moderationAlert {
+        case .reportConfirmation:
+            Inc.NearbyProfile.reportDetailsMessage.localized
+        case .error:
+            Inc.NearbyProfile.actionFailedMessage.localized
+        case nil:
+            ""
+        }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: isBlockDialogPresented) {
+                if let activeUser {
+                    ProfileBlockOptionsSheet(
+                        user: activeUser,
+                        onClose: cancel,
+                        onBlock: submitBlock,
+                        onReport: openReport
+                    )
+                    .presentationDetents([.height(250)])
+                    .presentationDragIndicator(.hidden)
+                }
             }
             .alert(
                 moderationAlertTitle,
@@ -552,67 +584,44 @@ struct ProfileRowContextMenuModifier: ViewModifier {
             } message: {
                 Text(moderationAlertMessage)
             }
-            .onChange(of: moderationRequest) { _, request in
+            .onChange(of: request?.id) { _, _ in
                 guard let request else { return }
-                moderationRequest = nil
-                switch request {
-                case .block:
-                    moderationDialog = .block
+                let token = request.id
+                self.request = nil
+                activeUser = request.user
+                presentationToken = token
+
+                guard request.waitsForTransientUI else {
+                    showsBlockOptions = true
+                    return
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    guard presentationToken == token,
+                          activeUser != nil,
+                          !isSubmitting else { return }
+                    showsBlockOptions = true
                 }
             }
     }
 
     @ViewBuilder
-    private var moderationDialogActions: some View {
-        switch moderationDialog {
-        case .block:
-            Button(
-                Inc.NearbyProfile.blockWithoutReport.localized,
-                role: .destructive,
-                action: submitBlock
-            )
-            Button(Inc.NearbyProfile.reportSpam.localized, role: .destructive) {
-                confirmReport(.spam)
-            }
-            Button(
-                Inc.NearbyProfile.reportHarassment.localized,
-                role: .destructive
-            ) {
-                confirmReport(.harassment)
-            }
-            Button(
-                Inc.NearbyProfile.reportInappropriate.localized,
-                role: .destructive
-            ) {
-                confirmReport(.inappropriate)
-            }
-            Button(
-                Inc.NearbyProfile.reportImpersonation.localized,
-                role: .destructive
-            ) {
-                confirmReport(.impersonation)
-            }
-            Button(Inc.NearbyProfile.reportOther.localized, role: .destructive) {
-                confirmReport(.other)
-            }
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-        case nil:
-            EmptyView()
-        }
-    }
-
-    @ViewBuilder
     private var moderationAlertActions: some View {
         switch moderationAlert {
-        case .reportConfirmation(let reason):
+        case .reportConfirmation:
             TextField(
                 Inc.NearbyProfile.reportDetailsPlaceholder.localized,
                 text: $reportDetails
             )
             Button(Inc.Common.cancel.localized, role: .cancel) { }
             Button(Inc.NearbyProfile.reportSend.localized, role: .destructive) {
-                submitReportAndBlock(reason: reason)
+                submitReportAndBlock()
             }
+            .disabled(
+                reportDetails.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).isEmpty
+            )
         case .error:
             Button(Inc.NearbyProfile.acknowledge.localized, role: .cancel) { }
         case nil:
@@ -620,13 +629,22 @@ struct ProfileRowContextMenuModifier: ViewModifier {
         }
     }
 
-    private func confirmReport(_ reason: ReportReason) {
-        moderationDialog = nil
+    private func openReport() {
+        isOpeningReport = true
+        showsBlockOptions = false
         reportDetails = ""
-        moderationAlert = .reportConfirmation(reason)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            guard activeUser != nil else {
+                isOpeningReport = false
+                return
+            }
+            moderationAlert = .reportConfirmation
+            isOpeningReport = false
+        }
     }
 
-    private func submitReportAndBlock(reason: ReportReason) {
+    private func submitReportAndBlock() {
+        guard let user = activeUser else { return }
         let details = reportDetails.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
@@ -635,7 +653,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
             do {
                 try await peopleViewModel.submitReport(
                     for: user,
-                    reason: reason,
+                    reason: .other,
                     details: details.isEmpty ? nil : details
                 )
             } catch {
@@ -647,6 +665,8 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                 try await peopleViewModel.block(user)
                 isSubmitting = false
                 reportDetails = ""
+                activeUser = nil
+                presentationToken = nil
             } catch {
                 isSubmitting = false
                 moderationAlert = .error
@@ -655,12 +675,15 @@ struct ProfileRowContextMenuModifier: ViewModifier {
     }
 
     private func submitBlock() {
-        moderationDialog = nil
+        guard let user = activeUser else { return }
+        showsBlockOptions = false
         isSubmitting = true
         Task {
             do {
                 try await peopleViewModel.block(user)
                 isSubmitting = false
+                activeUser = nil
+                presentationToken = nil
             } catch {
                 isSubmitting = false
                 moderationAlert = .error
@@ -668,19 +691,138 @@ struct ProfileRowContextMenuModifier: ViewModifier {
         }
     }
 
-    private func reportReasonTitle(_ reason: ReportReason) -> String {
-        switch reason {
-        case .spam:
-            Inc.NearbyProfile.reportSpam.localized
-        case .harassment:
-            Inc.NearbyProfile.reportHarassment.localized
-        case .inappropriate:
-            Inc.NearbyProfile.reportInappropriate.localized
-        case .impersonation:
-            Inc.NearbyProfile.reportImpersonation.localized
-        case .other:
-            Inc.NearbyProfile.reportOther.localized
+    private func cancel() {
+        showsBlockOptions = false
+        moderationAlert = nil
+        reportDetails = ""
+        isOpeningReport = false
+        activeUser = nil
+        presentationToken = nil
+    }
+}
+
+private struct ProfileBlockOptionsSheet: View {
+    let user: NearbyUser
+    let onClose: () -> Void
+    let onBlock: () -> Void
+    let onReport: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            HStack(spacing: 12) {
+                avatar
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Inc.NearbyProfile.blockTitle.localized)
+                        .font(.system(size: 17, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+
+                    Text(profileIdentity)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 42, height: 42)
+                        .background(
+                            Color(uiColor: .tertiarySystemFill),
+                            in: Circle()
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Inc.Common.close.localized)
+            }
+
+            VStack(spacing: 0) {
+                ProfileBlockOptionRow(
+                    title: Inc.NearbyProfile.blockWithoutReport.localized,
+                    systemImage: "person.crop.circle.badge.xmark",
+                    action: onBlock
+                )
+
+                Divider()
+                    .padding(.leading, 58)
+
+                ProfileBlockOptionRow(
+                    title: Inc.NearbyProfile.reportSend.localized,
+                    systemImage: "exclamationmark.bubble",
+                    action: onReport
+                )
+            }
+            .background(
+                Color(uiColor: .secondarySystemBackground),
+                in: RoundedRectangle(cornerRadius: 20)
+            )
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
+        .padding(.bottom, 18)
+    }
+
+    @ViewBuilder
+    private var avatar: some View {
+        Group {
+            if let photoURL = user.photoURL,
+               let url = URL(string: photoURL) {
+                KFImage(url)
+                    .placeholder { placeholder }
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: 44, height: 44)
+        .background(Color(uiColor: .secondarySystemBackground), in: Circle())
+        .clipShape(Circle())
+    }
+
+    private var placeholder: some View {
+        Image.personCropCircleFill
+            .resizable()
+            .scaledToFit()
+            .foregroundStyle(.secondary)
+    }
+
+    private var profileIdentity: String {
+        let username = user.username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+        guard !username.isEmpty else { return user.name }
+        return "\(user.name) · @\(username)"
+    }
+}
+
+private struct ProfileBlockOptionRow: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(role: .destructive, action: action) {
+            HStack(spacing: 18) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .regular))
+                    .frame(width: 22)
+
+                Text(title)
+                    .font(.system(size: 16))
+
+                Spacer()
+            }
+            .foregroundStyle(Color.red)
+            .padding(.horizontal, 18)
+            .frame(height: 54)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -691,7 +833,7 @@ extension View {
         relativeTimeReference: Date? = nil,
         writeAction: @escaping () -> Void,
         deleteAction: (() -> Void)? = nil,
-        moderationRequest: Binding<ProfileRowModerationRequest?>
+        blockAction: @escaping () -> Void
     ) -> some View {
         modifier(
             ProfileRowContextMenuModifier(
@@ -700,9 +842,15 @@ extension View {
                 relativeTimeReference: relativeTimeReference,
                 writeAction: writeAction,
                 deleteAction: deleteAction,
-                moderationRequest: moderationRequest
+                blockAction: blockAction
             )
         )
+    }
+
+    func profileModerationDialog(
+        request: Binding<ProfileModerationRequest?>
+    ) -> some View {
+        modifier(ProfileModerationDialogModifier(request: request))
     }
 }
 

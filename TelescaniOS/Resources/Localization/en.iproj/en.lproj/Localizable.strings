@@ -158,7 +158,8 @@
 "nearbyProfileReportOther" = "Other";
 "nearbyProfileReportConfirmTitle" = "Report and block?";
 "nearbyProfileReportConfirmMessage" = "Reason: %@. You can add optional context to the report before blocking.";
-"nearbyProfileReportDetailsPlaceholder" = "Optional details";
+"nearbyProfileReportDetailsPlaceholder" = "Describe the issue";
+"nearbyProfileReportDetailsMessage" = "Describe the reason for the report. The user will be blocked after you submit it.";
 "nearbyProfileReportSend" = "Report and block";
 "nearbyProfileReportSentTitle" = "Report sent";
 "nearbyProfileReportSentMessage" = "Thank you. The report has been saved for moderation.";

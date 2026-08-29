@@ -158,7 +158,8 @@
 "nearbyProfileReportOther" = "Другое";
 "nearbyProfileReportConfirmTitle" = "Пожаловаться и заблокировать?";
 "nearbyProfileReportConfirmMessage" = "Причина: %@. Перед блокировкой можно добавить комментарий к жалобе.";
-"nearbyProfileReportDetailsPlaceholder" = "Комментарий (необязательно)";
+"nearbyProfileReportDetailsPlaceholder" = "Опишите жалобу";
+"nearbyProfileReportDetailsMessage" = "Опишите причину жалобы. После отправки пользователь будет заблокирован.";
 "nearbyProfileReportSend" = "Пожаловаться и заблокировать";
 "nearbyProfileReportSentTitle" = "Жалоба отправлена";
 "nearbyProfileReportSentMessage" = "Спасибо. Жалоба сохранена и будет рассмотрена модератором.";
