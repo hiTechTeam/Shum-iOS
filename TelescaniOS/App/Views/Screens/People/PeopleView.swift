@@ -304,7 +304,7 @@ struct ProfileAvatarButton: View {
         }
         .frame(maxWidth: .infinity, minHeight: avatarSize)
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .background {
             ProfileRowSwipeBackground()
         }
@@ -367,12 +367,20 @@ struct ProfileAvatarButton: View {
 }
 
 struct ProfileRowSwipeBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var surfaceColor: Color {
+        colorScheme == .dark
+            ? Color(uiColor: .secondarySystemBackground)
+            : Color(uiColor: .systemBackground)
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let isVisible = geometry.frame(in: .global).minX < -0.5
 
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(uiColor: .systemBackground))
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(surfaceColor)
                 .opacity(isVisible ? 1 : 0)
                 .animation(
                     isVisible
@@ -893,11 +901,11 @@ private struct ProfileRowContextPreview: View {
                 )
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .frame(width: max(320, UIScreen.main.bounds.width - 32))
         .background(
             Color(uiColor: .systemBackground),
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+            in: RoundedRectangle(cornerRadius: 26, style: .continuous)
         )
     }
 

@@ -241,7 +241,7 @@ private struct EncounterHistoryRow: View {
         .frame(maxWidth: .infinity)
         .frame(minHeight: avatarSize)
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .background {
             ProfileRowSwipeBackground()
         }
