@@ -67,13 +67,7 @@ struct PeopleView: View {
                                     trailing: 16
                                 )
                             )
-                            .listRowSeparator(.hidden, edges: .bottom)
-                            .listRowSeparator(
-                                user.id == peopleViewModel.visibleUsers.first?.id
-                                    ? .hidden
-                                    : .visible,
-                                edges: .top
-                            )
+                            .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                         }
                     }

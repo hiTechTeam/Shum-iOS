@@ -117,7 +117,7 @@ struct EncounterHistoryView: View {
                     }
                 )
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) {
+                    Button {
                         deleteEncounter(encounter)
                     } label: {
                         Label(
@@ -125,14 +125,9 @@ struct EncounterHistoryView: View {
                             systemImage: "trash"
                         )
                     }
+                    .tint(.gray)
                 }
-                .listRowSeparator(.hidden, edges: .bottom)
-                .listRowSeparator(
-                    encounter.id == peopleViewModel.encounterHistory.first?.id
-                        ? .hidden
-                        : .visible,
-                    edges: .top
-                )
+                .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
                 .listRowInsets(
                     EdgeInsets(
