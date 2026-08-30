@@ -51,6 +51,9 @@
 "encounterHistoryListDescription" = "People you met during the last 24 hours";
 "encounterHistoryClear" = "Clear history";
 "encounterHistoryDelete" = "Delete";
+"encounterHistorySave" = "Save";
+"encounterHistoryDeleteTitle" = "Remove from Met?";
+"encounterHistoryDeleteMessage" = "This card will be removed from the Met list.";
 "encounterHistoryClearTitle" = "Clear encounter history?";
 "encounterHistoryClearMessage" = "All encounters saved on this device will be removed.";
 "encounterHistoryLastSeenFormat" = "Met %@";

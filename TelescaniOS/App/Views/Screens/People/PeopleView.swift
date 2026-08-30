@@ -45,6 +45,13 @@ struct PeopleView: View {
                         refreshAction: {
                             await peopleViewModel.refreshNearbyPeople()
                         },
+                        leadingActions: { _ in
+                            [
+                                .outlinedSave(
+                                    title: Inc.EncounterHistory.save.localized
+                                )
+                            ]
+                        },
                         trailingActions: { user in
                             [
                                 SystemSwipeAction(

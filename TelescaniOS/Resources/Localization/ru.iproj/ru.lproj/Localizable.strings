@@ -51,6 +51,9 @@
 "encounterHistoryListDescription" = "Люди, которых вы встречали за последние 24 часа";
 "encounterHistoryClear" = "Очистить историю";
 "encounterHistoryDelete" = "Удалить";
+"encounterHistorySave" = "Сохранить";
+"encounterHistoryDeleteTitle" = "Удалить из «Виделись»?";
+"encounterHistoryDeleteMessage" = "Карточка будет удалена из списка «Виделись».";
 "encounterHistoryClearTitle" = "Очистить историю встреч?";
 "encounterHistoryClearMessage" = "Все сохранённые на этом устройстве встречи будут удалены.";
 "encounterHistoryLastSeenFormat" = "Виделись %@";

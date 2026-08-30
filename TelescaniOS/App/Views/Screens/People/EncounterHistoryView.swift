@@ -12,6 +12,7 @@ struct EncounterHistoryView: View {
     @State private var relativeTimeReference = Date()
     @State private var moderationRequest: ProfileModerationRequest?
     @State private var telegramTransitionRequest: TelegramTransitionRequest?
+    @State private var pendingDeletion: EncounterHistoryEntry?
 
     var body: some View {
         ZStack {
@@ -66,6 +67,21 @@ struct EncounterHistoryView: View {
         } message: {
             Text(Inc.EncounterHistory.clearMessage.localized)
         }
+        .alert(
+            Inc.EncounterHistory.deleteTitle.localized,
+            isPresented: deleteConfirmationIsPresented,
+            presenting: pendingDeletion
+        ) { encounter in
+            Button(Inc.Common.cancel.localized, role: .cancel) {
+                pendingDeletion = nil
+            }
+            Button(Inc.EncounterHistory.delete.localized, role: .destructive) {
+                deleteEncounter(encounter)
+                pendingDeletion = nil
+            }
+        } message: { _ in
+            Text(Inc.EncounterHistory.deleteMessage.localized)
+        }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             peopleViewModel.refreshEncounterHistory()
@@ -93,6 +109,13 @@ struct EncounterHistoryView: View {
                 peopleViewModel.refreshEncounterHistory()
                 relativeTimeReference = Date()
             },
+            leadingActions: { _ in
+                [
+                    .outlinedSave(
+                        title: Inc.EncounterHistory.save.localized
+                    )
+                ]
+            },
             trailingActions: { encounter in
                 [
                     SystemSwipeAction(
@@ -113,7 +136,7 @@ struct EncounterHistoryView: View {
                         backgroundColor: .systemGray,
                         style: .normal,
                         handler: {
-                            deleteEncounter(encounter)
+                            requestDeleteEncounterAfterSwipe(encounter)
                         }
                     )
                 ]
@@ -164,6 +187,31 @@ struct EncounterHistoryView: View {
     private func deleteEncounter(_ encounter: EncounterHistoryEntry) {
         withAnimation {
             peopleViewModel.removeEncounterFromHistory(encounter.user)
+        }
+    }
+
+    private var deleteConfirmationIsPresented: Binding<Bool> {
+        Binding(
+            get: { pendingDeletion != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingDeletion = nil
+                }
+            }
+        )
+    }
+
+    private func requestDeleteEncounterAfterSwipe(
+        _ encounter: EncounterHistoryEntry
+    ) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            guard peopleViewModel.encounterHistory.contains(
+                where: { $0.id == encounter.id }
+            ) else {
+                return
+            }
+
+            pendingDeletion = encounter
         }
     }
 
