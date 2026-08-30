@@ -236,30 +236,17 @@ struct ScanningSettingsSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                Text(Inc.Scanning.scanToggleDescription.localized)
-                    .telescanDescriptionStyle()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Toggle(
-                    Inc.Scanning.scanning.localized,
-                    isOn: scanningBinding
-                )
-                .font(.body.weight(.medium))
-                .toggleStyle(.switch)
-                .tint(.green)
-                .padding(.horizontal, 14)
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
-                .background(
-                    Color.grOne,
-                    in: RoundedRectangle(cornerRadius: 13)
-                )
-
-                Spacer(minLength: 0)
+            Form {
+                Section {
+                    Toggle(
+                        Inc.Scanning.scanning.localized,
+                        isOn: scanningBinding
+                    )
+                } header: {
+                    Text(Inc.Scanning.scanToggleDescription.localized)
+                        .textCase(nil)
+                }
             }
-            .padding(.top, 20)
-            .padding(.horizontal, 20)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

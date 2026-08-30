@@ -25,6 +25,17 @@ struct QuickActionsSettingsSheet: View {
                             .padding(.leading, 60)
 
                         QuickActionToggleRow(
+                            title: Inc.QuickActions.clear.localized,
+                            description: Inc.QuickActions.clearDescription
+                                .localized,
+                            systemImage: "trash",
+                            isOn: $settings.isQuickClearEnabled
+                        )
+
+                        Divider()
+                            .padding(.leading, 60)
+
+                        QuickActionToggleRow(
                             title: Inc.QuickActions.block.localized,
                             description: Inc.QuickActions.blockDescription
                                 .localized,

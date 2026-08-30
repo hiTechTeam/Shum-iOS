@@ -486,7 +486,7 @@ struct SavedProfileAvatarBadge: View {
     var body: some View {
         Image(systemName: "heart.fill")
             .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(Color(uiColor: .systemGreen))
+            .foregroundStyle(.primary)
             .frame(width: 18, height: 18)
             .background(Color(uiColor: .systemBackground), in: Circle())
             .offset(x: 2, y: 2)
@@ -1402,11 +1402,7 @@ private struct ProfileSheetControls: View {
         } label: {
             Image(systemName: isSaved ? "heart.fill" : "heart")
                 .font(.system(size: 19, weight: .semibold))
-                .foregroundStyle(
-                    isSaved
-                        ? Color(uiColor: .systemGreen)
-                        : Color.primary
-                )
+                .foregroundStyle(.primary)
                 .frame(width: 56, height: 44)
                 .contentShape(Capsule())
                 .contentTransition(.symbolEffect(.replace))

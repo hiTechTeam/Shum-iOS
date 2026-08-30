@@ -149,6 +149,8 @@
 "quickActionsDescription" = "Selected actions will run immediately without confirmation.";
 "quickActionsChat" = "Quick Chat";
 "quickActionsChatDescription" = "Open Telegram immediately when you tap a profile card.";
+"quickActionsClear" = "Quick Clear";
+"quickActionsClearDescription" = "Remove a profile from Met immediately without confirmation.";
 "quickActionsBlock" = "Quick Block";
 "quickActionsBlockDescription" = "Block a profile immediately when swiping left, without a report.";
 

@@ -149,6 +149,8 @@
 "quickActionsDescription" = "Выбранные действия будут выполняться сразу, без подтверждения.";
 "quickActionsChat" = "Быстрый чат";
 "quickActionsChatDescription" = "Сразу открывать Telegram при нажатии на карточку.";
+"quickActionsClear" = "Быстрая очистка";
+"quickActionsClearDescription" = "Сразу убирать профиль из «Виделись» без подтверждения.";
 "quickActionsBlock" = "Быстрый блок";
 "quickActionsBlockDescription" = "Сразу блокировать профиль при свайпе влево, без жалобы.";
 

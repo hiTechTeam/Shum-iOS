@@ -271,6 +271,8 @@ struct Inc {
         static let description: String = "quickActionsDescription"
         static let chat: String = "quickActionsChat"
         static let chatDescription: String = "quickActionsChatDescription"
+        static let clear: String = "quickActionsClear"
+        static let clearDescription: String = "quickActionsClearDescription"
         static let block: String = "quickActionsBlock"
         static let blockDescription: String = "quickActionsBlockDescription"
     }

@@ -272,6 +272,11 @@ struct EncounterHistoryView: View {
                 return
             }
 
+            if quickActions.isQuickClearEnabled {
+                deleteEncounter(encounter)
+                return
+            }
+
             pendingDeletion = encounter
         }
     }
