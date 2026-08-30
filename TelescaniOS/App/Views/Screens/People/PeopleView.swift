@@ -47,7 +47,7 @@ struct PeopleView: View {
                         },
                         leadingActions: { _ in
                             [
-                                .outlinedSave(
+                                .save(
                                     title: Inc.EncounterHistory.save.localized
                                 )
                             ]

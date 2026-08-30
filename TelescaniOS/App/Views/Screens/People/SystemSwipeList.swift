@@ -6,85 +6,16 @@ struct SystemSwipeAction {
     let systemImage: String
     let backgroundColor: UIColor
     let style: UIContextualAction.Style
-    let customImage: UIImage?
-    let displaysTitle: Bool
     let handler: () -> Void
 
-    init(
-        title: String,
-        systemImage: String,
-        backgroundColor: UIColor,
-        style: UIContextualAction.Style,
-        customImage: UIImage? = nil,
-        displaysTitle: Bool = true,
-        handler: @escaping () -> Void
-    ) {
-        self.title = title
-        self.systemImage = systemImage
-        self.backgroundColor = backgroundColor
-        self.style = style
-        self.customImage = customImage
-        self.displaysTitle = displaysTitle
-        self.handler = handler
-    }
-
-    static func outlinedSave(title: String) -> SystemSwipeAction {
+    static func save(title: String) -> SystemSwipeAction {
         SystemSwipeAction(
             title: title,
-            systemImage: "heart",
-            backgroundColor: .clear,
+            systemImage: "plus",
+            backgroundColor: .systemGreen,
             style: .normal,
-            customImage: outlinedSaveImage(title: title),
-            displaysTitle: false,
             handler: { }
         )
-    }
-
-    private static func outlinedSaveImage(title: String) -> UIImage {
-        let size = CGSize(width: 62, height: 58)
-        let format = UIGraphicsImageRendererFormat()
-        format.opaque = false
-
-        return UIGraphicsImageRenderer(size: size, format: format)
-            .image { _ in
-                let green = UIColor.systemGreen
-                let borderRect = CGRect(
-                    x: 1,
-                    y: 1,
-                    width: size.width - 2,
-                    height: size.height - 2
-                )
-                let border = UIBezierPath(
-                    roundedRect: borderRect,
-                    cornerRadius: 15
-                )
-                border.lineWidth = 1.5
-                green.setStroke()
-                border.stroke()
-
-                let symbolConfiguration = UIImage.SymbolConfiguration(
-                    pointSize: 20,
-                    weight: .medium
-                )
-                let heart = UIImage(
-                    systemName: "heart",
-                    withConfiguration: symbolConfiguration
-                )?.withTintColor(green, renderingMode: .alwaysOriginal)
-                heart?.draw(in: CGRect(x: 21, y: 7, width: 20, height: 20))
-
-                let paragraph = NSMutableParagraphStyle()
-                paragraph.alignment = .center
-                let attributes: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.systemFont(ofSize: 9.5, weight: .semibold),
-                    .foregroundColor: green,
-                    .paragraphStyle: paragraph
-                ]
-                title.draw(
-                    in: CGRect(x: 3, y: 34, width: size.width - 6, height: 15),
-                    withAttributes: attributes
-                )
-            }
-            .withRenderingMode(.alwaysOriginal)
     }
 }
 
@@ -326,7 +257,7 @@ where Item: Identifiable & Equatable, RowContent: View {
             swipeActionsConfiguration(
                 at: indexPath,
                 actions: parent.leadingActions,
-                allowsFullSwipe: false
+                allowsFullSwipe: true
             )
         }
 
@@ -355,13 +286,12 @@ where Item: Identifiable & Equatable, RowContent: View {
             let actions = descriptors(item).map { descriptor in
                 let action = UIContextualAction(
                     style: descriptor.style,
-                    title: descriptor.displaysTitle ? descriptor.title : nil
+                    title: descriptor.title
                 ) { _, _, completion in
                     descriptor.handler()
                     completion(true)
                 }
-                action.image = descriptor.customImage
-                    ?? UIImage(systemName: descriptor.systemImage)
+                action.image = UIImage(systemName: descriptor.systemImage)
                 action.backgroundColor = descriptor.backgroundColor
                 return action
             }

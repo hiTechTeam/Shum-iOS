@@ -111,7 +111,7 @@ struct EncounterHistoryView: View {
             },
             leadingActions: { _ in
                 [
-                    .outlinedSave(
+                    .save(
                         title: Inc.EncounterHistory.save.localized
                     )
                 ]
