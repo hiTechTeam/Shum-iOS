@@ -234,7 +234,8 @@ struct ProfileOverviewView: View {
             ProfileOverviewRow(
                 title: Inc.Scanning.scanning.localized,
                 systemImage: "dot.radiowaves.left.and.right",
-                value: scanningStatusTitle
+                value: scanningStatusTitle,
+                position: .top
             ) {
                 showScanningSettings = true
             }
@@ -245,6 +246,7 @@ struct ProfileOverviewView: View {
                 title: Inc.NearbyNotifications.settingsTitle.localized,
                 systemImage: "bell",
                 value: notificationStatusTitle,
+                position: .bottom,
                 action: manageNotificationAuthorization
             )
         }
@@ -252,6 +254,7 @@ struct ProfileOverviewView: View {
             Color(uiColor: .secondarySystemBackground),
             in: RoundedRectangle(cornerRadius: 22)
         )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private var peopleCard: some View {
@@ -259,7 +262,8 @@ struct ProfileOverviewView: View {
             ProfileOverviewRow(
                 title: Inc.NearbyProfile.savedMenu.localized,
                 systemImage: "heart.fill",
-                value: savedProfilesStatusTitle
+                value: savedProfilesStatusTitle,
+                position: .top
             ) {
                 showSavedProfiles = true
             }
@@ -269,7 +273,8 @@ struct ProfileOverviewView: View {
             ProfileOverviewRow(
                 title: Inc.NearbyProfile.blockedMenu.localized,
                 systemImage: "person.crop.circle.badge.xmark",
-                value: blockedProfilesStatusTitle
+                value: blockedProfilesStatusTitle,
+                position: .bottom
             ) {
                 showBlockedProfiles = true
             }
@@ -278,6 +283,7 @@ struct ProfileOverviewView: View {
             Color(uiColor: .secondarySystemBackground),
             in: RoundedRectangle(cornerRadius: 22)
         )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private var profileMenu: some View {
@@ -401,30 +407,29 @@ private struct ProfileOverviewRow: View {
     let title: String
     let systemImage: String
     let value: String?
+    let position: ProfileMenuRowPosition
     let action: (() -> Void)?
 
     init(
         title: String,
         systemImage: String,
         value: String? = nil,
+        position: ProfileMenuRowPosition = .single,
         action: (() -> Void)? = nil
     ) {
         self.title = title
         self.systemImage = systemImage
         self.value = value
+        self.position = position
         self.action = action
     }
 
     @ViewBuilder
     var body: some View {
         if let action {
-            Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                action()
-            } label: {
+            ProfileMenuButton(position: position, action: action) {
                 rowContent(showsDisclosureIndicator: true)
             }
-            .buttonStyle(.plain)
         } else {
             rowContent(showsDisclosureIndicator: false)
         }
@@ -460,5 +465,99 @@ private struct ProfileOverviewRow: View {
         .padding(.horizontal, 20)
         .frame(height: 58)
         .contentShape(Rectangle())
+    }
+}
+
+enum ProfileMenuRowPosition {
+    case top
+    case middle
+    case bottom
+    case single
+
+    private var topRadius: CGFloat {
+        switch self {
+        case .top, .single:
+            22
+        case .middle, .bottom:
+            0
+        }
+    }
+
+    private var bottomRadius: CGFloat {
+        switch self {
+        case .bottom, .single:
+            22
+        case .top, .middle:
+            0
+        }
+    }
+
+    var shape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            topLeadingRadius: topRadius,
+            bottomLeadingRadius: bottomRadius,
+            bottomTrailingRadius: bottomRadius,
+            topTrailingRadius: topRadius,
+            style: .continuous
+        )
+    }
+}
+
+struct ProfileMenuButton<Label: View>: View {
+    let position: ProfileMenuRowPosition
+    let action: () -> Void
+    let label: Label
+
+    @State private var maintainsPressedHighlight = false
+
+    init(
+        position: ProfileMenuRowPosition,
+        action: @escaping () -> Void,
+        @ViewBuilder label: () -> Label
+    ) {
+        self.position = position
+        self.action = action
+        self.label = label()
+    }
+
+    var body: some View {
+        Button {
+            maintainsPressedHighlight = true
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                action()
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                    maintainsPressedHighlight = false
+                }
+            }
+        } label: {
+            label
+        }
+        .buttonStyle(
+            ProfileMenuPressedButtonStyle(
+                position: position,
+                maintainsHighlight: maintainsPressedHighlight
+            )
+        )
+    }
+}
+
+private struct ProfileMenuPressedButtonStyle: ButtonStyle {
+    let position: ProfileMenuRowPosition
+    let maintainsHighlight: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let isHighlighted = configuration.isPressed || maintainsHighlight
+
+        configuration.label
+            .background(
+                isHighlighted ? Color(uiColor: .tertiarySystemFill) : .clear,
+                in: position.shape
+            )
+            .animation(
+                .easeOut(duration: 0.12),
+                value: isHighlighted
+            )
     }
 }

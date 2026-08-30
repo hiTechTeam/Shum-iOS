@@ -31,6 +31,7 @@ struct ProfileDataView: View {
                 title: Inc.Profile.informationTitle.localized,
                 value: displayBio,
                 showsAccentValue: false,
+                position: .top,
                 action: openBioEditor
             )
 
@@ -40,6 +41,7 @@ struct ProfileDataView: View {
                 title: Inc.Profile.telegramTitle.localized,
                 value: displayTelegram,
                 showsAccentValue: telegramUsername == nil,
+                position: .bottom,
                 action: openTelegramLink
             )
         }
@@ -75,14 +77,12 @@ struct ProfileDataView: View {
     }
 
     private func openBioEditor() {
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         draftBio = String((authCodeViewModel.bio ?? "").prefix(36))
         authCodeViewModel.resetBioSaveState()
         showBioEditor = true
     }
 
     private func openTelegramLink() {
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         authCodeViewModel.resetCodeEntry()
         showTelegramLink = true
     }
@@ -128,10 +128,11 @@ private struct ProfileInformationRow: View {
     let title: String
     let value: String
     let showsAccentValue: Bool
+    let position: ProfileMenuRowPosition
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        ProfileMenuButton(position: position, action: action) {
             HStack(spacing: 12) {
                 Text(title)
                     .font(.system(size: 16, weight: .regular))
@@ -156,7 +157,6 @@ private struct ProfileInformationRow: View {
             .frame(height: 60)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .accessibilityLabel(title)
         .accessibilityValue(value)
         .accessibilityAddTraits(.isButton)

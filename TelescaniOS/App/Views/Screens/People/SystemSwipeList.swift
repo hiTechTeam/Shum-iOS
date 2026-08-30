@@ -159,6 +159,10 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
     private var isInteractionSurfaceEnabled = false
     private var isHeld = false
     private var isSwipePresented = false
+    private var isSwipeSurfaceVisible = false
+    private var swipeDisplayLink: CADisplayLink?
+    private var previousSwipeOffset: CGFloat = 0
+    private var maximumSwipeOffset: CGFloat = 0
 
     private lazy var holdRecognizer: UILongPressGestureRecognizer = {
         let recognizer = UILongPressGestureRecognizer(
@@ -184,8 +188,10 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        stopMonitoringSwipeMotion()
         isHeld = false
         isSwipePresented = false
+        isSwipeSurfaceVisible = false
         contentView.layer.removeAllAnimations()
         updateInteractionSurface(animated: false)
     }
@@ -195,8 +201,10 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
         holdRecognizer.isEnabled = isEnabled
 
         if !isEnabled {
+            stopMonitoringSwipeMotion()
             isHeld = false
             isSwipePresented = false
+            isSwipeSurfaceVisible = false
         }
 
         updateInteractionSurface(animated: false)
@@ -204,7 +212,120 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
 
     func setSwipePresented(_ isPresented: Bool) {
         isSwipePresented = isPresented
+
+        if isPresented {
+            isSwipeSurfaceVisible = true
+            startMonitoringSwipeMotion()
+        } else {
+            isSwipeSurfaceVisible = false
+            stopMonitoringSwipeMotion()
+        }
+
         updateInteractionSurface(animated: true)
+    }
+
+    private func startMonitoringSwipeMotion() {
+        stopMonitoringSwipeMotion()
+        previousSwipeOffset = currentSwipeOffset
+        maximumSwipeOffset = previousSwipeOffset
+
+        let displayLink = CADisplayLink(
+            target: self,
+            selector: #selector(observeSwipeMotion)
+        )
+        displayLink.preferredFrameRateRange = CAFrameRateRange(
+            minimum: 30,
+            maximum: 60,
+            preferred: 60
+        )
+        displayLink.add(to: .main, forMode: .common)
+        swipeDisplayLink = displayLink
+    }
+
+    private func stopMonitoringSwipeMotion() {
+        swipeDisplayLink?.invalidate()
+        swipeDisplayLink = nil
+    }
+
+    @objc private func observeSwipeMotion() {
+        guard isSwipePresented else {
+            stopMonitoringSwipeMotion()
+            return
+        }
+
+        let offset = currentSwipeOffset
+        maximumSwipeOffset = max(maximumSwipeOffset, offset)
+
+        if !isSwipeSurfaceVisible {
+            if isSwipeTouchActive, offset > 4 {
+                isSwipeSurfaceVisible = true
+                maximumSwipeOffset = offset
+                updateInteractionSurface(animated: true)
+            }
+
+            previousSwipeOffset = offset
+            return
+        }
+
+        let hasStartedReturning = maximumSwipeOffset > 4
+            && offset < previousSwipeOffset - 0.5
+
+        if hasStartedReturning, !isSwipeTouchActive {
+            isSwipeSurfaceVisible = false
+            updateInteractionSurface(animated: true, duration: 0.5)
+        }
+
+        previousSwipeOffset = offset
+    }
+
+    private var currentSwipeOffset: CGFloat {
+        guard let window else { return 0 }
+
+        let restingOriginX = tableView?.convert(.zero, to: window).x
+            ?? convert(.zero, to: window).x
+        let modelOriginX = contentView.convert(.zero, to: window).x
+        let modelOffset = abs(modelOriginX - restingOriginX)
+
+        guard let presentationLayer = contentView.layer.presentation() else {
+            return modelOffset
+        }
+
+        let windowLayer = window.layer.presentation() ?? window.layer
+        let presentationOffset = abs(
+            presentationLayer.convert(.zero, to: windowLayer).x
+                - restingOriginX
+        )
+        return max(modelOffset, presentationOffset)
+    }
+
+    private var tableView: UITableView? {
+        sequence(first: superview, next: { $0?.superview })
+            .compactMap { $0 as? UITableView }
+            .first
+    }
+
+    private var isSwipeTouchActive: Bool {
+        var currentView: UIView? = self
+
+        while let view = currentView {
+            let hasActivePan = view.gestureRecognizers?.contains { recognizer in
+                guard recognizer !== holdRecognizer,
+                      recognizer is UIPanGestureRecognizer else {
+                    return false
+                }
+
+                return recognizer.state == .began
+                    || recognizer.state == .changed
+            } ?? false
+
+            if hasActivePan {
+                return true
+            }
+
+            currentView = view.superview
+        }
+
+        return false
     }
 
     override func gestureRecognizer(
@@ -233,7 +354,7 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
         duration: TimeInterval? = nil
     ) {
         let isVisible = isInteractionSurfaceEnabled
-            && (isHeld || isSwipePresented)
+            && (isHeld || isSwipeSurfaceVisible)
         let changes = {
             self.contentView.backgroundColor = isVisible
                 ? self.interactionSurfaceColor
@@ -249,7 +370,7 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
         }
 
         UIView.animate(
-            withDuration: duration ?? (isVisible ? 0.16 : 0.45),
+            withDuration: duration ?? (isVisible ? 0.16 : 0.5),
             delay: 0,
             options: [.allowUserInteraction, .beginFromCurrentState],
             animations: changes
