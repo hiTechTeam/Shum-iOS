@@ -50,7 +50,7 @@
 "encounterHistoryEmptyMessage" = "People you meet during the last 24 hours will appear here.";
 "encounterHistoryListDescription" = "People you met during the last 24 hours";
 "encounterHistoryClear" = "Clear history";
-"encounterHistoryDelete" = "Delete";
+"encounterHistoryDelete" = "Clear";
 "encounterHistorySave" = "Save";
 "encounterHistoryRemove" = "Remove";
 "encounterHistoryDeleteTitle" = "Remove from Met?";

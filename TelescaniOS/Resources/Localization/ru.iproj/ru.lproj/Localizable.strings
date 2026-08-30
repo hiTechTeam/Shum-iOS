@@ -50,7 +50,7 @@
 "encounterHistoryEmptyMessage" = "Здесь появятся люди, которых вы встретили за последние 24 часа.";
 "encounterHistoryListDescription" = "Люди, которых вы встречали за последние 24 часа";
 "encounterHistoryClear" = "Очистить историю";
-"encounterHistoryDelete" = "Удалить";
+"encounterHistoryDelete" = "Очистить";
 "encounterHistorySave" = "Сохранить";
 "encounterHistoryRemove" = "Убрать";
 "encounterHistoryDeleteTitle" = "Удалить из «Виделись»?";

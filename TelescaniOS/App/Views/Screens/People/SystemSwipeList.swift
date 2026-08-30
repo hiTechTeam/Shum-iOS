@@ -42,7 +42,7 @@ struct SystemSwipeAction {
             style: .normal,
             savedPresentation: SavedPresentation(
                 title: removeTitle,
-                systemImage: "minus",
+                systemImage: "heart.slash",
                 backgroundColor: .systemGray
             ),
             handler: { }
@@ -156,6 +156,15 @@ where Item: SavedPeopleListItem, RowContent: View {
 }
 
 private final class SystemSwipeTableViewCell: UITableViewCell {
+    private struct SwipeOffsets {
+        let model: CGFloat
+        let presentation: CGFloat
+
+        var visible: CGFloat {
+            max(model, presentation)
+        }
+    }
+
     private var isInteractionSurfaceEnabled = false
     private var isHeld = false
     private var isSwipePresented = false
@@ -226,7 +235,7 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
 
     private func startMonitoringSwipeMotion() {
         stopMonitoringSwipeMotion()
-        previousSwipeOffset = currentSwipeOffset
+        previousSwipeOffset = currentSwipeOffsets.visible
         maximumSwipeOffset = previousSwipeOffset
 
         let displayLink = CADisplayLink(
@@ -253,7 +262,8 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
             return
         }
 
-        let offset = currentSwipeOffset
+        let offsets = currentSwipeOffsets
+        let offset = offsets.visible
         maximumSwipeOffset = max(maximumSwipeOffset, offset)
 
         if !isSwipeSurfaceVisible {
@@ -267,7 +277,9 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
             return
         }
 
-        let hasStartedReturning = maximumSwipeOffset > 4
+        let isReturningToRest = offsets.model < 1
+        let hasStartedReturning = isReturningToRest
+            && maximumSwipeOffset > 4
             && offset < previousSwipeOffset - 0.5
 
         if hasStartedReturning, !isSwipeTouchActive {
@@ -278,8 +290,10 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
         previousSwipeOffset = offset
     }
 
-    private var currentSwipeOffset: CGFloat {
-        guard let window else { return 0 }
+    private var currentSwipeOffsets: SwipeOffsets {
+        guard let window else {
+            return SwipeOffsets(model: 0, presentation: 0)
+        }
 
         let restingOriginX = tableView?.convert(.zero, to: window).x
             ?? convert(.zero, to: window).x
@@ -287,7 +301,10 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
         let modelOffset = abs(modelOriginX - restingOriginX)
 
         guard let presentationLayer = contentView.layer.presentation() else {
-            return modelOffset
+            return SwipeOffsets(
+                model: modelOffset,
+                presentation: modelOffset
+            )
         }
 
         let windowLayer = window.layer.presentation() ?? window.layer
@@ -295,7 +312,10 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
             presentationLayer.convert(.zero, to: windowLayer).x
                 - restingOriginX
         )
-        return max(modelOffset, presentationOffset)
+        return SwipeOffsets(
+            model: modelOffset,
+            presentation: presentationOffset
+        )
     }
 
     private var tableView: UITableView? {

@@ -490,6 +490,7 @@ struct ProfileModerationRequest: Identifiable {
 
 struct ProfileRowContextMenuModifier: ViewModifier {
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
+    @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
 
     let user: NearbyUser
     let isSaved: Bool
@@ -514,7 +515,35 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                     }
                     .tint(.primary)
 
+                    Button {
+                        savedPeople.toggle(user)
+                    } label: {
+                        Label(
+                            isSaved
+                                ? Inc.EncounterHistory.remove.localized
+                                : Inc.EncounterHistory.save.localized,
+                            systemImage: isSaved ? "heart.slash" : "heart"
+                        )
+                        .foregroundStyle(.primary)
+                    }
+                    .tint(.primary)
+
                     Divider()
+
+                    if let deleteAction {
+                        Button {
+                            deleteAction()
+                        } label: {
+                            Label(
+                                Inc.EncounterHistory.delete.localized,
+                                systemImage: "trash"
+                            )
+                            .foregroundStyle(.primary)
+                        }
+                        .tint(.primary)
+
+                        Divider()
+                    }
 
                     if isSaved {
                         Button {
@@ -534,21 +563,6 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                             Label(
                                 Inc.NearbyProfile.block.localized,
                                 systemImage: "person.crop.circle.badge.xmark"
-                            )
-                            .foregroundStyle(.red)
-                        }
-                        .tint(.red)
-                    }
-
-                    if let deleteAction {
-                        Divider()
-
-                        Button(role: .destructive) {
-                            deleteAction()
-                        } label: {
-                            Label(
-                                Inc.EncounterHistory.delete.localized,
-                                systemImage: "trash"
                             )
                             .foregroundStyle(.red)
                         }
@@ -1340,9 +1354,51 @@ struct ProfileSheetView: View {
 
 private struct ProfileSheetControls: View {
     @EnvironmentObject var peopleViewModel: PeopleViewModel
+    @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
 
     let user: NearbyUser
     let lastMetAt: Date?
+
+    private var isSaved: Bool {
+        savedPeople.contains(user.id)
+    }
+
+    private var saveButton: some View {
+        Button {
+            savedPeople.toggle(user)
+        } label: {
+            Image(systemName: isSaved ? "heart.fill" : "heart")
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(
+                    isSaved
+                        ? Color(uiColor: .systemGreen)
+                        : Color.primary
+                )
+                .frame(width: 56, height: 44)
+                .contentShape(Capsule())
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .accessibilityLabel(
+            isSaved
+                ? Inc.EncounterHistory.remove.localized
+                : Inc.EncounterHistory.save.localized
+        )
+    }
+
+    @ViewBuilder
+    private var saveControl: some View {
+        if #available(iOS 26.0, *) {
+            saveButton
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .tint(.primary)
+        } else {
+            saveButton
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .tint(.primary)
+        }
+    }
 
     private var presenceInfo: some View {
         Group {
@@ -1372,7 +1428,15 @@ private struct ProfileSheetControls: View {
     }
 
     var body: some View {
-        presenceInfo
+        ZStack(alignment: .top) {
+            presenceInfo
+
+            HStack {
+                Spacer()
+                saveControl
+            }
+            .padding(.horizontal, 8)
+        }
         .padding(.top, 8)
         .frame(
             maxWidth: .infinity,
