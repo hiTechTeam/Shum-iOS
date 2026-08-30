@@ -13,6 +13,7 @@ struct PeopleView: View {
     @State private var moderationRequest: ProfileModerationRequest?
     @State private var telegramTransitionRequest: TelegramTransitionRequest?
     @State private var showsEncounterHistory = false
+    @State private var showsSavedBlockInformation = false
 
     var body: some View {
         ZStack {
@@ -45,44 +46,67 @@ struct PeopleView: View {
                         refreshAction: {
                             await peopleViewModel.refreshNearbyPeople()
                         },
-                        leadingActions: { _ in
+                        leadingActions: { _, _ in
                             [
                                 .save(
-                                    title: Inc.EncounterHistory.save.localized
+                                    title: Inc.EncounterHistory.save.localized,
+                                    removeTitle: Inc.EncounterHistory.remove
+                                        .localized
                                 )
                             ]
                         },
-                        trailingActions: { user in
-                            [
-                                SystemSwipeAction(
-                                    title: Inc.NearbyProfile.block.localized,
-                                    systemImage: "person.crop.circle.badge.xmark",
-                                    backgroundColor: .systemRed,
-                                    style: .destructive,
-                                    handler: {
-                                        moderationRequest = ProfileModerationRequest(
-                                            user: user,
-                                            waitsForTransientUI: true
-                                        )
-                                    }
-                                )
-                            ]
+                        trailingActions: { user, isSaved in
+                            if isSaved {
+                                [
+                                    SystemSwipeAction(
+                                        title: Inc.NearbyProfile.savedBlockAction
+                                            .localized,
+                                        systemImage: "lock.fill",
+                                        backgroundColor: .systemGray,
+                                        style: .normal,
+                                        handler: {
+                                            requestSavedBlockInformation()
+                                        }
+                                    )
+                                ]
+                            } else {
+                                [
+                                    SystemSwipeAction(
+                                        title: Inc.NearbyProfile.block.localized,
+                                        systemImage: "person.crop.circle.badge.xmark",
+                                        backgroundColor: .systemRed,
+                                        style: .destructive,
+                                        handler: {
+                                            moderationRequest = ProfileModerationRequest(
+                                                user: user,
+                                                waitsForTransientUI: true
+                                            )
+                                        }
+                                    )
+                                ]
+                            }
                         }
-                    ) { user in
+                    ) { user, isSaved in
                         ProfileAvatarButton(
                             user: user,
+                            isSaved: isSaved,
                             action: { openUser(user) },
                             photoAction: { openPhoto(of: user) },
                             infoAction: { selectedUser = user },
                             blockAction: {
-                                moderationRequest = ProfileModerationRequest(
-                                    user: user,
-                                    waitsForTransientUI: false
-                                )
+                                if isSaved {
+                                    requestSavedBlockInformation()
+                                } else {
+                                    moderationRequest = ProfileModerationRequest(
+                                        user: user,
+                                        waitsForTransientUI: false
+                                    )
+                                }
                             }
                         )
                         .environmentObject(peopleViewModel)
                     }
+                    .ignoresSafeArea(edges: .top)
                 }
             } else {
                 ContentUnavailableView(
@@ -138,6 +162,14 @@ struct PeopleView: View {
         .nearbyUserPhotoPreview(user: $photoPreviewUser)
         .telegramTransitionAlert(request: $telegramTransitionRequest)
         .profileModerationDialog(request: $moderationRequest)
+        .alert(
+            Inc.NearbyProfile.savedBlockTitle.localized,
+            isPresented: $showsSavedBlockInformation
+        ) {
+            Button(Inc.NearbyProfile.savedBlockOK.localized, role: .cancel) { }
+        } message: {
+            Text(Inc.NearbyProfile.savedBlockMessage.localized)
+        }
         .task {
             await peopleViewModel.synchronizeBlockedProfiles()
             peopleViewModel.refreshEncounterHistory()
@@ -163,6 +195,12 @@ struct PeopleView: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             photoPreviewUser = user
+        }
+    }
+
+    private func requestSavedBlockInformation() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            showsSavedBlockInformation = true
         }
     }
 
@@ -301,6 +339,7 @@ private struct EncounterHistoryToolbarIcon: View {
 
 struct ProfileAvatarButton: View {
     let user: NearbyUser
+    let isSaved: Bool
     let action: () -> Void
     let photoAction: () -> Void
     let infoAction: () -> Void
@@ -315,6 +354,11 @@ struct ProfileAvatarButton: View {
                 photoAction()
             } label: {
                 profileImage
+                    .overlay(alignment: .bottomTrailing) {
+                        if isSaved {
+                            SavedProfileAvatarBadge()
+                        }
+                    }
             }
             .buttonStyle(.plain)
             .disabled(!hasPhoto)
@@ -359,6 +403,7 @@ struct ProfileAvatarButton: View {
         .padding(.vertical, 10)
         .profileRowContextMenu(
             user: user,
+            isSaved: isSaved,
             writeAction: action,
             blockAction: blockAction
         )
@@ -404,6 +449,17 @@ struct ProfileAvatarButton: View {
     }
 }
 
+struct SavedProfileAvatarBadge: View {
+    var body: some View {
+        Image(systemName: "heart.fill")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(Color(uiColor: .systemGreen))
+            .frame(width: 18, height: 18)
+            .background(Color(uiColor: .systemBackground), in: Circle())
+            .offset(x: 2, y: 2)
+    }
+}
+
 struct ProfileInfoButton: View {
     let action: () -> Void
 
@@ -436,6 +492,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
     let user: NearbyUser
+    let isSaved: Bool
     let lastMetAt: Date?
     let relativeTimeReference: Date?
     let writeAction: () -> Void
@@ -459,16 +516,29 @@ struct ProfileRowContextMenuModifier: ViewModifier {
 
                     Divider()
 
-                    Button(role: .destructive) {
-                        blockAction()
-                    } label: {
-                        Label(
-                            Inc.NearbyProfile.block.localized,
-                            systemImage: "person.crop.circle.badge.xmark"
-                        )
-                        .foregroundStyle(.red)
+                    if isSaved {
+                        Button {
+                            blockAction()
+                        } label: {
+                            Label(
+                                Inc.NearbyProfile.savedBlockAction.localized,
+                                systemImage: "lock.fill"
+                            )
+                            .foregroundStyle(.secondary)
+                        }
+                        .tint(.secondary)
+                    } else {
+                        Button(role: .destructive) {
+                            blockAction()
+                        } label: {
+                            Label(
+                                Inc.NearbyProfile.block.localized,
+                                systemImage: "person.crop.circle.badge.xmark"
+                            )
+                            .foregroundStyle(.red)
+                        }
+                        .tint(.red)
                     }
-                    .tint(.red)
 
                     if let deleteAction {
                         Divider()
@@ -488,6 +558,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
             } preview: {
                 ProfileRowContextPreview(
                     user: user,
+                    isSaved: isSaved,
                     lastMetAt: lastMetAt,
                     relativeTimeReference: relativeTimeReference,
                     countdownSeconds: lastMetAt == nil
@@ -851,6 +922,7 @@ private struct ProfileBlockOptionRow: View {
 extension View {
     func profileRowContextMenu(
         user: NearbyUser,
+        isSaved: Bool,
         lastMetAt: Date? = nil,
         relativeTimeReference: Date? = nil,
         writeAction: @escaping () -> Void,
@@ -860,6 +932,7 @@ extension View {
         modifier(
             ProfileRowContextMenuModifier(
                 user: user,
+                isSaved: isSaved,
                 lastMetAt: lastMetAt,
                 relativeTimeReference: relativeTimeReference,
                 writeAction: writeAction,
@@ -878,6 +951,7 @@ extension View {
 
 private struct ProfileRowContextPreview: View {
     let user: NearbyUser
+    let isSaved: Bool
     let lastMetAt: Date?
     let relativeTimeReference: Date?
     let countdownSeconds: Int?
@@ -907,6 +981,11 @@ private struct ProfileRowContextPreview: View {
     var body: some View {
         HStack(spacing: 12) {
             avatar
+                .overlay(alignment: .bottomTrailing) {
+                    if isSaved {
+                        SavedProfileAvatarBadge()
+                    }
+                }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(user.name)

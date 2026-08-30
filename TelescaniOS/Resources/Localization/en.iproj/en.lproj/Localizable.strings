@@ -52,6 +52,7 @@
 "encounterHistoryClear" = "Clear history";
 "encounterHistoryDelete" = "Delete";
 "encounterHistorySave" = "Save";
+"encounterHistoryRemove" = "Remove";
 "encounterHistoryDeleteTitle" = "Remove from Met?";
 "encounterHistoryDeleteMessage" = "This card will be removed from the Met list.";
 "encounterHistoryClearTitle" = "Clear encounter history?";
@@ -155,6 +156,10 @@
 "nearbyProfileNoInformation" = "Message on Telegram";
 "nearbyProfileReport" = "Report user";
 "nearbyProfileBlock" = "Block user";
+"nearbyProfileSavedBlockAction" = "Unavailable";
+"nearbyProfileSavedBlockTitle" = "Blocking unavailable";
+"nearbyProfileSavedBlockMessage" = "To block this person, remove them from Saved first.";
+"nearbyProfileSavedBlockOK" = "OK";
 "nearbyProfileReportTitle" = "Why are you reporting this user?";
 "nearbyProfileReportMessage" = "Choose the reason that best describes the problem.";
 "nearbyProfileReportSpam" = "Spam";

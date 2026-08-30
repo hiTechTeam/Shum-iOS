@@ -13,6 +13,7 @@ struct EncounterHistoryView: View {
     @State private var moderationRequest: ProfileModerationRequest?
     @State private var telegramTransitionRequest: TelegramTransitionRequest?
     @State private var pendingDeletion: EncounterHistoryEntry?
+    @State private var showsSavedBlockInformation = false
 
     var body: some View {
         ZStack {
@@ -56,6 +57,14 @@ struct EncounterHistoryView: View {
         .nearbyUserPhotoPreview(user: $photoPreviewUser)
         .telegramTransitionAlert(request: $telegramTransitionRequest)
         .profileModerationDialog(request: $moderationRequest)
+        .alert(
+            Inc.NearbyProfile.savedBlockTitle.localized,
+            isPresented: $showsSavedBlockInformation
+        ) {
+            Button(Inc.NearbyProfile.savedBlockOK.localized, role: .cancel) { }
+        } message: {
+            Text(Inc.NearbyProfile.savedBlockMessage.localized)
+        }
         .alert(
             Inc.EncounterHistory.clearTitle.localized,
             isPresented: $showsClearConfirmation
@@ -109,16 +118,26 @@ struct EncounterHistoryView: View {
                 peopleViewModel.refreshEncounterHistory()
                 relativeTimeReference = Date()
             },
-            leadingActions: { _ in
+            leadingActions: { _, _ in
                 [
                     .save(
-                        title: Inc.EncounterHistory.save.localized
+                        title: Inc.EncounterHistory.save.localized,
+                        removeTitle: Inc.EncounterHistory.remove.localized
                     )
                 ]
             },
-            trailingActions: { encounter in
-                [
-                    SystemSwipeAction(
+            trailingActions: { encounter, isSaved in
+                let leadingAction = isSaved
+                    ? SystemSwipeAction(
+                        title: Inc.NearbyProfile.savedBlockAction.localized,
+                        systemImage: "lock.fill",
+                        backgroundColor: .systemGray,
+                        style: .normal,
+                        handler: {
+                            requestSavedBlockInformation()
+                        }
+                    )
+                    : SystemSwipeAction(
                         title: Inc.NearbyProfile.block.localized,
                         systemImage: "person.crop.circle.badge.xmark",
                         backgroundColor: .systemRed,
@@ -129,7 +148,10 @@ struct EncounterHistoryView: View {
                                 waitsForTransientUI: true
                             )
                         }
-                    ),
+                    )
+
+                return [
+                    leadingAction,
                     SystemSwipeAction(
                         title: Inc.EncounterHistory.delete.localized,
                         systemImage: "trash",
@@ -141,9 +163,10 @@ struct EncounterHistoryView: View {
                     )
                 ]
             }
-        ) { encounter in
+        ) { encounter, isSaved in
             EncounterHistoryRow(
                 encounter: encounter,
+                isSaved: isSaved,
                 relativeTimeReference: relativeTimeReference,
                 action: {
                     UIImpactFeedbackGenerator(
@@ -161,14 +184,19 @@ struct EncounterHistoryView: View {
                     deleteEncounter(encounter)
                 },
                 blockAction: {
-                    moderationRequest = ProfileModerationRequest(
-                        user: encounter.user,
-                        waitsForTransientUI: false
-                    )
+                    if isSaved {
+                        requestSavedBlockInformation()
+                    } else {
+                        moderationRequest = ProfileModerationRequest(
+                            user: encounter.user,
+                            waitsForTransientUI: false
+                        )
+                    }
                 }
             )
             .environmentObject(peopleViewModel)
         }
+        .ignoresSafeArea(edges: .top)
     }
 
     private func openEncounter(_ encounter: EncounterHistoryEntry) {
@@ -215,6 +243,12 @@ struct EncounterHistoryView: View {
         }
     }
 
+    private func requestSavedBlockInformation() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            showsSavedBlockInformation = true
+        }
+    }
+
     private func openPhoto(of user: NearbyUser) {
         guard let photoURL = user.photoURL,
               URL(string: photoURL) != nil else { return }
@@ -230,6 +264,7 @@ struct EncounterHistoryView: View {
 
 private struct EncounterHistoryRow: View {
     let encounter: EncounterHistoryEntry
+    let isSaved: Bool
     let relativeTimeReference: Date
     let action: () -> Void
     let photoAction: () -> Void
@@ -246,6 +281,11 @@ private struct EncounterHistoryRow: View {
                     user: encounter.user,
                     size: avatarSize
                 )
+                .overlay(alignment: .bottomTrailing) {
+                    if isSaved {
+                        SavedProfileAvatarBadge()
+                    }
+                }
             }
             .buttonStyle(.plain)
             .disabled(!hasPhoto)
@@ -291,6 +331,7 @@ private struct EncounterHistoryRow: View {
         .padding(.vertical, 10)
         .profileRowContextMenu(
             user: encounter.user,
+            isSaved: isSaved,
             lastMetAt: encounter.lastSeen,
             relativeTimeReference: relativeTimeReference,
             writeAction: action,

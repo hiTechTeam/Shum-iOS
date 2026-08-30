@@ -52,6 +52,7 @@
 "encounterHistoryClear" = "Очистить историю";
 "encounterHistoryDelete" = "Удалить";
 "encounterHistorySave" = "Сохранить";
+"encounterHistoryRemove" = "Убрать";
 "encounterHistoryDeleteTitle" = "Удалить из «Виделись»?";
 "encounterHistoryDeleteMessage" = "Карточка будет удалена из списка «Виделись».";
 "encounterHistoryClearTitle" = "Очистить историю встреч?";
@@ -155,6 +156,10 @@
 "nearbyProfileNoInformation" = "Пишите в Telegram";
 "nearbyProfileReport" = "Пожаловаться";
 "nearbyProfileBlock" = "Заблокировать";
+"nearbyProfileSavedBlockAction" = "Недоступно";
+"nearbyProfileSavedBlockTitle" = "Блокировка недоступна";
+"nearbyProfileSavedBlockMessage" = "Чтобы заблокировать человека, сначала уберите его из сохранённых.";
+"nearbyProfileSavedBlockOK" = "ОК";
 "nearbyProfileReportTitle" = "Почему вы хотите пожаловаться?";
 "nearbyProfileReportMessage" = "Выберите причину, которая лучше всего описывает проблему.";
 "nearbyProfileReportSpam" = "Спам";

@@ -114,6 +114,7 @@ struct Inc {
         static let clear: String = "encounterHistoryClear"
         static let delete: String = "encounterHistoryDelete"
         static let save: String = "encounterHistorySave"
+        static let remove: String = "encounterHistoryRemove"
         static let deleteTitle: String = "encounterHistoryDeleteTitle"
         static let deleteMessage: String = "encounterHistoryDeleteMessage"
         static let clearTitle: String = "encounterHistoryClearTitle"
@@ -281,6 +282,12 @@ struct Inc {
         static let noInformation: String = "nearbyProfileNoInformation"
         static let report: String = "nearbyProfileReport"
         static let block: String = "nearbyProfileBlock"
+        static let savedBlockAction: String =
+            "nearbyProfileSavedBlockAction"
+        static let savedBlockTitle: String = "nearbyProfileSavedBlockTitle"
+        static let savedBlockMessage: String =
+            "nearbyProfileSavedBlockMessage"
+        static let savedBlockOK: String = "nearbyProfileSavedBlockOK"
 
         static let reportTitle: String = "nearbyProfileReportTitle"
         static let reportMessage: String = "nearbyProfileReportMessage"

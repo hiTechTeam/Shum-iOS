@@ -2,20 +2,100 @@ import SwiftUI
 import UIKit
 
 struct SystemSwipeAction {
+    struct SavedPresentation {
+        let title: String
+        let systemImage: String
+        let backgroundColor: UIColor
+    }
+
     let title: String
     let systemImage: String
     let backgroundColor: UIColor
     let style: UIContextualAction.Style
+    let savedPresentation: SavedPresentation?
     let handler: () -> Void
 
-    static func save(title: String) -> SystemSwipeAction {
+    init(
+        title: String,
+        systemImage: String,
+        backgroundColor: UIColor,
+        style: UIContextualAction.Style,
+        savedPresentation: SavedPresentation? = nil,
+        handler: @escaping () -> Void
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.backgroundColor = backgroundColor
+        self.style = style
+        self.savedPresentation = savedPresentation
+        self.handler = handler
+    }
+
+    static func save(
+        title: String,
+        removeTitle: String
+    ) -> SystemSwipeAction {
         SystemSwipeAction(
             title: title,
-            systemImage: "plus",
+            systemImage: "heart",
             backgroundColor: .systemGreen,
             style: .normal,
+            savedPresentation: SavedPresentation(
+                title: removeTitle,
+                systemImage: "minus",
+                backgroundColor: .systemGray
+            ),
             handler: { }
         )
+    }
+}
+
+private final class SavedPeopleStateStore: ObservableObject {
+    static let shared = SavedPeopleStateStore()
+
+    private let storageKey = "savedPeopleProfileIDs"
+    @Published private var savedIDs: Set<UUID>
+
+    private init() {
+        savedIDs = Set(
+            UserDefaults.standard
+                .stringArray(forKey: storageKey)?
+                .compactMap(UUID.init(uuidString:)) ?? []
+        )
+    }
+
+    func contains(_ id: UUID) -> Bool {
+        savedIDs.contains(id)
+    }
+
+    @discardableResult
+    func toggle(_ id: UUID) -> Bool {
+        let isSaved: Bool
+
+        if savedIDs.remove(id) != nil {
+            isSaved = false
+        } else {
+            savedIDs.insert(id)
+            isSaved = true
+        }
+
+        UserDefaults.standard.set(
+            savedIDs.map(\.uuidString).sorted(),
+            forKey: storageKey
+        )
+        return isSaved
+    }
+}
+
+private struct SavedPeopleRow<Item, RowContent>: View
+where Item: Identifiable, Item.ID == UUID, RowContent: View {
+    @ObservedObject var savedPeople: SavedPeopleStateStore
+
+    let item: Item
+    let rowContent: (Item, Bool) -> RowContent
+
+    var body: some View {
+        rowContent(item, savedPeople.contains(item.id))
     }
 }
 
@@ -50,6 +130,7 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
         super.prepareForReuse()
         isHeld = false
         isSwipePresented = false
+        contentView.layer.removeAllAnimations()
         updateInteractionSurface(animated: false)
     }
 
@@ -91,7 +172,10 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
         }
     }
 
-    private func updateInteractionSurface(animated: Bool) {
+    private func updateInteractionSurface(
+        animated: Bool,
+        duration: TimeInterval? = nil
+    ) {
         let isVisible = isInteractionSurfaceEnabled
             && (isHeld || isSwipePresented)
         let changes = {
@@ -109,7 +193,7 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
         }
 
         UIView.animate(
-            withDuration: isVisible ? 0.16 : 0.24,
+            withDuration: duration ?? (isVisible ? 0.16 : 0.24),
             delay: 0,
             options: [.allowUserInteraction, .beginFromCurrentState],
             animations: changes
@@ -121,26 +205,29 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
             ? .tertiarySystemBackground
             : .systemBackground
     }
+
 }
 
 struct SystemSwipeList<Item, RowContent>: UIViewControllerRepresentable
-where Item: Identifiable & Equatable, RowContent: View {
+where Item: Identifiable & Equatable, Item.ID == UUID, RowContent: View {
     let items: [Item]
     let descriptionText: String
     let reloadIdentifier: AnyHashable?
     let refreshAction: () async -> Void
-    let leadingActions: (Item) -> [SystemSwipeAction]
-    let trailingActions: (Item) -> [SystemSwipeAction]
-    let rowContent: (Item) -> RowContent
+    let leadingActions: (Item, Bool) -> [SystemSwipeAction]
+    let trailingActions: (Item, Bool) -> [SystemSwipeAction]
+    let rowContent: (Item, Bool) -> RowContent
 
     init(
         items: [Item],
         descriptionText: String,
         reloadIdentifier: AnyHashable? = nil,
         refreshAction: @escaping () async -> Void,
-        leadingActions: @escaping (Item) -> [SystemSwipeAction] = { _ in [] },
-        trailingActions: @escaping (Item) -> [SystemSwipeAction],
-        @ViewBuilder rowContent: @escaping (Item) -> RowContent
+        leadingActions: @escaping (Item, Bool) -> [SystemSwipeAction] = {
+            _, _ in []
+        },
+        trailingActions: @escaping (Item, Bool) -> [SystemSwipeAction],
+        @ViewBuilder rowContent: @escaping (Item, Bool) -> RowContent
     ) {
         self.items = items
         self.descriptionText = descriptionText
@@ -162,6 +249,7 @@ where Item: Identifiable & Equatable, RowContent: View {
         let tableView = controller.tableView!
 
         tableView.backgroundColor = .clear
+        tableView.contentInsetAdjustmentBehavior = .automatic
         tableView.separatorStyle = .none
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 72
@@ -202,6 +290,7 @@ where Item: Identifiable & Equatable, RowContent: View {
         UITableViewDataSource,
         UITableViewDelegate {
         var parent: SystemSwipeList
+        private let savedPeople = SavedPeopleStateStore.shared
 
         init(parent: SystemSwipeList) {
             self.parent = parent
@@ -227,9 +316,11 @@ where Item: Identifiable & Equatable, RowContent: View {
 
             cell.selectionStyle = .none
             cell.backgroundColor = .clear
-            cell.configureInteractionSurface(isEnabled: indexPath.row > 0)
 
             if indexPath.row == 0 {
+                cell.configureInteractionSurface(
+                    isEnabled: false
+                )
                 cell.contentConfiguration = UIHostingConfiguration {
                     Text(parent.descriptionText)
                         .font(.system(size: 12))
@@ -241,8 +332,15 @@ where Item: Identifiable & Equatable, RowContent: View {
                 .margins(.all, 0)
             } else {
                 let item = parent.items[indexPath.row - 1]
+                cell.configureInteractionSurface(
+                    isEnabled: true
+                )
                 cell.contentConfiguration = UIHostingConfiguration {
-                    parent.rowContent(item)
+                    SavedPeopleRow(
+                        savedPeople: savedPeople,
+                        item: item,
+                        rowContent: parent.rowContent
+                    )
                 }
                 .margins(.all, 0)
             }
@@ -274,7 +372,7 @@ where Item: Identifiable & Equatable, RowContent: View {
 
         private func swipeActionsConfiguration(
             at indexPath: IndexPath,
-            actions descriptors: (Item) -> [SystemSwipeAction],
+            actions descriptors: (Item, Bool) -> [SystemSwipeAction],
             allowsFullSwipe: Bool
         ) -> UISwipeActionsConfiguration? {
             guard indexPath.row > 0,
@@ -283,16 +381,28 @@ where Item: Identifiable & Equatable, RowContent: View {
             }
 
             let item = parent.items[indexPath.row - 1]
-            let actions = descriptors(item).map { descriptor in
+            let isSaved = savedPeople.contains(item.id)
+            let actions = descriptors(item, isSaved).map { descriptor in
+                let presentation = isSaved
+                    ? descriptor.savedPresentation
+                    : nil
                 let action = UIContextualAction(
                     style: descriptor.style,
-                    title: descriptor.title
+                    title: presentation?.title ?? descriptor.title
                 ) { _, _, completion in
+                    if descriptor.savedPresentation != nil {
+                        self.savedPeople.toggle(item.id)
+                    }
+
                     descriptor.handler()
                     completion(true)
                 }
-                action.image = UIImage(systemName: descriptor.systemImage)
-                action.backgroundColor = descriptor.backgroundColor
+                action.image = UIImage(
+                    systemName: presentation?.systemImage
+                        ?? descriptor.systemImage
+                )
+                action.backgroundColor = presentation?.backgroundColor
+                    ?? descriptor.backgroundColor
                 return action
             }
 
