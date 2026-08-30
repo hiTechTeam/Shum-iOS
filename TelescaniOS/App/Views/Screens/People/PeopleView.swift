@@ -39,54 +39,42 @@ struct PeopleView: View {
                         }
                     }
                 } else {
-                    List {
-                        Text(Inc.Scanning.listDescription.localized)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .listRowInsets(
-                                EdgeInsets(
-                                    top: 10,
-                                    leading: 16,
-                                    bottom: 10,
-                                    trailing: 16
+                    SystemSwipeList(
+                        items: peopleViewModel.visibleUsers,
+                        descriptionText: Inc.Scanning.listDescription.localized,
+                        refreshAction: {
+                            await peopleViewModel.refreshNearbyPeople()
+                        },
+                        trailingActions: { user in
+                            [
+                                SystemSwipeAction(
+                                    title: Inc.NearbyProfile.block.localized,
+                                    systemImage: "person.crop.circle.badge.xmark",
+                                    backgroundColor: .systemRed,
+                                    style: .destructive,
+                                    handler: {
+                                        moderationRequest = ProfileModerationRequest(
+                                            user: user,
+                                            waitsForTransientUI: true
+                                        )
+                                    }
                                 )
-                            )
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-
-                        ForEach(peopleViewModel.visibleUsers) { user in
-                            ProfileAvatarButton(
-                                user: user,
-                                action: { openUser(user) },
-                                photoAction: { openPhoto(of: user) },
-                                infoAction: { selectedUser = user },
-                                blockAction: {
-                                    moderationRequest = ProfileModerationRequest(
-                                        user: user,
-                                        waitsForTransientUI: false
-                                    )
-                                },
-                                swipeBlockAction: {
-                                    moderationRequest = ProfileModerationRequest(
-                                        user: user,
-                                        waitsForTransientUI: true
-                                    )
-                                },
-                                isSwipeSurfaceEnabled: !showsEncounterHistory
-                            )
-                            .listRowInsets(
-                                EdgeInsets()
-                            )
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
+                            ]
                         }
-                    }
-                    .coordinateSpace(name: ProfileRowCoordinateSpace.nearby)
-                    .listStyle(.plain)
-                    .environment(\.defaultMinListRowHeight, 0)
-                    .scrollContentBackground(.hidden)
-                    .refreshable {
-                        await peopleViewModel.refreshNearbyPeople()
+                    ) { user in
+                        ProfileAvatarButton(
+                            user: user,
+                            action: { openUser(user) },
+                            photoAction: { openPhoto(of: user) },
+                            infoAction: { selectedUser = user },
+                            blockAction: {
+                                moderationRequest = ProfileModerationRequest(
+                                    user: user,
+                                    waitsForTransientUI: false
+                                )
+                            }
+                        )
+                        .environmentObject(peopleViewModel)
                     }
                 }
             } else {
@@ -310,8 +298,6 @@ struct ProfileAvatarButton: View {
     let photoAction: () -> Void
     let infoAction: () -> Void
     let blockAction: () -> Void
-    let swipeBlockAction: () -> Void
-    let isSwipeSurfaceEnabled: Bool
 
     private let avatarSize: CGFloat = 52
 
@@ -364,23 +350,6 @@ struct ProfileAvatarButton: View {
         .frame(maxWidth: .infinity, minHeight: avatarSize)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background {
-            ProfileRowSwipeBackground(
-                coordinateSpace: .nearby,
-                isEnabled: isSwipeSurfaceEnabled
-            )
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button {
-                swipeBlockAction()
-            } label: {
-                Label(
-                    Inc.NearbyProfile.block.localized,
-                    systemImage: "person.crop.circle.badge.xmark"
-                )
-            }
-            .tint(.red)
-        }
         .profileRowContextMenu(
             user: user,
             writeAction: action,
@@ -425,43 +394,6 @@ struct ProfileAvatarButton: View {
         .frame(width: avatarSize, height: avatarSize)
         .background(Color(uiColor: .secondarySystemBackground), in: Circle())
         .clipShape(Circle())
-    }
-}
-
-enum ProfileRowCoordinateSpace: Hashable {
-    case nearby
-    case history
-}
-
-struct ProfileRowSwipeBackground: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    let coordinateSpace: ProfileRowCoordinateSpace
-    var isEnabled = true
-
-    private var surfaceColor: Color {
-        colorScheme == .dark
-            ? Color(uiColor: .secondarySystemBackground)
-            : Color(uiColor: .systemBackground)
-    }
-
-    var body: some View {
-        GeometryReader { geometry in
-            let isVisible = isEnabled
-                && geometry.frame(
-                    in: .named(coordinateSpace)
-                ).minX < -0.5
-
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(surfaceColor)
-                .opacity(isVisible ? 1 : 0)
-                .animation(
-                    isVisible
-                        ? .easeOut(duration: 0.1)
-                        : .easeOut(duration: 0.6),
-                    value: isVisible
-                )
-        }
     }
 }
 
@@ -998,7 +930,13 @@ private struct ProfileRowContextPreview: View {
         .padding(.vertical, verticalPadding)
         .frame(width: sourceWidth, height: sourceHeight)
         .background(
-            Color(uiColor: .systemBackground),
+            Color(
+                uiColor: UIColor { traits in
+                    traits.userInterfaceStyle == .dark
+                        ? .tertiarySystemBackground
+                        : .systemBackground
+                }
+            ),
             in: RoundedRectangle(cornerRadius: 26, style: .continuous)
         )
         .scaleEffect(previewScale)

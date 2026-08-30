@@ -84,68 +84,67 @@ struct EncounterHistoryView: View {
     }
 
     private var encounterList: some View {
-        List {
-            Text(Inc.EncounterHistory.listDescription.localized)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .listRowInsets(
-                    EdgeInsets(
-                        top: 10,
-                        leading: 16,
-                        bottom: 10,
-                        trailing: 16
+        SystemSwipeList(
+            items: peopleViewModel.encounterHistory,
+            descriptionText: Inc.EncounterHistory.listDescription.localized,
+            reloadIdentifier: relativeTimeReference,
+            refreshAction: {
+                await peopleViewModel.synchronizeBlockedProfiles()
+                peopleViewModel.refreshEncounterHistory()
+                relativeTimeReference = Date()
+            },
+            trailingActions: { encounter in
+                [
+                    SystemSwipeAction(
+                        title: Inc.NearbyProfile.block.localized,
+                        systemImage: "person.crop.circle.badge.xmark",
+                        backgroundColor: .systemRed,
+                        style: .destructive,
+                        handler: {
+                            moderationRequest = ProfileModerationRequest(
+                                user: encounter.user,
+                                waitsForTransientUI: true
+                            )
+                        }
+                    ),
+                    SystemSwipeAction(
+                        title: Inc.EncounterHistory.delete.localized,
+                        systemImage: "trash",
+                        backgroundColor: .systemGray,
+                        style: .normal,
+                        handler: {
+                            deleteEncounter(encounter)
+                        }
                     )
-                )
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-
-            ForEach(peopleViewModel.encounterHistory) { encounter in
-                EncounterHistoryRow(
-                    encounter: encounter,
-                    relativeTimeReference: relativeTimeReference,
-                    action: {
-                        UIImpactFeedbackGenerator(
-                            style: .light
-                        ).impactOccurred()
-                        openEncounter(encounter)
-                    },
-                    photoAction: {
-                        openPhoto(of: encounter.user)
-                    },
-                    infoAction: {
-                        selectedEncounter = encounter
-                    },
-                    deleteAction: {
-                        deleteEncounter(encounter)
-                    },
-                    blockAction: {
-                        moderationRequest = ProfileModerationRequest(
-                            user: encounter.user,
-                            waitsForTransientUI: false
-                        )
-                    },
-                    swipeBlockAction: {
-                        moderationRequest = ProfileModerationRequest(
-                            user: encounter.user,
-                            waitsForTransientUI: true
-                        )
-                    }
-                )
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-                .listRowInsets(
-                    EdgeInsets()
-                )
+                ]
             }
-        }
-        .coordinateSpace(name: ProfileRowCoordinateSpace.history)
-        .listStyle(.plain)
-        .environment(\.defaultMinListRowHeight, 0)
-        .scrollContentBackground(.hidden)
-        .refreshable {
-            await peopleViewModel.synchronizeBlockedProfiles()
-            peopleViewModel.refreshEncounterHistory()
-            relativeTimeReference = Date()
+        ) { encounter in
+            EncounterHistoryRow(
+                encounter: encounter,
+                relativeTimeReference: relativeTimeReference,
+                action: {
+                    UIImpactFeedbackGenerator(
+                        style: .light
+                    ).impactOccurred()
+                    openEncounter(encounter)
+                },
+                photoAction: {
+                    openPhoto(of: encounter.user)
+                },
+                infoAction: {
+                    selectedEncounter = encounter
+                },
+                deleteAction: {
+                    deleteEncounter(encounter)
+                },
+                blockAction: {
+                    moderationRequest = ProfileModerationRequest(
+                        user: encounter.user,
+                        waitsForTransientUI: false
+                    )
+                }
+            )
+            .environmentObject(peopleViewModel)
         }
     }
 
@@ -189,7 +188,6 @@ private struct EncounterHistoryRow: View {
     let infoAction: () -> Void
     let deleteAction: () -> Void
     let blockAction: () -> Void
-    let swipeBlockAction: () -> Void
 
     private let avatarSize: CGFloat = 52
 
@@ -243,30 +241,6 @@ private struct EncounterHistoryRow: View {
         .frame(minHeight: avatarSize)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background {
-            ProfileRowSwipeBackground(coordinateSpace: .history)
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button {
-                deleteAction()
-            } label: {
-                Label(
-                    Inc.EncounterHistory.delete.localized,
-                    systemImage: "trash"
-                )
-            }
-            .tint(.gray)
-
-            Button {
-                swipeBlockAction()
-            } label: {
-                Label(
-                    Inc.NearbyProfile.block.localized,
-                    systemImage: "person.crop.circle.badge.xmark"
-                )
-            }
-            .tint(.red)
-        }
         .profileRowContextMenu(
             user: encounter.user,
             lastMetAt: encounter.lastSeen,
