@@ -9,12 +9,14 @@ struct ProfileOverviewView: View {
     @ObservedObject var authCodeViewModel: CodeViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
     @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
+    @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
 
     @State private var showScanningSettings = false
     @State private var showInfoSheet = false
     @State private var showLogoutOptions = false
     @State private var showBlockedProfiles = false
     @State private var showSavedProfiles = false
+    @State private var showQuickActions = false
     @State private var showLogoutConfirmation = false
     @State private var showLogoutError = false
     @State private var showDeleteConfirmation = false
@@ -125,6 +127,11 @@ struct ProfileOverviewView: View {
         }
         .sheet(isPresented: $showSavedProfiles) {
             SavedProfilesView()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showQuickActions) {
+            QuickActionsSettingsSheet()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -246,9 +253,20 @@ struct ProfileOverviewView: View {
                 title: Inc.NearbyNotifications.settingsTitle.localized,
                 systemImage: "bell",
                 value: notificationStatusTitle,
-                position: .bottom,
+                position: .middle,
                 action: manageNotificationAuthorization
             )
+
+            Divider().padding(.leading, 60)
+
+            ProfileOverviewRow(
+                title: Inc.QuickActions.title.localized,
+                systemImage: "bolt.fill",
+                value: quickActionsStatusTitle,
+                position: .bottom
+            ) {
+                showQuickActions = true
+            }
         }
         .background(
             Color(uiColor: .secondarySystemBackground),
@@ -335,6 +353,12 @@ struct ProfileOverviewView: View {
 
     private var scanningStatusTitle: String {
         coordinator.isScaning
+            ? Inc.Settings.statusOn.localized
+            : Inc.Settings.statusOff.localized
+    }
+
+    private var quickActionsStatusTitle: String {
+        quickActions.hasEnabledActions
             ? Inc.Settings.statusOn.localized
             : Inc.Settings.statusOff.localized
     }

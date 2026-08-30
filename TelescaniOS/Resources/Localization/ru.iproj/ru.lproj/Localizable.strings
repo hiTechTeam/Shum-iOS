@@ -144,6 +144,14 @@
 "nearbyNotificationDisabled" = "Выключены";
 "nearbyNotificationConfigure" = "Настроить";
 
+/* Быстрые действия */
+"quickActionsTitle" = "Быстрые действия";
+"quickActionsDescription" = "Выбранные действия будут выполняться сразу, без подтверждения.";
+"quickActionsChat" = "Быстрый чат";
+"quickActionsChatDescription" = "Сразу открывать Telegram при нажатии на карточку.";
+"quickActionsBlock" = "Быстрый блок";
+"quickActionsBlockDescription" = "Сразу блокировать профиль при свайпе влево, без жалобы.";
+
 /* Модерация профиля пользователя рядом */
 "nearbyProfileClose" = "Закрыть профиль";
 "nearbyProfileOpenCard" = "Открыть карточку";

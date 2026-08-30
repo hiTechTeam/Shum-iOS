@@ -7,6 +7,8 @@ struct PeopleView: View {
     @EnvironmentObject var peopleViewModel: PeopleViewModel
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
+    @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
 
     @State private var selectedUser: NearbyUser?
     @State private var photoPreviewUser: NearbyUser?
@@ -14,6 +16,7 @@ struct PeopleView: View {
     @State private var telegramTransitionRequest: TelegramTransitionRequest?
     @State private var showsEncounterHistory = false
     @State private var showsSavedBlockInformation = false
+    @State private var showsQuickBlockError = false
 
     var body: some View {
         ZStack {
@@ -77,10 +80,7 @@ struct PeopleView: View {
                                         backgroundColor: .systemRed,
                                         style: .destructive,
                                         handler: {
-                                            moderationRequest = ProfileModerationRequest(
-                                                user: user,
-                                                waitsForTransientUI: true
-                                            )
+                                            handleSwipeBlock(user)
                                         }
                                     )
                                 ]
@@ -170,6 +170,14 @@ struct PeopleView: View {
         } message: {
             Text(Inc.NearbyProfile.savedBlockMessage.localized)
         }
+        .alert(
+            Inc.NearbyProfile.actionFailedTitle.localized,
+            isPresented: $showsQuickBlockError
+        ) {
+            Button(Inc.NearbyProfile.acknowledge.localized, role: .cancel) { }
+        } message: {
+            Text(Inc.NearbyProfile.actionFailedMessage.localized)
+        }
         .task {
             await peopleViewModel.synchronizeBlockedProfiles()
             peopleViewModel.refreshEncounterHistory()
@@ -182,9 +190,34 @@ struct PeopleView: View {
             return
         }
 
+        if quickActions.isQuickChatEnabled {
+            destination.open(using: openURL)
+            return
+        }
+
         telegramTransitionRequest = TelegramTransitionRequest(
             destination: destination
         )
+    }
+
+    private func handleSwipeBlock(_ user: NearbyUser) {
+        guard quickActions.isQuickBlockEnabled else {
+            moderationRequest = ProfileModerationRequest(
+                user: user,
+                waitsForTransientUI: true
+            )
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            Task {
+                do {
+                    try await peopleViewModel.block(user)
+                } catch {
+                    showsQuickBlockError = true
+                }
+            }
+        }
     }
 
     private func openPhoto(of user: NearbyUser) {
@@ -273,6 +306,13 @@ struct TelegramChatDestination {
         self.appURL = appURL
         self.webURL = webURL
     }
+
+    func open(using openURL: OpenURLAction) {
+        openURL(appURL) { accepted in
+            guard !accepted else { return }
+            openURL(webURL)
+        }
+    }
 }
 
 struct TelegramTransitionRequest: Identifiable {
@@ -304,17 +344,10 @@ private struct TelegramTransitionAlertModifier: ViewModifier {
         ) { request in
             Button(Inc.Common.cancel.localized, role: .cancel) { }
             Button(Inc.NearbyProfile.telegramTransitionContinue.localized) {
-                open(request.destination)
+                request.destination.open(using: openURL)
             }
         } message: { _ in
             Text(Inc.NearbyProfile.telegramTransitionMessage.localized)
-        }
-    }
-
-    private func open(_ destination: TelegramChatDestination) {
-        openURL(destination.appURL) { accepted in
-            guard !accepted else { return }
-            openURL(destination.webURL)
         }
     }
 }

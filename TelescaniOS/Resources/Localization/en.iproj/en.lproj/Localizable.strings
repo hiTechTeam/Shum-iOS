@@ -144,6 +144,14 @@
 "nearbyNotificationDisabled" = "Off";
 "nearbyNotificationConfigure" = "Set Up";
 
+/* Quick actions */
+"quickActionsTitle" = "Quick Actions";
+"quickActionsDescription" = "Selected actions will run immediately without confirmation.";
+"quickActionsChat" = "Quick Chat";
+"quickActionsChatDescription" = "Open Telegram immediately when you tap a profile card.";
+"quickActionsBlock" = "Quick Block";
+"quickActionsBlockDescription" = "Block a profile immediately when swiping left, without a report.";
+
 /* Nearby profile moderation */
 "nearbyProfileClose" = "Close profile";
 "nearbyProfileOpenCard" = "Open profile card";

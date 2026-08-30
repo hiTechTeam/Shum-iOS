@@ -266,6 +266,15 @@ struct Inc {
         static let configure: String = "nearbyNotificationConfigure"
     }
 
+    struct QuickActions {
+        static let title: String = "quickActionsTitle"
+        static let description: String = "quickActionsDescription"
+        static let chat: String = "quickActionsChat"
+        static let chatDescription: String = "quickActionsChatDescription"
+        static let block: String = "quickActionsBlock"
+        static let blockDescription: String = "quickActionsBlockDescription"
+    }
+
     // MARK: - Nearby profile moderation
     struct NearbyProfile {
         static let close: String = "nearbyProfileClose"

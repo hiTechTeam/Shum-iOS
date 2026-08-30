@@ -4,7 +4,9 @@ import UIKit
 
 struct EncounterHistoryView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
+    @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
 
     @State private var selectedEncounter: EncounterHistoryEntry?
     @State private var photoPreviewUser: NearbyUser?
@@ -14,6 +16,7 @@ struct EncounterHistoryView: View {
     @State private var telegramTransitionRequest: TelegramTransitionRequest?
     @State private var pendingDeletion: EncounterHistoryEntry?
     @State private var showsSavedBlockInformation = false
+    @State private var showsQuickBlockError = false
 
     var body: some View {
         ZStack {
@@ -64,6 +67,14 @@ struct EncounterHistoryView: View {
             Button(Inc.NearbyProfile.savedBlockOK.localized, role: .cancel) { }
         } message: {
             Text(Inc.NearbyProfile.savedBlockMessage.localized)
+        }
+        .alert(
+            Inc.NearbyProfile.actionFailedTitle.localized,
+            isPresented: $showsQuickBlockError
+        ) {
+            Button(Inc.NearbyProfile.acknowledge.localized, role: .cancel) { }
+        } message: {
+            Text(Inc.NearbyProfile.actionFailedMessage.localized)
         }
         .alert(
             Inc.EncounterHistory.clearTitle.localized,
@@ -143,10 +154,7 @@ struct EncounterHistoryView: View {
                         backgroundColor: .systemRed,
                         style: .destructive,
                         handler: {
-                            moderationRequest = ProfileModerationRequest(
-                                user: encounter.user,
-                                waitsForTransientUI: true
-                            )
+                            handleSwipeBlock(encounter.user)
                         }
                     )
 
@@ -207,9 +215,34 @@ struct EncounterHistoryView: View {
             return
         }
 
+        if quickActions.isQuickChatEnabled {
+            destination.open(using: openURL)
+            return
+        }
+
         telegramTransitionRequest = TelegramTransitionRequest(
             destination: destination
         )
+    }
+
+    private func handleSwipeBlock(_ user: NearbyUser) {
+        guard quickActions.isQuickBlockEnabled else {
+            moderationRequest = ProfileModerationRequest(
+                user: user,
+                waitsForTransientUI: true
+            )
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            Task {
+                do {
+                    try await peopleViewModel.block(user)
+                } catch {
+                    showsQuickBlockError = true
+                }
+            }
+        }
     }
 
     private func deleteEncounter(_ encounter: EncounterHistoryEntry) {
