@@ -313,6 +313,11 @@ struct Inc {
             "nearbyProfileBlockWithoutReport"
         static let blockedMenu: String = "nearbyProfileBlockedMenu"
         static let blockedProfiles: String = "nearbyProfileBlockedProfiles"
+        static let savedMenu: String = "nearbyProfileSavedMenu"
+        static let savedProfiles: String = "nearbyProfileSavedProfiles"
+        static let noSaved: String = "nearbyProfileNoSaved"
+        static let noSavedProfiles: String =
+            "nearbyProfileNoSavedProfiles"
         static let noBlockedProfiles: String = "nearbyProfileNoBlockedProfiles"
         static let noBlocked: String = "nearbyProfileNoBlocked"
         static let unblock: String = "nearbyProfileUnblock"

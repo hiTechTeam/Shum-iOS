@@ -180,6 +180,10 @@
 "nearbyProfileBlockWithoutReport" = "Заблокировать без жалобы";
 "nearbyProfileBlockedMenu" = "Заблокированные";
 "nearbyProfileBlockedProfiles" = "Заблокированные профили";
+"nearbyProfileSavedMenu" = "Сохранённые";
+"nearbyProfileSavedProfiles" = "Сохранённые профили";
+"nearbyProfileNoSaved" = "Нет";
+"nearbyProfileNoSavedProfiles" = "Нет сохранённых профилей";
 "nearbyProfileNoBlockedProfiles" = "Нет заблокированных профилей";
 "nearbyProfileNoBlocked" = "Нет";
 "nearbyProfileUnblock" = "Разблокировать";

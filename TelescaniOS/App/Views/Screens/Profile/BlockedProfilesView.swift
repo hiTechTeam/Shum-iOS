@@ -121,3 +121,93 @@ private struct BlockedProfileAvatar: View {
             }
     }
 }
+
+struct SavedProfilesView: View {
+    @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if savedPeople.users.isEmpty {
+                    ContentUnavailableView(
+                        Inc.NearbyProfile.noSavedProfiles.localized,
+                        systemImage: "heart"
+                    )
+                } else {
+                    List(savedPeople.users) { user in
+                        HStack(spacing: 12) {
+                            SavedProfileAvatar(user: user)
+
+                            Text(user.name)
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+
+                            Spacer()
+
+                            Button(Inc.EncounterHistory.remove.localized) {
+                                UIImpactFeedbackGenerator(
+                                    style: .light
+                                ).impactOccurred()
+                                savedPeople.remove(user)
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                        }
+                        .listRowInsets(
+                            EdgeInsets(
+                                top: 8,
+                                leading: 16,
+                                bottom: 8,
+                                trailing: 16
+                            )
+                        )
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(Inc.NearbyProfile.savedProfiles.localized)
+                        .telescanSheetTitleStyle()
+                }
+            }
+        }
+    }
+}
+
+private struct SavedProfileAvatar: View {
+    let user: NearbyUser
+
+    private let size: CGFloat = 44
+
+    var body: some View {
+        Group {
+            if let photoURL = user.photoURL,
+               let url = URL(string: photoURL) {
+                KFImage(url)
+                    .placeholder { placeholder }
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+    }
+
+    private var placeholder: some View {
+        Circle()
+            .fill(Color(uiColor: .tertiarySystemFill))
+            .overlay {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 19))
+                    .foregroundStyle(.secondary)
+            }
+    }
+}

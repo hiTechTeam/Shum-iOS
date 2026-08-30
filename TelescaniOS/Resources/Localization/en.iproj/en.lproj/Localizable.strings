@@ -180,6 +180,10 @@
 "nearbyProfileBlockWithoutReport" = "Block without reporting";
 "nearbyProfileBlockedMenu" = "Blocked";
 "nearbyProfileBlockedProfiles" = "Blocked profiles";
+"nearbyProfileSavedMenu" = "Saved";
+"nearbyProfileSavedProfiles" = "Saved profiles";
+"nearbyProfileNoSaved" = "None";
+"nearbyProfileNoSavedProfiles" = "No saved profiles";
 "nearbyProfileNoBlockedProfiles" = "No blocked profiles";
 "nearbyProfileNoBlocked" = "None";
 "nearbyProfileUnblock" = "Unblock";

@@ -50,45 +50,101 @@ struct SystemSwipeAction {
     }
 }
 
-private final class SavedPeopleStateStore: ObservableObject {
+final class SavedPeopleStateStore: ObservableObject {
     static let shared = SavedPeopleStateStore()
 
-    private let storageKey = "savedPeopleProfileIDs"
+    private let identifiersStorageKey = "savedPeopleProfileIDs"
+    private let profilesStorageKey = "savedPeopleProfiles"
     @Published private var savedIDs: Set<UUID>
+    @Published private(set) var users: [NearbyUser]
 
     private init() {
-        savedIDs = Set(
+        let storedIDs = Set(
             UserDefaults.standard
-                .stringArray(forKey: storageKey)?
+                .stringArray(forKey: identifiersStorageKey)?
                 .compactMap(UUID.init(uuidString:)) ?? []
         )
+        let decodedUsers = UserDefaults.standard
+            .data(forKey: profilesStorageKey)
+            .flatMap { try? JSONDecoder().decode([NearbyUser].self, from: $0) }
+            ?? []
+        var seenIDs = Set<UUID>()
+        let uniqueUsers = decodedUsers.filter {
+            seenIDs.insert($0.id).inserted
+        }
+        users = uniqueUsers
+        savedIDs = storedIDs.union(uniqueUsers.map(\.id))
     }
 
     func contains(_ id: UUID) -> Bool {
         savedIDs.contains(id)
     }
 
+    var count: Int {
+        savedIDs.count
+    }
+
     @discardableResult
-    func toggle(_ id: UUID) -> Bool {
+    func toggle(_ user: NearbyUser) -> Bool {
         let isSaved: Bool
 
-        if savedIDs.remove(id) != nil {
+        if savedIDs.remove(user.id) != nil {
+            users.removeAll { $0.id == user.id }
             isSaved = false
         } else {
-            savedIDs.insert(id)
+            savedIDs.insert(user.id)
+            users.append(user)
             isSaved = true
         }
 
+        persist()
+        return isSaved
+    }
+
+    func remove(_ user: NearbyUser) {
+        guard savedIDs.contains(user.id) else { return }
+        _ = toggle(user)
+    }
+
+    func refreshProfile(_ user: NearbyUser) {
+        guard savedIDs.contains(user.id) else { return }
+
+        if let index = users.firstIndex(where: { $0.id == user.id }) {
+            guard users[index] != user else { return }
+            users[index] = user
+        } else {
+            users.append(user)
+        }
+
+        persist()
+    }
+
+    private func persist() {
         UserDefaults.standard.set(
             savedIDs.map(\.uuidString).sorted(),
-            forKey: storageKey
+            forKey: identifiersStorageKey
         )
-        return isSaved
+        UserDefaults.standard.set(
+            try? JSONEncoder().encode(users),
+            forKey: profilesStorageKey
+        )
     }
 }
 
+protocol SavedPeopleListItem: Identifiable where ID == UUID {
+    var savedProfile: NearbyUser { get }
+}
+
+extension NearbyUser: SavedPeopleListItem {
+    var savedProfile: NearbyUser { self }
+}
+
+extension EncounterHistoryEntry: SavedPeopleListItem {
+    var savedProfile: NearbyUser { user }
+}
+
 private struct SavedPeopleRow<Item, RowContent>: View
-where Item: Identifiable, Item.ID == UUID, RowContent: View {
+where Item: SavedPeopleListItem, RowContent: View {
     @ObservedObject var savedPeople: SavedPeopleStateStore
 
     let item: Item
@@ -193,7 +249,7 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
         }
 
         UIView.animate(
-            withDuration: duration ?? (isVisible ? 0.16 : 0.24),
+            withDuration: duration ?? (isVisible ? 0.16 : 0.45),
             delay: 0,
             options: [.allowUserInteraction, .beginFromCurrentState],
             animations: changes
@@ -209,7 +265,7 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
 }
 
 struct SystemSwipeList<Item, RowContent>: UIViewControllerRepresentable
-where Item: Identifiable & Equatable, Item.ID == UUID, RowContent: View {
+where Item: SavedPeopleListItem & Equatable, RowContent: View {
     let items: [Item]
     let descriptionText: String
     let reloadIdentifier: AnyHashable?
@@ -332,6 +388,7 @@ where Item: Identifiable & Equatable, Item.ID == UUID, RowContent: View {
                 .margins(.all, 0)
             } else {
                 let item = parent.items[indexPath.row - 1]
+                savedPeople.refreshProfile(item.savedProfile)
                 cell.configureInteractionSurface(
                     isEnabled: true
                 )
@@ -391,7 +448,7 @@ where Item: Identifiable & Equatable, Item.ID == UUID, RowContent: View {
                     title: presentation?.title ?? descriptor.title
                 ) { _, _, completion in
                     if descriptor.savedPresentation != nil {
-                        self.savedPeople.toggle(item.id)
+                        self.savedPeople.toggle(item.savedProfile)
                     }
 
                     descriptor.handler()

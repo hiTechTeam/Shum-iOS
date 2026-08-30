@@ -8,11 +8,13 @@ struct ProfileOverviewView: View {
 
     @ObservedObject var authCodeViewModel: CodeViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
+    @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
 
     @State private var showScanningSettings = false
     @State private var showInfoSheet = false
     @State private var showLogoutOptions = false
     @State private var showBlockedProfiles = false
+    @State private var showSavedProfiles = false
     @State private var showLogoutConfirmation = false
     @State private var showLogoutError = false
     @State private var showDeleteConfirmation = false
@@ -57,7 +59,11 @@ struct ProfileOverviewView: View {
             ScrollView {
                 VStack(spacing: 30) {
                     profileHeader
-                    settingsCard
+
+                    VStack(spacing: 20) {
+                        settingsCard
+                        peopleCard
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 30)
@@ -114,6 +120,11 @@ struct ProfileOverviewView: View {
         .sheet(isPresented: $showBlockedProfiles) {
             BlockedProfilesView()
                 .environmentObject(coordinator.peopleViewModel)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showSavedProfiles) {
+            SavedProfilesView()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -236,6 +247,22 @@ struct ProfileOverviewView: View {
                 value: notificationStatusTitle,
                 action: manageNotificationAuthorization
             )
+        }
+        .background(
+            Color(uiColor: .secondarySystemBackground),
+            in: RoundedRectangle(cornerRadius: 22)
+        )
+    }
+
+    private var peopleCard: some View {
+        VStack(spacing: 0) {
+            ProfileOverviewRow(
+                title: Inc.NearbyProfile.savedMenu.localized,
+                systemImage: "heart.fill",
+                value: savedProfilesStatusTitle
+            ) {
+                showSavedProfiles = true
+            }
 
             Divider().padding(.leading, 60)
 
@@ -313,6 +340,12 @@ struct ProfileOverviewView: View {
             : String(count)
     }
 
+    private var savedProfilesStatusTitle: String {
+        savedPeople.count == 0
+            ? Inc.NearbyProfile.noSaved.localized
+            : String(savedPeople.count)
+    }
+
     private func manageNotificationAuthorization() {
         Task {
             let center = UNUserNotificationCenter.current()
@@ -368,13 +401,13 @@ private struct ProfileOverviewRow: View {
     let title: String
     let systemImage: String
     let value: String?
-    let action: () -> Void
+    let action: (() -> Void)?
 
     init(
         title: String,
         systemImage: String,
         value: String? = nil,
-        action: @escaping () -> Void
+        action: (() -> Void)? = nil
     ) {
         self.title = title
         self.systemImage = systemImage
@@ -382,34 +415,50 @@ private struct ProfileOverviewRow: View {
         self.action = action
     }
 
+    @ViewBuilder
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 16) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 20, weight: .regular))
-                    .frame(width: 24)
+        if let action {
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                action()
+            } label: {
+                rowContent(showsDisclosureIndicator: true)
+            }
+            .buttonStyle(.plain)
+        } else {
+            rowContent(showsDisclosureIndicator: false)
+        }
+    }
 
-                Text(title)
-                    .font(.system(size: 17))
+    private func rowContent(
+        showsDisclosureIndicator: Bool
+    ) -> some View {
+        HStack(spacing: 16) {
+            Image(systemName: systemImage)
+                .font(.system(size: 20, weight: .regular))
+                .frame(width: 24)
 
-                Spacer()
+            Text(title)
+                .font(.system(size: 17))
 
-                if let value {
-                    Text(value)
-                        .font(.system(size: 15))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+            Spacer()
 
+            if let value {
+                Text(value)
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            if showsDisclosureIndicator {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.tertiary)
             }
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 20)
-            .frame(height: 58)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 20)
+        .frame(height: 58)
+        .contentShape(Rectangle())
     }
 }
