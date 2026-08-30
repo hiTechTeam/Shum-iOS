@@ -56,7 +56,7 @@ struct ProfileOverviewView: View {
 
     var body: some View {
         ZStack {
-            Color.tsBackground.ignoresSafeArea()
+            Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 30) {
@@ -247,7 +247,9 @@ struct ProfileOverviewView: View {
                 showScanningSettings = true
             }
 
-            Divider().padding(.leading, 60)
+            Divider()
+                .padding(.leading, 60)
+                .padding(.trailing, 20)
 
             ProfileOverviewRow(
                 title: Inc.NearbyNotifications.settingsTitle.localized,
@@ -257,7 +259,9 @@ struct ProfileOverviewView: View {
                 action: manageNotificationAuthorization
             )
 
-            Divider().padding(.leading, 60)
+            Divider()
+                .padding(.leading, 60)
+                .padding(.trailing, 20)
 
             ProfileOverviewRow(
                 title: Inc.QuickActions.title.localized,
@@ -269,7 +273,7 @@ struct ProfileOverviewView: View {
             }
         }
         .background(
-            Color(uiColor: .secondarySystemBackground),
+            Color(uiColor: .secondarySystemGroupedBackground),
             in: RoundedRectangle(cornerRadius: 22)
         )
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -286,7 +290,9 @@ struct ProfileOverviewView: View {
                 showSavedProfiles = true
             }
 
-            Divider().padding(.leading, 60)
+            Divider()
+                .padding(.leading, 60)
+                .padding(.trailing, 20)
 
             ProfileOverviewRow(
                 title: Inc.NearbyProfile.blockedMenu.localized,
@@ -298,7 +304,7 @@ struct ProfileOverviewView: View {
             }
         }
         .background(
-            Color(uiColor: .secondarySystemBackground),
+            Color(uiColor: .secondarySystemGroupedBackground),
             in: RoundedRectangle(cornerRadius: 22)
         )
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -576,7 +582,7 @@ private struct ProfileMenuPressedButtonStyle: ButtonStyle {
 
         configuration.label
             .background(
-                isHighlighted ? Color(uiColor: .tertiarySystemFill) : .clear,
+                isHighlighted ? Color(uiColor: .secondarySystemFill) : .clear,
                 in: position.shape
             )
             .animation(

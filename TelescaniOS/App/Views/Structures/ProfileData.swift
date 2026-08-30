@@ -46,7 +46,7 @@ struct ProfileDataView: View {
             )
         }
         .background(
-            Color(uiColor: .secondarySystemBackground),
+            Color(uiColor: .secondarySystemGroupedBackground),
             in: RoundedRectangle(cornerRadius: 22)
         )
         .padding(.horizontal, 20)
@@ -55,6 +55,7 @@ struct ProfileDataView: View {
     private var profileRowDivider: some View {
         Divider()
             .padding(.leading, 20)
+            .padding(.trailing, 20)
     }
 
     private var displayBio: String {
@@ -100,7 +101,7 @@ struct ProfileDataView: View {
 
     var body: some View {
         ZStack {
-            Color.tsBackground.ignoresSafeArea()
+            Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
             scrollContent
         }
         .onChange(of: authCodeViewModel.photoS3URL) { _, value in
@@ -244,6 +245,7 @@ struct ScanningSettingsSheet: View {
                     )
                 } header: {
                     Text(Inc.Scanning.scanToggleDescription.localized)
+                        .telescanDescriptionStyle()
                         .textCase(nil)
                 }
             }

@@ -23,6 +23,7 @@ struct QuickActionsSettingsSheet: View {
 
                         Divider()
                             .padding(.leading, 60)
+                            .padding(.trailing, 16)
 
                         QuickActionToggleRow(
                             title: Inc.QuickActions.clear.localized,
@@ -34,6 +35,7 @@ struct QuickActionsSettingsSheet: View {
 
                         Divider()
                             .padding(.leading, 60)
+                            .padding(.trailing, 16)
 
                         QuickActionToggleRow(
                             title: Inc.QuickActions.block.localized,
@@ -43,19 +45,15 @@ struct QuickActionsSettingsSheet: View {
                             isOn: $settings.isQuickBlockEnabled
                         )
                     }
-                    .background(
-                        Color(uiColor: .secondarySystemBackground),
-                        in: RoundedRectangle(cornerRadius: 22)
-                    )
-                    .clipShape(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    )
+                    .modifier(QuickActionsGroupBackground())
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
                 .padding(.bottom, 32)
             }
-            .background(Color.tsBackground.ignoresSafeArea())
+            .background(
+                Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+            )
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -70,6 +68,27 @@ struct QuickActionsSettingsSheet: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private struct QuickActionsGroupBackground: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(
+                .regular,
+                in: .rect(cornerRadius: 22)
+            )
+        } else {
+            content
+                .background(
+                    Color(uiColor: .secondarySystemGroupedBackground),
+                    in: RoundedRectangle(cornerRadius: 22)
+                )
+                .clipShape(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                )
         }
     }
 }
