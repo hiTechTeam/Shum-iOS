@@ -370,14 +370,17 @@ struct ProfileAvatarButton: View {
                 isEnabled: isSwipeSurfaceEnabled
             )
         }
-        .profileRowEdgeSwipeActions([
-            ProfileRowEdgeAction(
-                title: Inc.NearbyProfile.block.localized,
-                systemImage: "person.crop.circle.badge.xmark",
-                tint: Color(uiColor: .systemRed),
-                action: swipeBlockAction
-            )
-        ])
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                swipeBlockAction()
+            } label: {
+                Label(
+                    Inc.NearbyProfile.block.localized,
+                    systemImage: "person.crop.circle.badge.xmark"
+                )
+            }
+            .tint(.red)
+        }
         .profileRowContextMenu(
             user: user,
             writeAction: action,
@@ -459,158 +462,6 @@ struct ProfileRowSwipeBackground: View {
                     value: isVisible
                 )
         }
-    }
-}
-
-struct ProfileRowEdgeAction {
-    let title: String
-    let systemImage: String
-    let tint: Color
-    let action: () -> Void
-}
-
-private struct ProfileRowEdgeSwipeActionsModifier: ViewModifier {
-    private let actionWidth: CGFloat = 72
-    private let activationWidth: CGFloat = 32
-
-    let actions: [ProfileRowEdgeAction]
-
-    @State private var rowWidth: CGFloat = 0
-    @State private var restingOffset: CGFloat = 0
-    @State private var dragOffset: CGFloat = 0
-    @State private var isHandlingHorizontalDrag = false
-    @State private var rejectedCurrentDrag = false
-
-    private var actionsWidth: CGFloat {
-        CGFloat(actions.count) * actionWidth
-    }
-
-    private var currentOffset: CGFloat {
-        max(-actionsWidth, min(0, restingOffset + dragOffset))
-    }
-
-    private var isOpen: Bool {
-        restingOffset < -0.5
-    }
-
-    func body(content: Content) -> some View {
-        ZStack(alignment: .trailing) {
-            actionButtons
-
-            content
-                .offset(x: currentOffset)
-                .overlay {
-                    if isOpen && !isHandlingHorizontalDrag {
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .onTapGesture(perform: close)
-                    }
-                }
-        }
-        .background {
-            GeometryReader { geometry in
-                Color.clear
-                    .onAppear {
-                        rowWidth = geometry.size.width
-                    }
-                    .onChange(of: geometry.size.width) { _, width in
-                        rowWidth = width
-                    }
-            }
-        }
-        .contentShape(Rectangle())
-        .simultaneousGesture(edgeDragGesture)
-        .onDisappear {
-            restingOffset = 0
-            dragOffset = 0
-            isHandlingHorizontalDrag = false
-            rejectedCurrentDrag = false
-        }
-    }
-
-    private var actionButtons: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
-                Button {
-                    close()
-                    action.action()
-                } label: {
-                    Image(systemName: action.systemImage)
-                        .font(.system(size: 19, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: actionWidth)
-                        .frame(maxHeight: .infinity)
-                        .background(action.tint)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(action.title)
-            }
-        }
-        .frame(width: actionsWidth)
-        .allowsHitTesting(currentOffset < -0.5)
-        .accessibilityHidden(currentOffset >= -0.5)
-    }
-
-    private var edgeDragGesture: some Gesture {
-        DragGesture(minimumDistance: 10, coordinateSpace: .local)
-            .onChanged { value in
-                let horizontalDistance = abs(value.translation.width)
-                let verticalDistance = abs(value.translation.height)
-
-                guard !rejectedCurrentDrag else { return }
-
-                if !isHandlingHorizontalDrag {
-                    guard horizontalDistance > verticalDistance else {
-                        if verticalDistance >= 10 {
-                            rejectedCurrentDrag = true
-                        }
-                        return
-                    }
-
-                    let startsAtTrailingEdge = value.startLocation.x
-                        >= max(0, rowWidth - activationWidth)
-                    guard isOpen || startsAtTrailingEdge else {
-                        rejectedCurrentDrag = true
-                        return
-                    }
-
-                    isHandlingHorizontalDrag = true
-                }
-
-                dragOffset = value.translation.width
-            }
-            .onEnded { value in
-                defer {
-                    dragOffset = 0
-                    isHandlingHorizontalDrag = false
-                    rejectedCurrentDrag = false
-                }
-
-                guard isHandlingHorizontalDrag else { return }
-
-                let projectedOffset = restingOffset
-                    + value.predictedEndTranslation.width
-                let shouldOpen = projectedOffset < -(actionsWidth * 0.45)
-
-                withAnimation(.snappy(duration: 0.24)) {
-                    restingOffset = shouldOpen ? -actionsWidth : 0
-                }
-            }
-    }
-
-    private func close() {
-        withAnimation(.snappy(duration: 0.22)) {
-            restingOffset = 0
-            dragOffset = 0
-        }
-    }
-}
-
-extension View {
-    func profileRowEdgeSwipeActions(
-        _ actions: [ProfileRowEdgeAction]
-    ) -> some View {
-        modifier(ProfileRowEdgeSwipeActionsModifier(actions: actions))
     }
 }
 

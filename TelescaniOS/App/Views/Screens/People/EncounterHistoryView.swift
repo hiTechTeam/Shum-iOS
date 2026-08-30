@@ -246,20 +246,27 @@ private struct EncounterHistoryRow: View {
         .background {
             ProfileRowSwipeBackground(coordinateSpace: .history)
         }
-        .profileRowEdgeSwipeActions([
-            ProfileRowEdgeAction(
-                title: Inc.NearbyProfile.block.localized,
-                systemImage: "person.crop.circle.badge.xmark",
-                tint: Color(uiColor: .systemRed),
-                action: swipeBlockAction
-            ),
-            ProfileRowEdgeAction(
-                title: Inc.EncounterHistory.delete.localized,
-                systemImage: "trash",
-                tint: Color(uiColor: .systemGray),
-                action: deleteAction
-            )
-        ])
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                deleteAction()
+            } label: {
+                Label(
+                    Inc.EncounterHistory.delete.localized,
+                    systemImage: "trash"
+                )
+            }
+            .tint(.gray)
+
+            Button {
+                swipeBlockAction()
+            } label: {
+                Label(
+                    Inc.NearbyProfile.block.localized,
+                    systemImage: "person.crop.circle.badge.xmark"
+                )
+            }
+            .tint(.red)
+        }
         .profileRowContextMenu(
             user: encounter.user,
             lastMetAt: encounter.lastSeen,
