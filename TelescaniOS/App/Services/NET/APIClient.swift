@@ -122,7 +122,6 @@ actor APIClient {
 
     func submitReport(
         targetID: UUID,
-        reason: ReportReason,
         details: String?,
         requestID: UUID = UUID()
     ) async throws -> ReportResponse {
@@ -132,7 +131,6 @@ actor APIClient {
             body: ReportCreateRequest(
                 clientRequestId: requestID,
                 targetTelescanId: targetID,
-                reason: reason,
                 details: details
             )
         )

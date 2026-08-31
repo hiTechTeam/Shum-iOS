@@ -9,6 +9,86 @@ protocol EncounterHistoryStoring: AnyObject {
     func removeAll()
 }
 
+protocol UnviewedEncounterStoring: AnyObject {
+    var ids: Set<UUID> { get }
+
+    func insert(_ id: UUID)
+    func remove(_ id: UUID)
+    func retain(_ ids: Set<UUID>)
+    func removeAll()
+}
+
+final class UnviewedEncounterStore: UnviewedEncounterStoring {
+    static let shared = UnviewedEncounterStore()
+
+    private let defaults: UserDefaults
+    private let key: String
+
+    private(set) var ids: Set<UUID>
+
+    init(
+        defaults: UserDefaults = .standard,
+        key: String = "telescan.unviewed-encounters.v1"
+    ) {
+        self.defaults = defaults
+        self.key = key
+        ids = Set(
+            defaults.stringArray(forKey: key)?
+                .compactMap(UUID.init(uuidString:)) ?? []
+        )
+    }
+
+    func insert(_ id: UUID) {
+        guard ids.insert(id).inserted else { return }
+        persist()
+    }
+
+    func remove(_ id: UUID) {
+        guard ids.remove(id) != nil else { return }
+        persist()
+    }
+
+    func retain(_ ids: Set<UUID>) {
+        let retained = self.ids.intersection(ids)
+        guard retained != self.ids else { return }
+        self.ids = retained
+        persist()
+    }
+
+    func removeAll() {
+        ids.removeAll()
+        defaults.removeObject(forKey: key)
+    }
+
+    private func persist() {
+        guard !ids.isEmpty else {
+            defaults.removeObject(forKey: key)
+            return
+        }
+        defaults.set(ids.map(\.uuidString).sorted(), forKey: key)
+    }
+}
+
+final class InMemoryUnviewedEncounterStore: UnviewedEncounterStoring {
+    private(set) var ids: Set<UUID> = []
+
+    func insert(_ id: UUID) {
+        ids.insert(id)
+    }
+
+    func remove(_ id: UUID) {
+        ids.remove(id)
+    }
+
+    func retain(_ ids: Set<UUID>) {
+        self.ids.formIntersection(ids)
+    }
+
+    func removeAll() {
+        ids.removeAll()
+    }
+}
+
 struct PendingEncounterIdentity: Identifiable, Codable, Equatable {
     let id: UUID
     let lastSeen: Date

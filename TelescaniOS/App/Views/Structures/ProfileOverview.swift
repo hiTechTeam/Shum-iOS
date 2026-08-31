@@ -290,6 +290,9 @@ struct ProfileOverviewView: View {
                 ProfileOverviewRow(
                     title: Inc.Tabs.metTitle.localized,
                     systemImage: "clock.arrow.circlepath",
+                    accentValue: peopleViewModel.unviewedEncounterCount > 0
+                        ? "+\(peopleViewModel.unviewedEncounterCount)"
+                        : nil,
                     value: String(peopleViewModel.encounterHistory.count),
                     position: .top
                 ) {
@@ -461,6 +464,7 @@ struct ProfileOverviewView: View {
 private struct ProfileOverviewRow: View {
     let title: String
     let systemImage: String
+    let accentValue: String?
     let value: String?
     let position: ProfileMenuRowPosition
     let action: (() -> Void)?
@@ -468,12 +472,14 @@ private struct ProfileOverviewRow: View {
     init(
         title: String,
         systemImage: String,
+        accentValue: String? = nil,
         value: String? = nil,
         position: ProfileMenuRowPosition = .single,
         action: (() -> Void)? = nil
     ) {
         self.title = title
         self.systemImage = systemImage
+        self.accentValue = accentValue
         self.value = value
         self.position = position
         self.action = action
@@ -502,6 +508,13 @@ private struct ProfileOverviewRow: View {
                 .font(.system(size: 17))
 
             Spacer()
+
+            if let accentValue {
+                Text(accentValue)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.green)
+                    .lineLimit(1)
+            }
 
             if let value {
                 Text(value)

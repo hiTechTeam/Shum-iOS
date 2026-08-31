@@ -17,6 +17,7 @@ struct EncounterHistoryView: View {
     @State private var pendingDeletion: EncounterHistoryEntry?
     @State private var showsSavedBlockInformation = false
     @State private var showsQuickBlockError = false
+    @State private var highlightedEncounterIDs: Set<UUID> = []
 
     var body: some View {
         ZStack {
@@ -205,6 +206,34 @@ struct EncounterHistoryView: View {
                 }
             )
             .environmentObject(peopleViewModel)
+            .background {
+                Color.green.opacity(
+                    highlightedEncounterIDs.contains(encounter.id)
+                        ? 0.16
+                        : 0
+                )
+            }
+            .onAppear {
+                revealEncounterIfNeeded(encounter)
+            }
+        }
+    }
+
+    private func revealEncounterIfNeeded(
+        _ encounter: EncounterHistoryEntry
+    ) {
+        guard peopleViewModel.unviewedEncounterIDs.contains(encounter.id),
+              highlightedEncounterIDs.insert(encounter.id).inserted else {
+            return
+        }
+
+        peopleViewModel.markEncounterViewed(encounter.id)
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.5))
+            _ = withAnimation(.easeOut(duration: 0.8)) {
+                highlightedEncounterIDs.remove(encounter.id)
+            }
         }
     }
 

@@ -26,11 +26,24 @@ final class PeopleViewModel: ObservableObject {
     }
     @Published private(set) var disappearanceCountdowns: [String: Int] = [:]
     @Published private(set) var blockedProfiles: [BlockedProfileResponse] = []
-    @Published private(set) var encounterHistory: [EncounterHistoryEntry] = []
+    @Published private(set) var encounterHistory: [EncounterHistoryEntry] = [] {
+        didSet {
+            updateApplicationIconBadge()
+        }
+    }
+    @Published private(set) var unviewedEncounterIDs: Set<UUID> = [] {
+        didSet {
+            updateApplicationIconBadge()
+        }
+    }
     @Published private(set) var discoveryError: String?
 
     var visibleUsers: [NearbyUser] {
         discoveryOrder.compactMap { userCache[$0] }
+    }
+
+    var unviewedEncounterCount: Int {
+        unviewedEncounterIDs.count
     }
 
     private let bleManager: BLEManagerProtocol
@@ -38,6 +51,7 @@ final class PeopleViewModel: ObservableObject {
     private let blockedProfileStore: BlockedProfileStoring
     private let encounterHistoryStore: EncounterHistoryStoring
     private let encounterBufferStore: EncounterHistoryStoring
+    private let unviewedEncounterStore: UnviewedEncounterStoring
     private let pendingEncounterIdentityStore:
         PendingEncounterIdentityStoring
     private let profileLoader: @MainActor (UUID) async throws
@@ -46,7 +60,6 @@ final class PeopleViewModel: ObservableObject {
         -> [BlockedProfileResponse]
     private let reportSubmitter: @MainActor (
         UUID,
-        ReportReason,
         String?
     ) async throws -> ReportResponse
     private let blockSubmitter: @MainActor (UUID) async throws
@@ -84,6 +97,7 @@ final class PeopleViewModel: ObservableObject {
             EncounterHistoryStore.shared,
         encounterBufferStore: EncounterHistoryStoring =
             EncounterBufferStore.shared,
+        unviewedEncounterStore: UnviewedEncounterStoring? = nil,
         pendingEncounterIdentityStore: PendingEncounterIdentityStoring? = nil,
         encounterRetention: TimeInterval? = EncounterHistoryPolicy.retention,
         historyUpdateInterval: TimeInterval = 60,
@@ -102,12 +116,10 @@ final class PeopleViewModel: ObservableObject {
             },
         reportSubmitter: @escaping @MainActor (
             UUID,
-            ReportReason,
             String?
-        ) async throws -> ReportResponse = { id, reason, details in
+        ) async throws -> ReportResponse = { id, details in
             try await FetchService.fetch.submitReport(
                 targetID: id,
-                reason: reason,
                 details: details
             )
         },
@@ -126,6 +138,13 @@ final class PeopleViewModel: ObservableObject {
         self.blockedProfileStore = blockedProfileStore
         self.encounterHistoryStore = encounterHistoryStore
         self.encounterBufferStore = encounterBufferStore
+        if let unviewedEncounterStore {
+            self.unviewedEncounterStore = unviewedEncounterStore
+        } else if bleManager is BLEManager {
+            self.unviewedEncounterStore = UnviewedEncounterStore.shared
+        } else {
+            self.unviewedEncounterStore = InMemoryUnviewedEncounterStore()
+        }
         if let pendingEncounterIdentityStore {
             self.pendingEncounterIdentityStore = pendingEncounterIdentityStore
         } else if bleManager is BLEManager {
@@ -153,13 +172,14 @@ final class PeopleViewModel: ObservableObject {
         self.reportSubmitter = reportSubmitter
         self.blockSubmitter = blockSubmitter
         self.unblockSubmitter = unblockSubmitter
+        unviewedEncounterIDs = self.unviewedEncounterStore.ids
         bleManager.delegate = self
         flushBufferedEncounters()
         refreshEncounterHistory(at: nowProvider())
         recoverPendingEncounterIdentities()
         startDistanceUpdater()
         startPresenceUpdater()
-        self.nearbyPeopleNotifier.setApplicationIconBadgeCount(0)
+        updateApplicationIconBadge()
     }
 
     deinit {
@@ -236,10 +256,9 @@ final class PeopleViewModel: ObservableObject {
 
     func submitReport(
         for user: NearbyUser,
-        reason: ReportReason,
         details: String?
     ) async throws {
-        _ = try await reportSubmitter(user.id, reason, details)
+        _ = try await reportSubmitter(user.id, details)
     }
 
     func block(_ user: NearbyUser) async throws {
@@ -277,15 +296,24 @@ final class PeopleViewModel: ObservableObject {
         }
         pendingIdentityRecoveryTasks.removeAll()
         encounterHistoryStore.removeAll()
+        unviewedEncounterStore.removeAll()
         pendingEncounterIdentityStore.removeAll()
         encounterHistory.removeAll()
+        unviewedEncounterIDs.removeAll()
         lastHistoryUpdates.removeAll()
     }
 
     func removeEncounterFromHistory(_ user: NearbyUser) {
         encounterHistoryStore.remove(ids: [user.id])
+        unviewedEncounterStore.remove(user.id)
+        unviewedEncounterIDs.remove(user.id)
         lastHistoryUpdates.removeValue(forKey: user.discoveryID)
         refreshEncounterHistory(at: nowProvider())
+    }
+
+    func markEncounterViewed(_ id: UUID) {
+        guard unviewedEncounterIDs.remove(id) != nil else { return }
+        unviewedEncounterStore.remove(id)
     }
 
     func refreshEncounterHistory(at now: Date = Date()) {
@@ -297,6 +325,12 @@ final class PeopleViewModel: ObservableObject {
         let blockedIDs = blockedProfileStore.ids
         encounterHistory = encounterHistoryStore.entries.filter {
             !blockedIDs.contains($0.user.discoveryID)
+        }
+        let visibleIDs = Set(encounterHistory.map(\.id))
+        unviewedEncounterStore.retain(visibleIDs)
+        let retainedUnviewedIDs = unviewedEncounterIDs.intersection(visibleIDs)
+        if retainedUnviewedIDs != unviewedEncounterIDs {
+            unviewedEncounterIDs = retainedUnviewedIDs
         }
     }
 
@@ -426,7 +460,7 @@ final class PeopleViewModel: ObservableObject {
 
     private func updateApplicationIconBadge() {
         nearbyPeopleNotifier.setApplicationIconBadgeCount(
-            visibleUsers.count
+            visibleUsers.count + unviewedEncounterCount
         )
     }
 
@@ -748,7 +782,15 @@ final class PeopleViewModel: ObservableObject {
             return
         }
 
+        let referenceDate = max(nowProvider(), date)
+        let isAlreadyInHistory = isEncounterInCurrentHistory(
+            user.id,
+            at: referenceDate
+        )
         encounterHistoryStore.record(user, seenAt: date)
+        if !isAlreadyInHistory {
+            markEncounterAsUnviewed(user.id)
+        }
         lastHistoryUpdates[canonicalID] = max(
             lastHistoryUpdates[canonicalID] ?? date,
             date
@@ -776,12 +818,39 @@ final class PeopleViewModel: ObservableObject {
         let blockedIDs = blockedProfileStore.ids
         for entry in bufferedEntries
         where !blockedIDs.contains(entry.user.discoveryID) {
+            let isAlreadyInHistory = isEncounterInCurrentHistory(
+                entry.id,
+                at: max(nowProvider(), entry.lastSeen)
+            )
             encounterHistoryStore.record(
                 entry.user,
                 seenAt: entry.lastSeen
             )
+            if !isAlreadyInHistory {
+                markEncounterAsUnviewed(entry.id)
+            }
         }
         encounterBufferStore.removeAll()
+    }
+
+    private func isEncounterInCurrentHistory(
+        _ id: UUID,
+        at referenceDate: Date
+    ) -> Bool {
+        guard let existing = encounterHistoryStore.entries.first(
+            where: { $0.id == id }
+        ) else {
+            return false
+        }
+        guard let encounterRetention else { return true }
+        return existing.lastSeen >= referenceDate.addingTimeInterval(
+            -encounterRetention
+        )
+    }
+
+    private func markEncounterAsUnviewed(_ id: UUID) {
+        unviewedEncounterStore.insert(id)
+        unviewedEncounterIDs.insert(id)
     }
 
     private func recoverPendingEncounterIdentities() {

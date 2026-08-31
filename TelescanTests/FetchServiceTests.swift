@@ -854,7 +854,6 @@ struct FetchServiceTests {
 
         let report = try await client.submitReport(
             targetID: targetID,
-            reason: .spam,
             details: "context"
         )
         let blocked = try await client.blockProfile(id: targetID)
@@ -876,7 +875,7 @@ struct FetchServiceTests {
             JSONSerialization.jsonObject(with: body) as? [String: Any]
         )
         #expect(json["targetTelescanId"] as? String == targetID.uuidString)
-        #expect(json["reason"] as? String == "spam")
+        #expect(json["reason"] as? String == "other")
         #expect(json["details"] as? String == "context")
         #expect(json["clientRequestId"] as? String != nil)
     }
@@ -992,19 +991,92 @@ struct FetchServiceTests {
         #expect(restored.entries.map(\.id) == [first.id])
     }
 
+    @Test("Unviewed encounters persist until their rows are seen")
+    func unviewedEncounterStorePersistsAndReconcilesIDs() throws {
+        let suiteName = "telescan.tests.unviewed.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let firstID = UUID()
+        let secondID = UUID()
+        let store = UnviewedEncounterStore(defaults: defaults)
+        store.insert(firstID)
+        store.insert(secondID)
+        store.remove(firstID)
+
+        let restored = UnviewedEncounterStore(defaults: defaults)
+        #expect(restored.ids == [secondID])
+
+        restored.retain([firstID])
+        #expect(restored.ids.isEmpty)
+    }
+
+    @Test("Application badge combines Nearby and new Met profiles")
+    @MainActor
+    func applicationBadgeCombinesNearbyAndEncounterHistory() async {
+        let manager = FakeBLEManager()
+        let notifier = FakeNearbyPeopleNotifier()
+        let historyStore = FakeEncounterHistoryStore()
+        let unviewedStore = InMemoryUnviewedEncounterStore()
+        let metUser = NearbyUser(
+            id: UUID(),
+            name: "Met",
+            username: "@met",
+            bio: nil,
+            photoURL: nil
+        )
+        historyStore.record(metUser, seenAt: Date())
+        unviewedStore.insert(metUser.id)
+        let nearbyID = UUID()
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            nearbyPeopleNotifier: notifier,
+            encounterHistoryStore: historyStore,
+            unviewedEncounterStore: unviewedStore,
+            profileLoader: { requestedID in
+                TelescanProfileResponse(
+                    telescanId: requestedID,
+                    name: "Nearby",
+                    username: "nearby",
+                    photoUrl: nil
+                )
+            }
+        )
+
+        #expect(notifier.applicationIconBadgeCounts.last == 1)
+
+        manager.emitDiscovery(id: nearbyID.uuidString, rssi: -55)
+        await Task.yield()
+        await viewModel.loadUserIfNeeded(
+            telescanID: nearbyID.uuidString.lowercased()
+        )
+
+        #expect(viewModel.visibleUsers.count == 1)
+        #expect(viewModel.encounterHistory.count == 1)
+        #expect(notifier.applicationIconBadgeCounts.last == 2)
+
+        viewModel.markEncounterViewed(metUser.id)
+        #expect(notifier.applicationIconBadgeCounts.last == 1)
+        viewModel.stopAllBluetoothActivity()
+    }
+
     @Test("Encounter history records after the heartbeat buffer expires")
     @MainActor
     func encounterHeartbeatPublishesAfterInactivity() async {
         let manager = FakeBLEManager()
+        let notifier = FakeNearbyPeopleNotifier()
         let historyStore = FakeEncounterHistoryStore()
         let bufferStore = FakeEncounterHistoryStore()
+        let unviewedStore = InMemoryUnviewedEncounterStore()
         let profileID = UUID()
         let start = Date(timeIntervalSince1970: 20_000)
         var now = start
         let viewModel = PeopleViewModel(
             bleManager: manager,
+            nearbyPeopleNotifier: notifier,
             encounterHistoryStore: historyStore,
             encounterBufferStore: bufferStore,
+            unviewedEncounterStore: unviewedStore,
             historyUpdateInterval: 60,
             encounterInactivityDelay: 0.5,
             profileLoader: { requestedID in
@@ -1046,6 +1118,13 @@ struct FetchServiceTests {
         #expect(historyStore.entries.first?.lastSeen == now)
         #expect(historyStore.recordCount == 1)
         #expect(bufferStore.entries.isEmpty)
+        #expect(viewModel.unviewedEncounterIDs == [profileID])
+        #expect(viewModel.unviewedEncounterCount == 1)
+        #expect(notifier.applicationIconBadgeCounts.last == 1)
+
+        viewModel.markEncounterViewed(profileID)
+        #expect(viewModel.unviewedEncounterCount == 0)
+        #expect(notifier.applicationIconBadgeCounts.last == 0)
 
         now = start.addingTimeInterval(80)
         manager.emitDiscovery(id: profileID.uuidString, rssi: -56)
@@ -1062,6 +1141,7 @@ struct FetchServiceTests {
         #expect(historyStore.entries.first?.lastSeen == now)
         #expect(historyStore.recordCount == 2)
         #expect(bufferStore.entries.isEmpty)
+        #expect(viewModel.unviewedEncounterIDs.isEmpty)
         viewModel.stopAllBluetoothActivity()
     }
 
@@ -1087,6 +1167,7 @@ struct FetchServiceTests {
     func bufferedEncounterPublishesOnNextLaunch() {
         let historyStore = FakeEncounterHistoryStore()
         let bufferStore = FakeEncounterHistoryStore()
+        let unviewedStore = InMemoryUnviewedEncounterStore()
         let user = NearbyUser(
             id: UUID(),
             name: "Interrupted encounter",
@@ -1101,6 +1182,7 @@ struct FetchServiceTests {
             bleManager: FakeBLEManager(),
             encounterHistoryStore: historyStore,
             encounterBufferStore: bufferStore,
+            unviewedEncounterStore: unviewedStore,
             encounterRetention: nil,
             nowProvider: { lastSignal.addingTimeInterval(10) }
         )
@@ -1109,7 +1191,57 @@ struct FetchServiceTests {
         #expect(historyStore.entries.first?.id == user.id)
         #expect(historyStore.entries.first?.lastSeen == lastSignal)
         #expect(viewModel.encounterHistory.first?.id == user.id)
+        #expect(viewModel.unviewedEncounterIDs == [user.id])
         #expect(viewModel.visibleUsers.isEmpty)
+        viewModel.markEncounterViewed(user.id)
+        viewModel.stopAllBluetoothActivity()
+
+        bufferStore.record(
+            user,
+            seenAt: lastSignal.addingTimeInterval(20)
+        )
+        let relaunchedViewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            encounterHistoryStore: historyStore,
+            encounterBufferStore: bufferStore,
+            unviewedEncounterStore: unviewedStore,
+            encounterRetention: nil,
+            nowProvider: { lastSignal.addingTimeInterval(30) }
+        )
+
+        #expect(relaunchedViewModel.unviewedEncounterIDs.isEmpty)
+        relaunchedViewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("An encounter becomes new again after leaving the 24-hour list")
+    @MainActor
+    func expiredEncounterBecomesUnviewedAgain() {
+        let historyStore = FakeEncounterHistoryStore()
+        let bufferStore = FakeEncounterHistoryStore()
+        let unviewedStore = InMemoryUnviewedEncounterStore()
+        let user = NearbyUser(
+            id: UUID(),
+            name: "Returned",
+            username: "@returned",
+            bio: nil,
+            photoURL: nil
+        )
+        let oldDate = Date(timeIntervalSince1970: 50_000)
+        let returnedAt = oldDate.addingTimeInterval(
+            EncounterHistoryPolicy.retention + 1
+        )
+        historyStore.record(user, seenAt: oldDate)
+        bufferStore.record(user, seenAt: returnedAt)
+
+        let viewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            encounterHistoryStore: historyStore,
+            encounterBufferStore: bufferStore,
+            unviewedEncounterStore: unviewedStore,
+            nowProvider: { returnedAt }
+        )
+
+        #expect(viewModel.unviewedEncounterIDs == [user.id])
         viewModel.stopAllBluetoothActivity()
     }
 
@@ -1847,11 +1979,15 @@ private final class FakeNearbyPeopleNotifier: NearbyPeopleNotifying {
     private(set) var synchronizedIDs: Set<String> = []
     private(set) var detectedIDs: Set<String> = []
     private(set) var scanningEnabled = false
+    private(set) var applicationIconBadgeCounts: [Int] = []
 
     func setScanningEnabled(_ enabled: Bool) {
         scanningEnabled = enabled
     }
     func setApplicationActive(_ isActive: Bool) { }
+    func setApplicationIconBadgeCount(_ count: Int) {
+        applicationIconBadgeCounts.append(count)
+    }
     func synchronizeNearby(ids: Set<String>) {
         synchronizedIDs = ids
     }

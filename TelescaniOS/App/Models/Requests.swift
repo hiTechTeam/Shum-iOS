@@ -37,17 +37,9 @@ struct ProfileUpdateRequest: Encodable {
     }
 }
 
-enum ReportReason: String, Codable, CaseIterable {
-    case spam
-    case harassment
-    case inappropriate
-    case impersonation
-    case other
-}
-
 struct ReportCreateRequest: Encodable {
     let clientRequestId: UUID
     let targetTelescanId: UUID
-    let reason: ReportReason
     let details: String?
+    private let reason = "other"
 }

@@ -797,12 +797,12 @@ private struct ProfileModerationDialogModifier: ViewModifier {
             do {
                 try await peopleViewModel.submitReport(
                     for: user,
-                    reason: .other,
                     details: details.isEmpty ? nil : details
                 )
             } catch {
-                // Blocking remains the primary safety action even if the
-                // report request cannot be delivered.
+                isSubmitting = false
+                moderationAlert = .error
+                return
             }
 
             do {

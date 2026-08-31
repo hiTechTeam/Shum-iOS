@@ -31,6 +31,7 @@ struct MainContentView: View {
                         profileTabIcon
                     }
                 }
+                .badge(peopleViewModel.unviewedEncounterCount)
                 .tag(MainTab.profile)
         }
         .tint(Color(uiColor: .systemBlue))
@@ -203,11 +204,12 @@ private final class TabBarBadgeAppearanceController: UIViewController {
     private func applyAppearance() {
         guard let tabBar = enclosingTabBarController?.tabBar,
               let items = tabBar.items,
-              !items.isEmpty else {
+              items.count >= 2 else {
             return
         }
 
         let peopleItem = items[0]
+        let profileItem = items[1]
         peopleItem.title = isScanning ? Inc.Common.nearby.localized : nil
         peopleItem.accessibilityLabel = Inc.Common.nearby.localized
 
@@ -227,6 +229,11 @@ private final class TabBarBadgeAppearanceController: UIViewController {
             isSelected: selectedTab == .nearby,
             inactiveTextColor: inactiveBadgeTextColor
         )
+        configureProfileBadge(
+            for: profileItem,
+            isSelected: selectedTab == .profile,
+            inactiveTextColor: inactiveBadgeTextColor
+        )
         configuredTabBar = tabBar
         configuredColorScheme = colorScheme
         configuredSelectedTab = selectedTab
@@ -241,6 +248,18 @@ private final class TabBarBadgeAppearanceController: UIViewController {
         configureBadge(
             for: item,
             backgroundColor: isSelected ? .systemBlue : .systemGray,
+            textColor: isSelected ? .white : inactiveTextColor
+        )
+    }
+
+    private func configureProfileBadge(
+        for item: UITabBarItem,
+        isSelected: Bool,
+        inactiveTextColor: UIColor
+    ) {
+        configureBadge(
+            for: item,
+            backgroundColor: isSelected ? .systemGreen : .systemGray,
             textColor: isSelected ? .white : inactiveTextColor
         )
     }

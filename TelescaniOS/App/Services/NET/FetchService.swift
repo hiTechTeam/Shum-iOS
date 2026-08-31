@@ -43,12 +43,10 @@ final class FetchService {
 
     func submitReport(
         targetID: UUID,
-        reason: ReportReason,
         details: String?
     ) async throws -> ReportResponse {
         try await client.submitReport(
             targetID: targetID,
-            reason: reason,
             details: details
         )
     }

@@ -88,7 +88,7 @@
 "profileBioApply" = "Применить";
 "profileBioSaveFailed" = "Не удалось сохранить BIO. Попробуйте ещё раз.";
 "profileNameTitle" = "Имя";
-"profileInformationTitle" = "Информация";
+"profileInformationTitle" = "Описание";
 "profileTelegramTitle" = "Telegram";
 "profileNotSpecified" = "Не указано";
 "profileLinkTelegram" = "Привязать";
