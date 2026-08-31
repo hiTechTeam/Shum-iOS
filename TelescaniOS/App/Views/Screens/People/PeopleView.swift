@@ -77,7 +77,9 @@ struct PeopleView: View {
                                         title: Inc.NearbyProfile.block.localized,
                                         systemImage: "person.crop.circle.badge.xmark",
                                         backgroundColor: .systemRed,
-                                        style: .destructive,
+                                        style: quickActions.isQuickBlockEnabled
+                                            ? .destructive
+                                            : .normal,
                                         handler: {
                                             handleSwipeBlock(user)
                                         }
@@ -455,12 +457,14 @@ struct ProfileAvatarButton: View {
 }
 
 struct SavedProfileAvatarBadge: View {
+    @Environment(\.profileRowSurfaceColor) private var surfaceColor
+
     var body: some View {
         Image(systemName: "heart.fill")
             .font(.system(size: 10, weight: .bold))
             .foregroundStyle(.primary)
             .frame(width: 18, height: 18)
-            .background(Color(uiColor: .systemBackground), in: Circle())
+            .background(surfaceColor, in: Circle())
             .offset(x: 2, y: 2)
     }
 }
@@ -494,6 +498,7 @@ struct ProfileModerationRequest: Identifiable {
 struct ProfileRowContextMenuModifier: ViewModifier {
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
     @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
+    @State private var showsSaveInformation = false
 
     let user: NearbyUser
     let isSaved: Bool
@@ -521,13 +526,20 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                         : nil,
                     distanceMeters: lastMetAt == nil
                         ? peopleViewModel.distances[user.discoveryID]
-                        : nil
+                        : nil,
+                    subtitle: nil
                 )
             }
+            .savedProfileInformationAlert(
+                isPresented: $showsSaveInformation
+            )
         } else {
             content.contextMenu {
                 menuContent
             }
+            .savedProfileInformationAlert(
+                isPresented: $showsSaveInformation
+            )
         }
     }
 
@@ -545,7 +557,8 @@ struct ProfileRowContextMenuModifier: ViewModifier {
         .tint(.primary)
 
         Button {
-            savedPeople.toggle(user)
+            let isNowSaved = savedPeople.toggle(user)
+            presentSaveInformationIfNeeded(isNowSaved: isNowSaved)
         } label: {
             Label(
                 isSaved
@@ -596,6 +609,18 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                 .foregroundStyle(.red)
             }
             .tint(.red)
+        }
+    }
+
+    private func presentSaveInformationIfNeeded(isNowSaved: Bool) {
+        guard isNowSaved, savedPeople.shouldShowSaveInformation else {
+            return
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard savedPeople.shouldShowSaveInformation else { return }
+            showsSaveInformation = true
         }
     }
 }
@@ -982,6 +1007,7 @@ struct ProfileRowContextPreview: View {
     let relativeTimeReference: Date?
     let countdownSeconds: Int?
     let distanceMeters: Int?
+    let subtitle: String?
 
     private let avatarSize: CGFloat = 52
     private let horizontalPadding: CGFloat = 16
@@ -1019,7 +1045,7 @@ struct ProfileRowContextPreview: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
-                Text(profileInformation)
+                Text(subtitle ?? profileInformation)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -1039,15 +1065,10 @@ struct ProfileRowContextPreview: View {
         .padding(.vertical, verticalPadding)
         .frame(width: sourceWidth, height: sourceHeight)
         .background(
-            Color(
-                uiColor: UIColor { traits in
-                    traits.userInterfaceStyle == .dark
-                        ? .tertiarySystemBackground
-                        : .systemBackground
-                }
-            ),
+            previewSurfaceColor,
             in: RoundedRectangle(cornerRadius: 26, style: .continuous)
         )
+        .environment(\.profileRowSurfaceColor, previewSurfaceColor)
         .scaleEffect(previewScale)
         .frame(
             width: previewWidth,
@@ -1121,6 +1142,16 @@ struct ProfileRowContextPreview: View {
         return bio.isEmpty
             ? Inc.NearbyProfile.noInformation.localized
             : bio
+    }
+
+    private var previewSurfaceColor: Color {
+        Color(
+            uiColor: UIColor { traits in
+                traits.userInterfaceStyle == .dark
+                    ? .tertiarySystemBackground
+                    : .systemBackground
+            }
+        )
     }
 }
 
@@ -1367,6 +1398,7 @@ struct ProfileSheetView: View {
 private struct ProfileSheetControls: View {
     @EnvironmentObject var peopleViewModel: PeopleViewModel
     @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
+    @State private var showsSaveInformation = false
 
     let user: NearbyUser
     let lastMetAt: Date?
@@ -1377,7 +1409,12 @@ private struct ProfileSheetControls: View {
 
     private var saveButton: some View {
         Button {
-            savedPeople.toggle(user)
+            let isNowSaved = savedPeople.toggle(user)
+            guard isNowSaved,
+                  savedPeople.shouldShowSaveInformation else {
+                return
+            }
+            showsSaveInformation = true
         } label: {
             Image(systemName: isSaved ? "heart.fill" : "heart")
                 .font(.system(size: 19, weight: .semibold))
@@ -1436,6 +1473,9 @@ private struct ProfileSheetControls: View {
             maxWidth: .infinity,
             maxHeight: .infinity,
             alignment: .top
+        )
+        .savedProfileInformationAlert(
+            isPresented: $showsSaveInformation
         )
     }
 }

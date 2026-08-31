@@ -26,11 +26,7 @@ final class PeopleViewModel: ObservableObject {
     }
     @Published private(set) var disappearanceCountdowns: [String: Int] = [:]
     @Published private(set) var blockedProfiles: [BlockedProfileResponse] = []
-    @Published private(set) var encounterHistory: [EncounterHistoryEntry] = [] {
-        didSet {
-            updateApplicationIconBadge()
-        }
-    }
+    @Published private(set) var encounterHistory: [EncounterHistoryEntry] = []
     @Published private(set) var discoveryError: String?
 
     var visibleUsers: [NearbyUser] {
@@ -429,12 +425,8 @@ final class PeopleViewModel: ObservableObject {
     }
 
     private func updateApplicationIconBadge() {
-        let uniqueProfileCount = Set(
-            encounterHistory.map(\.user.id)
-        ).count
-
         nearbyPeopleNotifier.setApplicationIconBadgeCount(
-            uniqueProfileCount
+            visibleUsers.count
         )
     }
 

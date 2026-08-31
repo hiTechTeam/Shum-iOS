@@ -7,7 +7,7 @@ struct People: View {
     @ObservedObject var authVM: CodeViewModel
     
     private let peopNearleInc: String = Inc.Common.nearby.localized
-    private let peopleInc: String = Inc.Tabs.people.localized
+    private let peopleInc: String = Inc.Common.nearby.localized
     
     var body: some View {
         NavigationStack {

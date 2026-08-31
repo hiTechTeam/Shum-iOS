@@ -193,6 +193,9 @@
 "nearbyProfileSavedMenu" = "Сохранённые";
 "nearbyProfileSavedProfiles" = "Сохранённые профили";
 "nearbyProfileSavedListDescription" = "Люди, которых вы сохранили";
+"nearbyProfileSavedInformationTitle" = "Профиль сохранён";
+"nearbyProfileSavedInformationMessage" = "Профиль добавлен в «Сохранённые». Вы сможете открыть его в соответствующем разделе профиля.";
+"nearbyProfileSavedInformationDoNotShow" = "Понятно, больше не показывать";
 "nearbyProfileNoSaved" = "Нет";
 "nearbyProfileNoSavedProfiles" = "Нет сохранённых профилей";
 "nearbyProfileNoBlockedProfiles" = "Нет заблокированных профилей";

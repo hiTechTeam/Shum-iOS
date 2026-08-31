@@ -193,6 +193,9 @@
 "nearbyProfileSavedMenu" = "Saved";
 "nearbyProfileSavedProfiles" = "Saved profiles";
 "nearbyProfileSavedListDescription" = "People you saved";
+"nearbyProfileSavedInformationTitle" = "Profile saved";
+"nearbyProfileSavedInformationMessage" = "The profile was added to Saved. You can open it from the corresponding section in your profile.";
+"nearbyProfileSavedInformationDoNotShow" = "Got it, don’t show again";
 "nearbyProfileNoSaved" = "None";
 "nearbyProfileNoSavedProfiles" = "No saved profiles";
 "nearbyProfileNoBlockedProfiles" = "No blocked profiles";

@@ -328,6 +328,12 @@ struct Inc {
         static let savedProfiles: String = "nearbyProfileSavedProfiles"
         static let savedListDescription: String =
             "nearbyProfileSavedListDescription"
+        static let savedInformationTitle: String =
+            "nearbyProfileSavedInformationTitle"
+        static let savedInformationMessage: String =
+            "nearbyProfileSavedInformationMessage"
+        static let savedInformationDoNotShow: String =
+            "nearbyProfileSavedInformationDoNotShow"
         static let noSaved: String = "nearbyProfileNoSaved"
         static let noSavedProfiles: String =
             "nearbyProfileNoSavedProfiles"

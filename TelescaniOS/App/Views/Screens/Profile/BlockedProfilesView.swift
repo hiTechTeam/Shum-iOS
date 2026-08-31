@@ -146,6 +146,7 @@ struct SavedProfilesView: View {
                     items: savedPeople.users,
                     descriptionText: Inc.NearbyProfile.savedListDescription
                         .localized,
+                    showsRowSeparators: true,
                     refreshAction: { },
                     trailingActions: { user, _ in
                         [
@@ -251,7 +252,7 @@ private struct SavedProfileRow: View {
                             .foregroundStyle(.primary)
                             .lineLimit(1)
 
-                        Text(profileInformation)
+                        Text(user.username)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -297,7 +298,8 @@ private struct SavedProfileRow: View {
                 lastMetAt: nil,
                 relativeTimeReference: nil,
                 countdownSeconds: nil,
-                distanceMeters: nil
+                distanceMeters: nil,
+                subtitle: user.username
             )
         }
     }
@@ -307,14 +309,6 @@ private struct SavedProfileRow: View {
         return URL(string: photoURL) != nil
     }
 
-    private var profileInformation: String {
-        let bio = user.bio?.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        ) ?? ""
-        return bio.isEmpty
-            ? Inc.NearbyProfile.noInformation.localized
-            : bio
-    }
 }
 
 private struct SavedProfileAvatar: View {

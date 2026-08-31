@@ -82,12 +82,12 @@ struct MainContentView: View {
     private var nearbyTabItem: some View {
         if coordinator.isScaning {
             Label(
-                Inc.Tabs.people.localized,
+                Inc.Common.nearby.localized,
                 systemImage: "person.2.fill"
             )
         } else {
             Image(systemName: "eye.slash")
-                .accessibilityLabel(Inc.Tabs.people.localized)
+                .accessibilityLabel(Inc.Common.nearby.localized)
         }
     }
 
@@ -208,8 +208,8 @@ private final class TabBarBadgeAppearanceController: UIViewController {
         }
 
         let peopleItem = items[0]
-        peopleItem.title = isScanning ? Inc.Tabs.people.localized : nil
-        peopleItem.accessibilityLabel = Inc.Tabs.people.localized
+        peopleItem.title = isScanning ? Inc.Common.nearby.localized : nil
+        peopleItem.accessibilityLabel = Inc.Common.nearby.localized
 
         if configuredTabBar === tabBar,
            configuredColorScheme == colorScheme,

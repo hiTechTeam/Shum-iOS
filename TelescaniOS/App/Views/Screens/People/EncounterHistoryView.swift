@@ -152,7 +152,9 @@ struct EncounterHistoryView: View {
                         title: Inc.NearbyProfile.block.localized,
                         systemImage: "person.crop.circle.badge.xmark",
                         backgroundColor: .systemRed,
-                        style: .destructive,
+                        style: quickActions.isQuickBlockEnabled
+                            ? .destructive
+                            : .normal,
                         handler: {
                             handleSwipeBlock(encounter.user)
                         }

@@ -5,6 +5,27 @@ extension Color {
     static var peopleListBackground: Color {
         return Color(uiColor: .systemBackground)
     }
+
+    static var profileRowSwipeSurface: Color {
+        Color(
+            uiColor: UIColor { traits in
+                traits.userInterfaceStyle == .dark
+                    ? .tertiarySystemBackground
+                    : .secondarySystemBackground
+            }
+        )
+    }
+}
+
+private struct ProfileRowSurfaceColorKey: EnvironmentKey {
+    static let defaultValue = Color(uiColor: .systemBackground)
+}
+
+extension EnvironmentValues {
+    var profileRowSurfaceColor: Color {
+        get { self[ProfileRowSurfaceColorKey.self] }
+        set { self[ProfileRowSurfaceColorKey.self] = newValue }
+    }
 }
 
 struct SystemSwipeAction {
@@ -61,6 +82,8 @@ final class SavedPeopleStateStore: ObservableObject {
 
     private let identifiersStorageKey = "savedPeopleProfileIDs"
     private let profilesStorageKey = "savedPeopleProfiles"
+    private let saveInformationSuppressedKey =
+        "savedProfileInformationSuppressed"
     @Published private var savedIDs: Set<UUID>
     @Published private(set) var users: [NearbyUser]
 
@@ -88,6 +111,17 @@ final class SavedPeopleStateStore: ObservableObject {
 
     var count: Int {
         savedIDs.count
+    }
+
+    var shouldShowSaveInformation: Bool {
+        !UserDefaults.standard.bool(forKey: saveInformationSuppressedKey)
+    }
+
+    func suppressSaveInformation() {
+        UserDefaults.standard.set(
+            true,
+            forKey: saveInformationSuppressedKey
+        )
     }
 
     @discardableResult
@@ -137,6 +171,39 @@ final class SavedPeopleStateStore: ObservableObject {
     }
 }
 
+private struct SavedProfileInformationAlertModifier: ViewModifier {
+    @Binding var isPresented: Bool
+
+    func body(content: Content) -> some View {
+        content.alert(
+            Inc.NearbyProfile.savedInformationTitle.localized,
+            isPresented: $isPresented
+        ) {
+            Button(Inc.NearbyProfile.acknowledge.localized) { }
+
+            Button(
+                Inc.NearbyProfile.savedInformationDoNotShow.localized
+            ) {
+                SavedPeopleStateStore.shared.suppressSaveInformation()
+            }
+        } message: {
+            Text(Inc.NearbyProfile.savedInformationMessage.localized)
+        }
+    }
+}
+
+extension View {
+    func savedProfileInformationAlert(
+        isPresented: Binding<Bool>
+    ) -> some View {
+        modifier(
+            SavedProfileInformationAlertModifier(
+                isPresented: isPresented
+            )
+        )
+    }
+}
+
 protocol SavedPeopleListItem: Identifiable where ID == UUID {
     var savedProfile: NearbyUser { get }
 }
@@ -172,15 +239,15 @@ private struct NativeSwipeInteractionRow<Content: View>: View {
 
     var body: some View {
         content
+            .environment(
+                \.profileRowSurfaceColor,
+                isSwipeActive
+                    ? .profileRowSwipeSurface
+                    : Color(uiColor: .systemBackground)
+            )
             .background {
                 if #available(iOS 26.0, *) {
-                    Color(
-                        uiColor: UIColor { traits in
-                            traits.userInterfaceStyle == .dark
-                                ? .tertiarySystemBackground
-                                : .secondarySystemBackground
-                        }
-                    )
+                    Color.profileRowSwipeSurface
                         .opacity(isSwipeActive ? 1 : 0)
                         .clipShape(
                             RoundedRectangle(
@@ -304,10 +371,12 @@ private struct NativeSwipeOffsetProbe: UIViewRepresentable {
 struct AdaptiveSystemSwipeList<Item, RowContent>: View
 where Item: SavedPeopleListItem & Equatable, RowContent: View {
     @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
+    @State private var showsSaveInformation = false
 
     let items: [Item]
     let descriptionText: String
     let reloadIdentifier: AnyHashable?
+    let showsRowSeparators: Bool
     let refreshAction: () async -> Void
     let leadingActions: (Item, Bool) -> [SystemSwipeAction]
     let trailingActions: (Item, Bool) -> [SystemSwipeAction]
@@ -317,6 +386,7 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
         items: [Item],
         descriptionText: String,
         reloadIdentifier: AnyHashable? = nil,
+        showsRowSeparators: Bool = false,
         refreshAction: @escaping () async -> Void,
         leadingActions: @escaping (Item, Bool) -> [SystemSwipeAction] = {
             _, _ in []
@@ -327,6 +397,7 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
         self.items = items
         self.descriptionText = descriptionText
         self.reloadIdentifier = reloadIdentifier
+        self.showsRowSeparators = showsRowSeparators
         self.refreshAction = refreshAction
         self.leadingActions = leadingActions
         self.trailingActions = trailingActions
@@ -357,7 +428,17 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
                 }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color(uiColor: .systemBackground))
-                    .listRowSeparator(.hidden)
+                    .listRowSeparator(
+                        showsRowSeparators ? .visible : .hidden
+                    )
+                    .alignmentGuide(.listRowSeparatorLeading) { _ in
+                        showsRowSeparators ? 80 : 0
+                    }
+                    .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+                        showsRowSeparators
+                            ? dimensions.width - 16
+                            : dimensions.width
+                    }
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
                         swipeButtons(
                             leadingActions(item, isSaved),
@@ -382,6 +463,9 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
         .refreshable {
             await refreshAction()
         }
+        .savedProfileInformationAlert(
+            isPresented: $showsSaveInformation
+        )
     }
 
     @ViewBuilder
@@ -421,9 +505,22 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
 
     private func perform(_ action: SystemSwipeAction, for item: Item) {
         if action.savedPresentation != nil {
-            savedPeople.toggle(item.savedProfile)
+            let isNowSaved = savedPeople.toggle(item.savedProfile)
+            presentSaveInformationIfNeeded(isNowSaved: isNowSaved)
         }
         action.handler()
+    }
+
+    private func presentSaveInformationIfNeeded(isNowSaved: Bool) {
+        guard isNowSaved, savedPeople.shouldShowSaveInformation else {
+            return
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard savedPeople.shouldShowSaveInformation else { return }
+            showsSaveInformation = true
+        }
     }
 }
 
