@@ -19,10 +19,18 @@ private enum NearbyProfileError: LocalizedError {
 final class PeopleViewModel: ObservableObject {
     private(set) var devices: [String: Int] = [:]
     @Published private(set) var distances: [String: Int] = [:]
-    @Published private(set) var userCache: [String: NearbyUser] = [:]
+    @Published private(set) var userCache: [String: NearbyUser] = [:] {
+        didSet {
+            updateApplicationIconBadge()
+        }
+    }
     @Published private(set) var disappearanceCountdowns: [String: Int] = [:]
     @Published private(set) var blockedProfiles: [BlockedProfileResponse] = []
-    @Published private(set) var encounterHistory: [EncounterHistoryEntry] = []
+    @Published private(set) var encounterHistory: [EncounterHistoryEntry] = [] {
+        didSet {
+            updateApplicationIconBadge()
+        }
+    }
     @Published private(set) var discoveryError: String?
 
     var visibleUsers: [NearbyUser] {
@@ -155,6 +163,7 @@ final class PeopleViewModel: ObservableObject {
         recoverPendingEncounterIdentities()
         startDistanceUpdater()
         startPresenceUpdater()
+        self.nearbyPeopleNotifier.setApplicationIconBadgeCount(0)
     }
 
     deinit {
@@ -417,6 +426,16 @@ final class PeopleViewModel: ObservableObject {
         }
         rssiSamples.removeAll(keepingCapacity: true)
         refreshEncounterHistory(at: nowProvider())
+    }
+
+    private func updateApplicationIconBadge() {
+        let uniqueProfileCount = Set(
+            encounterHistory.map(\.user.id)
+        ).count
+
+        nearbyPeopleNotifier.setApplicationIconBadgeCount(
+            uniqueProfileCount
+        )
     }
 
     func distanceFromRSSI(

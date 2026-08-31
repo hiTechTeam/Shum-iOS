@@ -14,13 +14,12 @@ struct PeopleView: View {
     @State private var photoPreviewUser: NearbyUser?
     @State private var moderationRequest: ProfileModerationRequest?
     @State private var telegramTransitionRequest: TelegramTransitionRequest?
-    @State private var showsEncounterHistory = false
     @State private var showsSavedBlockInformation = false
     @State private var showsQuickBlockError = false
 
     var body: some View {
         ZStack {
-            Color.tsBackground
+            Color.peopleListBackground
                 .ignoresSafeArea()
 
             if coordinator.isScaning {
@@ -43,7 +42,7 @@ struct PeopleView: View {
                         }
                     }
                 } else {
-                    SystemSwipeList(
+                    AdaptiveSystemSwipeList(
                         items: peopleViewModel.visibleUsers,
                         descriptionText: Inc.Scanning.listDescription.localized,
                         refreshAction: {
@@ -106,7 +105,6 @@ struct PeopleView: View {
                         )
                         .environmentObject(peopleViewModel)
                     }
-                    .ignoresSafeArea(edges: .top)
                 }
             } else {
                 ContentUnavailableView(
@@ -117,22 +115,6 @@ struct PeopleView: View {
                     )
                 )
             }
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showsEncounterHistory = true
-                } label: {
-                    EncounterHistoryToolbarIcon(
-                        hasEncounters: !peopleViewModel.encounterHistory.isEmpty
-                    )
-                }
-                .accessibilityLabel(Inc.PeopleFilters.historyButton.localized)
-            }
-        }
-        .navigationDestination(isPresented: $showsEncounterHistory) {
-            EncounterHistoryView()
-                .environmentObject(peopleViewModel)
         }
         .onChange(of: scenePhase) {  _, newPhase in
             guard newPhase == .active else {
@@ -360,16 +342,6 @@ extension View {
     }
 }
 
-private struct EncounterHistoryToolbarIcon: View {
-    let hasEncounters: Bool
-
-    var body: some View {
-        Image(systemName: "clock.arrow.circlepath")
-            .foregroundStyle(hasEncounters ? Color.blue : Color.gray)
-            .frame(width: 28, height: 28)
-    }
-}
-
 struct ProfileAvatarButton: View {
     let user: NearbyUser
     let isSaved: Bool
@@ -502,13 +474,11 @@ struct ProfileInfoButton: View {
             action()
         } label: {
             Image(systemName: "info.circle")
-                .font(.system(size: 15, weight: .regular))
+                .font(.system(size: 20, weight: .regular))
+                .symbolRenderingMode(.monochrome)
                 .foregroundStyle(.blue)
-                .frame(width: 36, height: 36)
-                .background(
-                    Color.secondary.opacity(0.14),
-                    in: Circle()
-                )
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Inc.NearbyProfile.openCard.localized)
@@ -533,75 +503,11 @@ struct ProfileRowContextMenuModifier: ViewModifier {
     let deleteAction: (() -> Void)?
     let blockAction: () -> Void
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
-            .contextMenu {
-                Group {
-                    Button {
-                        writeAction()
-                    } label: {
-                        Label(
-                            Inc.NearbyProfile.write.localized,
-                            systemImage: "paperplane"
-                        )
-                        .foregroundStyle(.primary)
-                    }
-                    .tint(.primary)
-
-                    Button {
-                        savedPeople.toggle(user)
-                    } label: {
-                        Label(
-                            isSaved
-                                ? Inc.EncounterHistory.remove.localized
-                                : Inc.EncounterHistory.save.localized,
-                            systemImage: isSaved ? "heart.slash" : "heart"
-                        )
-                        .foregroundStyle(.primary)
-                    }
-                    .tint(.primary)
-
-                    Divider()
-
-                    if let deleteAction {
-                        Button {
-                            deleteAction()
-                        } label: {
-                            Label(
-                                Inc.EncounterHistory.delete.localized,
-                                systemImage: "trash"
-                            )
-                            .foregroundStyle(.primary)
-                        }
-                        .tint(.primary)
-
-                        Divider()
-                    }
-
-                    if isSaved {
-                        Button {
-                            blockAction()
-                        } label: {
-                            Label(
-                                Inc.NearbyProfile.savedBlockAction.localized,
-                                systemImage: "lock.fill"
-                            )
-                            .foregroundStyle(.secondary)
-                        }
-                        .tint(.secondary)
-                    } else {
-                        Button(role: .destructive) {
-                            blockAction()
-                        } label: {
-                            Label(
-                                Inc.NearbyProfile.block.localized,
-                                systemImage: "person.crop.circle.badge.xmark"
-                            )
-                            .foregroundStyle(.red)
-                        }
-                        .tint(.red)
-                    }
-                }
+        if #available(iOS 26.0, *) {
+            content.contextMenu {
+                menuContent
             } preview: {
                 ProfileRowContextPreview(
                     user: user,
@@ -618,6 +524,79 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                         : nil
                 )
             }
+        } else {
+            content.contextMenu {
+                menuContent
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var menuContent: some View {
+        Button {
+            writeAction()
+        } label: {
+            Label(
+                Inc.NearbyProfile.write.localized,
+                systemImage: "paperplane"
+            )
+            .foregroundStyle(.primary)
+        }
+        .tint(.primary)
+
+        Button {
+            savedPeople.toggle(user)
+        } label: {
+            Label(
+                isSaved
+                    ? Inc.EncounterHistory.remove.localized
+                    : Inc.EncounterHistory.save.localized,
+                systemImage: isSaved ? "heart.slash" : "heart"
+            )
+            .foregroundStyle(.primary)
+        }
+        .tint(.primary)
+
+        Divider()
+
+        if let deleteAction {
+            Button {
+                deleteAction()
+            } label: {
+                Label(
+                    Inc.EncounterHistory.delete.localized,
+                    systemImage: "trash"
+                )
+                .foregroundStyle(.primary)
+            }
+            .tint(.primary)
+
+            Divider()
+        }
+
+        if isSaved {
+            Button {
+                blockAction()
+            } label: {
+                Label(
+                    Inc.NearbyProfile.savedBlockAction.localized,
+                    systemImage: "lock.fill"
+                )
+                .foregroundStyle(.secondary)
+            }
+            .tint(.secondary)
+        } else {
+            Button(role: .destructive) {
+                blockAction()
+            } label: {
+                Label(
+                    Inc.NearbyProfile.block.localized,
+                    systemImage: "person.crop.circle.badge.xmark"
+                )
+                .foregroundStyle(.red)
+            }
+            .tint(.red)
+        }
     }
 }
 
@@ -996,7 +975,7 @@ extension View {
     }
 }
 
-private struct ProfileRowContextPreview: View {
+struct ProfileRowContextPreview: View {
     let user: NearbyUser
     let isSaved: Bool
     let lastMetAt: Date?
@@ -1051,13 +1030,10 @@ private struct ProfileRowContextPreview: View {
             trailingInformation
 
             Image(systemName: "info.circle")
-                .font(.system(size: 15, weight: .regular))
+                .font(.system(size: 20, weight: .regular))
+                .symbolRenderingMode(.monochrome)
                 .foregroundStyle(.blue)
-                .frame(width: 36, height: 36)
-                .background(
-                    Color.secondary.opacity(0.14),
-                    in: Circle()
-                )
+                .frame(width: 44, height: 44)
         }
         .padding(.horizontal, horizontalPadding)
         .padding(.vertical, verticalPadding)
@@ -1205,6 +1181,7 @@ struct ProfileSheetView: View {
 
     let user: NearbyUser
     var lastMetAt: Date? = nil
+    var showsControls = true
 
     private var imageURL: URL? {
         guard let url = user.photoURL else { return nil }
@@ -1358,10 +1335,12 @@ struct ProfileSheetView: View {
             .offset(y: -10)
             .ignoresSafeArea(.keyboard, edges: .bottom)
 
-            ProfileSheetControls(
-                user: user,
-                lastMetAt: lastMetAt
-            )
+            if showsControls {
+                ProfileSheetControls(
+                    user: user,
+                    lastMetAt: lastMetAt
+                )
+            }
         }
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let imageURL {
@@ -1414,21 +1393,6 @@ private struct ProfileSheetControls: View {
         )
     }
 
-    @ViewBuilder
-    private var saveControl: some View {
-        if #available(iOS 26.0, *) {
-            saveButton
-                .buttonStyle(.glass)
-                .buttonBorderShape(.capsule)
-                .tint(.primary)
-        } else {
-            saveButton
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .tint(.primary)
-        }
-    }
-
     private var presenceInfo: some View {
         Group {
             if let lastMetAt {
@@ -1462,7 +1426,8 @@ private struct ProfileSheetControls: View {
 
             HStack {
                 Spacer()
-                saveControl
+                saveButton
+                    .buttonStyle(.plain)
             }
             .padding(.horizontal, 8)
         }

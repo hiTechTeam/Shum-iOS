@@ -16,6 +16,7 @@ struct ProfileOverviewView: View {
     @State private var showLogoutOptions = false
     @State private var showBlockedProfiles = false
     @State private var showSavedProfiles = false
+    @State private var showEncounterHistory = false
     @State private var showQuickActions = false
     @State private var showLogoutConfirmation = false
     @State private var showLogoutError = false
@@ -82,11 +83,13 @@ struct ProfileOverviewView: View {
             Task {
                 await refreshNotificationAuthorizationStatus()
                 await peopleViewModel.synchronizeBlockedProfiles()
+                peopleViewModel.refreshEncounterHistory()
             }
         }
         .task {
             await refreshNotificationAuthorizationStatus()
             await peopleViewModel.synchronizeBlockedProfiles()
+            peopleViewModel.refreshEncounterHistory()
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -125,10 +128,12 @@ struct ProfileOverviewView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $showSavedProfiles) {
+        .navigationDestination(isPresented: $showEncounterHistory) {
+            EncounterHistoryView()
+                .environmentObject(peopleViewModel)
+        }
+        .navigationDestination(isPresented: $showSavedProfiles) {
             SavedProfilesView()
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showQuickActions) {
             QuickActionsSettingsSheet()
@@ -280,34 +285,54 @@ struct ProfileOverviewView: View {
     }
 
     private var peopleCard: some View {
-        VStack(spacing: 0) {
-            ProfileOverviewRow(
-                title: Inc.NearbyProfile.savedMenu.localized,
-                systemImage: "heart.fill",
-                value: savedProfilesStatusTitle,
-                position: .top
-            ) {
-                showSavedProfiles = true
-            }
+        VStack(spacing: 20) {
+            VStack(spacing: 0) {
+                ProfileOverviewRow(
+                    title: Inc.Tabs.metTitle.localized,
+                    systemImage: "clock.arrow.circlepath",
+                    value: String(peopleViewModel.encounterHistory.count),
+                    position: .top
+                ) {
+                    showEncounterHistory = true
+                }
 
-            Divider()
-                .padding(.leading, 60)
-                .padding(.trailing, 20)
+                Divider()
+                    .padding(.leading, 60)
+                    .padding(.trailing, 20)
+
+                ProfileOverviewRow(
+                    title: Inc.NearbyProfile.savedMenu.localized,
+                    systemImage: "heart.fill",
+                    value: savedProfilesStatusTitle,
+                    position: .bottom
+                ) {
+                    showSavedProfiles = true
+                }
+            }
+            .background(
+                Color(uiColor: .secondarySystemGroupedBackground),
+                in: RoundedRectangle(cornerRadius: 22)
+            )
+            .clipShape(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+            )
 
             ProfileOverviewRow(
                 title: Inc.NearbyProfile.blockedMenu.localized,
                 systemImage: "person.crop.circle.badge.xmark",
                 value: blockedProfilesStatusTitle,
-                position: .bottom
+                position: .single
             ) {
                 showBlockedProfiles = true
             }
+            .background(
+                Color(uiColor: .secondarySystemGroupedBackground),
+                in: RoundedRectangle(cornerRadius: 22)
+            )
+            .clipShape(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+            )
         }
-        .background(
-            Color(uiColor: .secondarySystemGroupedBackground),
-            in: RoundedRectangle(cornerRadius: 22)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private var profileMenu: some View {
@@ -389,7 +414,7 @@ struct ProfileOverviewView: View {
 
             if settings.authorizationStatus == .notDetermined {
                 _ = try? await center.requestAuthorization(
-                    options: [.alert, .sound]
+                    options: [.alert, .sound, .badge]
                 )
                 await refreshNotificationAuthorizationStatus()
                 return

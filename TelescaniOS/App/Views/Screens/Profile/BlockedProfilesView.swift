@@ -123,66 +123,203 @@ private struct BlockedProfileAvatar: View {
 }
 
 struct SavedProfilesView: View {
+    @Environment(\.openURL) private var openURL
+    @EnvironmentObject private var peopleViewModel: PeopleViewModel
     @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
+    @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
+
+    @State private var selectedUser: NearbyUser?
+    @State private var photoPreviewUser: NearbyUser?
+    @State private var telegramTransitionRequest: TelegramTransitionRequest?
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if savedPeople.users.isEmpty {
-                    ContentUnavailableView(
-                        Inc.NearbyProfile.noSavedProfiles.localized,
-                        systemImage: "heart"
-                    )
-                } else {
-                    List(savedPeople.users) { user in
-                        HStack(spacing: 12) {
-                            SavedProfileAvatar(user: user)
+        ZStack {
+            Color.peopleListBackground.ignoresSafeArea()
 
-                            Text(user.name)
-                                .font(.body)
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-
-                            Spacer()
-
-                            Button(Inc.EncounterHistory.remove.localized) {
-                                UIImpactFeedbackGenerator(
-                                    style: .light
-                                ).impactOccurred()
+            if savedPeople.users.isEmpty {
+                ContentUnavailableView(
+                    Inc.NearbyProfile.noSavedProfiles.localized,
+                    systemImage: "heart"
+                )
+            } else {
+                AdaptiveSystemSwipeList(
+                    items: savedPeople.users,
+                    descriptionText: Inc.NearbyProfile.savedListDescription
+                        .localized,
+                    refreshAction: { },
+                    trailingActions: { user, _ in
+                        [
+                            SystemSwipeAction(
+                                title: Inc.EncounterHistory.remove.localized,
+                                systemImage: "heart.slash",
+                                backgroundColor: .systemGray,
+                                style: .destructive,
+                                handler: {
+                                    UIImpactFeedbackGenerator(
+                                        style: .light
+                                    ).impactOccurred()
+                                    withAnimation {
+                                        savedPeople.remove(user)
+                                    }
+                                }
+                            )
+                        ]
+                    }
+                ) { user, _ in
+                    SavedProfileRow(
+                        user: user,
+                        action: { openUser(user) },
+                        photoAction: { openPhoto(of: user) },
+                        infoAction: { selectedUser = user },
+                        removeAction: {
+                            withAnimation {
                                 savedPeople.remove(user)
                             }
-                            .buttonStyle(.borderless)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.accentColor)
                         }
-                        .listRowInsets(
-                            EdgeInsets(
-                                top: 8,
-                                leading: 16,
-                                bottom: 8,
-                                trailing: 16
-                            )
-                        )
-                    }
-                    .listStyle(.plain)
-                }
-            }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text(Inc.NearbyProfile.savedProfiles.localized)
-                        .telescanSheetTitleStyle()
+                    )
                 }
             }
         }
+        .sheet(item: $selectedUser) { user in
+            ProfileSheetView(user: user, showsControls: false)
+                .environmentObject(peopleViewModel)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
+        .nearbyUserPhotoPreview(user: $photoPreviewUser)
+        .telegramTransitionAlert(request: $telegramTransitionRequest)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(Inc.NearbyProfile.savedProfiles.localized)
+                    .telescanSheetTitleStyle()
+            }
+        }
+    }
+
+    private func openUser(_ user: NearbyUser) {
+        guard let destination = TelegramChatDestination(user: user) else {
+            selectedUser = user
+            return
+        }
+
+        if quickActions.isQuickChatEnabled {
+            destination.open(using: openURL)
+        } else {
+            telegramTransitionRequest = TelegramTransitionRequest(
+                destination: destination
+            )
+        }
+    }
+
+    private func openPhoto(of user: NearbyUser) {
+        guard let photoURL = user.photoURL,
+              URL(string: photoURL) != nil else { return }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            photoPreviewUser = user
+        }
+    }
+}
+
+private struct SavedProfileRow: View {
+    let user: NearbyUser
+    let action: () -> Void
+    let photoAction: () -> Void
+    let infoAction: () -> Void
+    let removeAction: () -> Void
+
+    private let avatarSize: CGFloat = 52
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: photoAction) {
+                SavedProfileAvatar(user: user, size: avatarSize)
+            }
+            .buttonStyle(.plain)
+            .disabled(!hasPhoto)
+            .accessibilityLabel(Inc.Profile.openPhoto.localized)
+
+            Button(action: action) {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(user.name)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+
+                        Text(profileInformation)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+                }
+                .frame(maxWidth: .infinity, minHeight: avatarSize)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(user.name)
+
+            ProfileInfoButton(action: infoAction)
+        }
+        .frame(maxWidth: .infinity, minHeight: avatarSize)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .contextMenu {
+            Button(action: action) {
+                Label(
+                    Inc.NearbyProfile.write.localized,
+                    systemImage: "paperplane"
+                )
+                .foregroundStyle(.primary)
+            }
+            .tint(.primary)
+
+            Divider()
+
+            Button(action: removeAction) {
+                Label(
+                    Inc.EncounterHistory.remove.localized,
+                    systemImage: "heart.slash"
+                )
+                .foregroundStyle(.primary)
+            }
+            .tint(.primary)
+        } preview: {
+            ProfileRowContextPreview(
+                user: user,
+                isSaved: false,
+                lastMetAt: nil,
+                relativeTimeReference: nil,
+                countdownSeconds: nil,
+                distanceMeters: nil
+            )
+        }
+    }
+
+    private var hasPhoto: Bool {
+        guard let photoURL = user.photoURL else { return false }
+        return URL(string: photoURL) != nil
+    }
+
+    private var profileInformation: String {
+        let bio = user.bio?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ) ?? ""
+        return bio.isEmpty
+            ? Inc.NearbyProfile.noInformation.localized
+            : bio
     }
 }
 
 private struct SavedProfileAvatar: View {
     let user: NearbyUser
-
-    private let size: CGFloat = 44
+    var size: CGFloat = 44
 
     var body: some View {
         Group {

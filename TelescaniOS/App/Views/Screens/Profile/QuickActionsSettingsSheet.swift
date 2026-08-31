@@ -51,9 +51,7 @@ struct QuickActionsSettingsSheet: View {
                 .padding(.top, 20)
                 .padding(.bottom, 32)
             }
-            .background(
-                Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
-            )
+            .modifier(QuickActionsScreenBackground())
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -68,6 +66,19 @@ struct QuickActionsSettingsSheet: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private struct QuickActionsScreenBackground: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+        } else {
+            content.background(
+                Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+            )
         }
     }
 }

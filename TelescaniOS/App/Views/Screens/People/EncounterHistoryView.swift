@@ -20,7 +20,7 @@ struct EncounterHistoryView: View {
 
     var body: some View {
         ZStack {
-            Color.tsBackground
+            Color.peopleListBackground
                 .ignoresSafeArea()
 
             if peopleViewModel.encounterHistory.isEmpty {
@@ -120,7 +120,7 @@ struct EncounterHistoryView: View {
     }
 
     private var encounterList: some View {
-        SystemSwipeList(
+        AdaptiveSystemSwipeList(
             items: peopleViewModel.encounterHistory,
             descriptionText: Inc.EncounterHistory.listDescription.localized,
             reloadIdentifier: relativeTimeReference,
@@ -204,7 +204,6 @@ struct EncounterHistoryView: View {
             )
             .environmentObject(peopleViewModel)
         }
-        .ignoresSafeArea(edges: .top)
     }
 
     private func openEncounter(_ encounter: EncounterHistoryEntry) {

@@ -239,10 +239,15 @@ struct NearbyEncounterAggregator {
 protocol NearbyPeopleNotifying: AnyObject {
     func setScanningEnabled(_ enabled: Bool)
     func setApplicationActive(_ isActive: Bool)
+    func setApplicationIconBadgeCount(_ count: Int)
     func synchronizeNearby(ids: Set<String>)
     func detect(id: String)
     func lose(id: String)
     func reset()
+}
+
+extension NearbyPeopleNotifying {
+    func setApplicationIconBadgeCount(_ count: Int) { }
 }
 
 @MainActor
@@ -255,6 +260,7 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
     private var isApplicationActive: Bool?
     private var scheduleGeneration = 0
     private var isRequestingAuthorization = false
+    private var applicationIconBadgeCount = 0
 
     private let requestIdentifier = "telescan.nearby-people.batch"
     private let threadIdentifier = "telescan.nearby-people"
@@ -292,6 +298,22 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
         aggregator.reset()
         stateStore.remove()
         cancelPendingNotification()
+    }
+
+    func setApplicationIconBadgeCount(_ count: Int) {
+        let badgeCount = max(0, count)
+        applicationIconBadgeCount = badgeCount
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await notificationCenter.setBadgeCount(badgeCount)
+            } catch {
+                logger.error(
+                    "Application icon badge update failed: \(error.localizedDescription)"
+                )
+            }
+        }
     }
 
     func detect(id: String) {
@@ -356,12 +378,21 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
             guard let self else { return }
             defer { isRequestingAuthorization = false }
             let settings = await notificationCenter.notificationSettings()
-            guard settings.authorizationStatus == .notDetermined else {
+            let needsInitialAuthorization =
+                settings.authorizationStatus == .notDetermined
+            let needsBadgeRegistration =
+                Self.canDeliver(settings.authorizationStatus)
+                && settings.badgeSetting != .enabled
+
+            guard needsInitialAuthorization || needsBadgeRegistration else {
                 return
             }
             do {
                 _ = try await notificationCenter.requestAuthorization(
-                    options: [.alert, .sound]
+                    options: [.alert, .sound, .badge]
+                )
+                try await notificationCenter.setBadgeCount(
+                    applicationIconBadgeCount
                 )
             } catch {
                 logger.error(

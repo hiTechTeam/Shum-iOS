@@ -192,6 +192,7 @@
 "nearbyProfileBlockedProfiles" = "Blocked profiles";
 "nearbyProfileSavedMenu" = "Saved";
 "nearbyProfileSavedProfiles" = "Saved profiles";
+"nearbyProfileSavedListDescription" = "People you saved";
 "nearbyProfileNoSaved" = "None";
 "nearbyProfileNoSavedProfiles" = "No saved profiles";
 "nearbyProfileNoBlockedProfiles" = "No blocked profiles";

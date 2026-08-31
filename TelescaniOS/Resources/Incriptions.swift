@@ -326,6 +326,8 @@ struct Inc {
         static let blockedProfiles: String = "nearbyProfileBlockedProfiles"
         static let savedMenu: String = "nearbyProfileSavedMenu"
         static let savedProfiles: String = "nearbyProfileSavedProfiles"
+        static let savedListDescription: String =
+            "nearbyProfileSavedListDescription"
         static let noSaved: String = "nearbyProfileNoSaved"
         static let noSavedProfiles: String =
             "nearbyProfileNoSavedProfiles"

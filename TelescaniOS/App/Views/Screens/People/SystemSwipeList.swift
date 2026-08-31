@@ -1,6 +1,12 @@
 import SwiftUI
 import UIKit
 
+extension Color {
+    static var peopleListBackground: Color {
+        return Color(uiColor: .systemBackground)
+    }
+}
+
 struct SystemSwipeAction {
     struct SavedPresentation {
         let title: String
@@ -155,6 +161,272 @@ where Item: SavedPeopleListItem, RowContent: View {
     }
 }
 
+private struct NativeSwipeInteractionRow<Content: View>: View {
+    @State private var isSwipeActive = false
+
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .background {
+                if #available(iOS 26.0, *) {
+                    Color(
+                        uiColor: UIColor { traits in
+                            traits.userInterfaceStyle == .dark
+                                ? .tertiarySystemBackground
+                                : .secondarySystemBackground
+                        }
+                    )
+                        .opacity(isSwipeActive ? 1 : 0)
+                        .clipShape(
+                            RoundedRectangle(
+                                cornerRadius: 26,
+                                style: .continuous
+                            )
+                        )
+
+                    NativeSwipeOffsetProbe(isActive: $isSwipeActive)
+                        .allowsHitTesting(false)
+                }
+            }
+            .animation(
+                .easeOut(duration: isSwipeActive ? 0.16 : 0.5),
+                value: isSwipeActive
+            )
+    }
+}
+
+private struct NativeSwipeOffsetProbe: UIViewRepresentable {
+    @Binding var isActive: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(isActive: $isActive)
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        context.coordinator.attach(to: view)
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        context.coordinator.isActive = $isActive
+        context.coordinator.attach(to: view)
+    }
+
+    static func dismantleUIView(
+        _ view: UIView,
+        coordinator: Coordinator
+    ) {
+        coordinator.stop()
+    }
+
+    final class Coordinator: NSObject {
+        var isActive: Binding<Bool>
+
+        private weak var probeView: UIView?
+        private var displayLink: CADisplayLink?
+        private var restingOriginX: CGFloat?
+
+        init(isActive: Binding<Bool>) {
+            self.isActive = isActive
+        }
+
+        func attach(to view: UIView) {
+            guard probeView !== view || displayLink == nil else { return }
+
+            stop()
+            probeView = view
+            restingOriginX = nil
+
+            let displayLink = CADisplayLink(
+                target: self,
+                selector: #selector(observeHorizontalOffset)
+            )
+            displayLink.preferredFrameRateRange = CAFrameRateRange(
+                minimum: 15,
+                maximum: 30,
+                preferred: 30
+            )
+            displayLink.add(to: .main, forMode: .common)
+            self.displayLink = displayLink
+        }
+
+        func stop() {
+            displayLink?.invalidate()
+            displayLink = nil
+            restingOriginX = nil
+        }
+
+        @objc private func observeHorizontalOffset() {
+            guard let probeView,
+                  probeView.window != nil,
+                  let scrollView = enclosingScrollView(for: probeView) else {
+                return
+            }
+
+            let originX = probeView.convert(.zero, to: scrollView).x
+
+            guard let restingOriginX else {
+                self.restingOriginX = originX
+                return
+            }
+
+            let offset = abs(originX - restingOriginX)
+
+            if offset > 4 {
+                setActive(true)
+            } else if offset < 1 {
+                self.restingOriginX = originX
+                setActive(false)
+            }
+        }
+
+        private func enclosingScrollView(for view: UIView) -> UIScrollView? {
+            sequence(first: view.superview, next: { $0?.superview })
+                .compactMap { $0 as? UIScrollView }
+                .first
+        }
+
+        private func setActive(_ value: Bool) {
+            guard isActive.wrappedValue != value else { return }
+            isActive.wrappedValue = value
+        }
+    }
+}
+
+struct AdaptiveSystemSwipeList<Item, RowContent>: View
+where Item: SavedPeopleListItem & Equatable, RowContent: View {
+    @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
+
+    let items: [Item]
+    let descriptionText: String
+    let reloadIdentifier: AnyHashable?
+    let refreshAction: () async -> Void
+    let leadingActions: (Item, Bool) -> [SystemSwipeAction]
+    let trailingActions: (Item, Bool) -> [SystemSwipeAction]
+    let rowContent: (Item, Bool) -> RowContent
+
+    init(
+        items: [Item],
+        descriptionText: String,
+        reloadIdentifier: AnyHashable? = nil,
+        refreshAction: @escaping () async -> Void,
+        leadingActions: @escaping (Item, Bool) -> [SystemSwipeAction] = {
+            _, _ in []
+        },
+        trailingActions: @escaping (Item, Bool) -> [SystemSwipeAction],
+        @ViewBuilder rowContent: @escaping (Item, Bool) -> RowContent
+    ) {
+        self.items = items
+        self.descriptionText = descriptionText
+        self.reloadIdentifier = reloadIdentifier
+        self.refreshAction = refreshAction
+        self.leadingActions = leadingActions
+        self.trailingActions = trailingActions
+        self.rowContent = rowContent
+    }
+
+    var body: some View {
+        nativeList
+    }
+
+    private var nativeList: some View {
+        List {
+            Text(descriptionText)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+            ForEach(items) { item in
+                let isSaved = savedPeople.contains(item.id)
+
+                NativeSwipeInteractionRow {
+                    rowContent(item, isSaved)
+                }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color(uiColor: .systemBackground))
+                    .listRowSeparator(.hidden)
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        swipeButtons(
+                            leadingActions(item, isSaved),
+                            item: item,
+                            isSaved: isSaved
+                        )
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        swipeButtons(
+                            trailingActions(item, isSaved),
+                            item: item,
+                            isSaved: isSaved
+                        )
+                    }
+                    .onAppear {
+                        savedPeople.refreshProfile(item.savedProfile)
+                    }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .refreshable {
+            await refreshAction()
+        }
+    }
+
+    @ViewBuilder
+    private func swipeButtons(
+        _ actions: [SystemSwipeAction],
+        item: Item,
+        isSaved: Bool
+    ) -> some View {
+        ForEach(actions.indices, id: \.self) { index in
+            let descriptor = actions[index]
+            let presentation = isSaved
+                ? descriptor.savedPresentation
+                : nil
+            let title = presentation?.title ?? descriptor.title
+            let systemImage = presentation?.systemImage
+                ?? descriptor.systemImage
+            let color = presentation?.backgroundColor
+                ?? descriptor.backgroundColor
+
+            if descriptor.style == .destructive {
+                Button(role: .destructive) {
+                    perform(descriptor, for: item)
+                } label: {
+                    Label(title, systemImage: systemImage)
+                }
+                .tint(Color(uiColor: color))
+            } else {
+                Button {
+                    perform(descriptor, for: item)
+                } label: {
+                    Label(title, systemImage: systemImage)
+                }
+                .tint(Color(uiColor: color))
+            }
+        }
+    }
+
+    private func perform(_ action: SystemSwipeAction, for item: Item) {
+        if action.savedPresentation != nil {
+            savedPeople.toggle(item.savedProfile)
+        }
+        action.handler()
+    }
+}
+
 private final class SystemSwipeTableViewCell: UITableViewCell {
     private struct SwipeOffsets {
         let model: CGFloat
@@ -207,7 +479,7 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
 
     func configureInteractionSurface(isEnabled: Bool) {
         isInteractionSurfaceEnabled = isEnabled
-        holdRecognizer.isEnabled = isEnabled
+        holdRecognizer.isEnabled = isEnabled && usesCustomHoldSurface
 
         if !isEnabled {
             stopMonitoringSwipeMotion()
@@ -379,9 +651,11 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
             self.contentView.backgroundColor = isVisible
                 ? self.interactionSurfaceColor
                 : .clear
-            self.contentView.layer.cornerRadius = isVisible ? 26 : 0
+            self.contentView.layer.cornerRadius = isVisible
+                && self.usesRoundedInteractionSurface ? 26 : 0
             self.contentView.layer.cornerCurve = .continuous
             self.contentView.layer.masksToBounds = isVisible
+                && self.usesRoundedInteractionSurface
         }
 
         guard animated else {
@@ -398,9 +672,27 @@ private final class SystemSwipeTableViewCell: UITableViewCell {
     }
 
     private var interactionSurfaceColor: UIColor {
-        traitCollection.userInterfaceStyle == .dark
-            ? .tertiarySystemBackground
-            : .systemBackground
+        guard usesRoundedInteractionSurface else {
+            return .systemBackground
+        }
+
+        return traitCollection.userInterfaceStyle == .dark
+            ? UIColor.tertiarySystemBackground
+            : UIColor.systemBackground
+    }
+
+    private var usesCustomHoldSurface: Bool {
+        if #available(iOS 26.0, *) {
+            return true
+        }
+        return false
+    }
+
+    private var usesRoundedInteractionSurface: Bool {
+        if #available(iOS 26.0, *) {
+            return true
+        }
+        return false
     }
 
 }

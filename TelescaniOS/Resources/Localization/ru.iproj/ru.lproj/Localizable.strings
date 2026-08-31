@@ -192,6 +192,7 @@
 "nearbyProfileBlockedProfiles" = "Заблокированные профили";
 "nearbyProfileSavedMenu" = "Сохранённые";
 "nearbyProfileSavedProfiles" = "Сохранённые профили";
+"nearbyProfileSavedListDescription" = "Люди, которых вы сохранили";
 "nearbyProfileNoSaved" = "Нет";
 "nearbyProfileNoSavedProfiles" = "Нет сохранённых профилей";
 "nearbyProfileNoBlockedProfiles" = "Нет заблокированных профилей";
