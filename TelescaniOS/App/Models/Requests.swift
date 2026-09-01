@@ -37,6 +37,27 @@ struct ProfileUpdateRequest: Encodable {
     }
 }
 
+enum ReportCommentValidationError: Error, Equatable {
+    case tooLong(maximum: Int)
+}
+
+enum ReportCommentPolicy {
+    static let maximumLength = 500
+
+    static func normalized(_ value: String?) throws -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard trimmed.count <= maximumLength else {
+            throw ReportCommentValidationError.tooLong(
+                maximum: maximumLength
+            )
+        }
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 struct ReportCreateRequest: Encodable {
     let clientRequestId: UUID
     let targetTelescanId: UUID

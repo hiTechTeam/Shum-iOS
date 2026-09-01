@@ -24,7 +24,7 @@ actor APIClient {
     private let sessionStore: AuthSessionStore
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
-    private var refreshTask: Task<Void, Error>?
+    private var refreshTask: (generation: UUID, task: Task<Void, Error>)?
 
     init(
         baseURL: URL,
@@ -41,6 +41,7 @@ actor APIClient {
         nonce: String,
         name: String?
     ) async throws -> AuthenticatedAccountResponse {
+        let generation = sessionStore.credentialGeneration
         let deviceID = try sessionStore.installationDeviceID()
         let request = try jsonRequest(
             path: "/api/v1/auth/apple",
@@ -54,12 +55,18 @@ actor APIClient {
         )
         let data = try await perform(request, authenticated: false)
         let response = try decoder.decode(AuthenticatedAccountResponse.self, from: data)
-        try sessionStore.saveAppleSession(response.tokens)
+        guard try sessionStore.saveAppleSession(
+            response.tokens,
+            ifGenerationMatches: generation
+        ) else {
+            throw APIClientError.unauthenticated
+        }
         return response
     }
 
     #if TELESCAN_PERSONAL_TEAM
     func linkForDevelopment(code: String) async throws -> TelegramLinkResponse {
+        let generation = sessionStore.credentialGeneration
         let deviceID = try sessionStore.installationDeviceID()
         let request = try jsonRequest(
             path: "/api/v1/auth/link",
@@ -68,7 +75,12 @@ actor APIClient {
         )
         let data = try await perform(request, authenticated: false)
         let response = try decoder.decode(AuthenticatedAccountResponse.self, from: data)
-        try sessionStore.saveLegacySession(response.tokens)
+        guard try sessionStore.saveLegacySession(
+            response.tokens,
+            ifGenerationMatches: generation
+        ) else {
+            throw APIClientError.unauthenticated
+        }
         return TelegramLinkResponse(
             access: AccessTokenResponse(
                 accessToken: response.tokens.accessToken,
@@ -89,14 +101,24 @@ actor APIClient {
     #endif
 
     func linkTelegram(code: String) async throws -> TelegramLinkResponse {
+        let generation = sessionStore.credentialGeneration
         let request = try jsonRequest(
             path: "/api/v1/users/me/telegram/link",
             method: "POST",
             body: TelegramLinkRequest(code: code)
         )
-        let data = try await perform(request, authenticated: true)
+        let data = try await perform(
+            request,
+            authenticated: true,
+            expectedGeneration: generation
+        )
         let response = try decoder.decode(TelegramLinkResponse.self, from: data)
-        try sessionStore.saveAccessToken(response.access.accessToken)
+        guard try sessionStore.saveAccessToken(
+            response.access.accessToken,
+            ifGenerationMatches: generation
+        ) else {
+            throw APIClientError.unauthenticated
+        }
         return response
     }
 
@@ -123,15 +145,16 @@ actor APIClient {
     func submitReport(
         targetID: UUID,
         details: String?,
-        requestID: UUID = UUID()
+        requestID: UUID
     ) async throws -> ReportResponse {
+        let normalizedDetails = try ReportCommentPolicy.normalized(details)
         let request = try jsonRequest(
             path: "/api/v1/reports",
             method: "POST",
             body: ReportCreateRequest(
                 clientRequestId: requestID,
                 targetTelescanId: targetID,
-                details: details
+                details: normalizedDetails
             )
         )
         return try decoder.decode(
@@ -187,8 +210,20 @@ actor APIClient {
     }
 
     func logoutCurrentSession() async throws {
+        guard let accessToken = sessionStore.accessToken else {
+            throw APIClientError.unauthenticated
+        }
+        try await logoutCurrentSession(accessToken: accessToken)
+    }
+
+    func logoutCurrentSession(accessToken: String) async throws {
         let request = try request(path: "/api/v1/auth/session", method: "DELETE")
-        _ = try await perform(request, authenticated: true)
+        var authenticatedRequest = request
+        authenticatedRequest.setValue(
+            "Bearer \(accessToken)",
+            forHTTPHeaderField: "Authorization"
+        )
+        _ = try await perform(authenticatedRequest, authenticated: false)
     }
 
     func deleteAccount() async throws {
@@ -207,29 +242,61 @@ actor APIClient {
     private func perform(
         _ original: URLRequest,
         authenticated: Bool,
-        retryAfterRefresh: Bool = true
+        retryAfterRefresh: Bool = true,
+        expectedGeneration: UUID? = nil
     ) async throws -> Data {
         var request = original
+        var requestGeneration: UUID?
+        var requestAccessToken: String?
         if authenticated {
-            guard let token = sessionStore.accessToken else {
+            let credentials = sessionStore.credentials
+            guard expectedGeneration == nil
+                    || credentials.generation == expectedGeneration,
+                  let token = credentials.accessToken else {
                 throw APIClientError.unauthenticated
             }
+            requestGeneration = credentials.generation
+            requestAccessToken = token
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw APIClientError.invalidResponse
         }
+        if authenticated,
+           let requestGeneration,
+           sessionStore.credentialGeneration != requestGeneration {
+            throw APIClientError.unauthenticated
+        }
         if http.statusCode == 401 && authenticated && retryAfterRefresh {
-            try await refreshTokens()
+            guard let requestGeneration else {
+                throw APIClientError.unauthenticated
+            }
+            let currentCredentials = sessionStore.credentials
+            if currentCredentials.generation == requestGeneration,
+               currentCredentials.accessToken != nil,
+               currentCredentials.accessToken != requestAccessToken {
+                return try await perform(
+                    original,
+                    authenticated: true,
+                    retryAfterRefresh: false,
+                    expectedGeneration: requestGeneration
+                )
+            }
+            try await refreshTokens(expectedGeneration: requestGeneration)
             return try await perform(
                 original,
                 authenticated: true,
-                retryAfterRefresh: false
+                retryAfterRefresh: false,
+                expectedGeneration: requestGeneration
             )
         }
         if http.statusCode == 401 && authenticated {
-            sessionStore.clearTokens()
+            if let requestGeneration {
+                sessionStore.clearTokens(
+                    ifGenerationMatches: requestGeneration
+                )
+            }
             throw APIClientError.unauthenticated
         }
         guard (200...299).contains(http.statusCode) else {
@@ -248,21 +315,36 @@ actor APIClient {
         return data
     }
 
-    private func refreshTokens() async throws {
-        if let refreshTask {
-            try await refreshTask.value
+    private func refreshTokens(expectedGeneration: UUID) async throws {
+        if let refreshTask,
+           refreshTask.generation == expectedGeneration {
+            try await refreshTask.task.value
             return
         }
-        guard let refreshToken = sessionStore.refreshToken else {
+        let credentials = sessionStore.credentials
+        guard credentials.generation == expectedGeneration,
+              let refreshToken = credentials.refreshToken else {
             throw APIClientError.unauthenticated
         }
-        let task = Task { try await self.performRefreshRequest(refreshToken) }
-        refreshTask = task
-        defer { refreshTask = nil }
+        let task = Task {
+            try await self.performRefreshRequest(
+                refreshToken,
+                generation: expectedGeneration
+            )
+        }
+        refreshTask = (expectedGeneration, task)
+        defer {
+            if refreshTask?.generation == expectedGeneration {
+                refreshTask = nil
+            }
+        }
         try await task.value
     }
 
-    private func performRefreshRequest(_ refreshToken: String) async throws {
+    private func performRefreshRequest(
+        _ refreshToken: String,
+        generation: UUID
+    ) async throws {
         let request = try jsonRequest(
             path: "/api/v1/auth/refresh",
             method: "POST",
@@ -273,13 +355,18 @@ actor APIClient {
             throw APIClientError.invalidResponse
         }
         if http.statusCode == 401 {
-            sessionStore.clearTokens()
+            sessionStore.clearTokens(ifGenerationMatches: generation)
             throw APIClientError.unauthenticated
         }
         guard (200...299).contains(http.statusCode) else {
             throw APIClientError.httpStatus(http.statusCode)
         }
-        try sessionStore.save(try decoder.decode(TokenResponse.self, from: data))
+        guard try sessionStore.save(
+            try decoder.decode(TokenResponse.self, from: data),
+            ifGenerationMatches: generation
+        ) else {
+            throw APIClientError.unauthenticated
+        }
     }
 
     private func jsonRequest<T: Encodable>(

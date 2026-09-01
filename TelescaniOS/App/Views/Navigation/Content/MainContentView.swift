@@ -6,7 +6,6 @@ struct MainContentView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
-    @StateObject private var profilePhotoViewModel = ProfilePhotoViewModel()
     @State private var selectedMainTab: MainTab = .nearby
     @State private var nearbyNavigationID = UUID()
 
@@ -69,7 +68,7 @@ struct MainContentView: View {
         NavigationStack {
             ProfileOverviewView(
                 authCodeViewModel: coordinator.authCodeViewModel,
-                photoViewModel: profilePhotoViewModel
+                photoViewModel: coordinator.profilePhotoViewModel
             )
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)

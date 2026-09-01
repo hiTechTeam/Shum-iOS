@@ -43,11 +43,13 @@ final class FetchService {
 
     func submitReport(
         targetID: UUID,
-        details: String?
+        details: String?,
+        requestID: UUID
     ) async throws -> ReportResponse {
         try await client.submitReport(
             targetID: targetID,
-            details: details
+            details: details,
+            requestID: requestID
         )
     }
 
@@ -73,6 +75,10 @@ final class FetchService {
 
     func logoutCurrentSession() async throws {
         try await client.logoutCurrentSession()
+    }
+
+    func logoutCurrentSession(accessToken: String) async throws {
+        try await client.logoutCurrentSession(accessToken: accessToken)
     }
 
     func deleteAccount() async throws {

@@ -157,8 +157,8 @@
 "nearbyProfileReportOther" = "Other";
 "nearbyProfileReportConfirmTitle" = "Report and block?";
 "nearbyProfileReportConfirmMessage" = "Reason: %@. You can add optional context to the report before blocking.";
-"nearbyProfileReportDetailsPlaceholder" = "Describe the issue";
-"nearbyProfileReportDetailsMessage" = "Describe the reason for the report. The user will be blocked after you submit it.";
+"nearbyProfileReportDetailsPlaceholder" = "Comment (optional)";
+"nearbyProfileReportDetailsMessage" = "The comment is optional. The user will be blocked after you submit the report.";
 "nearbyProfileReportSend" = "Report and block";
 "nearbyProfileReportSentTitle" = "Report sent";
 "nearbyProfileReportSentMessage" = "Thank you. The report has been saved for moderation.";
@@ -182,6 +182,7 @@
 "nearbyProfileActionFailedTitle" = "Couldn’t complete action";
 "nearbyProfileActionFailedMessage" = "Check your connection and try again.";
 "nearbyProfileAcknowledge" = "OK";
+"nearbyProfileRetry" = "Try again";
 
 /* Profile */
 "photoOptions" = "Photo Options";

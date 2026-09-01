@@ -42,5 +42,8 @@ final class QuickActionsSettingsStore: ObservableObject {
         isQuickChatEnabled = false
         isQuickClearEnabled = false
         isQuickBlockEnabled = false
+        defaults.removeObject(forKey: quickChatKey)
+        defaults.removeObject(forKey: quickClearKey)
+        defaults.removeObject(forKey: quickBlockKey)
     }
 }

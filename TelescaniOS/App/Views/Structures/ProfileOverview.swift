@@ -405,9 +405,12 @@ struct ProfileOverviewView: View {
     }
 
     private var savedProfilesStatusTitle: String {
-        savedPeople.count == 0
+        let count = savedPeople.users.filter {
+            !peopleViewModel.isProfileBlocked($0.id)
+        }.count
+        return count == 0
             ? Inc.NearbyProfile.noSaved.localized
-            : String(savedPeople.count)
+            : String(count)
     }
 
     private func manageNotificationAuthorization() {

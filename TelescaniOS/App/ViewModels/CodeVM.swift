@@ -36,6 +36,7 @@ final class CodeViewModel: ObservableObject {
         -> TelescanProfileResponse
     private var linkTask: Task<Void, Never>?
     private var pendingCode: String?
+    private var stateGeneration = UUID()
     private let codeCount = 8
 
     init(
@@ -92,11 +93,15 @@ final class CodeViewModel: ObservableObject {
         codeStatus = nil
         codeError = nil
         tmpTgUsername = nil
+        let stateGeneration = self.stateGeneration
+        let sessionGeneration = AccountSessionGeneration.shared.value
 
         linkTask = Task { [weak self] in
             guard let self else { return }
             defer {
-                if pendingCode == normalizedCode {
+                if stateGeneration == self.stateGeneration,
+                   sessionGeneration == AccountSessionGeneration.shared.value,
+                   pendingCode == normalizedCode {
                     isLoading = false
                     linkTask = nil
                 }
@@ -106,6 +111,8 @@ final class CodeViewModel: ObservableObject {
             do {
                 let response = try await linkAction(normalizedCode)
                 guard !Task.isCancelled,
+                      stateGeneration == self.stateGeneration,
+                      sessionGeneration == AccountSessionGeneration.shared.value,
                       tmpCode.uppercased() == normalizedCode else { return }
                 ProfileCache.clear()
                 applyProfile(response.profile)
@@ -115,13 +122,17 @@ final class CodeViewModel: ObservableObject {
             } catch is CancellationError {
                 return
             } catch APIClientError.telegramUsernameRequired {
-                guard tmpCode.uppercased() == normalizedCode else { return }
+                guard stateGeneration == self.stateGeneration,
+                      sessionGeneration == AccountSessionGeneration.shared.value,
+                      tmpCode.uppercased() == normalizedCode else { return }
                 tmpTgUsername = nil
                 codeError = .telegramUsernameRequired
                 codeStatus = false
                 feedback.notificationOccurred(.error)
             } catch {
-                guard tmpCode.uppercased() == normalizedCode else { return }
+                guard stateGeneration == self.stateGeneration,
+                      sessionGeneration == AccountSessionGeneration.shared.value,
+                      tmpCode.uppercased() == normalizedCode else { return }
                 tmpTgUsername = nil
                 codeError = .invalidCode
                 codeStatus = false
@@ -147,12 +158,28 @@ final class CodeViewModel: ObservableObject {
 
         isSavingBio = true
         bioSaveFailed = false
-        defer { isSavingBio = false }
+        let stateGeneration = self.stateGeneration
+        let sessionGeneration = AccountSessionGeneration.shared.value
+        defer {
+            if stateGeneration == self.stateGeneration,
+               sessionGeneration == AccountSessionGeneration.shared.value {
+                isSavingBio = false
+            }
+        }
         do {
-            applyProfile(try await updateBioAction(normalizedBio))
+            let profile = try await updateBioAction(normalizedBio)
+            guard stateGeneration == self.stateGeneration,
+                  sessionGeneration == AccountSessionGeneration.shared.value else {
+                return false
+            }
+            applyProfile(profile)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             return true
         } catch {
+            guard stateGeneration == self.stateGeneration,
+                  sessionGeneration == AccountSessionGeneration.shared.value else {
+                return false
+            }
             bioSaveFailed = true
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return false
@@ -192,6 +219,7 @@ final class CodeViewModel: ObservableObject {
     }
 
     func clearProfile() {
+        stateGeneration = UUID()
         linkTask?.cancel()
         linkTask = nil
         pendingCode = nil

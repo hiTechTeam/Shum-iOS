@@ -157,8 +157,8 @@
 "nearbyProfileReportOther" = "Другое";
 "nearbyProfileReportConfirmTitle" = "Пожаловаться и заблокировать?";
 "nearbyProfileReportConfirmMessage" = "Причина: %@. Перед блокировкой можно добавить комментарий к жалобе.";
-"nearbyProfileReportDetailsPlaceholder" = "Опишите жалобу";
-"nearbyProfileReportDetailsMessage" = "Опишите причину жалобы. После отправки пользователь будет заблокирован.";
+"nearbyProfileReportDetailsPlaceholder" = "Комментарий (необязательно)";
+"nearbyProfileReportDetailsMessage" = "Комментарий необязателен. После отправки жалобы пользователь будет заблокирован.";
 "nearbyProfileReportSend" = "Пожаловаться и заблокировать";
 "nearbyProfileReportSentTitle" = "Жалоба отправлена";
 "nearbyProfileReportSentMessage" = "Спасибо. Жалоба сохранена и будет рассмотрена модератором.";
@@ -182,6 +182,7 @@
 "nearbyProfileActionFailedTitle" = "Не удалось выполнить действие";
 "nearbyProfileActionFailedMessage" = "Проверьте подключение к сети и повторите попытку.";
 "nearbyProfileAcknowledge" = "Понятно";
+"nearbyProfileRetry" = "Повторить";
 
 /* Profile */
 "photoOptions" = "Параметры фото";

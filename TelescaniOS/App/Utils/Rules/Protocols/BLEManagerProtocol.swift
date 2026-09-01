@@ -9,10 +9,10 @@ enum BLEPresencePolicy {
 }
 
 public protocol BLEManagerDelegate: AnyObject {
-    func didDiscoverDevice(id: String, rssi: Int)
-    func didUpdateDevice(id: String, rssi: Int)
-    func didLoseDevice(id: String)
-    func didFail(with error: Error)
+    func didDiscoverDevice(id: String, rssi: Int, epoch: UUID)
+    func didUpdateDevice(id: String, rssi: Int, epoch: UUID)
+    func didLoseDevice(id: String, epoch: UUID)
+    func didFail(with error: Error, epoch: UUID)
 }
 
 protocol BLEManagerProtocol: AnyObject {
@@ -31,6 +31,8 @@ protocol BLEManagerProtocol: AnyObject {
 
     func reconcileDiscoveryState()
     func setApplicationActive(_ isActive: Bool)
+    /// Synchronously changes the account/scan epoch used by source callbacks.
+    func setDiscoveryEventEpoch(_ epoch: UUID?)
 
     func reset()
     

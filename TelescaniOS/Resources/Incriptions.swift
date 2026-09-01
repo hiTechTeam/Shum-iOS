@@ -315,6 +315,7 @@ struct Inc {
         static let actionFailedTitle: String = "nearbyProfileActionFailedTitle"
         static let actionFailedMessage: String = "nearbyProfileActionFailedMessage"
         static let acknowledge: String = "nearbyProfileAcknowledge"
+        static let retry: String = "nearbyProfileRetry"
     }
     
     // MARK: - Profile

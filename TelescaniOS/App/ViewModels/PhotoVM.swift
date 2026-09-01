@@ -14,9 +14,28 @@ final class ProfilePhotoViewModel: ObservableObject {
     private let photoS3UrlKey = "photoS3Url"
 
     private var photoLoadTask: Task<Void, Never>?
+    private var profileUpdateTask: Task<Void, Never>?
+    private var stateGeneration = UUID()
 
     init() {
         loadPhotoIfNeeded()
+    }
+
+    deinit {
+        photoLoadTask?.cancel()
+        profileUpdateTask?.cancel()
+    }
+
+    func resetAccountScopedState() {
+        stateGeneration = UUID()
+        photoLoadTask?.cancel()
+        photoLoadTask = nil
+        profileUpdateTask?.cancel()
+        profileUpdateTask = nil
+        uiImage = nil
+        profileImage = .noPhoto
+        ProfileImageStorage.delete()
+        UserDefaults.standard.removeObject(forKey: photoS3UrlKey)
     }
 
     func loadPhotoIfNeeded() {
@@ -55,6 +74,8 @@ final class ProfilePhotoViewModel: ObservableObject {
             urlString,
             forKey: photoS3UrlKey
         )
+        let stateGeneration = self.stateGeneration
+        let sessionGeneration = AccountSessionGeneration.shared.value
 
         photoLoadTask = Task { [weak self] in
             guard let self else {
@@ -65,6 +86,10 @@ final class ProfilePhotoViewModel: ObservableObject {
                 let data = try await fetchData(from: url)
 
                 try Task.checkCancellation()
+                guard stateGeneration == self.stateGeneration,
+                      sessionGeneration == AccountSessionGeneration.shared.value else {
+                    return
+                }
 
                 guard let loadedImage = UIImage(data: data) else {
                     throw URLError(.cannotDecodeContentData)
@@ -77,6 +102,10 @@ final class ProfilePhotoViewModel: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
+                guard stateGeneration == self.stateGeneration,
+                      sessionGeneration == AccountSessionGeneration.shared.value else {
+                    return
+                }
                 Self.logger.error(
                     "Failed to load photo: \(error.localizedDescription, privacy: .private)"
                 )
@@ -85,15 +114,30 @@ final class ProfilePhotoViewModel: ObservableObject {
     }
 
     func updateProfileImage(with newImage: UIImage?) {
-        Task { [weak self] in
+        profileUpdateTask?.cancel()
+        let stateGeneration = self.stateGeneration
+        let sessionGeneration = AccountSessionGeneration.shared.value
+        profileUpdateTask = Task { [weak self] in
             guard let self else {
                 return
+            }
+            defer {
+                if stateGeneration == self.stateGeneration,
+                   sessionGeneration == AccountSessionGeneration.shared.value {
+                    profileUpdateTask = nil
+                }
             }
 
             guard let originalImage = newImage else {
                 do {
                     try await FetchService.fetch
                         .deleteProfileImage()
+                    try Task.checkCancellation()
+                    guard stateGeneration == self.stateGeneration,
+                          sessionGeneration
+                            == AccountSessionGeneration.shared.value else {
+                        return
+                    }
 
                     photoLoadTask?.cancel()
                     photoLoadTask = nil
@@ -107,6 +151,11 @@ final class ProfilePhotoViewModel: ObservableObject {
                         forKey: photoS3UrlKey
                     )
                 } catch {
+                    guard stateGeneration == self.stateGeneration,
+                          sessionGeneration
+                            == AccountSessionGeneration.shared.value else {
+                        return
+                    }
                     Self.logger.error(
                         "Failed to delete profile image: \(error.localizedDescription, privacy: .private)"
                     )
@@ -131,6 +180,11 @@ final class ProfilePhotoViewModel: ObservableObject {
             do {
                 let photoURL = try await FetchService.fetch
                     .updateProfileImage(data: compressedData)
+                try Task.checkCancellation()
+                guard stateGeneration == self.stateGeneration,
+                      sessionGeneration == AccountSessionGeneration.shared.value else {
+                    return
+                }
 
                 photoLoadTask?.cancel()
                 photoLoadTask = nil
@@ -147,6 +201,10 @@ final class ProfilePhotoViewModel: ObservableObject {
                     forKey: photoS3UrlKey
                 )
             } catch {
+                guard stateGeneration == self.stateGeneration,
+                      sessionGeneration == AccountSessionGeneration.shared.value else {
+                    return
+                }
                 Self.logger.error(
                     "Failed to upload profile image: \(error.localizedDescription, privacy: .private)"
                 )

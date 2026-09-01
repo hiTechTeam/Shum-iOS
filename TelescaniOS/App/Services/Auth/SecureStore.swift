@@ -10,4 +10,5 @@ protocol SecureStoring: AnyObject {
 enum SecureStoreError: Error {
     case unhandledStatus(OSStatus)
     case invalidData
+    case resetIncomplete
 }

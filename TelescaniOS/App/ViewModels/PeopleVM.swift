@@ -1,6 +1,39 @@
 import Foundation
 import SwiftUI
 
+private final class BLECallbackGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var generation = UUID()
+    private var accepting = true
+
+    func ticket() -> UUID? {
+        lock.withLock { accepting ? generation : nil }
+    }
+
+    func accepts(_ ticket: UUID) -> Bool {
+        lock.withLock { accepting && generation == ticket }
+    }
+
+    func setAccepting(_ value: Bool, invalidate: Bool = false) {
+        lock.withLock {
+            if invalidate || accepting != value {
+                generation = UUID()
+            }
+            accepting = value
+        }
+    }
+}
+
+protocol BLECallbackDispatching: Sendable {
+    func dispatch(_ operation: @escaping @MainActor @Sendable () -> Void)
+}
+
+final class MainActorBLECallbackDispatcher: BLECallbackDispatching {
+    func dispatch(_ operation: @escaping @MainActor @Sendable () -> Void) {
+        Task { @MainActor in operation() }
+    }
+}
+
 private enum NearbyProfileError: LocalizedError {
     case incomplete
     case mismatchedIdentity
@@ -46,6 +79,10 @@ final class PeopleViewModel: ObservableObject {
         unviewedEncounterIDs.count
     }
 
+    var accountStateGeneration: UUID {
+        accountGeneration
+    }
+
     private let bleManager: BLEManagerProtocol
     private let nearbyPeopleNotifier: NearbyPeopleNotifying
     private let blockedProfileStore: BlockedProfileStoring
@@ -60,11 +97,14 @@ final class PeopleViewModel: ObservableObject {
         -> [BlockedProfileResponse]
     private let reportSubmitter: @MainActor (
         UUID,
-        String?
+        String?,
+        UUID
     ) async throws -> ReportResponse
     private let blockSubmitter: @MainActor (UUID) async throws
         -> BlockedProfileResponse
     private let unblockSubmitter: @MainActor (UUID) async throws -> Void
+    private let callbackGate = BLECallbackGate()
+    private let callbackDispatcher: any BLECallbackDispatching
     private var distanceTimer: Timer?
     private var presenceTimer: Timer?
     private var discoveryOrder: [String] = []
@@ -77,6 +117,11 @@ final class PeopleViewModel: ObservableObject {
     private var lastHistoryUpdates: [String: Date] = [:]
     private var lastBufferUpdates: [String: Date] = [:]
     private var suppressedProfileIDs: Set<String> = []
+    private var notifiedResolvedProfileIDs: Set<String> = []
+    private var accountGeneration = UUID()
+    private var blockedStateRevision: UInt64 = 0
+    private var blockedSyncTicket: UInt64 = 0
+    private var acceptsDiscoveryEvents = true
     private var isApplicationActive = true
     private let distanceUpdateInterval: TimeInterval = 10
     private let maximumRSSISamples = 30
@@ -106,6 +151,8 @@ final class PeopleViewModel: ObservableObject {
         maximumProfileResolutionAttempts: Int = 5,
         profileRetryBaseDelay: TimeInterval = 2,
         maximumRetryDelay: TimeInterval = 30,
+        callbackDispatcher: any BLECallbackDispatching =
+            MainActorBLECallbackDispatcher(),
         profileLoader: @escaping @MainActor (UUID) async throws
             -> TelescanProfileResponse = {
                 try await FetchService.fetch.profile(telescanID: $0)
@@ -116,11 +163,13 @@ final class PeopleViewModel: ObservableObject {
             },
         reportSubmitter: @escaping @MainActor (
             UUID,
-            String?
-        ) async throws -> ReportResponse = { id, details in
+            String?,
+            UUID
+        ) async throws -> ReportResponse = { id, details, requestID in
             try await FetchService.fetch.submitReport(
                 targetID: id,
-                details: details
+                details: details,
+                requestID: requestID
             )
         },
         blockSubmitter: @escaping @MainActor (UUID) async throws
@@ -167,6 +216,7 @@ final class PeopleViewModel: ObservableObject {
             self.profileRetryBaseDelay,
             maximumRetryDelay
         )
+        self.callbackDispatcher = callbackDispatcher
         self.profileLoader = profileLoader
         self.blockedProfilesLoader = blockedProfilesLoader
         self.reportSubmitter = reportSubmitter
@@ -174,6 +224,8 @@ final class PeopleViewModel: ObservableObject {
         self.unblockSubmitter = unblockSubmitter
         unviewedEncounterIDs = self.unviewedEncounterStore.ids
         bleManager.delegate = self
+        bleManager.setDiscoveryEventEpoch(callbackGate.ticket())
+        purgeEncounterData(canonicalIDs: blockedProfileStore.ids)
         flushBufferedEncounters()
         refreshEncounterHistory(at: nowProvider())
         recoverPendingEncounterIdentities()
@@ -231,59 +283,143 @@ final class PeopleViewModel: ObservableObject {
     }
 
     func refreshNearbyPeople() async {
+        setDiscoveryEventAcceptance(true, invalidate: true)
         clearDevices()
         bleManager.restartScanning()
     }
 
     func synchronizeBlockedProfiles() async {
+        let generation = accountGeneration
+        let revision = blockedStateRevision
+        blockedSyncTicket += 1
+        let ticket = blockedSyncTicket
         do {
             let profiles = try await blockedProfilesLoader()
+            guard generation == accountGeneration,
+                  revision == blockedStateRevision,
+                  ticket == blockedSyncTicket else { return }
             blockedProfiles = profiles
             let serverIDs = Set(
                 profiles.map { $0.telescanId.uuidString.lowercased() }
             )
             blockedProfileStore.replace(with: serverIDs)
-            discardPendingEncounters(canonicalIDs: serverIDs)
-            refreshEncounterHistory(at: nowProvider())
+            purgeEncounterData(canonicalIDs: serverIDs)
             let visibleBlockedIDs = devices.keys.filter(serverIDs.contains)
             for id in visibleBlockedIDs {
                 loseDevice(id: id)
             }
         } catch {
+            guard generation == accountGeneration else { return }
             // Preserve the last successful local block list while offline.
         }
     }
 
     func submitReport(
         for user: NearbyUser,
-        details: String?
+        details: String?,
+        requestID: UUID
     ) async throws {
-        _ = try await reportSubmitter(user.id, details)
+        let generation = accountGeneration
+        _ = try await reportSubmitter(
+            user.id,
+            ReportCommentPolicy.normalized(details),
+            requestID
+        )
+        guard generation == accountGeneration else {
+            throw CancellationError()
+        }
+    }
+
+    func isCurrentAccountStateGeneration(_ generation: UUID) -> Bool {
+        generation == accountGeneration
     }
 
     func block(_ user: NearbyUser) async throws {
+        let generation = accountGeneration
         let blockedProfile = try await blockSubmitter(user.id)
+        guard generation == accountGeneration else {
+            throw CancellationError()
+        }
+        blockedStateRevision += 1
         blockedProfileStore.insert(user.id)
         if let index = blockedProfiles.firstIndex(where: { $0.id == user.id }) {
             blockedProfiles[index] = blockedProfile
         } else {
             blockedProfiles.insert(blockedProfile, at: 0)
         }
-        discardPendingEncounters(canonicalIDs: [user.discoveryID])
-        refreshEncounterHistory(at: nowProvider())
+        purgeEncounterData(canonicalIDs: [user.discoveryID])
         loseDevice(id: user.discoveryID)
     }
 
     func unblock(_ profile: BlockedProfileResponse) async throws {
+        let generation = accountGeneration
         try await unblockSubmitter(profile.telescanId)
+        guard generation == accountGeneration else {
+            throw CancellationError()
+        }
+        blockedStateRevision += 1
         blockedProfileStore.remove(profile.telescanId)
         blockedProfiles.removeAll { $0.id == profile.id }
         refreshEncounterHistory(at: nowProvider())
     }
 
+    func isProfileBlocked(_ id: UUID) -> Bool {
+        blockedProfileStore.ids.contains(id.uuidString.lowercased())
+    }
+
     func clearBlockedProfileCache() {
+        blockedStateRevision += 1
         blockedProfileStore.removeAll()
         blockedProfiles.removeAll()
+    }
+
+    func resetAccountScopedState() {
+        accountGeneration = UUID()
+        blockedStateRevision += 1
+        blockedSyncTicket += 1
+        setDiscoveryEventAcceptance(false, invalidate: true)
+
+        nearbyPeopleNotifier.setScanningEnabled(false)
+        nearbyPeopleNotifier.reset()
+        bleManager.stopScanning()
+        bleManager.stopAdvertising()
+
+        for task in profileTasks.values {
+            task.cancel()
+        }
+        profileTasks.removeAll()
+        for task in pendingEncounterTasks.values {
+            task.cancel()
+        }
+        pendingEncounterTasks.removeAll()
+        for task in pendingIdentityRecoveryTasks.values {
+            task.cancel()
+        }
+        pendingIdentityRecoveryTasks.removeAll()
+
+        encounterHistoryStore.removeAll()
+        encounterBufferStore.removeAll()
+        unviewedEncounterStore.removeAll()
+        pendingEncounterIdentityStore.removeAll()
+        blockedProfileStore.removeAll()
+
+        devices.removeAll()
+        distances.removeAll()
+        userCache.removeAll()
+        disappearanceCountdowns.removeAll()
+        blockedProfiles.removeAll()
+        encounterHistory.removeAll()
+        unviewedEncounterIDs.removeAll()
+        discoveryOrder.removeAll()
+        rssiSamples.removeAll()
+        lastSignals.removeAll()
+        resolutionAttempts.removeAll()
+        lastHistoryUpdates.removeAll()
+        lastBufferUpdates.removeAll()
+        suppressedProfileIDs.removeAll()
+        notifiedResolvedProfileIDs.removeAll()
+        discoveryError = nil
+        nearbyPeopleNotifier.setApplicationIconBadgeCount(0)
     }
 
     func clearEncounterHistory() {
@@ -296,11 +432,13 @@ final class PeopleViewModel: ObservableObject {
         }
         pendingIdentityRecoveryTasks.removeAll()
         encounterHistoryStore.removeAll()
+        encounterBufferStore.removeAll()
         unviewedEncounterStore.removeAll()
         pendingEncounterIdentityStore.removeAll()
         encounterHistory.removeAll()
         unviewedEncounterIDs.removeAll()
         lastHistoryUpdates.removeAll()
+        lastBufferUpdates.removeAll()
     }
 
     func removeEncounterFromHistory(_ user: NearbyUser) {
@@ -335,6 +473,7 @@ final class PeopleViewModel: ObservableObject {
     }
 
     func toggleScanning(_ enabled: Bool) {
+        setDiscoveryEventAcceptance(enabled, invalidate: !enabled)
         nearbyPeopleNotifier.setScanningEnabled(enabled)
         if discoveryError != nil {
             discoveryError = nil
@@ -342,6 +481,7 @@ final class PeopleViewModel: ObservableObject {
         if enabled {
             bleManager.startScanning()
         } else {
+            cancelPendingIdentityRecovery()
             bleManager.stopScanning()
             clearDevices(recordEncountersImmediately: true)
         }
@@ -363,9 +503,19 @@ final class PeopleViewModel: ObservableObject {
         isActive: Bool,
         scanningEnabled: Bool? = nil
     ) {
+        if isApplicationActive != isActive {
+            notifiedResolvedProfileIDs.removeAll()
+        }
         isApplicationActive = isActive
         nearbyPeopleNotifier.setApplicationActive(isActive)
         if let scanningEnabled {
+            setDiscoveryEventAcceptance(
+                scanningEnabled,
+                invalidate: !scanningEnabled
+            )
+            if !scanningEnabled {
+                cancelPendingIdentityRecovery()
+            }
             nearbyPeopleNotifier.setScanningEnabled(scanningEnabled)
         }
         updateDisappearanceCountdowns()
@@ -385,14 +535,34 @@ final class PeopleViewModel: ObservableObject {
                 }
             )
             nearbyPeopleNotifier.synchronizeNearby(ids: recentlySeenIDs)
+            notifiedResolvedProfileIDs.formUnion(recentlySeenIDs)
         }
     }
 
     func stopAllBluetoothActivity() {
+        setDiscoveryEventAcceptance(false, invalidate: true)
+        cancelPendingIdentityRecovery()
         nearbyPeopleNotifier.setScanningEnabled(false)
         bleManager.stopScanning()
         bleManager.stopAdvertising()
         clearDevices(recordEncountersImmediately: true)
+    }
+
+    private func cancelPendingIdentityRecovery() {
+        for task in pendingIdentityRecoveryTasks.values {
+            task.cancel()
+        }
+        pendingIdentityRecoveryTasks.removeAll()
+        pendingEncounterIdentityStore.removeAll()
+    }
+
+    private func setDiscoveryEventAcceptance(
+        _ accepting: Bool,
+        invalidate: Bool = false
+    ) {
+        acceptsDiscoveryEvents = accepting
+        callbackGate.setAccepting(accepting, invalidate: invalidate)
+        bleManager.setDiscoveryEventEpoch(callbackGate.ticket())
     }
 
     private func startDistanceUpdater() {
@@ -502,10 +672,12 @@ final class PeopleViewModel: ObservableObject {
         lastSignals.removeAll()
         lastHistoryUpdates.removeAll()
         lastBufferUpdates.removeAll()
+        notifiedResolvedProfileIDs.removeAll()
         refreshEncounterHistory(at: nowProvider())
     }
 
     private func receiveDevice(id: String, rssi: Int) {
+        guard acceptsDiscoveryEvents else { return }
         guard let uuid = UUID(uuidString: id) else { return }
         let canonicalID = uuid.uuidString.lowercased()
         pendingEncounterTasks[canonicalID]?.cancel()
@@ -520,7 +692,6 @@ final class PeopleViewModel: ObservableObject {
         if isNew {
             discoveryOrder.insert(canonicalID, at: 0)
             refreshEncounterHistory(at: nowProvider())
-            nearbyPeopleNotifier.detect(id: canonicalID)
         }
         lastSignals[canonicalID] = now
         if let user = userCache[canonicalID] {
@@ -562,6 +733,7 @@ final class PeopleViewModel: ObservableObject {
                 profileRetryBaseDelay * pow(2, Double(max(0, attempt - 1))),
                 maximumRetryDelay
             )
+        let generation = accountGeneration
 
         profileTasks[id] = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -572,12 +744,15 @@ final class PeopleViewModel: ObservableObject {
                     return
                 }
             }
-            guard !Task.isCancelled, self.devices[id] != nil else { return }
-            await self.resolveProfile(for: id)
+            guard !Task.isCancelled,
+                  generation == self.accountGeneration,
+                  self.devices[id] != nil else { return }
+            await self.resolveProfile(for: id, generation: generation)
         }
     }
 
-    private func resolveProfile(for id: String) async {
+    private func resolveProfile(for id: String, generation: UUID) async {
+        guard generation == accountGeneration else { return }
         guard let requestedID = UUID(uuidString: id) else {
             profileTasks[id] = nil
             return
@@ -586,6 +761,7 @@ final class PeopleViewModel: ObservableObject {
         do {
             let response = try await profileLoader(requestedID)
             try Task.checkCancellation()
+            guard generation == accountGeneration else { return }
             guard devices[id] != nil else {
                 profileTasks[id] = nil
                 return
@@ -599,6 +775,7 @@ final class PeopleViewModel: ObservableObject {
                 return
             }
             userCache[id] = user
+            notifyResolvedProfileIfNeeded(id: id)
             let lastSeenAt = lastSignals[id] ?? nowProvider()
             bufferEncounter(user, at: lastSeenAt, force: true)
             pendingEncounterIdentityStore.remove(ids: [user.id])
@@ -609,8 +786,11 @@ final class PeopleViewModel: ObservableObject {
             resolutionAttempts[id] = 0
             profileTasks[id] = nil
         } catch is CancellationError {
-            profileTasks[id] = nil
+            if generation == accountGeneration {
+                profileTasks[id] = nil
+            }
         } catch {
+            guard generation == accountGeneration else { return }
             profileTasks[id] = nil
             if isTerminalProfileError(error) {
                 nearbyPeopleNotifier.lose(id: id)
@@ -630,6 +810,17 @@ final class PeopleViewModel: ObservableObject {
             guard devices[id] != nil else { return }
             scheduleProfileResolution(for: id, immediately: false, force: true)
         }
+    }
+
+    private func notifyResolvedProfileIfNeeded(id: String) {
+        guard !isApplicationActive,
+              devices[id] != nil,
+              userCache[id] != nil,
+              !blockedProfileStore.ids.contains(id),
+              notifiedResolvedProfileIDs.insert(id).inserted else {
+            return
+        }
+        nearbyPeopleNotifier.detect(id: id)
     }
 
     private func validatedUser(
@@ -712,6 +903,7 @@ final class PeopleViewModel: ObservableObject {
         lastSignals.removeValue(forKey: canonicalID)
         lastHistoryUpdates.removeValue(forKey: canonicalID)
         lastBufferUpdates.removeValue(forKey: canonicalID)
+        notifiedResolvedProfileIDs.remove(canonicalID)
         refreshEncounterHistory(at: nowProvider())
     }
 
@@ -724,6 +916,7 @@ final class PeopleViewModel: ObservableObject {
 
         pendingEncounterTasks[canonicalID]?.cancel()
         let delay = encounterInactivityDelay
+        let generation = accountGeneration
         pendingEncounterTasks[canonicalID] = Task { @MainActor [weak self] in
             do {
                 try await Task.sleep(for: .seconds(delay))
@@ -732,6 +925,7 @@ final class PeopleViewModel: ObservableObject {
             }
 
             guard let self else { return }
+            guard generation == self.accountGeneration else { return }
             self.pendingEncounterTasks.removeValue(forKey: canonicalID)
             guard !self.blockedProfileStore.ids.contains(canonicalID) else {
                 return
@@ -798,17 +992,30 @@ final class PeopleViewModel: ObservableObject {
         refreshEncounterHistory(at: max(nowProvider(), date))
     }
 
-    private func discardPendingEncounters(canonicalIDs: Set<String>) {
+    private func purgeEncounterData(canonicalIDs: Set<String>) {
         let ids = Set(canonicalIDs.compactMap { UUID(uuidString: $0) })
         for canonicalID in canonicalIDs {
             pendingEncounterTasks[canonicalID]?.cancel()
             pendingEncounterTasks.removeValue(forKey: canonicalID)
+            pendingIdentityRecoveryTasks[canonicalID]?.cancel()
+            pendingIdentityRecoveryTasks.removeValue(forKey: canonicalID)
+            notifiedResolvedProfileIDs.remove(canonicalID)
+            nearbyPeopleNotifier.lose(id: canonicalID)
         }
+        encounterHistoryStore.remove(ids: ids)
         encounterBufferStore.remove(ids: ids)
         pendingEncounterIdentityStore.remove(ids: ids)
+        for id in ids {
+            unviewedEncounterStore.remove(id)
+            unviewedEncounterIDs.remove(id)
+        }
+        lastHistoryUpdates = lastHistoryUpdates.filter {
+            !canonicalIDs.contains($0.key)
+        }
         lastBufferUpdates = lastBufferUpdates.filter {
             !canonicalIDs.contains($0.key)
         }
+        refreshEncounterHistory(at: nowProvider())
     }
 
     private func flushBufferedEncounters() {
@@ -871,18 +1078,22 @@ final class PeopleViewModel: ObservableObject {
                 continue
             }
 
+            let generation = accountGeneration
             pendingIdentityRecoveryTasks[canonicalID] = Task {
                 [weak self] in
                 guard let self else { return }
                 defer {
-                    self.pendingIdentityRecoveryTasks.removeValue(
-                        forKey: canonicalID
-                    )
+                    if generation == self.accountGeneration {
+                        self.pendingIdentityRecoveryTasks.removeValue(
+                            forKey: canonicalID
+                        )
+                    }
                 }
 
                 do {
                     let response = try await self.profileLoader(entry.id)
                     try Task.checkCancellation()
+                    guard generation == self.accountGeneration else { return }
                     let user = try self.validatedUser(
                         response,
                         requestedID: entry.id
@@ -906,6 +1117,7 @@ final class PeopleViewModel: ObservableObject {
                 } catch is CancellationError {
                     return
                 } catch {
+                    guard generation == self.accountGeneration else { return }
                     if self.isTerminalProfileError(error) {
                         self.pendingEncounterIdentityStore.remove(
                             ids: [entry.id]
@@ -918,28 +1130,32 @@ final class PeopleViewModel: ObservableObject {
 }
 
 extension PeopleViewModel: BLEManagerDelegate {
-    nonisolated func didDiscoverDevice(id: String, rssi: Int) {
-        Task { @MainActor [weak self] in
-            self?.receiveDevice(id: id, rssi: rssi)
+    nonisolated func didDiscoverDevice(id: String, rssi: Int, epoch: UUID) {
+        callbackDispatcher.dispatch { @MainActor [weak self] in
+            guard let self, self.callbackGate.accepts(epoch) else { return }
+            self.receiveDevice(id: id, rssi: rssi)
         }
     }
 
-    nonisolated func didUpdateDevice(id: String, rssi: Int) {
-        Task { @MainActor [weak self] in
-            self?.receiveDevice(id: id, rssi: rssi)
+    nonisolated func didUpdateDevice(id: String, rssi: Int, epoch: UUID) {
+        callbackDispatcher.dispatch { @MainActor [weak self] in
+            guard let self, self.callbackGate.accepts(epoch) else { return }
+            self.receiveDevice(id: id, rssi: rssi)
         }
     }
 
-    nonisolated func didLoseDevice(id: String) {
-        Task { @MainActor [weak self] in
-            self?.loseDevice(id: id)
+    nonisolated func didLoseDevice(id: String, epoch: UUID) {
+        callbackDispatcher.dispatch { @MainActor [weak self] in
+            guard let self, self.callbackGate.accepts(epoch) else { return }
+            self.loseDevice(id: id)
         }
     }
 
-    nonisolated func didFail(with error: Error) {
+    nonisolated func didFail(with error: Error, epoch: UUID) {
         let message = error.localizedDescription
-        Task { @MainActor [weak self] in
-            self?.discoveryError = message
+        callbackDispatcher.dispatch { @MainActor [weak self] in
+            guard let self, self.callbackGate.accepts(epoch) else { return }
+            self.discoveryError = message
         }
     }
 }

@@ -87,6 +87,91 @@ struct BLEManagerTests {
         )
     }
 
+    @Test("An epoch transition is ordered behind queued BLE source callbacks.")
+    func sourceQueueEpochTransitionPreservesCallbackOrigin() {
+        let sourceQueue = DispatchQueue(
+            label: "com.telescan.tests.ble-source-epoch"
+        )
+        let gate = BLESourceEpochGate(queue: sourceQueue)
+        let observedEpoch = LockedEpochObservation()
+        let accountAEpoch = UUID()
+        let accountBEpoch = UUID()
+
+        gate.set(accountAEpoch)
+        sourceQueue.async {
+            observedEpoch.store(gate.currentOnSourceQueue())
+        }
+
+        // This synchronous transition must drain the callback submitted above
+        // before replacing A's source epoch.
+        gate.set(nil)
+        gate.set(accountBEpoch)
+
+        #expect(observedEpoch.value == accountAEpoch)
+    }
+
+    @Test("A delayed advertising callback retains its request epoch.")
+    func advertisingCompletionCannotAdoptNextAccountEpoch() {
+        var tracker = BLESingleFlightEpochTracker()
+        let accountAEpoch = UUID()
+        let accountBEpoch = UUID()
+
+        let startedA = tracker.begin(epoch: accountAEpoch)
+        let overlappingB = tracker.begin(epoch: accountBEpoch)
+        let completedA = tracker.takeCompletionOrigin()
+        let startedB = tracker.begin(epoch: accountBEpoch)
+        let completedB = tracker.takeCompletionOrigin()
+
+        #expect(startedA)
+        #expect(!overlappingB)
+        #expect(completedA == accountAEpoch)
+        #expect(startedB)
+        #expect(completedB == accountBEpoch)
+    }
+
+    @Test("A peripheral operation drains before the next account can reuse it.")
+    func peripheralOperationCannotBeOverwrittenAcrossAccountReset() throws {
+        var tracker = BLEPeripheralEpochTracker()
+        let peripheralID = UUID()
+        let accountAEpoch = UUID()
+        let accountBEpoch = UUID()
+
+        let startedA = tracker.admit(
+            peripheralID: peripheralID,
+            epoch: accountAEpoch
+        )
+        tracker.markRetiring(peripheralID: peripheralID)
+        let deferredB = tracker.admit(
+            peripheralID: peripheralID,
+            epoch: accountBEpoch
+        )
+        let staleValueAccepted = tracker.accepts(
+            peripheralID: peripheralID,
+            currentEpoch: accountBEpoch
+        )
+        let originBeforeTerminal = tracker.origin(for: peripheralID)
+        let epochReleasedByATerminal = tracker.complete(
+            peripheralID: peripheralID
+        )
+        let releasedEpoch = try #require(epochReleasedByATerminal)
+        let startedB = tracker.admit(
+            peripheralID: peripheralID,
+            epoch: releasedEpoch
+        )
+        let currentValueAccepted = tracker.accepts(
+            peripheralID: peripheralID,
+            currentEpoch: accountBEpoch
+        )
+
+        #expect(startedA == .started)
+        #expect(deferredB == .deferred)
+        #expect(!staleValueAccepted)
+        #expect(originBeforeTerminal == accountAEpoch)
+        #expect(epochReleasedByATerminal == accountBEpoch)
+        #expect(startedB == .started)
+        #expect(currentValueAccepted)
+    }
+
     @Test("reset() clean active operations and allows you to start over.")
     func resetClearsActiveOperations() async throws {
         let manager = BLEManager.shared
@@ -150,6 +235,19 @@ struct BLEManagerTests {
     }
 }
 
+private final class LockedEpochObservation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValue: UUID?
+
+    var value: UUID? {
+        lock.withLock { storedValue }
+    }
+
+    func store(_ value: UUID?) {
+        lock.withLock { storedValue = value }
+    }
+}
+
 // MARK: - Mock Delegate for tests
 
 final class MockBLEManagerDelegate: BLEManagerDelegate {
@@ -157,16 +255,16 @@ final class MockBLEManagerDelegate: BLEManagerDelegate {
     var onUpdateDevice: ((String, Int) -> Void)?
     var onLoseDevice: ((String) -> Void)?
     var onFail: ((Error) -> Void)?
-    func didDiscoverDevice(id: String, rssi: Int) {
+    func didDiscoverDevice(id: String, rssi: Int, epoch: UUID) {
         onDiscoverDevice?(id, rssi)
     }
-    func didUpdateDevice(id: String, rssi: Int) {
+    func didUpdateDevice(id: String, rssi: Int, epoch: UUID) {
         onUpdateDevice?(id, rssi)
     }
-    func didLoseDevice(id: String) {
+    func didLoseDevice(id: String, epoch: UUID) {
         onLoseDevice?(id)
     }
-    func didFail(with error: Error) {
+    func didFail(with error: Error, epoch: UUID) {
         onFail?(error)
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 @testable import Telescan
 
 @Suite("Authenticated API client", .serialized)
@@ -91,6 +92,63 @@ struct FetchServiceTests {
         let longBio = String(repeating: "a", count: 61)
         #expect(await viewModel.updateBio(longBio))
         #expect(submittedBio == String(repeating: "a", count: 36))
+    }
+
+    @Test("A late account A BIO response cannot repopulate cleared profile state")
+    @MainActor
+    func lateBioResponseCannotCrossAccountReset() async {
+        clearStoredProfile()
+        defer { clearStoredProfile() }
+        let accountAID = UUID()
+        var continuation: CheckedContinuation<TelescanProfileResponse, Error>?
+        let viewModel = CodeViewModel(
+            linkAction: { _ in throw APIClientError.invalidResponse },
+            updateBioAction: { _ in
+                try await withCheckedThrowingContinuation {
+                    continuation = $0
+                }
+            }
+        )
+        viewModel.applyProfile(
+            TelescanProfileResponse(
+                telescanId: accountAID,
+                name: "Account A",
+                username: "account_a",
+                bio: "Old bio",
+                photoUrl: nil
+            )
+        )
+
+        let updateTask = Task { await viewModel.updateBio("Late bio") }
+        while continuation == nil {
+            await Task.yield()
+        }
+
+        AccountSessionGeneration.shared.advance()
+        viewModel.clearProfile()
+        clearStoredProfile()
+        continuation?.resume(
+            returning: TelescanProfileResponse(
+                telescanId: accountAID,
+                name: "Account A",
+                username: "account_a",
+                bio: "Late bio",
+                photoUrl: nil
+            )
+        )
+        continuation = nil
+
+        #expect(await updateTask.value == false)
+        #expect(viewModel.telescanID == nil)
+        #expect(viewModel.bio == nil)
+        #expect(
+            UserDefaults.standard.string(forKey: Keys.bioKey.rawValue) == nil
+        )
+        #expect(
+            UserDefaults.standard.string(
+                forKey: Keys.telescanIDKey.rawValue
+            ) == nil
+        )
     }
 
     @Test("A validated code can be edited and checked again")
@@ -250,6 +308,357 @@ struct FetchServiceTests {
 
         try sessions.saveAppleSession(tokens)
         #expect(sessions.hasPrimarySession)
+    }
+
+    @Test("A cold start without a primary session clears stale account data")
+    @MainActor
+    func coldStartWithoutPrimarySessionClearsStaleAccountData() throws {
+        let defaults = UserDefaults.standard
+        let accountMarkerKey = "telescan.tests.stale-account-marker"
+        let historyStore = EncounterHistoryStore(defaults: defaults)
+        let bufferStore = EncounterBufferStore(defaults: defaults)
+        let unviewedStore = UnviewedEncounterStore(defaults: defaults)
+        let pendingStore = PendingEncounterIdentityStore(defaults: defaults)
+        let blockedStore = BlockedProfileStore(defaults: defaults)
+        let peopleViewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            blockedProfileStore: blockedStore,
+            encounterHistoryStore: historyStore,
+            encounterBufferStore: bufferStore,
+            unviewedEncounterStore: unviewedStore,
+            pendingEncounterIdentityStore: pendingStore,
+            encounterRetention: nil
+        )
+        defer {
+            peopleViewModel.stopAllBluetoothActivity()
+            SavedPeopleStateStore.shared.removeAll()
+            QuickActionsSettingsStore.shared.reset()
+            ProfileImageStorage.delete()
+            if let bundleID = Bundle.main.bundleIdentifier {
+                defaults.removePersistentDomain(forName: bundleID)
+            }
+        }
+
+        let sessions = AuthSessionStore(store: MemorySecureStore())
+        let installationID = try sessions.installationDeviceID()
+        let staleUser = NearbyUser(
+            id: UUID(),
+            name: "Stale account",
+            username: "@stale_account",
+            bio: "Must be cleared",
+            photoURL: nil
+        )
+        let seenAt = Date(timeIntervalSince1970: 80_000)
+
+        defaults.set(false, forKey: Keys.isReg.rawValue)
+        defaults.set(true, forKey: Keys.isScaning.rawValue)
+        defaults.set(
+            staleUser.id.uuidString,
+            forKey: Keys.telescanIDKey.rawValue
+        )
+        defaults.set(staleUser.name, forKey: Keys.tgNameKey.rawValue)
+        defaults.set(staleUser.username, forKey: Keys.usernameKey.rawValue)
+        defaults.set(staleUser.bio, forKey: Keys.bioKey.rawValue)
+        defaults.set("stale", forKey: accountMarkerKey)
+        historyStore.record(staleUser, seenAt: seenAt)
+        bufferStore.record(staleUser, seenAt: seenAt)
+        unviewedStore.insert(staleUser.id)
+        pendingStore.record(id: staleUser.id, seenAt: seenAt)
+        blockedStore.insert(staleUser.id)
+        _ = SavedPeopleStateStore.shared.toggle(staleUser)
+        QuickActionsSettingsStore.shared.isQuickChatEnabled = true
+        QuickActionsSettingsStore.shared.isQuickBlockEnabled = true
+        QuickActionsSettingsStore.shared.isQuickClearEnabled = true
+
+        let staleImage = UIGraphicsImageRenderer(
+            size: CGSize(width: 2, height: 2)
+        ).image { context in
+            UIColor.red.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }
+        ProfileImageStorage.save(staleImage)
+        let photoViewModel = ProfilePhotoViewModel()
+        #expect(photoViewModel.uiImage != nil)
+
+        let codeViewModel = CodeViewModel()
+        let coordinator = AppCoordinator(
+            authSession: sessions,
+            authCodeViewModel: codeViewModel,
+            peopleViewModel: peopleViewModel,
+            profilePhotoViewModel: photoViewModel,
+            bluetoothReset: { }
+        )
+
+        #expect(!coordinator.isAuthenticated)
+        #expect(!coordinator.isRegistered)
+        #expect(!coordinator.isScaning)
+        #expect(codeViewModel.telescanID == nil)
+        #expect(codeViewModel.tgName == nil)
+        #expect(codeViewModel.tgUsername == nil)
+        #expect(codeViewModel.bio == nil)
+        #expect(photoViewModel.uiImage == nil)
+        #expect(ProfileImageStorage.load() == nil)
+        #expect(historyStore.entries.isEmpty)
+        #expect(bufferStore.entries.isEmpty)
+        #expect(unviewedStore.ids.isEmpty)
+        #expect(pendingStore.entries.isEmpty)
+        #expect(blockedStore.ids.isEmpty)
+        #expect(peopleViewModel.visibleUsers.isEmpty)
+        #expect(SavedPeopleStateStore.shared.count == 0)
+        #expect(!QuickActionsSettingsStore.shared.hasEnabledActions)
+        #expect(defaults.object(forKey: accountMarkerKey) == nil)
+        #expect(!sessions.hasTokens)
+        #expect(try sessions.installationDeviceID() == installationID)
+
+        let restartedHistory = EncounterHistoryStore(defaults: defaults)
+        let restartedBuffer = EncounterBufferStore(defaults: defaults)
+        let restartedUnviewed = UnviewedEncounterStore(defaults: defaults)
+        let restartedPending = PendingEncounterIdentityStore(defaults: defaults)
+        let restartedBlocked = BlockedProfileStore(defaults: defaults)
+        #expect(restartedHistory.entries.isEmpty)
+        #expect(restartedBuffer.entries.isEmpty)
+        #expect(restartedUnviewed.ids.isEmpty)
+        #expect(restartedPending.entries.isEmpty)
+        #expect(restartedBlocked.ids.isEmpty)
+    }
+
+    @Test("Logout resets local account state when the network is unavailable")
+    @MainActor
+    func logoutNetworkFailureStillResetsLocally() async throws {
+        let sessions = AuthSessionStore(store: MemorySecureStore())
+        try sessions.saveAppleSession(testTokens(account: "account-a"))
+        UserDefaults.standard.set(true, forKey: Keys.isReg.rawValue)
+        let people = PeopleViewModel(bleManager: FakeBLEManager())
+        let peopleGeneration = people.accountStateGeneration
+        var bluetoothResetCount = 0
+        let coordinator = AppCoordinator(
+            authSession: sessions,
+            peopleViewModel: people,
+            logoutAction: { _ in throw URLError(.notConnectedToInternet) },
+            bluetoothReset: { bluetoothResetCount += 1 }
+        )
+
+        try await coordinator.logoutCurrentSession()
+
+        #expect(!sessions.hasTokens)
+        #expect(!coordinator.isAuthenticated)
+        #expect(!coordinator.isRegistered)
+        #expect(people.accountStateGeneration != peopleGeneration)
+        #expect(bluetoothResetCount == 1)
+        people.stopAllBluetoothActivity()
+    }
+
+    @Test("Logout resets locally when the server response is lost")
+    @MainActor
+    func logoutLostResponseStillResetsLocally() async throws {
+        let sessions = AuthSessionStore(store: MemorySecureStore())
+        try sessions.saveAppleSession(testTokens(account: "account-a"))
+        UserDefaults.standard.set(true, forKey: Keys.isReg.rawValue)
+        var requestReachedServer = false
+        let people = PeopleViewModel(bleManager: FakeBLEManager())
+        let coordinator = AppCoordinator(
+            authSession: sessions,
+            peopleViewModel: people,
+            logoutAction: { _ in
+                requestReachedServer = true
+                throw URLError(.networkConnectionLost)
+            },
+            bluetoothReset: { }
+        )
+
+        try await coordinator.logoutCurrentSession()
+
+        #expect(requestReachedServer)
+        #expect(!sessions.hasTokens)
+        #expect(!coordinator.isAuthenticated)
+        people.stopAllBluetoothActivity()
+    }
+
+    @Test("A late account A logout cannot reset account B")
+    @MainActor
+    func lateLogoutCannotResetNewLogin() async throws {
+        let sessions = AuthSessionStore(store: MemorySecureStore())
+        try sessions.saveAppleSession(testTokens(account: "account-a"))
+        UserDefaults.standard.set(true, forKey: Keys.isReg.rawValue)
+        var continuation: CheckedContinuation<Void, Error>?
+        var bluetoothResetCount = 0
+        let people = PeopleViewModel(bleManager: FakeBLEManager())
+        let peopleGeneration = people.accountStateGeneration
+        let coordinator = AppCoordinator(
+            authSession: sessions,
+            peopleViewModel: people,
+            logoutAction: { token in
+                #expect(token == "account-a-access")
+                try await withCheckedThrowingContinuation {
+                    continuation = $0
+                }
+            },
+            bluetoothReset: { bluetoothResetCount += 1 }
+        )
+        let logout = Task { try await coordinator.logoutCurrentSession() }
+        while continuation == nil { await Task.yield() }
+
+        #expect(!sessions.hasTokens)
+        #expect(!coordinator.isAuthenticated)
+        #expect(bluetoothResetCount == 1)
+
+        let accountBTokens = testTokens(account: "account-b")
+        try sessions.saveAppleSession(accountBTokens)
+        let accountBID = UUID()
+        coordinator.completedAppleSignIn(
+            profile: TelescanProfileResponse(
+                telescanId: accountBID,
+                name: "Account B",
+                username: "account_b",
+                photoUrl: nil
+            )
+        )
+        let accountBPeopleGeneration = people.accountStateGeneration
+        continuation?.resume(throwing: URLError(.networkConnectionLost))
+        continuation = nil
+        try await logout.value
+
+        #expect(sessions.accessToken == accountBTokens.accessToken)
+        #expect(sessions.refreshToken == accountBTokens.refreshToken)
+        #expect(coordinator.isAuthenticated)
+        #expect(coordinator.isRegistered)
+        #expect(people.accountStateGeneration != peopleGeneration)
+        #expect(people.accountStateGeneration == accountBPeopleGeneration)
+        #expect(bluetoothResetCount == 1)
+        people.stopAllBluetoothActivity()
+    }
+
+    @Test("A stale account generation cannot overwrite or clear a new session")
+    func staleAccountGenerationCannotMutateNewSession() throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        let deviceID = try sessions.installationDeviceID()
+        let accountA = TokenResponse(
+            accessToken: "account-a-access",
+            refreshToken: "account-a-refresh-token-value-that-is-long-enough",
+            tokenType: "bearer",
+            expiresIn: 900
+        )
+        let accountB = TokenResponse(
+            accessToken: "account-b-access",
+            refreshToken: "account-b-refresh-token-value-that-is-long-enough",
+            tokenType: "bearer",
+            expiresIn: 900
+        )
+        let delayedAccountARefresh = TokenResponse(
+            accessToken: "late-account-a-access",
+            refreshToken: "late-account-a-refresh-token-value-that-is-long-enough",
+            tokenType: "bearer",
+            expiresIn: 900
+        )
+
+        try sessions.saveAppleSession(accountA)
+        let accountAGeneration = sessions.credentialGeneration
+        sessions.clearTokens()
+        try sessions.saveAppleSession(accountB)
+
+        #expect(
+            try !sessions.save(
+                delayedAccountARefresh,
+                ifGenerationMatches: accountAGeneration
+            )
+        )
+        #expect(!sessions.clearTokens(ifGenerationMatches: accountAGeneration))
+        #expect(sessions.accessToken == accountB.accessToken)
+        #expect(sessions.refreshToken == accountB.refreshToken)
+        #expect(sessions.hasPrimarySession)
+
+        let restored = AuthSessionStore(store: store)
+        #expect(try restored.installationDeviceID() == deviceID)
+        #expect(restored.accessToken == accountB.accessToken)
+        #expect(restored.refreshToken == accountB.refreshToken)
+    }
+
+    @Test("A failed credential removal leaves a durable fail-closed reset")
+    func failedCredentialRemovalRemainsFailClosedAfterRestart() throws {
+        let suiteName = "telescan.tests.auth-reset.\(UUID().uuidString)"
+        let resetDefaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { resetDefaults.removePersistentDomain(forName: suiteName) }
+        let store = FaultInjectingSecureStore()
+        let sessions = AuthSessionStore(
+            store: store,
+            resetDefaults: resetDefaults
+        )
+        let oldTokens = TokenResponse(
+            accessToken: "old-account-access",
+            refreshToken: "old-account-refresh-token-value-that-is-long-enough",
+            tokenType: "bearer",
+            expiresIn: 900
+        )
+        let newTokens = TokenResponse(
+            accessToken: "new-account-access",
+            refreshToken: "new-account-refresh-token-value-that-is-long-enough",
+            tokenType: "bearer",
+            expiresIn: 900
+        )
+
+        try sessions.saveAppleSession(oldTokens)
+        store.failRemovals = true
+        #expect(!sessions.clearTokens())
+        #expect(sessions.hasPendingReset)
+        #expect(sessions.accessToken == nil)
+        #expect(sessions.refreshToken == nil)
+        #expect(!sessions.hasPrimarySession)
+
+        let restarted = AuthSessionStore(
+            store: store,
+            resetDefaults: resetDefaults
+        )
+        #expect(restarted.hasPendingReset)
+        #expect(restarted.accessToken == nil)
+        #expect(!restarted.hasPrimarySession)
+
+        store.failRemovals = false
+        try restarted.saveAppleSession(newTokens)
+        #expect(!restarted.hasPendingReset)
+        #expect(restarted.accessToken == newTokens.accessToken)
+        #expect(restarted.refreshToken == newTokens.refreshToken)
+        #expect(restarted.hasPrimarySession)
+    }
+
+    @Test("A failed credential verification also survives restart fail closed")
+    func failedCredentialVerificationRemainsFailClosedAfterRestart() throws {
+        let suiteName = "telescan.tests.auth-reset.\(UUID().uuidString)"
+        let resetDefaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { resetDefaults.removePersistentDomain(forName: suiteName) }
+        let store = FaultInjectingSecureStore()
+        let sessions = AuthSessionStore(
+            store: store,
+            resetDefaults: resetDefaults
+        )
+        try sessions.saveAppleSession(
+            TokenResponse(
+                accessToken: "account-access",
+                refreshToken: "account-refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+
+        store.failReads = true
+        #expect(!sessions.clearTokens())
+        #expect(sessions.hasPendingReset)
+        #expect(sessions.credentials.accessToken == nil)
+        #expect(!sessions.hasPrimarySession)
+
+        let restarted = AuthSessionStore(
+            store: store,
+            resetDefaults: resetDefaults
+        )
+        #expect(restarted.hasPendingReset)
+        #expect(restarted.credentials.refreshToken == nil)
+        #expect(!restarted.hasPrimarySession)
+
+        store.failReads = false
+        #expect(restarted.clearTokens())
+        #expect(!restarted.hasPendingReset)
+        #expect(!restarted.hasTokens)
+        #expect(!restarted.hasPrimarySession)
     }
 
     @Test("Sign in with Apple creates and stores the primary session")
@@ -640,6 +1049,138 @@ struct FetchServiceTests {
         #expect(calls == 3)
     }
 
+    @Test("A delayed account A refresh cannot overwrite account B tokens")
+    func delayedRefreshCannotOverwriteNewAccount() async throws {
+        let sessions = AuthSessionStore(store: MemorySecureStore())
+        try sessions.saveAppleSession(
+            TokenResponse(
+                accessToken: "account-a-access",
+                refreshToken: "account-a-refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let refreshGate = BlockingRequestGate()
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/api/v1/auth/refresh" {
+                refreshGate.markStartedAndWait()
+                return (
+                    200,
+                    Data(
+                        """
+                        {"accessToken":"late-account-a-access","refreshToken":"late-account-a-refresh-token-value-that-is-long-enough","tokenType":"bearer","expiresIn":900}
+                        """.utf8
+                    )
+                )
+            }
+            #expect(
+                request.value(forHTTPHeaderField: "Authorization")
+                    == "Bearer account-a-access"
+            )
+            return (401, Data())
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        let requestTask = Task {
+            do {
+                let _: TelescanProfileResponse = try await client.currentProfile()
+                return false
+            } catch {
+                return true
+            }
+        }
+        for _ in 0..<200 where !refreshGate.hasStarted {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(refreshGate.hasStarted)
+        sessions.clearTokens()
+        let accountB = TokenResponse(
+            accessToken: "account-b-access",
+            refreshToken: "account-b-refresh-token-value-that-is-long-enough",
+            tokenType: "bearer",
+            expiresIn: 900
+        )
+        try sessions.saveAppleSession(accountB)
+        refreshGate.open()
+
+        #expect(await requestTask.value)
+        #expect(sessions.accessToken == accountB.accessToken)
+        #expect(sessions.refreshToken == accountB.refreshToken)
+        #expect(sessions.hasPrimarySession)
+    }
+
+    @Test("A delayed successful account A response cannot escape into account B")
+    func delayedAuthenticatedResponseCannotCrossAccountReset() async throws {
+        let sessions = AuthSessionStore(store: MemorySecureStore())
+        try sessions.saveAppleSession(
+            TokenResponse(
+                accessToken: "account-a-access",
+                refreshToken: "account-a-refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let responseGate = BlockingRequestGate()
+        let accountAProfileID = UUID()
+        MockURLProtocol.handler = { request in
+            #expect(
+                request.value(forHTTPHeaderField: "Authorization")
+                    == "Bearer account-a-access"
+            )
+            responseGate.markStartedAndWait()
+            return (
+                200,
+                Data(
+                    """
+                    {"telescanId":"\(accountAProfileID.uuidString)","name":"Account A","username":"account_a","photoUrl":null}
+                    """.utf8
+                )
+            )
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        let requestTask = Task {
+            do {
+                let _: TelescanProfileResponse = try await client.currentProfile()
+                return false
+            } catch {
+                return true
+            }
+        }
+        for _ in 0..<200 where !responseGate.hasStarted {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(responseGate.hasStarted)
+        sessions.clearTokens()
+        let accountB = TokenResponse(
+            accessToken: "account-b-access",
+            refreshToken: "account-b-refresh-token-value-that-is-long-enough",
+            tokenType: "bearer",
+            expiresIn: 900
+        )
+        try sessions.saveAppleSession(accountB)
+        responseGate.open()
+
+        #expect(await requestTask.value)
+        #expect(sessions.accessToken == accountB.accessToken)
+        #expect(sessions.refreshToken == accountB.refreshToken)
+        #expect(sessions.hasPrimarySession)
+    }
+
     @Test("A final 401 invalidates the refreshed session")
     func finalUnauthorizedResponseClearsTokens() async throws {
         let store = MemorySecureStore()
@@ -808,6 +1349,7 @@ struct FetchServiceTests {
         let session = URLSession(configuration: configuration)
         let targetID = UUID()
         let reportID = UUID()
+        let clientRequestID = UUID()
         let recorder = ModerationRequestRecorder()
         MockURLProtocol.handler = { request in
             recorder.record(request)
@@ -854,7 +1396,8 @@ struct FetchServiceTests {
 
         let report = try await client.submitReport(
             targetID: targetID,
-            details: "context"
+            details: "context",
+            requestID: clientRequestID
         )
         let blocked = try await client.blockProfile(id: targetID)
         let list = try await client.blockedProfiles()
@@ -877,7 +1420,165 @@ struct FetchServiceTests {
         #expect(json["targetTelescanId"] as? String == targetID.uuidString)
         #expect(json["reason"] as? String == "other")
         #expect(json["details"] as? String == "context")
-        #expect(json["clientRequestId"] as? String != nil)
+        #expect(
+            json["clientRequestId"] as? String
+                == clientRequestID.uuidString
+        )
+    }
+
+    @Test("Report comment is optional and limited to 500 characters")
+    func reportCommentContractIsEnforcedClientSide() async throws {
+        let sessions = AuthSessionStore(store: MemorySecureStore())
+        try sessions.save(
+            TokenResponse(
+                accessToken: "access-token",
+                refreshToken: "refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let targetID = UUID()
+        let reportID = UUID()
+        let recorder = ModerationRequestRecorder()
+        MockURLProtocol.handler = { request in
+            recorder.record(request)
+            return (
+                201,
+                Data(
+                    """
+                    {"reportId":"\(reportID.uuidString)","status":"pending","createdAt":"2026-09-01T12:00:00Z"}
+                    """.utf8
+                )
+            )
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+        let maximumComment = String(
+            repeating: "x",
+            count: ReportCommentPolicy.maximumLength
+        )
+
+        _ = try await client.submitReport(
+            targetID: targetID,
+            details: "   \n",
+            requestID: UUID()
+        )
+        _ = try await client.submitReport(
+            targetID: targetID,
+            details: maximumComment,
+            requestID: UUID()
+        )
+
+        do {
+            _ = try await client.submitReport(
+                targetID: targetID,
+                details: maximumComment + "x",
+                requestID: UUID()
+            )
+            Issue.record("Expected an overlong report comment error")
+        } catch let error as ReportCommentValidationError {
+            #expect(
+                error == .tooLong(
+                    maximum: ReportCommentPolicy.maximumLength
+                )
+            )
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+
+        #expect(recorder.requests.count == 2)
+        let emptyBody = try #require(
+            requestBodyData(recorder.requests[0])
+        )
+        let emptyJSON = try #require(
+            JSONSerialization.jsonObject(with: emptyBody) as? [String: Any]
+        )
+        #expect(emptyJSON["details"] == nil)
+
+        let maximumBody = try #require(
+            requestBodyData(recorder.requests[1])
+        )
+        let maximumJSON = try #require(
+            JSONSerialization.jsonObject(with: maximumBody) as? [String: Any]
+        )
+        #expect(maximumJSON["details"] as? String == maximumComment)
+    }
+
+    @Test("Report retries reuse one client request ID")
+    func reportRetriesReuseClientRequestID() async throws {
+        let sessions = AuthSessionStore(store: MemorySecureStore())
+        try sessions.save(
+            TokenResponse(
+                accessToken: "access-token",
+                refreshToken: "refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let targetID = UUID()
+        let reportID = UUID()
+        let clientRequestID = UUID()
+        let recorder = ModerationRequestRecorder()
+        MockURLProtocol.handler = { request in
+            recorder.record(request)
+            if recorder.requests.count == 1 {
+                return (503, Data())
+            }
+            return (
+                201,
+                Data(
+                    """
+                    {"reportId":"\(reportID.uuidString)","status":"pending","createdAt":"2026-09-01T12:00:00Z"}
+                    """.utf8
+                )
+            )
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        do {
+            _ = try await client.submitReport(
+                targetID: targetID,
+                details: "same operation",
+                requestID: clientRequestID
+            )
+            Issue.record("Expected the first report attempt to fail")
+        } catch APIClientError.httpStatus(let status) {
+            #expect(status == 503)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+        let response = try await client.submitReport(
+            targetID: targetID,
+            details: "same operation",
+            requestID: clientRequestID
+        )
+
+        #expect(response.reportId == reportID)
+        #expect(recorder.requests.count == 2)
+        let requestIDs = try recorder.requests.map { request in
+            let body = try #require(requestBodyData(request))
+            let json = try #require(
+                JSONSerialization.jsonObject(with: body) as? [String: Any]
+            )
+            return try #require(json["clientRequestId"] as? String)
+        }
+        #expect(requestIDs == [
+            clientRequestID.uuidString,
+            clientRequestID.uuidString
+        ])
     }
 
     @Test("A nearby row appears only after a complete matching profile loads")
@@ -1227,6 +1928,321 @@ struct FetchServiceTests {
         #expect(restored.entries.first?.lastSeen == seenAt)
     }
 
+    @Test("Account reset removes every persisted encounter surface before account B")
+    @MainActor
+    func accountResetClearsEncounterStateAcrossRestart() throws {
+        let suiteName = "telescan.tests.account-reset.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let historyStore = EncounterHistoryStore(defaults: defaults)
+        let bufferStore = EncounterBufferStore(defaults: defaults)
+        let unviewedStore = UnviewedEncounterStore(defaults: defaults)
+        let pendingStore = PendingEncounterIdentityStore(defaults: defaults)
+        let blockedStore = BlockedProfileStore(defaults: defaults)
+        let notifier = FakeNearbyPeopleNotifier()
+        let accountAUser = NearbyUser(
+            id: UUID(),
+            name: "Account A encounter",
+            username: "@account_a",
+            bio: nil,
+            photoURL: nil
+        )
+        let seenAt = Date(timeIntervalSince1970: 60_000)
+        let viewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            nearbyPeopleNotifier: notifier,
+            blockedProfileStore: blockedStore,
+            encounterHistoryStore: historyStore,
+            encounterBufferStore: bufferStore,
+            unviewedEncounterStore: unviewedStore,
+            pendingEncounterIdentityStore: pendingStore,
+            encounterRetention: nil
+        )
+
+        historyStore.record(accountAUser, seenAt: seenAt)
+        bufferStore.record(accountAUser, seenAt: seenAt)
+        unviewedStore.insert(accountAUser.id)
+        pendingStore.record(id: accountAUser.id, seenAt: seenAt)
+        blockedStore.insert(accountAUser.id)
+
+        viewModel.resetAccountScopedState()
+
+        #expect(historyStore.entries.isEmpty)
+        #expect(bufferStore.entries.isEmpty)
+        #expect(unviewedStore.ids.isEmpty)
+        #expect(pendingStore.entries.isEmpty)
+        #expect(blockedStore.ids.isEmpty)
+        #expect(viewModel.visibleUsers.isEmpty)
+        #expect(viewModel.encounterHistory.isEmpty)
+        #expect(viewModel.unviewedEncounterIDs.isEmpty)
+        #expect(notifier.resetCount == 1)
+
+        let restartedHistory = EncounterHistoryStore(defaults: defaults)
+        let restartedBuffer = EncounterBufferStore(defaults: defaults)
+        let restartedUnviewed = UnviewedEncounterStore(defaults: defaults)
+        let restartedPending = PendingEncounterIdentityStore(defaults: defaults)
+        let restartedBlocked = BlockedProfileStore(defaults: defaults)
+        #expect(restartedHistory.entries.isEmpty)
+        #expect(restartedBuffer.entries.isEmpty)
+        #expect(restartedUnviewed.ids.isEmpty)
+        #expect(restartedPending.entries.isEmpty)
+        #expect(restartedBlocked.ids.isEmpty)
+
+        let accountBUser = NearbyUser(
+            id: UUID(),
+            name: "Account B encounter",
+            username: "@account_b",
+            bio: nil,
+            photoURL: nil
+        )
+        restartedHistory.record(accountBUser, seenAt: seenAt)
+        let accountBRestart = EncounterHistoryStore(defaults: defaults)
+        #expect(accountBRestart.entries.map(\.id) == [accountBUser.id])
+        #expect(!accountBRestart.entries.contains { $0.id == accountAUser.id })
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("Block purges persisted encounter state across restart and unblock")
+    @MainActor
+    func blockRestartUnblockDoesNotRestoreMet() async throws {
+        let suiteName = "telescan.tests.block-purge.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let savedPeople = SavedPeopleStateStore.shared
+        savedPeople.removeAll()
+        defer { savedPeople.removeAll() }
+
+        let target = NearbyUser(
+            id: UUID(),
+            name: "Blocked target",
+            username: "@blocked_target",
+            bio: nil,
+            photoURL: nil
+        )
+        let seenAt = Date(timeIntervalSince1970: 70_000)
+        let historyStore = EncounterHistoryStore(defaults: defaults)
+        let bufferStore = EncounterBufferStore(defaults: defaults)
+        let unviewedStore = UnviewedEncounterStore(defaults: defaults)
+        let pendingStore = PendingEncounterIdentityStore(defaults: defaults)
+        let blockedStore = BlockedProfileStore(defaults: defaults)
+        let blockedResponse = BlockedProfileResponse(
+            telescanId: target.id,
+            name: target.name,
+            username: target.username,
+            photoUrl: target.photoURL,
+            blockedAt: "2026-09-01T12:00:00Z"
+        )
+        let viewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            blockedProfileStore: blockedStore,
+            encounterHistoryStore: historyStore,
+            encounterBufferStore: bufferStore,
+            unviewedEncounterStore: unviewedStore,
+            pendingEncounterIdentityStore: pendingStore,
+            encounterRetention: nil,
+            blockSubmitter: { _ in blockedResponse }
+        )
+        historyStore.record(target, seenAt: seenAt)
+        bufferStore.record(target, seenAt: seenAt)
+        unviewedStore.insert(target.id)
+        pendingStore.record(id: target.id, seenAt: seenAt)
+        _ = savedPeople.toggle(target)
+
+        try await viewModel.block(target)
+
+        #expect(historyStore.entries.isEmpty)
+        #expect(bufferStore.entries.isEmpty)
+        #expect(unviewedStore.ids.isEmpty)
+        #expect(pendingStore.entries.isEmpty)
+        #expect(blockedStore.ids == [target.discoveryID])
+        #expect(savedPeople.contains(target.id))
+        #expect(viewModel.isProfileBlocked(target.id))
+        viewModel.stopAllBluetoothActivity()
+
+        let restartedHistory = EncounterHistoryStore(defaults: defaults)
+        let restartedBuffer = EncounterBufferStore(defaults: defaults)
+        let restartedUnviewed = UnviewedEncounterStore(defaults: defaults)
+        let restartedPending = PendingEncounterIdentityStore(defaults: defaults)
+        let restartedBlocked = BlockedProfileStore(defaults: defaults)
+        let relaunchedViewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            blockedProfileStore: restartedBlocked,
+            encounterHistoryStore: restartedHistory,
+            encounterBufferStore: restartedBuffer,
+            unviewedEncounterStore: restartedUnviewed,
+            pendingEncounterIdentityStore: restartedPending,
+            encounterRetention: nil,
+            unblockSubmitter: { id in #expect(id == target.id) }
+        )
+
+        #expect(relaunchedViewModel.isProfileBlocked(target.id))
+        #expect(relaunchedViewModel.encounterHistory.isEmpty)
+        try await relaunchedViewModel.unblock(blockedResponse)
+        #expect(!relaunchedViewModel.isProfileBlocked(target.id))
+        #expect(relaunchedViewModel.encounterHistory.isEmpty)
+        #expect(restartedHistory.entries.isEmpty)
+        #expect(restartedBuffer.entries.isEmpty)
+        #expect(restartedUnviewed.ids.isEmpty)
+        #expect(restartedPending.entries.isEmpty)
+        #expect(savedPeople.contains(target.id))
+        relaunchedViewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("Server block sync physically purges all encounter stores")
+    @MainActor
+    func serverBlockSyncPurgesAllEncounterStores() async {
+        let target = NearbyUser(
+            id: UUID(),
+            name: "Server blocked",
+            username: "@server_blocked",
+            bio: nil,
+            photoURL: nil
+        )
+        let historyStore = FakeEncounterHistoryStore()
+        let bufferStore = FakeEncounterHistoryStore()
+        let unviewedStore = InMemoryUnviewedEncounterStore()
+        let pendingStore = InMemoryPendingEncounterIdentityStore()
+        let blockedStore = FakeBlockedProfileStore()
+        let response = BlockedProfileResponse(
+            telescanId: target.id,
+            name: target.name,
+            username: target.username,
+            photoUrl: target.photoURL,
+            blockedAt: "2026-09-01T12:00:00Z"
+        )
+        let viewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            blockedProfileStore: blockedStore,
+            encounterHistoryStore: historyStore,
+            encounterBufferStore: bufferStore,
+            unviewedEncounterStore: unviewedStore,
+            pendingEncounterIdentityStore: pendingStore,
+            encounterRetention: nil,
+            blockedProfilesLoader: { [response] }
+        )
+        historyStore.record(target, seenAt: Date())
+        bufferStore.record(target, seenAt: Date())
+        unviewedStore.insert(target.id)
+        pendingStore.record(id: target.id, seenAt: Date())
+
+        await viewModel.synchronizeBlockedProfiles()
+
+        #expect(blockedStore.ids == [target.discoveryID])
+        #expect(historyStore.entries.isEmpty)
+        #expect(bufferStore.entries.isEmpty)
+        #expect(unviewedStore.ids.isEmpty)
+        #expect(pendingStore.entries.isEmpty)
+        #expect(viewModel.encounterHistory.isEmpty)
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("A delayed block sync cannot undo a completed local block")
+    @MainActor
+    func staleBlockSyncCannotUndoBlock() async throws {
+        let target = NearbyUser(
+            id: UUID(), name: "Target", username: "target",
+            bio: nil, photoURL: nil
+        )
+        let response = blockedResponse(for: target, at: "new")
+        let store = FakeBlockedProfileStore()
+        var continuation:
+            CheckedContinuation<[BlockedProfileResponse], Never>?
+        let viewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            blockedProfileStore: store,
+            encounterRetention: nil,
+            blockedProfilesLoader: {
+                await withCheckedContinuation { continuation = $0 }
+            },
+            blockSubmitter: { _ in response }
+        )
+        let sync = Task { await viewModel.synchronizeBlockedProfiles() }
+        while continuation == nil { await Task.yield() }
+
+        try await viewModel.block(target)
+        continuation?.resume(returning: [])
+        continuation = nil
+        await sync.value
+
+        #expect(store.ids == [target.discoveryID])
+        #expect(viewModel.blockedProfiles == [response])
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("A delayed block sync cannot undo a completed local unblock")
+    @MainActor
+    func staleBlockSyncCannotUndoUnblock() async throws {
+        let target = NearbyUser(
+            id: UUID(), name: "Target", username: "target",
+            bio: nil, photoURL: nil
+        )
+        let response = blockedResponse(for: target, at: "old")
+        let store = FakeBlockedProfileStore()
+        store.insert(target.id)
+        var continuation:
+            CheckedContinuation<[BlockedProfileResponse], Never>?
+        let viewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            blockedProfileStore: store,
+            encounterRetention: nil,
+            blockedProfilesLoader: {
+                await withCheckedContinuation { continuation = $0 }
+            },
+            unblockSubmitter: { _ in }
+        )
+        let sync = Task { await viewModel.synchronizeBlockedProfiles() }
+        while continuation == nil { await Task.yield() }
+
+        try await viewModel.unblock(response)
+        continuation?.resume(returning: [response])
+        continuation = nil
+        await sync.value
+
+        #expect(store.ids.isEmpty)
+        #expect(viewModel.blockedProfiles.isEmpty)
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("An older block sync cannot overwrite a newer sync")
+    @MainActor
+    func overlappingBlockSyncsApplyNewestResponse() async {
+        let oldUser = NearbyUser(
+            id: UUID(), name: "Old", username: "old",
+            bio: nil, photoURL: nil
+        )
+        let newUser = NearbyUser(
+            id: UUID(), name: "New", username: "new",
+            bio: nil, photoURL: nil
+        )
+        let oldResponse = blockedResponse(for: oldUser, at: "old")
+        let newResponse = blockedResponse(for: newUser, at: "new")
+        let store = FakeBlockedProfileStore()
+        var continuations: [
+            CheckedContinuation<[BlockedProfileResponse], Never>
+        ] = []
+        let viewModel = PeopleViewModel(
+            bleManager: FakeBLEManager(),
+            blockedProfileStore: store,
+            encounterRetention: nil,
+            blockedProfilesLoader: {
+                await withCheckedContinuation { continuations.append($0) }
+            }
+        )
+        let older = Task { await viewModel.synchronizeBlockedProfiles() }
+        while continuations.count < 1 { await Task.yield() }
+        let newer = Task { await viewModel.synchronizeBlockedProfiles() }
+        while continuations.count < 2 { await Task.yield() }
+
+        continuations[1].resume(returning: [newResponse])
+        await newer.value
+        continuations[0].resume(returning: [oldResponse])
+        await older.value
+
+        #expect(store.ids == [newUser.discoveryID])
+        #expect(viewModel.blockedProfiles == [newResponse])
+        viewModel.stopAllBluetoothActivity()
+    }
+
     @Test("Buffered encounters publish before the next scan starts")
     @MainActor
     func bufferedEncounterPublishesOnNextLaunch() {
@@ -1341,8 +2357,9 @@ struct FetchServiceTests {
         await Task.yield()
         #expect(pendingStore.entries.first?.id == profileID)
         #expect(pendingStore.entries.first?.lastSeen == seenAt)
-        firstViewModel.stopAllBluetoothActivity()
 
+        // A process interruption does not execute the explicit user-facing
+        // scanning stop path, so the persisted unresolved identity remains.
         let restoredViewModel = PeopleViewModel(
             bleManager: FakeBLEManager(),
             encounterHistoryStore: historyStore,
@@ -1365,6 +2382,7 @@ struct FetchServiceTests {
         #expect(historyStore.entries.first?.id == profileID)
         #expect(historyStore.entries.first?.lastSeen == seenAt)
         #expect(restoredViewModel.encounterHistory.first?.id == profileID)
+        firstViewModel.stopAllBluetoothActivity()
         restoredViewModel.stopAllBluetoothActivity()
     }
 
@@ -1486,6 +2504,71 @@ struct FetchServiceTests {
         viewModel.stopAllBluetoothActivity()
     }
 
+    @Test("A late account A profile callback cannot write into account B")
+    @MainActor
+    func lateProfileCallbackCannotCrossAccountReset() async throws {
+        let manager = FakeBLEManager()
+        let accountAID = UUID()
+        let accountBID = UUID()
+        var accountAContinuation:
+            CheckedContinuation<TelescanProfileResponse, Error>?
+        let historyStore = FakeEncounterHistoryStore()
+        let bufferStore = FakeEncounterHistoryStore()
+        let unviewedStore = InMemoryUnviewedEncounterStore()
+        let pendingStore = InMemoryPendingEncounterIdentityStore()
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            encounterHistoryStore: historyStore,
+            encounterBufferStore: bufferStore,
+            unviewedEncounterStore: unviewedStore,
+            pendingEncounterIdentityStore: pendingStore,
+            encounterRetention: nil,
+            encounterInactivityDelay: 30,
+            profileLoader: { requestedID in
+                if requestedID == accountAID {
+                    return try await withCheckedThrowingContinuation {
+                        continuation in
+                        accountAContinuation = continuation
+                    }
+                }
+                return TelescanProfileResponse(
+                    telescanId: requestedID,
+                    name: "Account B",
+                    username: "account_b",
+                    photoUrl: nil
+                )
+            }
+        )
+
+        manager.emitDiscovery(id: accountAID.uuidString, rssi: -55)
+        while accountAContinuation == nil {
+            await Task.yield()
+        }
+
+        viewModel.resetAccountScopedState()
+        viewModel.toggleScanning(true)
+        manager.emitDiscovery(id: accountBID.uuidString, rssi: -56)
+        try await Task.sleep(for: .milliseconds(50))
+        accountAContinuation?.resume(
+            returning: TelescanProfileResponse(
+                telescanId: accountAID,
+                name: "Late account A",
+                username: "late_account_a",
+                photoUrl: nil
+            )
+        )
+        accountAContinuation = nil
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(viewModel.visibleUsers.map(\.id) == [accountBID])
+        #expect(viewModel.userCache[accountAID.uuidString.lowercased()] == nil)
+        #expect(!historyStore.entries.contains { $0.id == accountAID })
+        #expect(!bufferStore.entries.contains { $0.id == accountAID })
+        #expect(!unviewedStore.ids.contains(accountAID))
+        #expect(!pendingStore.entries.contains { $0.id == accountAID })
+        viewModel.stopAllBluetoothActivity()
+    }
+
     @Test("Losing a BLE candidate cancels profile publication")
     @MainActor
     func lostCandidateCannotAppearLater() async throws {
@@ -1508,6 +2591,140 @@ struct FetchServiceTests {
 
         #expect(viewModel.visibleUsers.isEmpty)
         #expect(viewModel.devices.isEmpty)
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("A queued BLE callback is rejected after scanning is disabled")
+    @MainActor
+    func queuedDiscoveryCannotCrossScanningDisable() async throws {
+        let manager = FakeBLEManager()
+        let historyStore = FakeEncounterHistoryStore()
+        let bufferStore = FakeEncounterHistoryStore()
+        let pendingStore = InMemoryPendingEncounterIdentityStore()
+        var profileLoads = 0
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            encounterHistoryStore: historyStore,
+            encounterBufferStore: bufferStore,
+            pendingEncounterIdentityStore: pendingStore,
+            encounterRetention: nil,
+            profileLoader: { requestedID in
+                profileLoads += 1
+                return TelescanProfileResponse(
+                    telescanId: requestedID,
+                    name: "Late callback",
+                    username: "late_callback",
+                    photoUrl: nil
+                )
+            }
+        )
+
+        viewModel.toggleScanning(true)
+        manager.emitDiscovery(id: UUID().uuidString, rssi: -55)
+        viewModel.toggleScanning(false)
+        try await Task.sleep(for: .milliseconds(20))
+
+        #expect(profileLoads == 0)
+        #expect(viewModel.devices.isEmpty)
+        #expect(viewModel.visibleUsers.isEmpty)
+        #expect(pendingStore.entries.isEmpty)
+        #expect(historyStore.entries.isEmpty)
+        #expect(bufferStore.entries.isEmpty)
+    }
+
+    @Test("A queued BLE callback is rejected after all BLE activity stops")
+    @MainActor
+    func queuedDiscoveryCannotCrossFullStop() async throws {
+        let manager = FakeBLEManager()
+        let historyStore = FakeEncounterHistoryStore()
+        let bufferStore = FakeEncounterHistoryStore()
+        let pendingStore = InMemoryPendingEncounterIdentityStore()
+        var profileLoads = 0
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            encounterHistoryStore: historyStore,
+            encounterBufferStore: bufferStore,
+            pendingEncounterIdentityStore: pendingStore,
+            encounterRetention: nil,
+            profileLoader: { requestedID in
+                profileLoads += 1
+                return TelescanProfileResponse(
+                    telescanId: requestedID,
+                    name: "Late callback",
+                    username: "late_callback",
+                    photoUrl: nil
+                )
+            }
+        )
+
+        viewModel.toggleScanning(true)
+        manager.emitDiscovery(id: UUID().uuidString, rssi: -55)
+        viewModel.stopAllBluetoothActivity()
+        try await Task.sleep(for: .milliseconds(20))
+
+        #expect(profileLoads == 0)
+        #expect(viewModel.devices.isEmpty)
+        #expect(viewModel.visibleUsers.isEmpty)
+        #expect(pendingStore.entries.isEmpty)
+        #expect(historyStore.entries.isEmpty)
+        #expect(bufferStore.entries.isEmpty)
+    }
+
+    @Test("Queued BLE callbacks cannot cross reset and scan re-enable")
+    @MainActor
+    func queuedBLECallbacksCannotEnterNextAccountScanEpoch() async throws {
+        let manager = FakeBLEManager()
+        let dispatcher = ControlledMainActorDispatcher()
+        let staleDiscoveryID = UUID()
+        let staleUpdateID = UUID()
+        let currentID = UUID()
+        var profileLoads: [UUID] = []
+        let pendingStore = InMemoryPendingEncounterIdentityStore()
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            pendingEncounterIdentityStore: pendingStore,
+            encounterRetention: nil,
+            callbackDispatcher: dispatcher,
+            profileLoader: { requestedID in
+                profileLoads.append(requestedID)
+                return TelescanProfileResponse(
+                    telescanId: requestedID,
+                    name: "Current account",
+                    username: "current_account",
+                    photoUrl: nil
+                )
+            }
+        )
+
+        viewModel.toggleScanning(true)
+        manager.queueSourceDiscovery(id: staleDiscoveryID.uuidString, rssi: -55)
+        manager.queueSourceUpdate(id: staleUpdateID.uuidString, rssi: -56)
+        manager.queueSourceLoss(id: currentID.uuidString)
+        manager.queueSourceFailure(APIClientError.httpStatus(503))
+        #expect(manager.queuedSourceCallbackCount == 4)
+        #expect(dispatcher.count == 0)
+
+        viewModel.resetAccountScopedState()
+        viewModel.toggleScanning(true)
+        manager.emitDiscovery(id: currentID.uuidString, rssi: -57)
+
+        dispatcher.runLast()
+        await Task.yield()
+        await Task.yield()
+        #expect(viewModel.visibleUsers.map(\.id) == [currentID])
+
+        manager.deliverQueuedSourceCallbacks()
+        #expect(dispatcher.count == 4)
+        dispatcher.runAll()
+        await Task.yield()
+
+        #expect(profileLoads == [currentID])
+        #expect(viewModel.visibleUsers.map(\.id) == [currentID])
+        #expect(
+            Set(viewModel.devices.keys) == [currentID.uuidString.lowercased()]
+        )
+        #expect(viewModel.discoveryError == nil)
+        #expect(pendingStore.entries.isEmpty)
         viewModel.stopAllBluetoothActivity()
     }
 
@@ -1714,18 +2931,61 @@ struct FetchServiceTests {
         #expect(restoredStore.state == aggregator.persistentState)
     }
 
-    @Test("Background notification does not wait for profile loading")
+    @Test("Raw, invalid and timed-out identities never notify in background")
     @MainActor
-    func backgroundNotificationDoesNotWaitForProfileLoading() async {
+    func unresolvedBackgroundIdentityDoesNotNotify() async throws {
         let manager = FakeBLEManager()
         let notifier = FakeNearbyPeopleNotifier()
         let profileID = UUID()
         let viewModel = PeopleViewModel(
             bleManager: manager,
             nearbyPeopleNotifier: notifier,
+            maximumProfileResolutionAttempts: 1,
             profileLoader: { _ in
-                try await Task.sleep(for: .seconds(30))
-                throw CancellationError()
+                throw URLError(.timedOut)
+            }
+        )
+
+        viewModel.toggleScanning(true)
+        viewModel.reconcileBluetoothState(
+            isActive: false,
+            scanningEnabled: true
+        )
+        manager.emitDiscovery(id: "not-a-uuid", rssi: -55)
+        manager.emitDiscovery(id: profileID.uuidString, rssi: -55)
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(notifier.scanningEnabled == true)
+        #expect(notifier.detectedIDs.isEmpty)
+        #expect(notifier.detectCalls.isEmpty)
+        #expect(viewModel.visibleUsers.isEmpty)
+        viewModel.stopAllBluetoothActivity()
+    }
+
+    @Test("Transient profile resolution notifies once after authenticated success")
+    @MainActor
+    func resolvedBackgroundProfileNotifiesOnceAfterRetry() async throws {
+        let manager = FakeBLEManager()
+        let notifier = FakeNearbyPeopleNotifier()
+        let profileID = UUID()
+        var attempts = 0
+        let viewModel = PeopleViewModel(
+            bleManager: manager,
+            nearbyPeopleNotifier: notifier,
+            maximumProfileResolutionAttempts: 3,
+            profileRetryBaseDelay: 0.01,
+            maximumRetryDelay: 0.02,
+            profileLoader: { requestedID in
+                attempts += 1
+                if attempts == 1 {
+                    throw APIClientError.httpStatus(503)
+                }
+                return TelescanProfileResponse(
+                    telescanId: requestedID,
+                    name: "Resolved",
+                    username: "resolved",
+                    photoUrl: nil
+                )
             }
         )
 
@@ -1735,14 +2995,18 @@ struct FetchServiceTests {
             scanningEnabled: true
         )
         manager.emitDiscovery(id: profileID.uuidString, rssi: -55)
-        await Task.yield()
+        try await Task.sleep(for: .milliseconds(150))
 
-        #expect(notifier.scanningEnabled == true)
-        #expect(
-            notifier.detectedIDs == [
-                profileID.uuidString.lowercased()
-            ]
-        )
+        let canonicalID = profileID.uuidString.lowercased()
+        #expect(attempts == 2)
+        #expect(viewModel.visibleUsers.map(\.id) == [profileID])
+        #expect(notifier.detectedIDs == [canonicalID])
+        #expect(notifier.detectCalls == [canonicalID])
+
+        manager.emitUpdate(id: profileID.uuidString, rssi: -56)
+        await Task.yield()
+        await viewModel.refreshUser(telescanID: canonicalID)
+        #expect(notifier.detectCalls == [canonicalID])
         viewModel.stopAllBluetoothActivity()
     }
 
@@ -1933,6 +3197,28 @@ private func clearStoredProfile() {
     defaults.removeObject(forKey: "userCode")
 }
 
+private func testTokens(account: String) -> TokenResponse {
+    TokenResponse(
+        accessToken: "\(account)-access",
+        refreshToken: "\(account)-refresh-token-value-that-is-long-enough",
+        tokenType: "bearer",
+        expiresIn: 900
+    )
+}
+
+private func blockedResponse(
+    for user: NearbyUser,
+    at blockedAt: String
+) -> BlockedProfileResponse {
+    BlockedProfileResponse(
+        telescanId: user.id,
+        name: user.name,
+        username: user.username,
+        photoUrl: user.photoURL,
+        blockedAt: blockedAt
+    )
+}
+
 private func requestBodyData(_ request: URLRequest) -> Data? {
     if let body = request.httpBody {
         return body
@@ -1957,6 +3243,26 @@ private final class MemorySecureStore: SecureStoring {
     func data(for key: String) throws -> Data? { values[key] }
     func set(_ data: Data, for key: String) throws { values[key] = data }
     func remove(_ key: String) throws { values.removeValue(forKey: key) }
+}
+
+private final class FaultInjectingSecureStore: SecureStoring {
+    private var values: [String: Data] = [:]
+    var failReads = false
+    var failRemovals = false
+
+    func data(for key: String) throws -> Data? {
+        if failReads { throw SecureStoreError.invalidData }
+        return values[key]
+    }
+
+    func set(_ data: Data, for key: String) throws {
+        values[key] = data
+    }
+
+    func remove(_ key: String) throws {
+        if failRemovals { throw SecureStoreError.invalidData }
+        values.removeValue(forKey: key)
+    }
 }
 
 private final class MockURLProtocol: URLProtocol {
@@ -1998,6 +3304,25 @@ private final class RequestCounters: @unchecked Sendable {
     }
 }
 
+private final class BlockingRequestGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private let release = DispatchSemaphore(value: 0)
+    private var started = false
+
+    var hasStarted: Bool {
+        lock.withLock { started }
+    }
+
+    func markStartedAndWait() {
+        lock.withLock { started = true }
+        _ = release.wait(timeout: .now() + 2)
+    }
+
+    func open() {
+        release.signal()
+    }
+}
+
 private final class ModerationRequestRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var storedRequests: [URLRequest] = []
@@ -2015,6 +3340,12 @@ private final class ModerationRequestRecorder: @unchecked Sendable {
 private final class FakeBLEManager: BLEManagerProtocol {
     weak var delegate: BLEManagerDelegate?
     var isBluetoothAvailable = true
+    private var discoveryEventEpoch: UUID?
+    private var queuedSourceCallbacks: [() -> Void] = []
+
+    var queuedSourceCallbackCount: Int {
+        queuedSourceCallbacks.count
+    }
 
     func startScanning() { }
     func restartScanning() { }
@@ -2024,18 +3355,123 @@ private final class FakeBLEManager: BLEManagerProtocol {
     func stopAdvertising() { }
     func reconcileDiscoveryState() { }
     func setApplicationActive(_ isActive: Bool) { }
+    func setDiscoveryEventEpoch(_ epoch: UUID?) {
+        discoveryEventEpoch = epoch
+    }
     func reset() { }
 
     func emitDiscovery(id: String, rssi: Int) {
-        delegate?.didDiscoverDevice(id: id, rssi: rssi)
+        guard let discoveryEventEpoch else { return }
+        delegate?.didDiscoverDevice(
+            id: id,
+            rssi: rssi,
+            epoch: discoveryEventEpoch
+        )
     }
 
     func emitUpdate(id: String, rssi: Int) {
-        delegate?.didUpdateDevice(id: id, rssi: rssi)
+        guard let discoveryEventEpoch else { return }
+        delegate?.didUpdateDevice(
+            id: id,
+            rssi: rssi,
+            epoch: discoveryEventEpoch
+        )
     }
 
     func emitLoss(id: String) {
-        delegate?.didLoseDevice(id: id)
+        guard let discoveryEventEpoch else { return }
+        delegate?.didLoseDevice(id: id, epoch: discoveryEventEpoch)
+    }
+
+    func emitFailure(_ error: Error) {
+        guard let discoveryEventEpoch else { return }
+        delegate?.didFail(with: error, epoch: discoveryEventEpoch)
+    }
+
+    func queueSourceDiscovery(id: String, rssi: Int) {
+        guard let discoveryEventEpoch else { return }
+        queuedSourceCallbacks.append { [weak self] in
+            self?.delegate?.didDiscoverDevice(
+                id: id,
+                rssi: rssi,
+                epoch: discoveryEventEpoch
+            )
+        }
+    }
+
+    func queueSourceUpdate(id: String, rssi: Int) {
+        guard let discoveryEventEpoch else { return }
+        queuedSourceCallbacks.append { [weak self] in
+            self?.delegate?.didUpdateDevice(
+                id: id,
+                rssi: rssi,
+                epoch: discoveryEventEpoch
+            )
+        }
+    }
+
+    func queueSourceLoss(id: String) {
+        guard let discoveryEventEpoch else { return }
+        queuedSourceCallbacks.append { [weak self] in
+            self?.delegate?.didLoseDevice(
+                id: id,
+                epoch: discoveryEventEpoch
+            )
+        }
+    }
+
+    func queueSourceFailure(_ error: Error) {
+        guard let discoveryEventEpoch else { return }
+        queuedSourceCallbacks.append { [weak self] in
+            self?.delegate?.didFail(
+                with: error,
+                epoch: discoveryEventEpoch
+            )
+        }
+    }
+
+    func deliverQueuedSourceCallbacks() {
+        let callbacks = queuedSourceCallbacks
+        queuedSourceCallbacks.removeAll()
+        for callback in callbacks {
+            callback()
+        }
+    }
+}
+
+private final class ControlledMainActorDispatcher:
+    BLECallbackDispatching,
+    @unchecked Sendable
+{
+    typealias Operation = @MainActor @Sendable () -> Void
+
+    private let lock = NSLock()
+    private var operations: [Operation] = []
+
+    var count: Int {
+        lock.withLock { operations.count }
+    }
+
+    func dispatch(_ operation: @escaping Operation) {
+        lock.withLock { operations.append(operation) }
+    }
+
+    @MainActor
+    func runLast() {
+        let operation = lock.withLock { operations.popLast() }
+        operation?()
+    }
+
+    @MainActor
+    func runAll() {
+        let pending = lock.withLock {
+            let pending = operations
+            operations.removeAll()
+            return pending
+        }
+        for operation in pending {
+            operation()
+        }
     }
 }
 
@@ -2043,6 +3479,9 @@ private final class FakeBLEManager: BLEManagerProtocol {
 private final class FakeNearbyPeopleNotifier: NearbyPeopleNotifying {
     private(set) var synchronizedIDs: Set<String> = []
     private(set) var detectedIDs: Set<String> = []
+    private(set) var detectCalls: [String] = []
+    private(set) var lostIDs: Set<String> = []
+    private(set) var resetCount = 0
     private(set) var scanningEnabled = false
     private(set) var applicationIconBadgeCounts: [Int] = []
 
@@ -2058,9 +3497,17 @@ private final class FakeNearbyPeopleNotifier: NearbyPeopleNotifying {
     }
     func detect(id: String) {
         detectedIDs.insert(id)
+        detectCalls.append(id)
     }
-    func lose(id: String) { }
-    func reset() { }
+    func lose(id: String) {
+        detectedIDs.remove(id)
+        lostIDs.insert(id)
+    }
+    func reset() {
+        resetCount += 1
+        synchronizedIDs.removeAll()
+        detectedIDs.removeAll()
+    }
 }
 
 private final class FakeBlockedProfileStore: BlockedProfileStoring {

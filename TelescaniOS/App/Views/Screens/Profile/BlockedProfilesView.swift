@@ -132,18 +132,22 @@ struct SavedProfilesView: View {
     @State private var photoPreviewUser: NearbyUser?
     @State private var telegramTransitionRequest: TelegramTransitionRequest?
 
+    private var visibleSavedUsers: [NearbyUser] {
+        savedPeople.users.filter { !peopleViewModel.isProfileBlocked($0.id) }
+    }
+
     var body: some View {
         ZStack {
             Color.peopleListBackground.ignoresSafeArea()
 
-            if savedPeople.users.isEmpty {
+            if visibleSavedUsers.isEmpty {
                 ContentUnavailableView(
                     Inc.NearbyProfile.noSavedProfiles.localized,
                     systemImage: "heart"
                 )
             } else {
                 AdaptiveSystemSwipeList(
-                    items: savedPeople.users,
+                    items: visibleSavedUsers,
                     descriptionText: Inc.NearbyProfile.savedListDescription
                         .localized,
                     showsRowSeparators: true,
@@ -171,7 +175,7 @@ struct SavedProfilesView: View {
                         user: user,
                         action: { openUser(user) },
                         photoAction: { openPhoto(of: user) },
-                        infoAction: { selectedUser = user },
+                        infoAction: { openInfo(for: user) },
                         removeAction: {
                             withAnimation {
                                 savedPeople.remove(user)
@@ -189,6 +193,9 @@ struct SavedProfilesView: View {
         }
         .nearbyUserPhotoPreview(user: $photoPreviewUser)
         .telegramTransitionAlert(request: $telegramTransitionRequest)
+        .onChange(of: peopleViewModel.blockedProfiles.map(\.id)) { _, _ in
+            closeBlockedProfileSurfaces()
+        }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -200,6 +207,7 @@ struct SavedProfilesView: View {
     }
 
     private func openUser(_ user: NearbyUser) {
+        guard !peopleViewModel.isProfileBlocked(user.id) else { return }
         guard let destination = TelegramChatDestination(user: user) else {
             selectedUser = user
             return
@@ -209,12 +217,15 @@ struct SavedProfilesView: View {
             destination.open(using: openURL)
         } else {
             telegramTransitionRequest = TelegramTransitionRequest(
+                userID: user.id,
+                accountGeneration: peopleViewModel.accountStateGeneration,
                 destination: destination
             )
         }
     }
 
     private func openPhoto(of user: NearbyUser) {
+        guard !peopleViewModel.isProfileBlocked(user.id) else { return }
         guard let photoURL = user.photoURL,
               URL(string: photoURL) != nil else { return }
 
@@ -223,6 +234,23 @@ struct SavedProfilesView: View {
         withTransaction(transaction) {
             photoPreviewUser = user
         }
+    }
+
+    private func openInfo(for user: NearbyUser) {
+        guard !peopleViewModel.isProfileBlocked(user.id) else { return }
+        selectedUser = user
+    }
+
+    private func closeBlockedProfileSurfaces() {
+        if let selectedUser,
+           peopleViewModel.isProfileBlocked(selectedUser.id) {
+            self.selectedUser = nil
+        }
+        if let photoPreviewUser,
+           peopleViewModel.isProfileBlocked(photoPreviewUser.id) {
+            self.photoPreviewUser = nil
+        }
+        telegramTransitionRequest = nil
     }
 }
 

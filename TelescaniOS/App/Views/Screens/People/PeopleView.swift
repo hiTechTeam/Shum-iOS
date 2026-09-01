@@ -93,13 +93,15 @@ struct PeopleView: View {
                             isSaved: isSaved,
                             action: { openUser(user) },
                             photoAction: { openPhoto(of: user) },
-                            infoAction: { selectedUser = user },
+                            infoAction: { openInfo(for: user) },
                             blockAction: {
                                 if isSaved {
                                     requestSavedBlockInformation()
                                 } else {
                                     moderationRequest = ProfileModerationRequest(
                                         user: user,
+                                        accountGeneration: peopleViewModel
+                                            .accountStateGeneration,
                                         waitsForTransientUI: false
                                     )
                                 }
@@ -136,6 +138,17 @@ struct PeopleView: View {
             if let selectedUser, !ids.contains(selectedUser.id) {
                 self.selectedUser = nil
             }
+            if let photoPreviewUser, !ids.contains(photoPreviewUser.id) {
+                self.photoPreviewUser = nil
+            }
+            if let moderationRequest,
+               !ids.contains(moderationRequest.user.id) {
+                self.moderationRequest = nil
+            }
+            if let telegramTransitionRequest,
+               !ids.contains(telegramTransitionRequest.userID) {
+                self.telegramTransitionRequest = nil
+            }
         }
         .sheet(item: $selectedUser) { user in
             ProfileSheetView(user: user)
@@ -169,6 +182,7 @@ struct PeopleView: View {
     }
 
     private func openUser(_ user: NearbyUser) {
+        guard !peopleViewModel.isProfileBlocked(user.id) else { return }
         guard let destination = TelegramChatDestination(user: user) else {
             selectedUser = user
             return
@@ -180,20 +194,35 @@ struct PeopleView: View {
         }
 
         telegramTransitionRequest = TelegramTransitionRequest(
+            userID: user.id,
+            accountGeneration: peopleViewModel.accountStateGeneration,
             destination: destination
         )
+    }
+
+    private func openInfo(for user: NearbyUser) {
+        guard !peopleViewModel.isProfileBlocked(user.id) else { return }
+        selectedUser = user
     }
 
     private func handleSwipeBlock(_ user: NearbyUser) {
         guard quickActions.isQuickBlockEnabled else {
             moderationRequest = ProfileModerationRequest(
                 user: user,
+                accountGeneration: peopleViewModel.accountStateGeneration,
                 waitsForTransientUI: true
             )
             return
         }
 
+        let generation = peopleViewModel.accountStateGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            guard peopleViewModel.isCurrentAccountStateGeneration(generation),
+                  peopleViewModel.visibleUsers.contains(
+                    where: { $0.id == user.id }
+                  ) else {
+                return
+            }
             Task {
                 do {
                     try await peopleViewModel.block(user)
@@ -205,6 +234,7 @@ struct PeopleView: View {
     }
 
     private func openPhoto(of user: NearbyUser) {
+        guard !peopleViewModel.isProfileBlocked(user.id) else { return }
         guard let photoURL = user.photoURL,
               URL(string: photoURL) != nil else { return }
 
@@ -301,11 +331,14 @@ struct TelegramChatDestination {
 
 struct TelegramTransitionRequest: Identifiable {
     let id = UUID()
+    let userID: UUID
+    let accountGeneration: UUID
     let destination: TelegramChatDestination
 }
 
 private struct TelegramTransitionAlertModifier: ViewModifier {
     @Environment(\.openURL) private var openURL
+    @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
     @Binding var request: TelegramTransitionRequest?
 
@@ -321,18 +354,33 @@ private struct TelegramTransitionAlertModifier: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content.alert(
-            Inc.NearbyProfile.telegramTransitionTitle.localized,
-            isPresented: isPresented,
-            presenting: request
-        ) { request in
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-            Button(Inc.NearbyProfile.telegramTransitionContinue.localized) {
-                request.destination.open(using: openURL)
+        content
+            .alert(
+                Inc.NearbyProfile.telegramTransitionTitle.localized,
+                isPresented: isPresented,
+                presenting: request
+            ) { request in
+                Button(Inc.Common.cancel.localized, role: .cancel) { }
+                Button(Inc.NearbyProfile.telegramTransitionContinue.localized) {
+                    guard peopleViewModel.isCurrentAccountStateGeneration(
+                            request.accountGeneration
+                          ),
+                          !peopleViewModel.isProfileBlocked(request.userID) else {
+                        self.request = nil
+                        return
+                    }
+                    request.destination.open(using: openURL)
+                }
+            } message: { _ in
+                Text(Inc.NearbyProfile.telegramTransitionMessage.localized)
             }
-        } message: { _ in
-            Text(Inc.NearbyProfile.telegramTransitionMessage.localized)
-        }
+            .onChange(of: peopleViewModel.accountStateGeneration) { _, _ in
+                guard let request,
+                      !peopleViewModel.isCurrentAccountStateGeneration(
+                        request.accountGeneration
+                      ) else { return }
+                self.request = nil
+            }
     }
 }
 
@@ -492,6 +540,7 @@ struct ProfileInfoButton: View {
 struct ProfileModerationRequest: Identifiable {
     let id = UUID()
     let user: NearbyUser
+    let accountGeneration: UUID
     let waitsForTransientUI: Bool
 }
 
@@ -651,6 +700,20 @@ private struct ProfileModerationDialogModifier: ViewModifier {
     @State private var isSubmitting = false
     @State private var isOpeningReport = false
     @State private var presentationToken: UUID?
+    @State private var activeAccountGeneration: UUID?
+    @State private var reportRequestID: UUID?
+    @State private var hasSubmittedReport = false
+
+    private var reportDetailsBinding: Binding<String> {
+        Binding(
+            get: { reportDetails },
+            set: {
+                reportDetails = String(
+                    $0.prefix(ReportCommentPolicy.maximumLength)
+                )
+            }
+        )
+    }
 
     private var isBlockDialogPresented: Binding<Bool> {
         Binding(
@@ -662,6 +725,7 @@ private struct ProfileModerationDialogModifier: ViewModifier {
                    !isSubmitting,
                    !isOpeningReport {
                     activeUser = nil
+                    activeAccountGeneration = nil
                     presentationToken = nil
                 }
             }
@@ -674,10 +738,13 @@ private struct ProfileModerationDialogModifier: ViewModifier {
             set: { isPresented in
                 if !isPresented {
                     moderationAlert = nil
-                    reportDetails = ""
                     if !isSubmitting {
                         activeUser = nil
+                        activeAccountGeneration = nil
                         presentationToken = nil
+                        reportDetails = ""
+                        reportRequestID = nil
+                        hasSubmittedReport = false
                     }
                 }
             }
@@ -698,7 +765,9 @@ private struct ProfileModerationDialogModifier: ViewModifier {
     private var moderationAlertMessage: String {
         switch moderationAlert {
         case .reportConfirmation:
-            Inc.NearbyProfile.reportDetailsMessage.localized
+            "\(Inc.NearbyProfile.reportDetailsMessage.localized)\n"
+                + "\(reportDetails.count)/"
+                + "\(ReportCommentPolicy.maximumLength)"
         case .error:
             Inc.NearbyProfile.actionFailedMessage.localized
         case nil:
@@ -732,8 +801,18 @@ private struct ProfileModerationDialogModifier: ViewModifier {
                 guard let request else { return }
                 let token = request.id
                 self.request = nil
+                guard peopleViewModel.isCurrentAccountStateGeneration(
+                    request.accountGeneration
+                ) else {
+                    cancel()
+                    return
+                }
                 activeUser = request.user
+                activeAccountGeneration = request.accountGeneration
                 presentationToken = token
+                reportDetails = ""
+                reportRequestID = nil
+                hasSubmittedReport = false
 
                 guard request.waitsForTransientUI else {
                     showsBlockOptions = true
@@ -743,9 +822,24 @@ private struct ProfileModerationDialogModifier: ViewModifier {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     guard presentationToken == token,
                           activeUser != nil,
+                          peopleViewModel.isCurrentAccountStateGeneration(
+                            request.accountGeneration
+                          ),
                           !isSubmitting else { return }
                     showsBlockOptions = true
                 }
+            }
+            .onChange(of: peopleViewModel.blockedProfiles.map(\.id)) { _, _ in
+                guard let activeUser,
+                      peopleViewModel.isProfileBlocked(activeUser.id) else {
+                    return
+                }
+                cancel()
+            }
+            .onChange(of: peopleViewModel.accountStateGeneration) { _, newValue in
+                guard let activeAccountGeneration,
+                      activeAccountGeneration != newValue else { return }
+                cancel()
             }
     }
 
@@ -755,19 +849,19 @@ private struct ProfileModerationDialogModifier: ViewModifier {
         case .reportConfirmation:
             TextField(
                 Inc.NearbyProfile.reportDetailsPlaceholder.localized,
-                text: $reportDetails
+                text: reportDetailsBinding
             )
             Button(Inc.Common.cancel.localized, role: .cancel) { }
             Button(Inc.NearbyProfile.reportSend.localized, role: .destructive) {
                 submitReportAndBlock()
             }
-            .disabled(
-                reportDetails.trimmingCharacters(
-                    in: .whitespacesAndNewlines
-                ).isEmpty
-            )
         case .error:
-            Button(Inc.NearbyProfile.acknowledge.localized, role: .cancel) { }
+            Button(Inc.Common.cancel.localized, role: .cancel) {
+                cancel()
+            }
+            Button(Inc.NearbyProfile.retry.localized) {
+                retryFailedOperation()
+            }
         case nil:
             EmptyView()
         }
@@ -777,9 +871,16 @@ private struct ProfileModerationDialogModifier: ViewModifier {
         isOpeningReport = true
         showsBlockOptions = false
         reportDetails = ""
+        reportRequestID = UUID()
+        hasSubmittedReport = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            guard activeUser != nil else {
+            guard activeUser != nil,
+                  let activeAccountGeneration,
+                  peopleViewModel.isCurrentAccountStateGeneration(
+                    activeAccountGeneration
+                  ) else {
                 isOpeningReport = false
+                cancel()
                 return
             }
             moderationAlert = .reportConfirmation
@@ -788,38 +889,89 @@ private struct ProfileModerationDialogModifier: ViewModifier {
     }
 
     private func submitReportAndBlock() {
-        guard let user = activeUser else { return }
-        let details = reportDetails.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
+        guard let user = activeUser,
+              let activeAccountGeneration,
+              peopleViewModel.isCurrentAccountStateGeneration(
+                activeAccountGeneration
+              ) else {
+            cancel()
+            return
+        }
+        let requestID = reportRequestID ?? UUID()
+        reportRequestID = requestID
+        let details = reportDetails
         isSubmitting = true
         Task {
-            do {
-                try await peopleViewModel.submitReport(
-                    for: user,
-                    details: details.isEmpty ? nil : details
-                )
-            } catch {
-                isSubmitting = false
-                moderationAlert = .error
-                return
+            if !hasSubmittedReport {
+                do {
+                    try await peopleViewModel.submitReport(
+                        for: user,
+                        details: details,
+                        requestID: requestID
+                    )
+                    hasSubmittedReport = true
+                } catch {
+                    guard peopleViewModel.isCurrentAccountStateGeneration(
+                        activeAccountGeneration
+                    ) else {
+                        isSubmitting = false
+                        cancel()
+                        return
+                    }
+                    isSubmitting = false
+                    moderationAlert = .error
+                    return
+                }
             }
 
+            guard peopleViewModel.isCurrentAccountStateGeneration(
+                activeAccountGeneration
+            ) else {
+                isSubmitting = false
+                cancel()
+                return
+            }
             do {
                 try await peopleViewModel.block(user)
                 isSubmitting = false
                 reportDetails = ""
                 activeUser = nil
+                self.activeAccountGeneration = nil
                 presentationToken = nil
+                reportRequestID = nil
+                hasSubmittedReport = false
             } catch {
+                guard peopleViewModel.isCurrentAccountStateGeneration(
+                    activeAccountGeneration
+                ) else {
+                    isSubmitting = false
+                    cancel()
+                    return
+                }
                 isSubmitting = false
                 moderationAlert = .error
             }
         }
     }
 
+    private func retryFailedOperation() {
+        moderationAlert = nil
+        if reportRequestID != nil {
+            submitReportAndBlock()
+        } else {
+            submitBlock()
+        }
+    }
+
     private func submitBlock() {
-        guard let user = activeUser else { return }
+        guard let user = activeUser,
+              let activeAccountGeneration,
+              peopleViewModel.isCurrentAccountStateGeneration(
+                activeAccountGeneration
+              ) else {
+            cancel()
+            return
+        }
         showsBlockOptions = false
         isSubmitting = true
         Task {
@@ -827,8 +979,18 @@ private struct ProfileModerationDialogModifier: ViewModifier {
                 try await peopleViewModel.block(user)
                 isSubmitting = false
                 activeUser = nil
+                self.activeAccountGeneration = nil
                 presentationToken = nil
+                reportRequestID = nil
+                hasSubmittedReport = false
             } catch {
+                guard peopleViewModel.isCurrentAccountStateGeneration(
+                    activeAccountGeneration
+                ) else {
+                    isSubmitting = false
+                    cancel()
+                    return
+                }
                 isSubmitting = false
                 moderationAlert = .error
             }
@@ -841,7 +1003,10 @@ private struct ProfileModerationDialogModifier: ViewModifier {
         reportDetails = ""
         isOpeningReport = false
         activeUser = nil
+        activeAccountGeneration = nil
         presentationToken = nil
+        reportRequestID = nil
+        hasSubmittedReport = false
     }
 }
 

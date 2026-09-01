@@ -113,6 +113,20 @@ struct EncounterHistoryView: View {
                !ids.contains(selectedEncounter.id) {
                 self.selectedEncounter = nil
             }
+            if let photoPreviewUser, !ids.contains(photoPreviewUser.id) {
+                self.photoPreviewUser = nil
+            }
+            if let moderationRequest,
+               !ids.contains(moderationRequest.user.id) {
+                self.moderationRequest = nil
+            }
+            if let telegramTransitionRequest,
+               !ids.contains(telegramTransitionRequest.userID) {
+                self.telegramTransitionRequest = nil
+            }
+            if let pendingDeletion, !ids.contains(pendingDeletion.id) {
+                self.pendingDeletion = nil
+            }
         }
         .task {
             await peopleViewModel.synchronizeBlockedProfiles()
@@ -189,7 +203,7 @@ struct EncounterHistoryView: View {
                     openPhoto(of: encounter.user)
                 },
                 infoAction: {
-                    selectedEncounter = encounter
+                    openInfo(for: encounter)
                 },
                 deleteAction: {
                     deleteEncounter(encounter)
@@ -200,6 +214,8 @@ struct EncounterHistoryView: View {
                     } else {
                         moderationRequest = ProfileModerationRequest(
                             user: encounter.user,
+                            accountGeneration: peopleViewModel
+                                .accountStateGeneration,
                             waitsForTransientUI: false
                         )
                     }
@@ -238,6 +254,7 @@ struct EncounterHistoryView: View {
     }
 
     private func openEncounter(_ encounter: EncounterHistoryEntry) {
+        guard !peopleViewModel.isProfileBlocked(encounter.id) else { return }
         guard let destination = TelegramChatDestination(
                 user: encounter.user
               ) else {
@@ -251,20 +268,35 @@ struct EncounterHistoryView: View {
         }
 
         telegramTransitionRequest = TelegramTransitionRequest(
+            userID: encounter.id,
+            accountGeneration: peopleViewModel.accountStateGeneration,
             destination: destination
         )
+    }
+
+    private func openInfo(for encounter: EncounterHistoryEntry) {
+        guard !peopleViewModel.isProfileBlocked(encounter.id) else { return }
+        selectedEncounter = encounter
     }
 
     private func handleSwipeBlock(_ user: NearbyUser) {
         guard quickActions.isQuickBlockEnabled else {
             moderationRequest = ProfileModerationRequest(
                 user: user,
+                accountGeneration: peopleViewModel.accountStateGeneration,
                 waitsForTransientUI: true
             )
             return
         }
 
+        let generation = peopleViewModel.accountStateGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            guard peopleViewModel.isCurrentAccountStateGeneration(generation),
+                  peopleViewModel.encounterHistory.contains(
+                    where: { $0.id == user.id }
+                  ) else {
+                return
+            }
             Task {
                 do {
                     try await peopleViewModel.block(user)
@@ -318,6 +350,7 @@ struct EncounterHistoryView: View {
     }
 
     private func openPhoto(of user: NearbyUser) {
+        guard !peopleViewModel.isProfileBlocked(user.id) else { return }
         guard let photoURL = user.photoURL,
               URL(string: photoURL) != nil else { return }
 

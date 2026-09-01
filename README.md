@@ -73,6 +73,12 @@ session and clears local tokens and caches. Account deletion removes the server
 account, photos, every device session, link codes, confirmation requests, and
 local session and profile data. The installation `device_id` remains in
 Keychain as an unlinked per-installation identifier for a later registration.
+Local credential reset is fail-closed: a durable marker in a dedicated
+`UserDefaults` suite is written before Keychain mutation, tokens and the primary
+session marker are removed and read back for verification, and the marker is
+cleared only after all three values are absent. While a reset is pending the
+app exposes no credentials and cannot restore a session, including after a
+process restart; the retained installation `device_id` is outside this reset.
 
 At launch and whenever the app returns to the foreground, it loads
 `GET /api/v1/users/me`. A valid response refreshes the locally displayed
@@ -120,6 +126,16 @@ writes its own identity back through a dedicated GATT characteristic, so one
 asymmetric system discovery records the encounter on both phones. The raw UUID
 and timestamp are persisted before profile lookup, preventing a short background
 network window or process termination from losing an already detected encounter.
+An explicit scan disable or account stop closes the discovery callback gate,
+cancels pending identity recovery, and removes unresolved identities; callbacks
+already queued by Core Bluetooth carry the old scan epoch and cannot repopulate
+Nearby or Met even if scanning is re-enabled before their main-thread delivery.
+Epoch transitions are synchronous on Core Bluetooth's own serial queue. GATT,
+service-publication, and advertising requests retain their originating epoch;
+a connection from the next account is deferred until the previous peripheral
+operation reaches a terminal callback.
+An abrupt process termination does not run that explicit cleanup, so persisted
+pending identities remain available to the documented launch recovery path.
 Core Bluetooth still provides no prompt-discovery guarantee when both iPhones
 are already backgrounded with their screens off; the bilateral exchange begins
 only after iOS delivers at least one discovery event.
@@ -190,7 +206,9 @@ temporarily unavailable.
 
 ## Local storage
 
-- Keychain: access token, refresh token, and installation `device_id`.
+- Keychain: access token, refresh token, the primary-session marker, and
+  installation `device_id`. Credential deletion is guarded by the separate
+  durable reset marker described above.
 - `UserDefaults`: public `telescan_id`, profile metadata, registration state,
   discovery state, BLE restoration identity, and the current account's cached
   blocked-profile UUIDs. It also stores device-local saved public profile
@@ -211,9 +229,10 @@ Unit tests cover BLE manager state and identity encoding, resolved-only nearby
 profiles, disappearance cancellation, automatic link-code success/error UI
 state, offline-safe session validation, stable installation identity, token
 refresh and retry, single-flight concurrent refresh, stable discovery ordering,
-10-second distance refresh, application badge aggregation, local-state reset,
-and 24-hour encounter-history persistence, deduplication, filtering, and
-cleanup. Example commands:
+10-second distance refresh, application badge aggregation, fail-closed
+Keychain deletion faults and restart behavior, queued callbacks across explicit
+BLE stop/reset/re-enable epochs, local-state reset, and 24-hour encounter-history persistence,
+deduplication, filtering, and cleanup. Example commands:
 
 ```sh
 xcodebuild test \

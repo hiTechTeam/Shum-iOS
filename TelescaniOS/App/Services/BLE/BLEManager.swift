@@ -2,6 +2,112 @@ import Foundation
 import CoreBluetooth
 import Logging
 
+/// Owns the discovery epoch on the same serial queue Core Bluetooth uses for
+/// delegate delivery. A synchronous transition is therefore ordered after
+/// every source callback already submitted to that queue.
+final class BLESourceEpochGate: @unchecked Sendable {
+    private let queue: DispatchQueue
+    private let queueKey = DispatchSpecificKey<UInt8>()
+    private var epoch: UUID?
+
+    init(queue: DispatchQueue) {
+        self.queue = queue
+        queue.setSpecific(key: queueKey, value: 1)
+    }
+
+    func set(_ epoch: UUID?) {
+        if DispatchQueue.getSpecific(key: queueKey) == 1 {
+            self.epoch = epoch
+        } else {
+            queue.sync {
+                self.epoch = epoch
+            }
+        }
+    }
+
+    func currentOnSourceQueue() -> UUID? {
+        dispatchPrecondition(condition: .onQueue(queue))
+        return epoch
+    }
+
+    func acceptsOnSourceQueue(_ candidate: UUID) -> Bool {
+        dispatchPrecondition(condition: .onQueue(queue))
+        return epoch == candidate
+    }
+}
+
+struct BLESingleFlightEpochTracker {
+    private var pending: UUID?
+
+    var hasPending: Bool { pending != nil }
+
+    mutating func begin(epoch: UUID) -> Bool {
+        guard pending == nil else { return false }
+        pending = epoch
+        return true
+    }
+
+    mutating func takeCompletionOrigin() -> UUID? {
+        defer { pending = nil }
+        return pending
+    }
+}
+
+struct BLEPeripheralEpochTracker {
+    enum Admission: Equatable {
+        case started
+        case alreadyActive
+        case deferred
+    }
+
+    private struct Operation {
+        let epoch: UUID
+        var isRetiring: Bool
+    }
+
+    private var operations: [UUID: Operation] = [:]
+    private var deferredEpochs: [UUID: UUID] = [:]
+
+    mutating func admit(peripheralID: UUID, epoch: UUID) -> Admission {
+        if let operation = operations[peripheralID] {
+            if operation.epoch == epoch {
+                return .alreadyActive
+            }
+            deferredEpochs[peripheralID] = epoch
+            return .deferred
+        }
+        operations[peripheralID] = Operation(
+            epoch: epoch,
+            isRetiring: false
+        )
+        return .started
+    }
+
+    func origin(for peripheralID: UUID) -> UUID? {
+        operations[peripheralID]?.epoch
+    }
+
+    func accepts(peripheralID: UUID, currentEpoch: UUID) -> Bool {
+        guard let operation = operations[peripheralID] else { return false }
+        return !operation.isRetiring && operation.epoch == currentEpoch
+    }
+
+    mutating func markRetiring(peripheralID: UUID) {
+        guard var operation = operations[peripheralID] else { return }
+        operation.isRetiring = true
+        operations[peripheralID] = operation
+    }
+
+    mutating func complete(peripheralID: UUID) -> UUID? {
+        operations.removeValue(forKey: peripheralID)
+        return deferredEpochs.removeValue(forKey: peripheralID)
+    }
+
+    mutating func discardDeferred() {
+        deferredEpochs.removeAll()
+    }
+}
+
 public final class BLEManager: NSObject, BLEManagerProtocol {
 
     struct PeerIdentityWrite: Equatable {
@@ -15,10 +121,8 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
 
     private let logger = Logger(label: "BLEManager")
 
-    private let queue = DispatchQueue(
-        label: "com.telescan.ble.manager",
-        qos: .userInitiated
-    )
+    private let queue: DispatchQueue
+    private let discoveryEventEpochGate: BLESourceEpochGate
 
     private let serviceUUID = CBUUID(
         string: "A6B50001-8A5D-4F7A-9E4C-123456789001"
@@ -69,7 +173,18 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     private var resolvingPeripheralIDs: Set<UUID> = []
     private var retryNotBefore: [UUID: Date] = [:]
     private var identityResolutionTimeoutGenerations: [UUID: Int] = [:]
+    private var peripheralEpochTracker = BLEPeripheralEpochTracker()
+    private var deferredPeripheralResolutions: [UUID: (
+        peripheral: CBPeripheral,
+        rssi: Int
+    )] = [:]
+    private var peripheralFinishShouldRetry: [UUID: Bool] = [:]
+    private var peripheralResolutionServices: [UUID: ObjectIdentifier] = [:]
+    private var peripheralReadCharacteristics: [UUID: ObjectIdentifier] = [:]
+    private var peripheralWriteCharacteristics: [UUID: ObjectIdentifier] = [:]
     private var devicesLastSeen: [String: Date] = [:]
+    private var servicePublicationEpochs: [ObjectIdentifier: UUID] = [:]
+    private var advertisingEpochTracker = BLESingleFlightEpochTracker()
 
     private let foregroundIdentityResolutionTimeout: TimeInterval = 8
     private let identityRetryDelay: TimeInterval = 3
@@ -82,7 +197,25 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         peripheralManager.state == .poweredOn
     }
 
+    func setDiscoveryEventEpoch(_ epoch: UUID?) {
+        discoveryEventEpochGate.set(epoch)
+    }
+
+    private func currentDiscoveryEventEpoch() -> UUID? {
+        discoveryEventEpochGate.currentOnSourceQueue()
+    }
+
+    private func isCurrentDiscoveryEventEpoch(_ epoch: UUID) -> Bool {
+        discoveryEventEpochGate.acceptsOnSourceQueue(epoch)
+    }
+
     private override init() {
+        let queue = DispatchQueue(
+            label: "com.telescan.ble.manager",
+            qos: .userInitiated
+        )
+        self.queue = queue
+        self.discoveryEventEpochGate = BLESourceEpochGate(queue: queue)
         super.init()
 
         logger.info("BLEManager init")
@@ -147,6 +280,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     }
 
     public func stopScanning() {
+        setDiscoveryEventEpoch(nil)
         queue.async { [weak self] in
             guard let self else { return }
 
@@ -249,6 +383,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     }
 
     public func reset() {
+        setDiscoveryEventEpoch(nil)
         queue.async { [weak self] in
             guard let self else { return }
 
@@ -258,12 +393,9 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             self.stopScanningNow(clearPresence: false)
             self.removePublishedServiceIfPossible()
 
-            self.discoveredPeripherals.removeAll()
-            self.peripheralRSSI.removeAll()
             self.peripheralIdentities.removeAll()
             self.peripheralIdentityValidatedAt.removeAll()
             self.identityResolutionFailures.removeAll()
-            self.resolvingPeripheralIDs.removeAll()
             self.retryNotBefore.removeAll()
             self.identityResolutionTimeoutGenerations.removeAll()
             self.devicesLastSeen.removeAll()
@@ -325,6 +457,22 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         centralManager.cancelPeripheralConnection(peripheral)
     }
 
+    private func acceptedEpoch(
+        for peripheral: CBPeripheral
+    ) -> UUID? {
+        let id = peripheral.identifier
+        guard discoveredPeripherals[id] === peripheral,
+              resolvingPeripheralIDs.contains(id),
+              let currentEpoch = currentDiscoveryEventEpoch(),
+              peripheralEpochTracker.accepts(
+                peripheralID: id,
+                currentEpoch: currentEpoch
+              ) else {
+            return nil
+        }
+        return currentEpoch
+    }
+
     private func removePublishedServiceIfPossible() {
         guard peripheralManager.state == .poweredOn else { return }
         if peripheralManager.isAdvertising {
@@ -359,7 +507,8 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     }
 
     private func publishServiceIfPossible() {
-        guard shouldAdvertise else { return }
+        guard shouldAdvertise,
+              let eventEpoch = currentDiscoveryEventEpoch() else { return }
 
         guard peripheralManager.state == .poweredOn else {
             logger.info(
@@ -422,6 +571,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         self.peerIdentityWriteCharacteristic = peerIdentityWriteCharacteristic
         publishedService = service
         serviceIsPublished = false
+        servicePublicationEpochs[ObjectIdentifier(service)] = eventEpoch
 
         peripheralManager.add(service)
 
@@ -431,7 +581,13 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     private func startAdvertisingIfPossible() {
         guard shouldAdvertise,
               serviceIsPublished,
-              peripheralManager.state == .poweredOn else {
+              peripheralManager.state == .poweredOn,
+              let eventEpoch = currentDiscoveryEventEpoch() else {
+            return
+        }
+
+        guard !advertisingEpochTracker.hasPending else {
+            logger.info("Advertising waits for the prior request callback")
             return
         }
 
@@ -444,6 +600,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             CBAdvertisementDataServiceUUIDsKey: [serviceUUID]
         ]
 
+        guard advertisingEpochTracker.begin(epoch: eventEpoch) else { return }
         peripheralManager.startAdvertising(advertisement)
 
         logger.info("Advertising requested")
@@ -453,9 +610,12 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         _ identity: String,
         rssi: Int,
         peripheralID: UUID,
+        eventEpoch: UUID,
         wasValidated: Bool = true
     ) {
-        guard shouldScan else { return }
+        guard shouldScan, isCurrentDiscoveryEventEpoch(eventEpoch) else {
+            return
+        }
         guard let uuid = UUID(uuidString: identity) else { return }
         let canonicalIdentity = uuid.uuidString.lowercased()
         var replacedIdentity: String?
@@ -471,7 +631,10 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         }
         if let replacedIdentity {
             DispatchQueue.main.async { [weak self] in
-                self?.delegate?.didLoseDevice(id: replacedIdentity)
+                self?.delegate?.didLoseDevice(
+                    id: replacedIdentity,
+                    epoch: eventEpoch
+                )
             }
         }
         guard canonicalIdentity != currentIdentity else { return }
@@ -485,12 +648,14 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             if isNewDevice {
                 self.delegate?.didDiscoverDevice(
                     id: canonicalIdentity,
-                    rssi: rssi
+                    rssi: rssi,
+                    epoch: eventEpoch
                 )
             } else {
                 self.delegate?.didUpdateDevice(
                     id: canonicalIdentity,
-                    rssi: rssi
+                    rssi: rssi,
+                    epoch: eventEpoch
                 )
             }
 
@@ -500,17 +665,39 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
 
     private func connectAndReadIdentity(
         peripheral: CBPeripheral,
-        rssi: Int
+        rssi: Int,
+        eventEpoch: UUID? = nil
     ) {
         guard centralManager.state == .poweredOn else { return }
 
         let peripheralID = peripheral.identifier
-        guard !resolvingPeripheralIDs.contains(peripheralID) else {
-            peripheralRSSI[peripheralID] = rssi
+        guard let eventEpoch = eventEpoch
+                ?? peripheralEpochTracker.origin(for: peripheralID)
+                ?? currentDiscoveryEventEpoch(),
+              isCurrentDiscoveryEventEpoch(eventEpoch) else {
             return
         }
         if let retryDate = retryNotBefore[peripheralID], retryDate > Date() {
             return
+        }
+
+        switch peripheralEpochTracker.admit(
+            peripheralID: peripheralID,
+            epoch: eventEpoch
+        ) {
+        case .alreadyActive:
+            peripheralRSSI[peripheralID] = rssi
+            return
+
+        case .deferred:
+            deferredPeripheralResolutions[peripheralID] = (
+                peripheral: peripheral,
+                rssi: rssi
+            )
+            return
+
+        case .started:
+            break
         }
 
         resolvingPeripheralIDs.insert(peripheralID)
@@ -585,6 +772,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     }
 
     private func removeExpiredDevices() {
+        guard let eventEpoch = currentDiscoveryEventEpoch() else { return }
         let now = Date()
         let timeout = isApplicationActive
             ? BLEPresencePolicy.activeTimeout
@@ -602,19 +790,29 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             devicesLastSeen.removeValue(forKey: identity)
 
             DispatchQueue.main.async { [weak self] in
-                self?.delegate?.didLoseDevice(id: identity)
+                self?.delegate?.didLoseDevice(
+                    id: identity,
+                    epoch: eventEpoch
+                )
                 self?.logger.info("Telescan device lost")
             }
         }
     }
 
     private func cancelIdentityResolutions() {
-        for peripheral in discoveredPeripherals.values {
+        deferredPeripheralResolutions.removeAll()
+        peripheralEpochTracker.discardDeferred()
+        for (id, peripheral) in discoveredPeripherals {
+            guard peripheralEpochTracker.origin(for: id) != nil else {
+                resolvingPeripheralIDs.remove(id)
+                peripheralRSSI.removeValue(forKey: id)
+                continue
+            }
+            peripheralFinishShouldRetry[id] = false
+            peripheralEpochTracker.markRetiring(peripheralID: id)
+            identityResolutionTimeoutGenerations.removeValue(forKey: id)
             cancelPeripheralConnectionIfPossible(peripheral)
         }
-        discoveredPeripherals.removeAll()
-        peripheralRSSI.removeAll()
-        resolvingPeripheralIDs.removeAll()
         retryNotBefore.removeAll()
         identityResolutionTimeoutGenerations.removeAll()
         identityResolutionFailures.removeAll()
@@ -625,10 +823,38 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         shouldRetry: Bool
     ) {
         let id = peripheral.identifier
+        guard discoveredPeripherals[id] === peripheral,
+              peripheralEpochTracker.origin(for: id) != nil else {
+            return
+        }
+        peripheralFinishShouldRetry[id] = shouldRetry
+        peripheralEpochTracker.markRetiring(peripheralID: id)
+        identityResolutionTimeoutGenerations.removeValue(forKey: id)
+        cancelPeripheralConnectionIfPossible(peripheral)
+    }
+
+    private func completeIdentityResolution(
+        _ peripheral: CBPeripheral,
+        terminalRetryDefault: Bool
+    ) {
+        let id = peripheral.identifier
+        guard discoveredPeripherals[id] === peripheral,
+              let eventEpoch = peripheralEpochTracker.origin(for: id) else {
+            return
+        }
         let rssi = peripheralRSSI[id] ?? -100
+        let shouldRetry = peripheralFinishShouldRetry.removeValue(forKey: id)
+            ?? terminalRetryDefault
+        let deferredEpoch = peripheralEpochTracker.complete(peripheralID: id)
+        let deferredResolution = deferredPeripheralResolutions.removeValue(
+            forKey: id
+        )
         resolvingPeripheralIDs.remove(id)
         discoveredPeripherals.removeValue(forKey: id)
         peripheralRSSI.removeValue(forKey: id)
+        peripheralResolutionServices.removeValue(forKey: id)
+        peripheralReadCharacteristics.removeValue(forKey: id)
+        peripheralWriteCharacteristics.removeValue(forKey: id)
         identityResolutionTimeoutGenerations.removeValue(forKey: id)
         if shouldRetry {
             identityResolutionFailures[id, default: 0] += 1
@@ -641,46 +867,69 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             retryNotBefore.removeValue(forKey: id)
             identityResolutionFailures.removeValue(forKey: id)
         }
-        cancelPeripheralConnectionIfPossible(peripheral)
+
+        if let deferredEpoch,
+           let deferredResolution,
+           shouldScan,
+           isCurrentDiscoveryEventEpoch(deferredEpoch) {
+            retryNotBefore.removeValue(forKey: id)
+            identityResolutionFailures.removeValue(forKey: id)
+            connectAndReadIdentity(
+                peripheral: deferredResolution.peripheral,
+                rssi: deferredResolution.rssi,
+                eventEpoch: deferredEpoch
+            )
+            return
+        }
 
         if shouldRetry,
            !isApplicationActive,
            shouldScan,
+           isCurrentDiscoveryEventEpoch(eventEpoch),
            identityResolutionFailures[id, default: 0] < 3 {
             scheduleBackgroundIdentityRetry(
                 peripheral: peripheral,
-                rssi: rssi
+                rssi: rssi,
+                eventEpoch: eventEpoch
             )
         }
     }
 
     private func scheduleBackgroundIdentityRetry(
         peripheral: CBPeripheral,
-        rssi: Int
+        rssi: Int,
+        eventEpoch: UUID
     ) {
         let id = peripheral.identifier
         queue.asyncAfter(deadline: .now() + identityRetryDelay) {
             [weak self] in
             guard let self,
                   self.shouldScan,
+                  self.isCurrentDiscoveryEventEpoch(eventEpoch),
                   !self.isApplicationActive,
                   !self.resolvingPeripheralIDs.contains(id) else {
                 return
             }
             self.retryNotBefore.removeValue(forKey: id)
             self.logger.info("Retrying background identity resolution")
-            self.connectAndReadIdentity(peripheral: peripheral, rssi: rssi)
+            self.connectAndReadIdentity(
+                peripheral: peripheral,
+                rssi: rssi,
+                eventEpoch: eventEpoch
+            )
         }
     }
 
     private func clearPresence(notify: Bool) {
         let identities = Array(devicesLastSeen.keys)
         devicesLastSeen.removeAll()
-        guard notify, !identities.isEmpty else { return }
+        guard notify,
+              !identities.isEmpty,
+              let eventEpoch = currentDiscoveryEventEpoch() else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             for identity in identities {
-                self.delegate?.didLoseDevice(id: identity)
+                self.delegate?.didLoseDevice(id: identity, epoch: eventEpoch)
             }
         }
     }
@@ -758,7 +1007,8 @@ extension BLEManager: CBCentralManagerDelegate {
         advertisementData: [String: Any],
         rssi RSSI: NSNumber
     ) {
-        guard shouldScan else { return }
+        guard shouldScan,
+              let eventEpoch = currentDiscoveryEventEpoch() else { return }
         let rssi = RSSI.intValue
 
         logger.debug(
@@ -770,6 +1020,7 @@ extension BLEManager: CBCentralManagerDelegate {
                 knownIdentity,
                 rssi: rssi,
                 peripheralID: peripheral.identifier,
+                eventEpoch: eventEpoch,
                 wasValidated: false
             )
             if let validationDate = peripheralIdentityValidatedAt[
@@ -788,7 +1039,8 @@ extension BLEManager: CBCentralManagerDelegate {
             handleIdentity(
                 identity.uuidString,
                 rssi: rssi,
-                peripheralID: peripheral.identifier
+                peripheralID: peripheral.identifier,
+                eventEpoch: eventEpoch
             )
 
             return
@@ -796,7 +1048,8 @@ extension BLEManager: CBCentralManagerDelegate {
 
         connectAndReadIdentity(
             peripheral: peripheral,
-            rssi: rssi
+            rssi: rssi,
+            eventEpoch: eventEpoch
         )
     }
 
@@ -809,8 +1062,8 @@ extension BLEManager: CBCentralManagerDelegate {
         )
 
         guard shouldScan,
-              resolvingPeripheralIDs.contains(peripheral.identifier) else {
-            cancelPeripheralConnectionIfPossible(peripheral)
+              acceptedEpoch(for: peripheral) != nil else {
+            finishIdentityResolution(peripheral, shouldRetry: false)
             return
         }
         discoveredPeripherals[peripheral.identifier] = peripheral
@@ -826,7 +1079,11 @@ extension BLEManager: CBCentralManagerDelegate {
         logger.warning(
             "Failed to connect \(peripheral.identifier): \(error?.localizedDescription ?? "unknown error")"
         )
-        finishIdentityResolution(peripheral, shouldRetry: true)
+        completeIdentityResolution(
+            peripheral,
+            terminalRetryDefault: shouldScan
+                && acceptedEpoch(for: peripheral) != nil
+        )
     }
 
     public func centralManager(
@@ -838,13 +1095,11 @@ extension BLEManager: CBCentralManagerDelegate {
             "Disconnected peripheral: \(peripheral.identifier)"
         )
 
-        let id = peripheral.identifier
-        if resolvingPeripheralIDs.contains(id) {
-            finishIdentityResolution(peripheral, shouldRetry: true)
-        } else {
-            discoveredPeripherals.removeValue(forKey: id)
-            peripheralRSSI.removeValue(forKey: id)
-        }
+        completeIdentityResolution(
+            peripheral,
+            terminalRetryDefault: shouldScan
+                && acceptedEpoch(for: peripheral) != nil
+        )
     }
 
     public func centralManager(
@@ -862,19 +1117,17 @@ extension BLEManager: CBCentralManagerDelegate {
                 as? [CBPeripheral] {
 
             for peripheral in peripherals {
-                discoveredPeripherals[peripheral.identifier] = peripheral
-                peripheral.delegate = self
-
-                guard shouldScan else { continue }
+                guard shouldScan,
+                      let eventEpoch = currentDiscoveryEventEpoch() else {
+                    continue
+                }
                 switch peripheral.state {
-                case .connected, .disconnected:
-                    connectAndReadIdentity(peripheral: peripheral, rssi: -100)
-                case .connecting:
-                    resolvingPeripheralIDs.insert(peripheral.identifier)
-                    peripheralRSSI[peripheral.identifier] = -100
-                    scheduleForegroundIdentityTimeout(for: peripheral)
-                case .disconnecting:
-                    break
+                case .connected, .disconnected, .connecting, .disconnecting:
+                    connectAndReadIdentity(
+                        peripheral: peripheral,
+                        rssi: -100,
+                        eventEpoch: eventEpoch
+                    )
                 @unknown default:
                     break
                 }
@@ -896,10 +1149,7 @@ extension BLEManager: CBPeripheralDelegate {
         didDiscoverServices error: Error?
     ) {
         guard shouldScan,
-              resolvingPeripheralIDs.contains(peripheral.identifier) else {
-            finishIdentityResolution(peripheral, shouldRetry: false)
-            return
-        }
+              acceptedEpoch(for: peripheral) != nil else { return }
         if let error {
             logger.warning(
                 "Service discovery failed: \(error.localizedDescription)"
@@ -915,6 +1165,9 @@ extension BLEManager: CBPeripheralDelegate {
             finishIdentityResolution(peripheral, shouldRetry: true)
             return
         }
+        peripheralResolutionServices[peripheral.identifier] = ObjectIdentifier(
+            service
+        )
 
         peripheral.discoverCharacteristics(
             [
@@ -931,11 +1184,11 @@ extension BLEManager: CBPeripheralDelegate {
         didDiscoverCharacteristicsFor service: CBService,
         error: Error?
     ) {
+        let id = peripheral.identifier
         guard shouldScan,
-              resolvingPeripheralIDs.contains(peripheral.identifier) else {
-            finishIdentityResolution(peripheral, shouldRetry: false)
-            return
-        }
+              acceptedEpoch(for: peripheral) != nil,
+              peripheralResolutionServices[id] == ObjectIdentifier(service)
+        else { return }
         if let error {
             logger.warning(
                 "Characteristic discovery failed: \(error.localizedDescription)"
@@ -953,6 +1206,7 @@ extension BLEManager: CBPeripheralDelegate {
             finishIdentityResolution(peripheral, shouldRetry: true)
             return
         }
+        peripheralReadCharacteristics[id] = ObjectIdentifier(characteristic)
 
         peripheral.readValue(for: characteristic)
     }
@@ -962,11 +1216,11 @@ extension BLEManager: CBPeripheralDelegate {
         didUpdateValueFor characteristic: CBCharacteristic,
         error: Error?
     ) {
+        let id = peripheral.identifier
         guard shouldScan,
-              resolvingPeripheralIDs.contains(peripheral.identifier) else {
-            finishIdentityResolution(peripheral, shouldRetry: false)
-            return
-        }
+              let eventEpoch = acceptedEpoch(for: peripheral),
+              peripheralReadCharacteristics[id]
+                == ObjectIdentifier(characteristic) else { return }
         if let error {
             logger.warning(
                 "Identity read failed: \(error.localizedDescription)"
@@ -984,12 +1238,13 @@ extension BLEManager: CBPeripheralDelegate {
             return
         }
 
-        let rssi = peripheralRSSI[peripheral.identifier] ?? -100
+        let rssi = peripheralRSSI[id] ?? -100
 
         handleIdentity(
             identity.uuidString,
             rssi: rssi,
-            peripheralID: peripheral.identifier
+            peripheralID: id,
+            eventEpoch: eventEpoch
         )
 
         guard identity.uuidString.lowercased() != currentIdentity,
@@ -1006,6 +1261,9 @@ extension BLEManager: CBPeripheralDelegate {
             finishIdentityResolution(peripheral, shouldRetry: false)
             return
         }
+        peripheralWriteCharacteristics[id] = ObjectIdentifier(
+            writeCharacteristic
+        )
 
         peripheral.writeValue(
             localIdentityData,
@@ -1020,10 +1278,11 @@ extension BLEManager: CBPeripheralDelegate {
         didWriteValueFor characteristic: CBCharacteristic,
         error: Error?
     ) {
+        let id = peripheral.identifier
         guard characteristic.uuid == peerIdentityWriteCharacteristicUUID,
-              resolvingPeripheralIDs.contains(peripheral.identifier) else {
-            return
-        }
+              acceptedEpoch(for: peripheral) != nil,
+              peripheralWriteCharacteristics[id]
+                == ObjectIdentifier(characteristic) else { return }
 
         if let error {
             logger.warning(
@@ -1068,6 +1327,31 @@ extension BLEManager: CBPeripheralManagerDelegate {
         didAdd service: CBService,
         error: Error?
     ) {
+        let serviceKey = ObjectIdentifier(service)
+        guard let eventEpoch = servicePublicationEpochs.removeValue(
+            forKey: serviceKey
+        ) else {
+            logger.warning("Ignoring an untracked service publication callback")
+            if let mutableService = service as? CBMutableService {
+                peripheral.remove(mutableService)
+            }
+            return
+        }
+
+        guard shouldAdvertise,
+              isCurrentDiscoveryEventEpoch(eventEpoch),
+              publishedService === service else {
+            logger.info("Discarding a stale service publication callback")
+            if let mutableService = service as? CBMutableService {
+                peripheral.remove(mutableService)
+            }
+            if publishedService === service {
+                clearPublishedServiceState()
+                publishServiceIfPossible()
+            }
+            return
+        }
+
         if let error {
             serviceIsPublished = false
 
@@ -1076,7 +1360,7 @@ extension BLEManager: CBPeripheralManagerDelegate {
             )
 
             DispatchQueue.main.async { [weak self] in
-                self?.delegate?.didFail(with: error)
+                self?.delegate?.didFail(with: error, epoch: eventEpoch)
             }
 
             return
@@ -1098,13 +1382,32 @@ extension BLEManager: CBPeripheralManagerDelegate {
         _ peripheral: CBPeripheralManager,
         error: Error?
     ) {
+        guard let eventEpoch = advertisingEpochTracker
+            .takeCompletionOrigin() else {
+            logger.warning("Ignoring an untracked advertising callback")
+            if peripheral.isAdvertising && !shouldAdvertise {
+                peripheral.stopAdvertising()
+            }
+            return
+        }
+
+        guard shouldAdvertise,
+              isCurrentDiscoveryEventEpoch(eventEpoch) else {
+            logger.info("Discarding a stale advertising callback")
+            if peripheral.isAdvertising {
+                peripheral.stopAdvertising()
+            }
+            startAdvertisingIfPossible()
+            return
+        }
+
         if let error {
             logger.error(
                 "Advertising failed: \(error.localizedDescription)"
             )
 
             DispatchQueue.main.async { [weak self] in
-                self?.delegate?.didFail(with: error)
+                self?.delegate?.didFail(with: error, epoch: eventEpoch)
             }
 
             return
@@ -1119,7 +1422,9 @@ extension BLEManager: CBPeripheralManagerDelegate {
     ) {
         for request in requests {
             guard request.characteristic.uuid
-                    == peerIdentityWriteCharacteristicUUID else {
+                    == peerIdentityWriteCharacteristicUUID,
+                  request.characteristic
+                    === peerIdentityWriteCharacteristic else {
                 peripheral.respond(to: request, withResult: .requestNotSupported)
                 continue
             }
@@ -1139,11 +1444,14 @@ extension BLEManager: CBPeripheralManagerDelegate {
             }
 
             let centralID = request.central.identifier
-            handleIdentity(
-                peer.identity.uuidString,
-                rssi: peer.rssi,
-                peripheralID: centralID
-            )
+            if let eventEpoch = currentDiscoveryEventEpoch() {
+                handleIdentity(
+                    peer.identity.uuidString,
+                    rssi: peer.rssi,
+                    peripheralID: centralID,
+                    eventEpoch: eventEpoch
+                )
+            }
             peripheral.respond(to: request, withResult: .success)
             logger.info("Peer identity received through GATT handshake")
         }

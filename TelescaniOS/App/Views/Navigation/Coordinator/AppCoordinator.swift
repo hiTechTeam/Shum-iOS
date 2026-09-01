@@ -4,10 +4,13 @@ import SwiftUI
 final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     private let regKey = Keys.isReg.rawValue
     private let scanningKey = Keys.isScaning.rawValue
-    private let authSession = AuthSessionStore.shared
+    private let authSession: AuthSessionStore
     private let sessionValidator: SessionValidator
+    private let logoutAction: @MainActor (String) async throws -> Void
+    private let bluetoothReset: @MainActor () -> Void
     private var isValidatingSession = false
     private var hasStartedInitialSessionRefresh = false
+    private var sessionGeneration = UUID()
 
     @Published var isRegistered: Bool
     @Published private(set) var isAuthenticated: Bool
@@ -17,32 +20,55 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     @Published var showSplash = true
     @Published var isScaning: Bool
 
-    let authCodeViewModel = CodeViewModel()
-    let peopleViewModel = PeopleViewModel()
+    let authCodeViewModel: CodeViewModel
+    let peopleViewModel: PeopleViewModel
+    let profilePhotoViewModel: ProfilePhotoViewModel
 
-    init(sessionValidator: SessionValidator? = nil) {
+    init(
+        sessionValidator: SessionValidator? = nil,
+        authSession: AuthSessionStore = .shared,
+        authCodeViewModel: CodeViewModel? = nil,
+        peopleViewModel: PeopleViewModel? = nil,
+        profilePhotoViewModel: ProfilePhotoViewModel? = nil,
+        primarySessionRequired: Bool? = nil,
+        logoutAction: @escaping @MainActor (String) async throws -> Void = {
+            try await FetchService.fetch.logoutCurrentSession(accessToken: $0)
+        },
+        bluetoothReset: @escaping @MainActor () -> Void = {
+            BLEManager.shared.reset()
+        }
+    ) {
+        self.authSession = authSession
         self.sessionValidator = sessionValidator ?? SessionValidator()
+        self.logoutAction = logoutAction
+        self.bluetoothReset = bluetoothReset
+        self.authCodeViewModel = authCodeViewModel ?? CodeViewModel()
+        self.peopleViewModel = peopleViewModel ?? PeopleViewModel()
+        self.profilePhotoViewModel = profilePhotoViewModel
+            ?? ProfilePhotoViewModel()
         let locallyRegistered = UserDefaults.standard.bool(forKey: regKey)
-        let hasTokens = AuthSessionStore.shared.hasTokens
-        let hasPrimarySession = AuthSessionStore.shared.hasPrimarySession
-        let hasLegacySession = hasTokens && !hasPrimarySession
+        let hasPrimarySession = authSession.hasPrimarySession
         #if TELESCAN_PERSONAL_TEAM
+        let requiresPrimarySession = primarySessionRequired ?? false
+        let hasTokens = authSession.hasTokens
+        let hasUsableAccountSession = requiresPrimarySession
+            ? hasPrimarySession
+            : hasTokens
         isAuthenticated = AppConfig.skipRegistration || hasTokens
         isRegistered = AppConfig.skipRegistration
             || (locallyRegistered && hasTokens)
         #else
+        let hasUsableAccountSession = hasPrimarySession
         isAuthenticated = AppConfig.skipRegistration || hasPrimarySession
         isRegistered = AppConfig.skipRegistration
             || (locallyRegistered && hasPrimarySession)
         #endif
         isScaning = UserDefaults.standard.bool(forKey: scanningKey)
-        authCodeViewModel.restoreLocalProfile()
-        #if !TELESCAN_PERSONAL_TEAM
-        if hasLegacySession || locallyRegistered && !hasPrimarySession,
+        self.authCodeViewModel.restoreLocalProfile()
+        if !hasUsableAccountSession,
            !AppConfig.skipRegistration {
-            clearLocalSession()
+            resetAccountScopedSession()
         }
-        #endif
 
         AppNotificationRouter.shared.configure { [weak self] in
             self?.nearbyNotificationNavigationRequest = UUID()
@@ -71,7 +97,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
 
     func completedRegistration() {
         guard AppConfig.skipRegistration || authSession.hasTokens else {
-            clearLocalSession()
+            resetAccountScopedSession()
             return
         }
         isAuthenticated = true
@@ -107,22 +133,31 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
 
     func logoutCurrentSession() async throws {
+        let credentials = authSession.credentials
+        guard resetAccountScopedSession(
+            ifCredentialGenerationMatches: credentials.generation
+        ) else { return }
+        guard let accessToken = credentials.accessToken else { return }
         do {
-            try await FetchService.fetch.logoutCurrentSession()
-            clearLocalSession()
-        } catch APIClientError.unauthenticated {
-            clearLocalSession()
+            try await logoutAction(accessToken)
+        } catch {
+            // The local logout is already complete. Remote revocation is
+            // best-effort because a response may be lost after the delete.
         }
     }
 
     func deleteAccount() async throws {
+        let generation = sessionGeneration
         do {
             try await FetchService.fetch.deleteAccount()
-            clearLocalSession()
+            guard generation == sessionGeneration else { return }
+            resetAccountScopedSession()
         } catch APIClientError.unauthenticated {
-            clearLocalSession()
+            guard generation == sessionGeneration else { return }
+            resetAccountScopedSession()
         } catch APIClientError.httpStatus(let status) where status == 404 {
-            clearLocalSession()
+            guard generation == sessionGeneration else { return }
+            resetAccountScopedSession()
         }
     }
 
@@ -130,10 +165,17 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         guard isAuthenticated, authSession.hasTokens, !isValidatingSession else {
             return
         }
+        let generation = sessionGeneration
         isValidatingSession = true
-        defer { isValidatingSession = false }
+        defer {
+            if generation == sessionGeneration {
+                isValidatingSession = false
+            }
+        }
 
-        switch await sessionValidator.validate() {
+        let validation = await sessionValidator.validate()
+        guard generation == sessionGeneration else { return }
+        switch validation {
         case .active(let profile):
             authCodeViewModel.applyProfile(profile)
             if !isRegistered {
@@ -149,29 +191,41 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             isRegistered = false
             UserDefaults.standard.set(false, forKey: regKey)
         case .invalid:
-            clearLocalSession()
+            resetAccountScopedSession()
         case .unavailable:
             break
         }
     }
 
-    private func clearLocalSession() {
-        peopleViewModel.stopAllBluetoothActivity()
-        peopleViewModel.clearBlockedProfileCache()
-        peopleViewModel.clearEncounterHistory()
-        BLEManager.shared.reset()
-        authSession.clearTokens()
+    @discardableResult
+    private func resetAccountScopedSession(
+        ifCredentialGenerationMatches expectedGeneration: UUID? = nil
+    ) -> Bool {
+        if let expectedGeneration {
+            guard authSession.beginLocalReset(
+                ifGenerationMatches: expectedGeneration
+            ) else { return false }
+        } else {
+            authSession.clearTokens()
+        }
+        AccountSessionGeneration.shared.advance()
+        sessionGeneration = UUID()
+        isValidatingSession = false
+        peopleViewModel.resetAccountScopedState()
+        bluetoothReset()
         ProfileCache.clear()
         authCodeViewModel.clearProfile()
+        profilePhotoViewModel.resetAccountScopedState()
         SavedPeopleStateStore.shared.removeAll()
+        QuickActionsSettingsStore.shared.reset()
         if let bundleID = Bundle.main.bundleIdentifier {
             UserDefaults.standard.removePersistentDomain(forName: bundleID)
         }
-        QuickActionsSettingsStore.shared.reset()
         isScaning = false
         isAuthenticated = false
         isRegistered = false
         authenticationFlowID = UUID()
+        return true
     }
 
     func updateApplicationState(isActive: Bool) {
