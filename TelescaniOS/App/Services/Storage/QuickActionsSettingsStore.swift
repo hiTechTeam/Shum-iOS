@@ -37,4 +37,10 @@ final class QuickActionsSettingsStore: ObservableObject {
         isQuickClearEnabled = defaults.bool(forKey: quickClearKey)
         isQuickBlockEnabled = defaults.bool(forKey: quickBlockKey)
     }
+
+    func reset() {
+        isQuickChatEnabled = false
+        isQuickClearEnabled = false
+        isQuickBlockEnabled = false
+    }
 }

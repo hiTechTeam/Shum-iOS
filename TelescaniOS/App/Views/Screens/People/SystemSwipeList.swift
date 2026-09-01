@@ -146,6 +146,14 @@ final class SavedPeopleStateStore: ObservableObject {
         _ = toggle(user)
     }
 
+    func removeAll() {
+        savedIDs.removeAll()
+        users.removeAll()
+        UserDefaults.standard.removeObject(forKey: identifiersStorageKey)
+        UserDefaults.standard.removeObject(forKey: profilesStorageKey)
+        UserDefaults.standard.removeObject(forKey: saveInformationSuppressedKey)
+    }
+
     func refreshProfile(_ user: NearbyUser) {
         guard savedIDs.contains(user.id) else { return }
 

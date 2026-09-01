@@ -47,10 +47,6 @@ struct Inc {
     
     // MARK: - Tabs
     struct Tabs {
-        static let chats: String = "chats"
-        // EN: Chats
-        // RU: Чаты
-
         static let settings: String = "settings"
         // EN: Settings
         // RU: Настройки
@@ -78,31 +74,6 @@ struct Inc {
         static let metHeader: String = "metHeader"
         // EN: Met recently
         // RU: Виделись недавно
-    }
-
-    // MARK: - Chats
-    struct Chats {
-        static let emptyTitle: String = "chatsEmptyTitle"
-        static let emptyMessage: String = "chatsEmptyMessage"
-        static let search: String = "chatSearch"
-        static let newConversation: String = "chatNewConversation"
-        static let noMessagesTitle: String = "chatNoMessagesTitle"
-        static let noMessagesMessage: String = "chatNoMessagesMessage"
-        static let messagePlaceholder: String = "chatMessagePlaceholder"
-        static let today: String = "chatToday"
-        static let send: String = "chatSend"
-        static let actions: String = "chatActions"
-        static let mute: String = "chatMute"
-        static let unmute: String = "chatUnmute"
-        static let attachment: String = "chatAttachment"
-        static let photo: String = "chatPhoto"
-        static let camera: String = "chatCamera"
-        static let file: String = "chatFile"
-        static let timeRemaining: String = "chatTimeRemaining"
-        static let timeExpired: String = "chatTimeExpired"
-        static let waitForNextMeeting: String = "chatWaitForNextMeeting"
-        static let nearbyWithYou: String = "chatNearbyWithYou"
-        static let recentlyMet: String = "chatRecentlyMet"
     }
 
     // MARK: - Encounter history

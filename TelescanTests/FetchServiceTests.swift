@@ -991,6 +991,29 @@ struct FetchServiceTests {
         #expect(restored.entries.map(\.id) == [first.id])
     }
 
+    @Test("Encounter buffer does not discard resolved profiles at 500 entries")
+    func encounterBufferHasNoProfileLimit() throws {
+        let suiteName = "telescan.tests.encounter-buffer.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = EncounterBufferStore(defaults: defaults)
+        for index in 0..<501 {
+            store.record(
+                NearbyUser(
+                    id: UUID(),
+                    name: "Profile \(index)",
+                    username: "@profile\(index)",
+                    bio: nil,
+                    photoURL: nil
+                ),
+                seenAt: Date(timeIntervalSince1970: TimeInterval(index))
+            )
+        }
+
+        #expect(store.entries.count == 501)
+    }
+
     @Test("Unviewed encounters persist until their rows are seen")
     func unviewedEncounterStorePersistsAndReconcilesIDs() throws {
         let suiteName = "telescan.tests.unviewed.\(UUID().uuidString)"
@@ -1009,6 +1032,48 @@ struct FetchServiceTests {
 
         restored.retain([firstID])
         #expect(restored.ids.isEmpty)
+    }
+
+    @Test("Quick actions reset their in-memory and persisted state")
+    func quickActionsResetOnSessionCleanup() throws {
+        let suiteName = "telescan.tests.quick-actions.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = QuickActionsSettingsStore(defaults: defaults)
+        store.isQuickChatEnabled = true
+        store.isQuickClearEnabled = true
+        store.isQuickBlockEnabled = true
+
+        store.reset()
+
+        #expect(!store.isQuickChatEnabled)
+        #expect(!store.isQuickClearEnabled)
+        #expect(!store.isQuickBlockEnabled)
+        #expect(!QuickActionsSettingsStore(defaults: defaults).hasEnabledActions)
+    }
+
+    @Test("Saved profiles clear their in-memory state during session cleanup")
+    func savedProfilesClearOnSessionCleanup() {
+        let store = SavedPeopleStateStore.shared
+        let user = NearbyUser(
+            id: UUID(),
+            name: "Saved",
+            username: "@saved",
+            bio: nil,
+            photoURL: nil
+        )
+        store.removeAll()
+        defer { store.removeAll() }
+
+        _ = store.toggle(user)
+        #expect(store.contains(user.id))
+
+        store.removeAll()
+
+        #expect(!store.contains(user.id))
+        #expect(store.users.isEmpty)
+        #expect(store.count == 0)
     }
 
     @Test("Application badge combines Nearby and new Met profiles")

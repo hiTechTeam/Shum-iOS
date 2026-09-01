@@ -15,7 +15,6 @@
 /* Tabs */
 "peopleNearby" = "People nearby";
 "people" = "People";
-"chats" = "Chats";
 "settings" = "Settings";
 "profile" = "Profile";
 "me" = "Me";
@@ -23,27 +22,6 @@
 "metHeader" = "Met recently";
 
 /* Chats */
-"chatsEmptyTitle" = "No chats yet";
-"chatsEmptyMessage" = "Start a chat from someone’s profile.";
-"chatSearch" = "Search";
-"chatNewConversation" = "New chat";
-"chatNoMessagesTitle" = "No messages yet";
-"chatNoMessagesMessage" = "Send the first message.";
-"chatMessagePlaceholder" = "Message";
-"chatToday" = "Today";
-"chatSend" = "Send";
-"chatActions" = "Chat actions";
-"chatMute" = "Mute notifications";
-"chatUnmute" = "Unmute notifications";
-"chatAttachment" = "Add attachment";
-"chatPhoto" = "Photo";
-"chatCamera" = "Camera";
-"chatFile" = "File";
-"chatTimeRemaining" = "Time remaining";
-"chatTimeExpired" = "Time expired";
-"chatWaitForNextMeeting" = "Wait for the next meeting";
-"chatNearbyWithYou" = "nearby with you";
-"chatRecentlyMet" = "recently met";
 
 /* Encounter history */
 "encounterHistoryEmptyTitle" = "No encounters yet";

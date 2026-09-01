@@ -163,9 +163,11 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         authSession.clearTokens()
         ProfileCache.clear()
         authCodeViewModel.clearProfile()
+        SavedPeopleStateStore.shared.removeAll()
         if let bundleID = Bundle.main.bundleIdentifier {
             UserDefaults.standard.removePersistentDomain(forName: bundleID)
         }
+        QuickActionsSettingsStore.shared.reset()
         isScaning = false
         isAuthenticated = false
         isRegistered = false

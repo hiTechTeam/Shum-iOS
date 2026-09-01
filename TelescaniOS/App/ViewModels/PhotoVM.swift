@@ -1,7 +1,13 @@
+import OSLog
 import SwiftUI
 
 @MainActor
 final class ProfilePhotoViewModel: ObservableObject {
+
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "Telescan",
+        category: "ProfilePhoto"
+    )
 
     @Published var profileImage: Image = .noPhoto
     @Published var uiImage: UIImage?
@@ -71,9 +77,8 @@ final class ProfilePhotoViewModel: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
-                print(
-                    "Failed to load photo:",
-                    error.localizedDescription
+                Self.logger.error(
+                    "Failed to load photo: \(error.localizedDescription, privacy: .private)"
                 )
             }
         }
@@ -102,9 +107,8 @@ final class ProfilePhotoViewModel: ObservableObject {
                         forKey: photoS3UrlKey
                     )
                 } catch {
-                    print(
-                        "Failed to delete profile image:",
-                        error.localizedDescription
+                    Self.logger.error(
+                        "Failed to delete profile image: \(error.localizedDescription, privacy: .private)"
                     )
                 }
 
@@ -143,9 +147,8 @@ final class ProfilePhotoViewModel: ObservableObject {
                     forKey: photoS3UrlKey
                 )
             } catch {
-                print(
-                    "Failed to upload profile image:",
-                    error.localizedDescription
+                Self.logger.error(
+                    "Failed to upload profile image: \(error.localizedDescription, privacy: .private)"
                 )
             }
         }

@@ -336,7 +336,7 @@ final class EncounterBufferStore: EncounterHistoryStoring {
     init(
         defaults: UserDefaults = .standard,
         key: String = "telescan.encounter-buffer.v1",
-        maximumEntries: Int = 500
+        maximumEntries: Int = .max
     ) {
         storage = EncounterHistoryStore(
             defaults: defaults,

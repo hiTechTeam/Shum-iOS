@@ -90,16 +90,25 @@ show a non-empty BIO in up to three lines above a primary action that opens the
 linked Telegram profile; BIO text is rendered as plain text and never as an
 active link.
 
-The main tab bar contains **People** and **Profile**. **People** keeps
-profiles in discovery order instead of re-sorting rows whenever RSSI changes;
-coarse distance labels are recalculated every 10 seconds. The toolbar opens the
-full-height **Met** history. A resolved encounter starts a one-minute heartbeat
-buffer that is refreshed by every BLE signal and persisted at bounded intervals.
+The main tab bar contains **Nearby** and **Profile**. **Nearby** keeps profiles
+in discovery order instead of re-sorting rows whenever RSSI changes; coarse
+distance labels are recalculated every 10 seconds. **Met**, **Saved**, and
+**Blocked** are separate push destinations in Profile. A resolved encounter
+starts a one-minute heartbeat buffer that is refreshed by every BLE signal and
+persisted at bounded intervals.
 After a full minute without a signal, the last real signal is published to
 **Met** and removed from the pending buffer. If iOS terminates the app before
 that timeout can run, the persisted buffer is published on the next launch
 before scanning restarts. Met snapshots remain local for up to 24 hours, and a
-later nearby discovery does not remove the existing history entry.
+later nearby discovery does not remove the existing history entry. New Met
+profiles remain marked until their rows become visible. The application icon
+badge combines the current Nearby count with only the unviewed Met count.
+
+Saving a profile stores its public snapshot only on the current device. Saved
+profiles never become an API collection and do not synchronize between devices.
+They remain until the user removes them or clears the local account through
+sign-out or account deletion. Profile settings also expose optional quick chat,
+quick clear, and quick block actions that skip their usual confirmation step.
 
 Both Core Bluetooth background modes and state restoration remain enabled while
 scanning is on. Background identity connections are left pending for iOS to
@@ -121,11 +130,11 @@ and Privacy Policy.
 ## Reports and blocking
 
 The nearby-profile sheet uses native menus, confirmation dialogs, and alerts.
-Users can report a profile for spam, harassment, inappropriate content,
-impersonation, or another reason and may add a short optional comment. The API
-captures the target BIO together with the name, username, and photo context. Reports
-are submitted through the authenticated API with a client request UUID so a
-token refresh or retry does not create duplicate pending reports.
+Users submit one universal profile report and may add a short optional comment.
+The API captures the target BIO together with the name, username, and photo
+context. Reports are submitted through the authenticated API with a client
+request UUID so a token refresh or retry does not create duplicate pending
+reports.
 
 Blocking succeeds on the API before the profile is removed locally. A block is
 enforced in both profile-lookup directions, immediately removes the person from
@@ -184,15 +193,17 @@ temporarily unavailable.
 - Keychain: access token, refresh token, and installation `device_id`.
 - `UserDefaults`: public `telescan_id`, profile metadata, registration state,
   discovery state, BLE restoration identity, and the current account's cached
-  blocked-profile UUIDs. It also stores at most 500 resolved encounter-profile
-  snapshots and at most 500 unresolved BLE identities with their last-seen
-  timestamps; entries older than 24 hours are removed and the history is never
-  uploaded.
+  blocked-profile UUIDs. It also stores device-local saved public profile
+  snapshots, resolved encounter-profile snapshots, and at most 500 unresolved
+  BLE identities with their last-seen timestamps. Encounter entries older than
+  24 hours are removed. Neither Saved nor Met is uploaded.
 - App storage and caches: selected/cached profile images and HTTP responses.
 
-The encounter history can be cleared from **Met** and is also cleared on sign
-out or account deletion. The clear link code and Telegram ID are not persisted
-by the current app.
+The encounter history can be cleared from **Met**. Met and Saved are also
+cleared from persistence and in-memory singleton state on sign-out or account
+deletion, preventing one account from inheriting another account's local
+profiles in the same process. The clear link code and Telegram ID are not
+persisted by the current app.
 
 ## Verification
 
@@ -200,8 +211,9 @@ Unit tests cover BLE manager state and identity encoding, resolved-only nearby
 profiles, disappearance cancellation, automatic link-code success/error UI
 state, offline-safe session validation, stable installation identity, token
 refresh and retry, single-flight concurrent refresh, stable discovery ordering,
-10-second distance refresh, and 24-hour encounter-history persistence,
-deduplication, filtering, and cleanup. Example commands:
+10-second distance refresh, application badge aggregation, local-state reset,
+and 24-hour encounter-history persistence, deduplication, filtering, and
+cleanup. Example commands:
 
 ```sh
 xcodebuild test \

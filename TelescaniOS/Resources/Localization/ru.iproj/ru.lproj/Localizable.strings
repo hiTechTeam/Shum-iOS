@@ -15,7 +15,6 @@
 /* Tabs */
 "peopleNearby" = "Люди рядом";
 "people" = "Люди";
-"chats" = "Чаты";
 "settings" = "Настройки";
 "profile" = "Профиль";
 "me" = "Я";
@@ -23,27 +22,6 @@
 "metHeader" = "Виделись недавно";
 
 /* Чаты */
-"chatsEmptyTitle" = "Пока нет чатов";
-"chatsEmptyMessage" = "Начните чат из карточки человека.";
-"chatSearch" = "Поиск";
-"chatNewConversation" = "Новый чат";
-"chatNoMessagesTitle" = "Сообщений пока нет";
-"chatNoMessagesMessage" = "Напишите первое сообщение.";
-"chatMessagePlaceholder" = "Сообщение";
-"chatToday" = "Сегодня";
-"chatSend" = "Отправить";
-"chatActions" = "Действия с чатом";
-"chatMute" = "Выключить уведомления";
-"chatUnmute" = "Включить уведомления";
-"chatAttachment" = "Добавить вложение";
-"chatPhoto" = "Фото";
-"chatCamera" = "Камера";
-"chatFile" = "Файл";
-"chatTimeRemaining" = "Время для общения";
-"chatTimeExpired" = "Время истекло";
-"chatWaitForNextMeeting" = "Ждём следующей встречи";
-"chatNearbyWithYou" = "Рядом с вами";
-"chatRecentlyMet" = "Виделись недавно";
 
 /* История встреч */
 "encounterHistoryEmptyTitle" = "Пока никого";
