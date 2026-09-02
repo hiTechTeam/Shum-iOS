@@ -72,26 +72,24 @@ struct Welcome: View {
         )
         var text = AttributedString(content)
 
-        text.foregroundColor = Color.primary
-        text.font = .system(size: 14 * scale, weight: .regular)
+        text.foregroundColor = Color.secondary
+        text.font = .system(size: 12 * scale, weight: .regular)
 
         if let privacyRange = text.range(of: privacyTitle) {
             text[privacyRange].link = privacyPolicyURL
             text[privacyRange].foregroundColor = accentColor
-            text[privacyRange].underlineStyle = .single
             text[privacyRange].font = .system(
-                size: 14 * scale,
-                weight: .bold
+                size: 12 * scale,
+                weight: .regular
             )
         }
 
         if let termsRange = text.range(of: termsTitle) {
             text[termsRange].link = termsOfServiceURL
             text[termsRange].foregroundColor = accentColor
-            text[termsRange].underlineStyle = .single
             text[termsRange].font = .system(
-                size: 14 * scale,
-                weight: .bold
+                size: 12 * scale,
+                weight: .regular
             )
         }
 

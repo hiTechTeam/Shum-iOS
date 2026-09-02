@@ -89,7 +89,7 @@
 "aboutOnBoardingMsg" = "Telescan lets you instantly find and share Telegram profiles with people nearby.";
 "shortOnboardingMsg" = "Share your Telegram profile with\npeople nearby using Bluetooth";
 "start" = "Continue";
-"legalAgreement" = "By continuing, you agree to Telescan’s\n%@ and %@";
+"legalAgreement" = "By continuing, you accept %@ and %@";
 "privacyPolicy" = "Privacy Policy";
 "termsOfService" = "Terms of Service";
 "continueHint" = "Opens the identity verification screen";

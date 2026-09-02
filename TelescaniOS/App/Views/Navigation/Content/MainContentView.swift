@@ -258,7 +258,7 @@ private final class TabBarBadgeAppearanceController: UIViewController {
     ) {
         configureBadge(
             for: item,
-            backgroundColor: isSelected ? .systemPurple : .systemGray,
+            backgroundColor: isSelected ? .systemOrange : .systemGray,
             textColor: isSelected ? .white : inactiveTextColor
         )
     }

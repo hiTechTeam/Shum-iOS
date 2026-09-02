@@ -146,7 +146,7 @@ struct EncounterHistoryView: View {
             },
             rowSurfaceColor: { encounter in
                 highlightedEncounterIDs.contains(encounter.id)
-                    ? Color.purple.opacity(0.16)
+                    ? Color.orange.opacity(0.16)
                     : nil
             },
             leadingActions: { _, _ in

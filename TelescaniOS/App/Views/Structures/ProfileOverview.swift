@@ -503,7 +503,7 @@ private struct ProfileOverviewRow: View {
             if let accentValue {
                 Text(accentValue)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(.orange)
                     .lineLimit(1)
             }
 

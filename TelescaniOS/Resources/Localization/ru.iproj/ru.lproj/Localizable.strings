@@ -89,7 +89,7 @@
 "aboutOnBoardingMsg" = "Telescan позволяет быстро находить и обмениваться Telegram-профилями.";
 "shortOnboardingMsg" = "Делитесь профилем Telegram с людьми\nрядом с помощью Bluetooth";
 "start" = "Продолжить";
-"legalAgreement" = "Продолжая, вы соглашаетесь с документами\n«%@» и «%@»";
+"legalAgreement" = "Продолжая, вы принимаете %@ и %@";
 "privacyPolicy" = "Политика конфиденциальности";
 "termsOfService" = "Условия использования";
 "continueHint" = "Открывает экран подтверждения личности";
