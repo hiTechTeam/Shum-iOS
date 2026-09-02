@@ -151,6 +151,23 @@ struct FetchServiceTests {
         )
     }
 
+    @Test("Rejected public BIO is shown as a policy error")
+    @MainActor
+    func rejectedBioHasDedicatedState() async {
+        let viewModel = CodeViewModel(
+            linkAction: { _ in throw APIClientError.invalidResponse },
+            updateBioAction: { _ in throw APIClientError.publicContentRejected }
+        )
+
+        #expect(await viewModel.updateBio("Rejected text") == false)
+        #expect(viewModel.bioSaveFailed)
+        #expect(viewModel.bioContentRejected)
+
+        viewModel.resetBioSaveState()
+        #expect(!viewModel.bioSaveFailed)
+        #expect(!viewModel.bioContentRejected)
+    }
+
     @Test("A validated code can be edited and checked again")
     @MainActor
     func validatedCodeCanBeReplaced() async {
@@ -890,6 +907,48 @@ struct FetchServiceTests {
             _ = try await client.linkTelegram(code: "USERLESS")
             Issue.record("Expected a Telegram username error")
         } catch APIClientError.telegramUsernameRequired {
+            #expect(sessions.hasTokens)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test("The API content-policy response has a dedicated client error")
+    func publicContentResponseIsClassified() async throws {
+        let store = MemorySecureStore()
+        let sessions = AuthSessionStore(store: store)
+        try sessions.save(
+            TokenResponse(
+                accessToken: "access-token",
+                refreshToken: "refresh-token-value-that-is-long-enough",
+                tokenType: "bearer",
+                expiresIn: 900
+            )
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        MockURLProtocol.handler = { request in
+            #expect(request.url?.path == "/api/v1/users/me")
+            return (
+                422,
+                Data(
+                    """
+                    {"detail":"Rejected","code":"public_content_rejected"}
+                    """.utf8
+                )
+            )
+        }
+        let client = APIClient(
+            baseURL: URL(string: "https://api.example")!,
+            session: session,
+            sessionStore: sessions
+        )
+
+        do {
+            _ = try await client.updateProfile(bio: "Rejected text")
+            Issue.record("Expected a public-content error")
+        } catch APIClientError.publicContentRejected {
             #expect(sessions.hasTokens)
         } catch {
             Issue.record("Unexpected error: \(error)")

@@ -5,6 +5,7 @@ struct BioEditorField: View {
 
     let isSaving: Bool
     let saveFailed: Bool
+    let contentRejected: Bool
 
     private let characterLimit = 36
     private let cornerRadius: CGFloat = 18
@@ -60,7 +61,11 @@ struct BioEditorField: View {
             }
 
             if saveFailed {
-                Text(Inc.Profile.bioSaveFailed.localized)
+                Text(
+                    contentRejected
+                        ? Inc.Profile.bioContentRejected.localized
+                        : Inc.Profile.bioSaveFailed.localized
+                )
                     .font(.system(size: 12))
                     .foregroundStyle(.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -88,7 +93,8 @@ struct BioProfileField: View {
             BioEditorField(
                 text: $draftBio,
                 isSaving: false,
-                saveFailed: false
+                saveFailed: false,
+                contentRejected: false
             )
             .allowsHitTesting(false)
 
@@ -143,7 +149,8 @@ struct BioEditorSheet: View {
                 BioEditorField(
                     text: $draftBio,
                     isSaving: authVM.isSavingBio,
-                    saveFailed: authVM.bioSaveFailed
+                    saveFailed: authVM.bioSaveFailed,
+                    contentRejected: authVM.bioContentRejected
                 )
 
                 Text(Inc.Profile.informationDescription.localized)

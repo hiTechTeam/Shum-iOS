@@ -28,6 +28,7 @@ final class CodeViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isSavingBio = false
     @Published var bioSaveFailed = false
+    @Published var bioContentRejected = false
     @Published var tmpTgUsername: String?
     @Published var tmpCode = ""
 
@@ -158,6 +159,7 @@ final class CodeViewModel: ObservableObject {
 
         isSavingBio = true
         bioSaveFailed = false
+        bioContentRejected = false
         let stateGeneration = self.stateGeneration
         let sessionGeneration = AccountSessionGeneration.shared.value
         defer {
@@ -175,6 +177,15 @@ final class CodeViewModel: ObservableObject {
             applyProfile(profile)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             return true
+        } catch APIClientError.publicContentRejected {
+            guard stateGeneration == self.stateGeneration,
+                  sessionGeneration == AccountSessionGeneration.shared.value else {
+                return false
+            }
+            bioSaveFailed = true
+            bioContentRejected = true
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            return false
         } catch {
             guard stateGeneration == self.stateGeneration,
                   sessionGeneration == AccountSessionGeneration.shared.value else {
@@ -188,6 +199,7 @@ final class CodeViewModel: ObservableObject {
 
     func resetBioSaveState() {
         bioSaveFailed = false
+        bioContentRejected = false
     }
 
     func resetCodeEntry() {
@@ -199,6 +211,7 @@ final class CodeViewModel: ObservableObject {
         isLoading = false
         isSavingBio = false
         bioSaveFailed = false
+        bioContentRejected = false
         tmpTgUsername = nil
         tmpCode = ""
     }
@@ -234,6 +247,7 @@ final class CodeViewModel: ObservableObject {
         isLoading = false
         isSavingBio = false
         bioSaveFailed = false
+        bioContentRejected = false
         tmpTgUsername = nil
         tmpCode = ""
     }

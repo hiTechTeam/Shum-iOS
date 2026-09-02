@@ -5,6 +5,7 @@ enum APIClientError: Error {
     case unauthenticated
     case accountNotFound
     case telegramUsernameRequired
+    case publicContentRejected
     case invalidResponse
     case httpStatus(Int)
 }
@@ -306,9 +307,15 @@ actor APIClient {
                 throw APIClientError.accountNotFound
             }
             if http.statusCode == 422,
-               let payload = try? decoder.decode(APIErrorResponse.self, from: data),
-               payload.code == "telegram_username_required" {
-                throw APIClientError.telegramUsernameRequired
+               let payload = try? decoder.decode(APIErrorResponse.self, from: data) {
+                switch payload.code {
+                case "telegram_username_required":
+                    throw APIClientError.telegramUsernameRequired
+                case "public_content_rejected":
+                    throw APIClientError.publicContentRejected
+                default:
+                    break
+                }
             }
             throw APIClientError.httpStatus(http.statusCode)
         }

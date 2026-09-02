@@ -25,13 +25,4 @@ enum AppConfig {
         return value
     }()
 
-    /// Local backend URL (Debug only)
-    static let localHost: String = {
-        guard let value = Bundle.main.object(
-            forInfoDictionaryKey: "LOCALHOST"
-        ) as? String else {
-            fatalError("LOCALHOST is missing in Info.plist")
-        }
-        return value
-    }()
 }

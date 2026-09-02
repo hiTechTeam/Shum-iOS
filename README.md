@@ -17,7 +17,6 @@ these build settings through `Configuration/Info.plist`:
 | --- | --- |
 | `API_ORIGIN` | Base origin such as `https://api.tgtelescan.ru` |
 | `TELESCAN_BOT` | Link to `https://t.me/tgtelescan_bot` |
-| `LOCALHOST` | Optional Debug backend origin |
 
 Create local build settings from the tracked templates before the first build:
 

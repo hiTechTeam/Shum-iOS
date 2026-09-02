@@ -65,6 +65,7 @@
 "profileBioEmpty" = "Add BIO";
 "profileBioApply" = "Apply";
 "profileBioSaveFailed" = "Couldn’t save BIO. Please try again.";
+"profileBioContentRejected" = "This BIO can’t be published. Please change the text.";
 "profileNameTitle" = "Name";
 "profileInformationTitle" = "Description";
 "profileTelegramTitle" = "Telegram";

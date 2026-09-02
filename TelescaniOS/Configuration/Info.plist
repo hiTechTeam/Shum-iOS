@@ -7,9 +7,6 @@
     <key>API_ORIGIN</key>
     <string>$(API_ORIGIN)</string>
 
-    <key>LOCALHOST</key>
-    <string></string>
-
     <key>TELESCAN_BOT</key>
     <string>$(TELESCAN_BOT)</string>
 

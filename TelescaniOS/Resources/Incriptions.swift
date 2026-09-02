@@ -356,6 +356,7 @@ struct Inc {
         static let bioEmpty: String = "profileBioEmpty"
         static let bioApply: String = "profileBioApply"
         static let bioSaveFailed: String = "profileBioSaveFailed"
+        static let bioContentRejected: String = "profileBioContentRejected"
 
         static let nameTitle: String = "profileNameTitle"
         static let informationTitle: String = "profileInformationTitle"
@@ -423,7 +424,6 @@ struct IncLogos {
 struct Links {
     
     static let telescanBot = AppConfig.telescanBot
-    static let local = AppConfig.localHost
     static let origin = AppConfig.apiOrigin
     
     static let apiV1 = origin + "/api/v1"
