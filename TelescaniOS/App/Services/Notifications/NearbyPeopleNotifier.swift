@@ -166,6 +166,20 @@ struct NearbyEncounterAggregator {
         return currentBatch.map(NearbyNotificationUpdate.schedule)
     }
 
+    mutating func markAlreadyNearby(
+        ids: Set<String>,
+        at now: Date = Date()
+    ) {
+        resetEncounterAfterQuietPeriod(at: now)
+        finalizeExpiredBatch(at: now)
+
+        nearbyIDs.formUnion(ids)
+        encounteredIDs.formUnion(ids)
+        if !ids.isEmpty {
+            emptySince = nil
+        }
+    }
+
     mutating func lose(
         id: String,
         at now: Date = Date()
@@ -336,16 +350,8 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
             return
         }
 
-        var latestUpdate: NearbyNotificationUpdate?
-        for id in ids {
-            if let update = aggregator.detect(id: id) {
-                latestUpdate = update
-            }
-        }
+        aggregator.markAlreadyNearby(ids: ids)
         persistAggregatorState()
-        if let latestUpdate {
-            apply(latestUpdate)
-        }
     }
 
     func lose(id: String) {

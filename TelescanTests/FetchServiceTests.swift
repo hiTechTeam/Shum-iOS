@@ -2872,6 +2872,41 @@ struct FetchServiceTests {
         #expect(batch.totalCount == 1)
     }
 
+    @Test("People already nearby when backgrounding do not notify")
+    func alreadyNearbyPeopleBecomeNotificationBaseline() throws {
+        let start = Date(timeIntervalSince1970: 2_500)
+        var aggregator = NearbyEncounterAggregator(
+            initialCollectionWindow: 12,
+            updateCollectionWindow: 25,
+            encounterResetDelay: 180
+        )
+
+        aggregator.markAlreadyNearby(
+            ids: ["already-visible"],
+            at: start
+        )
+
+        #expect(
+            aggregator.detect(
+                id: "already-visible",
+                at: start.addingTimeInterval(1)
+            ) == nil
+        )
+        #expect(aggregator.pendingIDs.isEmpty)
+
+        let update = aggregator.detect(
+            id: "just-arrived",
+            at: start.addingTimeInterval(2)
+        )
+        guard case .schedule(let batch) = update else {
+            Issue.record("Expected a notification for the new nearby person")
+            return
+        }
+        #expect(batch.kind == .initial)
+        #expect(batch.addedCount == 1)
+        #expect(batch.totalCount == 2)
+    }
+
     @Test("Nearby notification batch survives process recreation")
     func nearbyNotificationBatchSurvivesProcessRecreation() throws {
         let start = Date(timeIntervalSince1970: 3_000)

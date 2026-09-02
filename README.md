@@ -199,10 +199,12 @@ Bluetooth power transitions, and state restoration.
 
 When the app is backgrounded, nearby notifications contain aggregate numeric
 counts rather than profile names. Discoveries are coalesced into numeric batches
-instead of producing one notification per profile, and a quiet period starts a
-new encounter. A profile contributes only after authenticated resolution
-succeeds, and cached blocks continue to suppress notifications while the API is
-temporarily unavailable.
+instead of producing one notification per profile. People already visible when
+the app enters the background establish the notification baseline and do not
+trigger another alert; only people detected after that transition contribute to
+the batch. A quiet period starts a new encounter. A profile contributes only
+after authenticated resolution succeeds, and cached blocks continue to suppress
+notifications while the API is temporarily unavailable.
 
 ## Local storage
 
