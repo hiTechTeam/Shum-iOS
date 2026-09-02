@@ -78,6 +78,11 @@ struct ProfileOverviewView: View {
         .onChange(of: authCodeViewModel.photoS3URL) { _, value in
             photoVM.loadPhotoFromURL(value)
         }
+        .onAppear {
+            // Registration can populate the profile before this view exists,
+            // so onChange alone would miss the initial Telegram photo URL.
+            photoVM.loadPhotoFromURL(authCodeViewModel.photoS3URL)
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task {
