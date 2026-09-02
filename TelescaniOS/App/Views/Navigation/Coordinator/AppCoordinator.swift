@@ -103,6 +103,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         isAuthenticated = true
         isRegistered = true
         UserDefaults.standard.set(true, forKey: regKey)
+        profilePhotoViewModel.loadPhotoFromURL(authCodeViewModel.photoS3URL)
         setScanning(true)
         updateApplicationState(isActive: true)
     }
