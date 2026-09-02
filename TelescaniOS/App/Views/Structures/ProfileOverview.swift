@@ -285,57 +285,39 @@ struct ProfileOverviewView: View {
     }
 
     private var peopleCard: some View {
-        VStack(spacing: 20) {
-            VStack(spacing: 0) {
-                ProfileOverviewRow(
-                    title: Inc.Tabs.metTitle.localized,
-                    systemImage: "clock.arrow.circlepath",
-                    accentValue: peopleViewModel.unviewedEncounterCount > 0
-                        ? "+\(peopleViewModel.unviewedEncounterCount)"
-                        : nil,
-                    value: String(peopleViewModel.encounterHistory.count),
-                    position: .top
-                ) {
-                    showEncounterHistory = true
-                }
-
-                Divider()
-                    .padding(.leading, 60)
-                    .padding(.trailing, 20)
-
-                ProfileOverviewRow(
-                    title: Inc.NearbyProfile.savedMenu.localized,
-                    systemImage: "heart.fill",
-                    value: savedProfilesStatusTitle,
-                    position: .bottom
-                ) {
-                    showSavedProfiles = true
-                }
+        VStack(spacing: 0) {
+            ProfileOverviewRow(
+                title: Inc.Tabs.metTitle.localized,
+                systemImage: "clock.arrow.circlepath",
+                accentValue: peopleViewModel.unviewedEncounterCount > 0
+                    ? "+\(peopleViewModel.unviewedEncounterCount)"
+                    : nil,
+                value: String(peopleViewModel.encounterHistory.count),
+                position: .top
+            ) {
+                showEncounterHistory = true
             }
-            .background(
-                Color(uiColor: .secondarySystemGroupedBackground),
-                in: RoundedRectangle(cornerRadius: 22)
-            )
-            .clipShape(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-            )
+
+            Divider()
+                .padding(.leading, 60)
+                .padding(.trailing, 20)
 
             ProfileOverviewRow(
-                title: Inc.NearbyProfile.blockedMenu.localized,
-                systemImage: "person.crop.circle.badge.xmark",
-                value: blockedProfilesStatusTitle,
-                position: .single
+                title: Inc.NearbyProfile.savedMenu.localized,
+                systemImage: "heart.fill",
+                value: savedProfilesStatusTitle,
+                position: .bottom
             ) {
-                showBlockedProfiles = true
+                showSavedProfiles = true
             }
-            .background(
-                Color(uiColor: .secondarySystemGroupedBackground),
-                in: RoundedRectangle(cornerRadius: 22)
-            )
-            .clipShape(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-            )
         }
+        .background(
+            Color(uiColor: .secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 22)
+        )
+        .clipShape(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
     }
 
     private var profileMenu: some View {
@@ -347,6 +329,19 @@ struct ProfileOverviewView: View {
                     .foregroundStyle(.primary)
             }
             .tint(.primary)
+
+            Button {
+                showBlockedProfiles = true
+            } label: {
+                Label(
+                    Inc.NearbyProfile.blockedMenu.localized,
+                    systemImage: "person.crop.circle.badge.xmark"
+                )
+                .foregroundStyle(.primary)
+            }
+            .tint(.primary)
+
+            Divider()
 
             Button(role: .destructive) {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -395,13 +390,6 @@ struct ProfileOverviewView: View {
         quickActions.hasEnabledActions
             ? Inc.Settings.statusOn.localized
             : Inc.Settings.statusOff.localized
-    }
-
-    private var blockedProfilesStatusTitle: String {
-        let count = peopleViewModel.blockedProfiles.count
-        return count == 0
-            ? Inc.NearbyProfile.noBlocked.localized
-            : String(count)
     }
 
     private var savedProfilesStatusTitle: String {
@@ -515,7 +503,7 @@ private struct ProfileOverviewRow: View {
             if let accentValue {
                 Text(accentValue)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(.purple)
                     .lineLimit(1)
             }
 

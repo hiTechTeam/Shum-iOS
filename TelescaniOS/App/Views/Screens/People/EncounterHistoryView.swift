@@ -144,6 +144,11 @@ struct EncounterHistoryView: View {
                 peopleViewModel.refreshEncounterHistory()
                 relativeTimeReference = Date()
             },
+            rowSurfaceColor: { encounter in
+                highlightedEncounterIDs.contains(encounter.id)
+                    ? Color.purple.opacity(0.16)
+                    : nil
+            },
             leadingActions: { _, _ in
                 [
                     .save(
@@ -222,13 +227,6 @@ struct EncounterHistoryView: View {
                 }
             )
             .environmentObject(peopleViewModel)
-            .background {
-                Color.green.opacity(
-                    highlightedEncounterIDs.contains(encounter.id)
-                        ? 0.16
-                        : 0
-                )
-            }
             .onAppear {
                 revealEncounterIfNeeded(encounter)
             }

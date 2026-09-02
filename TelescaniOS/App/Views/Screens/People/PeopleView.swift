@@ -17,13 +17,37 @@ struct PeopleView: View {
     @State private var showsSavedBlockInformation = false
     @State private var showsQuickBlockError = false
 
+    private var displayedUsers: [NearbyUser] {
+#if DEBUG
+        peopleViewModel.visibleUsers + Self.debugNearbyUsers
+#else
+        peopleViewModel.visibleUsers
+#endif
+    }
+
+#if DEBUG
+    private static let debugNearbyUsers: [NearbyUser] = (1...20).map {
+        index in
+        let suffix = String(format: "%012d", index)
+        return NearbyUser(
+            id: UUID(
+                uuidString: "DEB60000-0000-0000-0000-\(suffix)"
+            )!,
+            name: "Профиль \(index)",
+            username: "placeholder_\(index)",
+            bio: nil,
+            photoURL: nil
+        )
+    }
+#endif
+
     var body: some View {
         ZStack {
             Color.peopleListBackground
                 .ignoresSafeArea()
 
             if coordinator.isScaning {
-                if peopleViewModel.visibleUsers.isEmpty {
+                if displayedUsers.isEmpty {
                     GeometryReader { geometry in
                         ScrollView {
                             ContentUnavailableView(
@@ -43,7 +67,7 @@ struct PeopleView: View {
                     }
                 } else {
                     AdaptiveSystemSwipeList(
-                        items: peopleViewModel.visibleUsers,
+                        items: displayedUsers,
                         descriptionText: Inc.Scanning.listDescription.localized,
                         refreshAction: {
                             await peopleViewModel.refreshNearbyPeople()

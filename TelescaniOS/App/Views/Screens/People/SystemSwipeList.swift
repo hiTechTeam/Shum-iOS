@@ -238,10 +238,17 @@ where Item: SavedPeopleListItem, RowContent: View {
 
 private struct NativeSwipeInteractionRow<Content: View>: View {
     @State private var isSwipeActive = false
+    @State private var didBeginSwipe = false
+    @State private var suppressPersistentSurface = false
 
+    let persistentSurfaceColor: Color?
     let content: Content
 
-    init(@ViewBuilder content: () -> Content) {
+    init(
+        persistentSurfaceColor: Color? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.persistentSurfaceColor = persistentSurfaceColor
         self.content = content()
     }
 
@@ -255,23 +262,57 @@ private struct NativeSwipeInteractionRow<Content: View>: View {
             )
             .background {
                 if #available(iOS 26.0, *) {
-                    Color.profileRowSwipeSurface
-                        .opacity(isSwipeActive ? 1 : 0)
+                    activeSurfaceColor
+                        .opacity(isSurfaceVisible ? 1 : 0)
                         .clipShape(
                             RoundedRectangle(
-                                cornerRadius: 26,
+                                cornerRadius: didBeginSwipe ? 26 : 0,
                                 style: .continuous
                             )
                         )
+                } else if let visiblePersistentSurfaceColor {
+                    visiblePersistentSurfaceColor
+                }
 
+                if #available(iOS 26.0, *) {
                     NativeSwipeOffsetProbe(isActive: $isSwipeActive)
                         .allowsHitTesting(false)
                 }
             }
             .animation(
-                .easeOut(duration: isSwipeActive ? 0.16 : 0.5),
+                .easeOut(duration: isSwipeActive ? 0.16 : 0.3),
                 value: isSwipeActive
             )
+            .onChange(of: isSwipeActive) { wasActive, isActive in
+                if isActive {
+                    didBeginSwipe = true
+                } else if wasActive, persistentSurfaceColor != nil {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        suppressPersistentSurface = true
+                    }
+                }
+            }
+            .onChange(of: hasPersistentSurface) { _, hasSurface in
+                guard hasSurface, !isSwipeActive else { return }
+                didBeginSwipe = false
+                suppressPersistentSurface = false
+            }
+    }
+
+    private var hasPersistentSurface: Bool {
+        persistentSurfaceColor != nil
+    }
+
+    private var visiblePersistentSurfaceColor: Color? {
+        suppressPersistentSurface ? nil : persistentSurfaceColor
+    }
+
+    private var activeSurfaceColor: Color {
+        visiblePersistentSurfaceColor ?? .profileRowSwipeSurface
+    }
+
+    private var isSurfaceVisible: Bool {
+        visiblePersistentSurfaceColor != nil || isSwipeActive
     }
 }
 
@@ -303,11 +344,27 @@ private struct NativeSwipeOffsetProbe: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject {
+        private struct SwipeOffsets {
+            let model: CGFloat
+            let presentation: CGFloat
+
+            var visible: CGFloat {
+                max(model, presentation)
+            }
+
+            var isSettled: Bool {
+                model < 1 && presentation < 1
+            }
+        }
+
         var isActive: Binding<Bool>
 
         private weak var probeView: UIView?
         private var displayLink: CADisplayLink?
         private var restingOriginX: CGFloat?
+        private var previousOffset: CGFloat = 0
+        private var maximumOffset: CGFloat = 0
+        private var isReturning = false
 
         init(isActive: Binding<Bool>) {
             self.isActive = isActive
@@ -319,6 +376,9 @@ private struct NativeSwipeOffsetProbe: UIViewRepresentable {
             stop()
             probeView = view
             restingOriginX = nil
+            previousOffset = 0
+            maximumOffset = 0
+            isReturning = false
 
             let displayLink = CADisplayLink(
                 target: self,
@@ -337,6 +397,9 @@ private struct NativeSwipeOffsetProbe: UIViewRepresentable {
             displayLink?.invalidate()
             displayLink = nil
             restingOriginX = nil
+            previousOffset = 0
+            maximumOffset = 0
+            isReturning = false
         }
 
         @objc private func observeHorizontalOffset() {
@@ -346,21 +409,106 @@ private struct NativeSwipeOffsetProbe: UIViewRepresentable {
                 return
             }
 
-            let originX = probeView.convert(.zero, to: scrollView).x
+            let modelOriginX = probeView.convert(.zero, to: scrollView).x
 
             guard let restingOriginX else {
-                self.restingOriginX = originX
+                self.restingOriginX = modelOriginX
                 return
             }
 
-            let offset = abs(originX - restingOriginX)
+            let offsets = swipeOffsets(
+                for: probeView,
+                in: scrollView,
+                restingOriginX: restingOriginX
+            )
+            let offset = offsets.visible
+            let isTouchActive = hasActivePanGesture(from: probeView)
 
-            if offset > 4 {
-                setActive(true)
-            } else if offset < 1 {
-                self.restingOriginX = originX
+            if offsets.isSettled, !isTouchActive {
+                self.restingOriginX = modelOriginX
+                previousOffset = 0
+                maximumOffset = 0
+                isReturning = false
+                setActive(false)
+                return
+            }
+
+            if !isActive.wrappedValue {
+                if offset > 4, !isReturning || isTouchActive {
+                    isReturning = false
+                    maximumOffset = offset
+                    setActive(true)
+                }
+
+                previousOffset = offset
+                return
+            }
+
+            maximumOffset = max(maximumOffset, offset)
+
+            let hasStartedReturning = offsets.model < 1
+                && maximumOffset > 4
+                && offset < previousOffset - 0.5
+
+            if hasStartedReturning, !isTouchActive {
+                isReturning = true
                 setActive(false)
             }
+
+            previousOffset = offset
+        }
+
+        private func swipeOffsets(
+            for probeView: UIView,
+            in scrollView: UIScrollView,
+            restingOriginX: CGFloat
+        ) -> SwipeOffsets {
+            let modelOriginX = probeView.convert(.zero, to: scrollView).x
+            let modelOffset = abs(modelOriginX - restingOriginX)
+
+            guard let presentationLayer = probeView.layer.presentation()
+            else {
+                return SwipeOffsets(
+                    model: modelOffset,
+                    presentation: modelOffset
+                )
+            }
+
+            let scrollLayer = scrollView.layer.presentation()
+                ?? scrollView.layer
+            let presentationOriginX = presentationLayer.convert(
+                .zero,
+                to: scrollLayer
+            ).x
+
+            return SwipeOffsets(
+                model: modelOffset,
+                presentation: abs(presentationOriginX - restingOriginX)
+            )
+        }
+
+        private func hasActivePanGesture(from view: UIView) -> Bool {
+            var currentView: UIView? = view
+
+            while let candidate = currentView {
+                let hasActivePan = candidate.gestureRecognizers?.contains {
+                    recognizer in
+                    guard recognizer is UIPanGestureRecognizer else {
+                        return false
+                    }
+
+                    return recognizer.state == .began
+                        || recognizer.state == .changed
+                } ?? false
+
+                if hasActivePan {
+                    return true
+                }
+
+                currentView = candidate.superview
+            }
+
+            return false
         }
 
         private func enclosingScrollView(for view: UIView) -> UIScrollView? {
@@ -386,6 +534,7 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
     let reloadIdentifier: AnyHashable?
     let showsRowSeparators: Bool
     let refreshAction: () async -> Void
+    let rowSurfaceColor: (Item) -> Color?
     let leadingActions: (Item, Bool) -> [SystemSwipeAction]
     let trailingActions: (Item, Bool) -> [SystemSwipeAction]
     let rowContent: (Item, Bool) -> RowContent
@@ -396,6 +545,7 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
         reloadIdentifier: AnyHashable? = nil,
         showsRowSeparators: Bool = false,
         refreshAction: @escaping () async -> Void,
+        rowSurfaceColor: @escaping (Item) -> Color? = { _ in nil },
         leadingActions: @escaping (Item, Bool) -> [SystemSwipeAction] = {
             _, _ in []
         },
@@ -407,6 +557,7 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
         self.reloadIdentifier = reloadIdentifier
         self.showsRowSeparators = showsRowSeparators
         self.refreshAction = refreshAction
+        self.rowSurfaceColor = rowSurfaceColor
         self.leadingActions = leadingActions
         self.trailingActions = trailingActions
         self.rowContent = rowContent
@@ -431,7 +582,9 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
             ForEach(items) { item in
                 let isSaved = savedPeople.contains(item.id)
 
-                NativeSwipeInteractionRow {
+                NativeSwipeInteractionRow(
+                    persistentSurfaceColor: rowSurfaceColor(item)
+                ) {
                     rowContent(item, isSaved)
                 }
                     .listRowInsets(EdgeInsets())
