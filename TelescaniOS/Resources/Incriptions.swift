@@ -171,7 +171,7 @@ struct Inc {
         
         static let shortOnboardingMsg: String = "shortOnboardingMsg"
         // EN: Connect with people nearby you
-        // RU: Будь в коннекте с теми, кто рядом
+        // RU: В коннекте с теми, кто рядом
         
         static let start: String = "start"
         // EN: Get started with Telegram

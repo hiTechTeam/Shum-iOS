@@ -101,7 +101,7 @@
 "privacyPolicy" = "Privacy Policy";
 "termsOfService" = "Terms of Service";
 "continueHint" = "Opens the identity verification screen";
-"goNext" = "Next";
+"goNext" = "Got it";
 "go" = "Go";
 "confirmButton" = "Confirm";
 

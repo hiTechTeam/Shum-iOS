@@ -104,7 +104,7 @@ struct HowTelescanWorksView: View {
                     Spacer()
 
                     RegistrationPrimaryButton(
-                        title: Inc.Onboarding.start.localized,
+                        title: Inc.Onboarding.goNext.localized,
                         accentColor: accentColor
                     ) {
                         showIdentityVerification = true

@@ -95,13 +95,13 @@
 "welcome_title" = "Telescan";
 "poweredByTG" = "Работает от Telegram";
 "aboutOnBoardingMsg" = "Telescan позволяет быстро находить и обмениваться Telegram-профилями.";
-"shortOnboardingMsg" = "Будь в коннекте с теми, кто рядом";
+"shortOnboardingMsg" = "В коннекте с теми, кто рядом";
 "start" = "Продолжить";
 "legalAgreement" = "Продолжая, вы принимаете %@ и %@";
 "privacyPolicy" = "Политика конфиденциальности";
 "termsOfService" = "Условия использования";
 "continueHint" = "Открывает экран подтверждения личности";
-"goNext" = "Далее";
+"goNext" = "Понятно";
 "go" = "Начать";
 "confirmButton" = "Применить";
 
