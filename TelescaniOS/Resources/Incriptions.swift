@@ -155,17 +155,23 @@ struct Inc {
         static let appleIdentityDescription: String = "appleIdentityDescription"
         static let appleSignInButton: String = "appleSignInButton"
         static let appleSignInHint: String = "appleSignInHint"
+        static let howItWorksTitle: String = "howItWorksTitle"
+        static let nearbyFeatureTitle: String = "nearbyFeatureTitle"
+        static let nearbyFeatureDescription: String = "nearbyFeatureDescription"
+        static let profileFeatureTitle: String = "profileFeatureTitle"
+        static let profileFeatureDescription: String = "profileFeatureDescription"
+        static let telegramFeatureTitle: String = "telegramFeatureTitle"
+        static let telegramFeatureDescription: String = "telegramFeatureDescription"
         static let welcomeTitle: String = "welcome_title"
-        // EN: Welcome to Telescan
-        // RU: Добро пожаловать в Telescan
+        // EN/RU: Telescan
         
         static let aboutOnBoardingMsg: String = "aboutOnBoardingMsg"
         // EN: Telescan lets you instantly find and share profiles.
         // RU: Telescan позволяет быстро находить и обмениваться профилями.
         
         static let shortOnboardingMsg: String = "shortOnboardingMsg"
-        // EN: Share your Telegram with people around you
-        // RU: Делитесь Telegram с людьми рядом
+        // EN: Connect with people nearby you
+        // RU: Будь в коннекте с теми, кто рядом
         
         static let start: String = "start"
         // EN: Get started with Telegram

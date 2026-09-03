@@ -3,7 +3,7 @@ import SwiftUI
 struct Welcome: View {
 
     @Environment(\.colorScheme) private var colorScheme
-    @State private var showIdentityVerification = false
+    @State private var showHowItWorks = false
 
     private let referenceWidth: CGFloat = 390
     private let accentColor = Color(
@@ -110,10 +110,6 @@ struct Welcome: View {
                 .minimumScaleFactor(0.68)
                 .padding(.top, 15 * scale)
 
-            Text(Inc.Common.Telescan)
-                .font(.system(size: 36 * scale, weight: .heavy))
-                .padding(.top, 1 * scale)
-
             Text(Inc.Onboarding.shortOnboardingMsg.localized)
                 .font(.system(size: 17 * scale, weight: .regular))
                 .multilineTextAlignment(.center)
@@ -140,7 +136,7 @@ struct Welcome: View {
                     title: Inc.Onboarding.start.localized,
                     accentColor: accentColor
                 ) {
-                    showIdentityVerification = true
+                    showHowItWorks = true
                 }
             }
             .frame(height: 50)
@@ -182,8 +178,8 @@ struct Welcome: View {
             }
             .tint(accentColor)
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(isPresented: $showIdentityVerification) {
-                AppleIdentityVerificationView()
+            .navigationDestination(isPresented: $showHowItWorks) {
+                HowTelescanWorksView()
             }
         }
     }
