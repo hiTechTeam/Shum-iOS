@@ -300,6 +300,259 @@ struct FetchServiceTests {
         #expect(await validator.validate() == .unavailable)
     }
 
+    @Test("A first Telegram link picks up a photo that appears shortly afterward")
+    @MainActor
+    func firstTelegramLinkPollsForLatePhoto() async throws {
+        let defaults = UserDefaults.standard
+        clearStoredProfile()
+        ProfileImageStorage.delete()
+        defaults.removeObject(forKey: Keys.isReg.rawValue)
+        defaults.removeObject(forKey: Keys.isScaning.rawValue)
+
+        let sessions = AuthSessionStore(store: MemorySecureStore())
+        try sessions.saveAppleSession(testTokens(account: "late-photo"))
+        let profileID = UUID()
+        let profileWithoutPhoto = TelescanProfileResponse(
+            telescanId: profileID,
+            name: "Ada",
+            username: "ada",
+            photoUrl: nil,
+            telegramLinked: true
+        )
+        let photoURL = URL(string: "https://cdn.example/late-photo.png")!
+        let profileWithPhoto = TelescanProfileResponse(
+            telescanId: profileID,
+            name: "Ada",
+            username: "ada",
+            photoUrl: photoURL.absoluteString,
+            telegramLinked: true
+        )
+        var profileRequestCount = 0
+        let validator = SessionValidator {
+            profileRequestCount += 1
+            return profileRequestCount == 1
+                ? profileWithoutPhoto
+                : profileWithPhoto
+        }
+
+        let renderedImage = UIGraphicsImageRenderer(
+            size: CGSize(width: 2, height: 2)
+        ).image { context in
+            UIColor.blue.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }
+        let imageData = try #require(renderedImage.pngData())
+        MockURLProtocol.handler = { request in
+            #expect(request.url == photoURL)
+            return (200, imageData)
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let photoSession = URLSession(configuration: configuration)
+        let photoViewModel = ProfilePhotoViewModel(session: photoSession)
+        let codeViewModel = CodeViewModel()
+        codeViewModel.applyProfile(profileWithoutPhoto)
+        let peopleViewModel = PeopleViewModel(bleManager: FakeBLEManager())
+        var retryDelays: [UInt64] = []
+        let coordinator = AppCoordinator(
+            sessionValidator: validator,
+            authSession: sessions,
+            authCodeViewModel: codeViewModel,
+            peopleViewModel: peopleViewModel,
+            profilePhotoViewModel: photoViewModel,
+            bluetoothReset: { },
+            postLinkPhotoRetryDelays: [10, 20, 40],
+            postLinkPhotoRetrySleep: { retryDelays.append($0) }
+        )
+        defer {
+            peopleViewModel.stopAllBluetoothActivity()
+            photoSession.invalidateAndCancel()
+            MockURLProtocol.handler = nil
+            clearStoredProfile()
+            ProfileImageStorage.delete()
+            defaults.removeObject(forKey: Keys.isReg.rawValue)
+            defaults.removeObject(forKey: Keys.isScaning.rawValue)
+        }
+
+        coordinator.completedRegistration()
+        await coordinator.waitForPendingPostLinkPhotoRefresh()
+        await photoViewModel.waitForPendingPhotoLoad()
+
+        #expect(coordinator.isRegistered)
+        #expect(profileRequestCount == 2)
+        #expect(retryDelays == [10, 20])
+        #expect(codeViewModel.photoS3URL == photoURL.absoluteString)
+        #expect(photoViewModel.uiImage != nil)
+    }
+
+    @Test("A missing post-link photo uses a bounded retry schedule")
+    @MainActor
+    func firstTelegramLinkPhotoPollingIsBounded() async throws {
+        let defaults = UserDefaults.standard
+        clearStoredProfile()
+        ProfileImageStorage.delete()
+        defaults.removeObject(forKey: Keys.isReg.rawValue)
+        defaults.removeObject(forKey: Keys.isScaning.rawValue)
+
+        let sessions = AuthSessionStore(store: MemorySecureStore())
+        try sessions.saveAppleSession(testTokens(account: "no-photo"))
+        let profile = TelescanProfileResponse(
+            telescanId: UUID(),
+            name: "No Photo",
+            username: "no_photo",
+            photoUrl: nil,
+            telegramLinked: true
+        )
+        var profileRequestCount = 0
+        let validator = SessionValidator {
+            profileRequestCount += 1
+            return profile
+        }
+        let codeViewModel = CodeViewModel()
+        codeViewModel.applyProfile(profile)
+        let peopleViewModel = PeopleViewModel(bleManager: FakeBLEManager())
+        let photoViewModel = ProfilePhotoViewModel()
+        var retryDelays: [UInt64] = []
+        let coordinator = AppCoordinator(
+            sessionValidator: validator,
+            authSession: sessions,
+            authCodeViewModel: codeViewModel,
+            peopleViewModel: peopleViewModel,
+            profilePhotoViewModel: photoViewModel,
+            bluetoothReset: { },
+            postLinkPhotoRetrySleep: { retryDelays.append($0) }
+        )
+        defer {
+            peopleViewModel.stopAllBluetoothActivity()
+            clearStoredProfile()
+            ProfileImageStorage.delete()
+            defaults.removeObject(forKey: Keys.isReg.rawValue)
+            defaults.removeObject(forKey: Keys.isScaning.rawValue)
+        }
+
+        coordinator.completedRegistration()
+        await coordinator.waitForPendingPostLinkPhotoRefresh()
+
+        #expect(profileRequestCount == 5)
+        #expect(
+            retryDelays == [
+                500_000_000,
+                1_000_000_000,
+                2_000_000_000,
+                4_000_000_000,
+                8_000_000_000
+            ]
+        )
+        #expect(codeViewModel.photoS3URL == nil)
+        #expect(photoViewModel.uiImage == nil)
+    }
+
+    @Test("A late post-link photo response cannot cross an account switch")
+    @MainActor
+    func latePostLinkPhotoCannotCrossAccountSwitch() async throws {
+        let defaults = UserDefaults.standard
+        clearStoredProfile()
+        ProfileImageStorage.delete()
+        defaults.removeObject(forKey: Keys.isReg.rawValue)
+        defaults.removeObject(forKey: Keys.isScaning.rawValue)
+
+        let sessions = AuthSessionStore(store: MemorySecureStore())
+        try sessions.saveAppleSession(testTokens(account: "account-a"))
+        let accountAProfile = TelescanProfileResponse(
+            telescanId: UUID(),
+            name: "Account A",
+            username: "account_a",
+            photoUrl: nil,
+            telegramLinked: true
+        )
+        let accountBProfile = TelescanProfileResponse(
+            telescanId: UUID(),
+            name: "Account B",
+            username: nil,
+            photoUrl: nil,
+            telegramLinked: false
+        )
+        var lateProfileContinuation:
+            CheckedContinuation<TelescanProfileResponse, Never>?
+        var lateValidationCompleted = false
+        let validator = SessionValidator {
+            let profile = await withCheckedContinuation {
+                lateProfileContinuation = $0
+            }
+            lateValidationCompleted = true
+            return profile
+        }
+
+        let renderedImage = UIGraphicsImageRenderer(
+            size: CGSize(width: 2, height: 2)
+        ).image { context in
+            UIColor.red.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }
+        let imageData = try #require(renderedImage.pngData())
+        MockURLProtocol.handler = { _ in (200, imageData) }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let photoSession = URLSession(configuration: configuration)
+        let photoViewModel = ProfilePhotoViewModel(session: photoSession)
+        let codeViewModel = CodeViewModel()
+        codeViewModel.applyProfile(accountAProfile)
+        let peopleViewModel = PeopleViewModel(bleManager: FakeBLEManager())
+        let coordinator = AppCoordinator(
+            sessionValidator: validator,
+            authSession: sessions,
+            authCodeViewModel: codeViewModel,
+            peopleViewModel: peopleViewModel,
+            profilePhotoViewModel: photoViewModel,
+            logoutAction: { _ in },
+            bluetoothReset: { },
+            postLinkPhotoRetryDelays: [1],
+            postLinkPhotoRetrySleep: { _ in }
+        )
+        defer {
+            peopleViewModel.stopAllBluetoothActivity()
+            photoSession.invalidateAndCancel()
+            MockURLProtocol.handler = nil
+            clearStoredProfile()
+            ProfileImageStorage.delete()
+            defaults.removeObject(forKey: Keys.isReg.rawValue)
+            defaults.removeObject(forKey: Keys.isScaning.rawValue)
+        }
+
+        coordinator.completedRegistration()
+        while lateProfileContinuation == nil {
+            await Task.yield()
+        }
+
+        try await coordinator.logoutCurrentSession()
+        try sessions.saveAppleSession(testTokens(account: "account-b"))
+        coordinator.completedAppleSignIn(profile: accountBProfile)
+
+        lateProfileContinuation?.resume(
+            returning: TelescanProfileResponse(
+                telescanId: accountAProfile.telescanId,
+                name: "Late Account A",
+                username: "late_account_a",
+                photoUrl: "https://cdn.example/account-a.png",
+                telegramLinked: true
+            )
+        )
+        lateProfileContinuation = nil
+        while !lateValidationCompleted {
+            await Task.yield()
+        }
+        await Task.yield()
+        await photoViewModel.waitForPendingPhotoLoad()
+
+        #expect(codeViewModel.telescanID == accountBProfile.telescanId)
+        #expect(codeViewModel.tgName == accountBProfile.name)
+        #expect(codeViewModel.photoS3URL == nil)
+        #expect(photoViewModel.uiImage == nil)
+        #expect(coordinator.isAuthenticated)
+        #expect(!coordinator.isRegistered)
+        #expect(sessions.hasPrimarySession)
+    }
+
     @Test("Installation device ID is stable and not hardware-derived")
     func stableInstallationID() throws {
         let store = MemorySecureStore()

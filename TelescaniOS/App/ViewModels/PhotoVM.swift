@@ -12,12 +12,14 @@ final class ProfilePhotoViewModel: ObservableObject {
     @Published var profileImage: Image = .noPhoto
     @Published var uiImage: UIImage?
     private let photoS3UrlKey = "photoS3Url"
+    private let session: URLSession
 
     private var photoLoadTask: Task<Void, Never>?
     private var profileUpdateTask: Task<Void, Never>?
     private var stateGeneration = UUID()
 
-    init() {
+    init(session: URLSession = .shared) {
+        self.session = session
         loadPhotoIfNeeded()
     }
 
@@ -111,6 +113,11 @@ final class ProfilePhotoViewModel: ObservableObject {
                 )
             }
         }
+    }
+
+    func waitForPendingPhotoLoad() async {
+        let task = photoLoadTask
+        await task?.value
     }
 
     func updateProfileImage(with newImage: UIImage?) {
@@ -226,7 +233,7 @@ final class ProfilePhotoViewModel: ObservableObject {
             forHTTPHeaderField: "Cache-Control"
         )
 
-        let (data, response) = try await URLSession.shared.data(
+        let (data, response) = try await session.data(
             for: request
         )
 

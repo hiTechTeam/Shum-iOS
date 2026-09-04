@@ -8,9 +8,12 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     private let sessionValidator: SessionValidator
     private let logoutAction: @MainActor (String) async throws -> Void
     private let bluetoothReset: @MainActor () -> Void
+    private let postLinkPhotoRetryDelays: [UInt64]
+    private let postLinkPhotoRetrySleep: @MainActor (UInt64) async throws -> Void
     private var isValidatingSession = false
     private var hasStartedInitialSessionRefresh = false
     private var sessionGeneration = UUID()
+    private var postLinkPhotoRefreshTask: Task<Void, Never>?
 
     @Published var isRegistered: Bool
     @Published private(set) var isAuthenticated: Bool
@@ -36,12 +39,25 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         },
         bluetoothReset: @escaping @MainActor () -> Void = {
             BLEManager.shared.reset()
-        }
+        },
+        postLinkPhotoRetryDelays: [UInt64] = [
+            500_000_000,
+            1_000_000_000,
+            2_000_000_000,
+            4_000_000_000,
+            8_000_000_000
+        ],
+        postLinkPhotoRetrySleep: @escaping @MainActor (UInt64) async throws
+            -> Void = {
+                try await Task.sleep(nanoseconds: $0)
+            }
     ) {
         self.authSession = authSession
         self.sessionValidator = sessionValidator ?? SessionValidator()
         self.logoutAction = logoutAction
         self.bluetoothReset = bluetoothReset
+        self.postLinkPhotoRetryDelays = postLinkPhotoRetryDelays
+        self.postLinkPhotoRetrySleep = postLinkPhotoRetrySleep
         self.authCodeViewModel = authCodeViewModel ?? CodeViewModel()
         self.peopleViewModel = peopleViewModel ?? PeopleViewModel()
         self.profilePhotoViewModel = profilePhotoViewModel
@@ -104,6 +120,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         isRegistered = true
         UserDefaults.standard.set(true, forKey: regKey)
         profilePhotoViewModel.loadPhotoFromURL(authCodeViewModel.photoS3URL)
+        startPostLinkPhotoRefreshIfNeeded()
         setScanning(true)
         updateApplicationState(isActive: true)
     }
@@ -167,6 +184,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             return
         }
         let generation = sessionGeneration
+        let credentialGeneration = authSession.credentialGeneration
         isValidatingSession = true
         defer {
             if generation == sessionGeneration {
@@ -175,10 +193,14 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         }
 
         let validation = await sessionValidator.validate()
-        guard generation == sessionGeneration else { return }
+        guard generation == sessionGeneration,
+              credentialGeneration == authSession.credentialGeneration else {
+            return
+        }
         switch validation {
         case .active(let profile):
             authCodeViewModel.applyProfile(profile)
+            profilePhotoViewModel.loadPhotoFromURL(profile.photoUrl)
             if !isRegistered {
                 completedRegistration()
             }
@@ -189,6 +211,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             }
         case .telegramLinkRequired(let profile):
             authCodeViewModel.applyProfile(profile)
+            profilePhotoViewModel.loadPhotoFromURL(profile.photoUrl)
             isRegistered = false
             UserDefaults.standard.set(false, forKey: regKey)
         case .invalid:
@@ -211,6 +234,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         }
         AccountSessionGeneration.shared.advance()
         sessionGeneration = UUID()
+        postLinkPhotoRefreshTask?.cancel()
+        postLinkPhotoRefreshTask = nil
         isValidatingSession = false
         peopleViewModel.resetAccountScopedState()
         bluetoothReset()
@@ -227,6 +252,60 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         isRegistered = false
         authenticationFlowID = UUID()
         return true
+    }
+
+    private func startPostLinkPhotoRefreshIfNeeded() {
+        postLinkPhotoRefreshTask?.cancel()
+        postLinkPhotoRefreshTask = nil
+
+        guard authCodeViewModel.photoS3URL == nil,
+              !postLinkPhotoRetryDelays.isEmpty else {
+            return
+        }
+
+        let coordinatorGeneration = sessionGeneration
+        let credentialGeneration = authSession.credentialGeneration
+        let accountGeneration = AccountSessionGeneration.shared.value
+        let retryDelays = postLinkPhotoRetryDelays
+        let retrySleep = postLinkPhotoRetrySleep
+
+        postLinkPhotoRefreshTask = Task { [weak self] in
+            for delay in retryDelays {
+                do {
+                    try await retrySleep(delay)
+                } catch {
+                    return
+                }
+
+                guard !Task.isCancelled,
+                      let self,
+                      coordinatorGeneration == self.sessionGeneration,
+                      credentialGeneration
+                        == self.authSession.credentialGeneration,
+                      accountGeneration == AccountSessionGeneration.shared.value else {
+                    return
+                }
+
+                await self.refreshSession()
+
+                guard !Task.isCancelled,
+                      coordinatorGeneration == self.sessionGeneration,
+                      credentialGeneration
+                        == self.authSession.credentialGeneration,
+                      accountGeneration == AccountSessionGeneration.shared.value else {
+                    return
+                }
+
+                if self.authCodeViewModel.photoS3URL != nil {
+                    return
+                }
+            }
+        }
+    }
+
+    func waitForPendingPostLinkPhotoRefresh() async {
+        let task = postLinkPhotoRefreshTask
+        await task?.value
     }
 
     func updateApplicationState(isActive: Bool) {
