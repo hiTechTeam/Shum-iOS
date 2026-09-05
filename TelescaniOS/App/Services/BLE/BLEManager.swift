@@ -182,6 +182,13 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     private var peripheralResolutionServices: [UUID: ObjectIdentifier] = [:]
     private var peripheralReadCharacteristics: [UUID: ObjectIdentifier] = [:]
     private var peripheralWriteCharacteristics: [UUID: ObjectIdentifier] = [:]
+    private var recentPeripherals: [UUID: (
+        peripheral: CBPeripheral,
+        lastSeenAt: Date,
+        rssi: Int
+    )] = [:]
+    private var backgroundConnectionIDs: Set<UUID> = []
+    private var backgroundConnectedPeripherals: [UUID: CBPeripheral] = [:]
     private var devicesLastSeen: [String: Date] = [:]
     private var servicePublicationEpochs: [ObjectIdentifier: UUID] = [:]
     private var advertisingEpochTracker = BLESingleFlightEpochTracker()
@@ -189,6 +196,9 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     private let foregroundIdentityResolutionTimeout: TimeInterval = 8
     private let identityRetryDelay: TimeInterval = 3
     private let identityRevalidationInterval: TimeInterval = 30
+    private let recentPeripheralMaximumAge: TimeInterval = 15 * 60
+    private let recentPeripheralCapacity = 16
+    private let backgroundConnectionLimit = 4
     private var isApplicationActive = false
     private var cleanupTimer: DispatchSourceTimer?
 
@@ -366,8 +376,13 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     public func setApplicationActive(_ isActive: Bool) {
         queue.async { [weak self] in
             guard let self else { return }
+            let applicationStateChanged = self.isApplicationActive != isActive
             self.isApplicationActive = isActive
             if isActive {
+                self.releaseBackgroundConnections()
+                if applicationStateChanged {
+                    self.restartScanningForApplicationState()
+                }
                 self.reconcileWithPersistedState()
                 for id in self.resolvingPeripheralIDs {
                     guard let peripheral = self.discoveredPeripherals[id] else {
@@ -378,6 +393,10 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
                 self.removeExpiredDevices()
             } else {
                 self.identityResolutionTimeoutGenerations.removeAll()
+                if applicationStateChanged {
+                    self.restartScanningForApplicationState()
+                }
+                self.armBackgroundConnections()
             }
         }
     }
@@ -398,6 +417,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             self.identityResolutionFailures.removeAll()
             self.retryNotBefore.removeAll()
             self.identityResolutionTimeoutGenerations.removeAll()
+            self.recentPeripherals.removeAll()
             self.devicesLastSeen.removeAll()
 
             self.clearPublishedServiceState()
@@ -429,11 +449,20 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         centralManager.scanForPeripherals(
             withServices: [serviceUUID],
             options: [
-                CBCentralManagerScanOptionAllowDuplicatesKey: true
+                CBCentralManagerScanOptionAllowDuplicatesKey:
+                    isApplicationActive
             ]
         )
 
         logger.info("Scanning started")
+    }
+
+    private func restartScanningForApplicationState() {
+        guard shouldScan, centralManager.state == .poweredOn else { return }
+        if centralManager.isScanning {
+            centralManager.stopScan()
+        }
+        startScanningIfPossible()
     }
 
     private func stopScanningNow(clearPresence shouldClearPresence: Bool) {
@@ -441,7 +470,11 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
            centralManager.isScanning {
             centralManager.stopScan()
         }
+        releaseBackgroundConnections()
         cancelIdentityResolutions()
+        if !shouldScan {
+            recentPeripherals.removeAll()
+        }
         if shouldClearPresence {
             clearPresence(notify: true)
         }
@@ -455,6 +488,137 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             return
         }
         centralManager.cancelPeripheralConnection(peripheral)
+    }
+
+    private func recordRecentPeripheral(
+        _ peripheral: CBPeripheral,
+        rssi: Int,
+        at date: Date = Date()
+    ) {
+        recentPeripherals[peripheral.identifier] = (
+            peripheral: peripheral,
+            lastSeenAt: date,
+            rssi: rssi
+        )
+
+        guard recentPeripherals.count > recentPeripheralCapacity else { return }
+        let overflow = recentPeripherals.count - recentPeripheralCapacity
+        for entry in recentPeripherals
+            .sorted(by: { $0.value.lastSeenAt < $1.value.lastSeenAt })
+            .prefix(overflow) {
+            recentPeripherals.removeValue(forKey: entry.key)
+        }
+    }
+
+    private func armBackgroundConnections() {
+        guard !isApplicationActive,
+              shouldScan,
+              centralManager.state == .poweredOn,
+              let eventEpoch = currentDiscoveryEventEpoch() else { return }
+
+        let connectedIDs = Set(backgroundConnectedPeripherals.keys)
+        let availableSlots = max(
+            0,
+            backgroundConnectionLimit - connectedIDs.count
+        )
+        guard availableSlots > 0 else { return }
+
+        let candidateIDs = BLEBackgroundReconnectPolicy.candidateIDs(
+            lastSeenAt: recentPeripherals.mapValues(\.lastSeenAt),
+            excluding: connectedIDs,
+            now: Date(),
+            maximumAge: recentPeripheralMaximumAge,
+            limit: availableSlots
+        )
+        backgroundConnectionIDs.formUnion(candidateIDs)
+
+        for id in candidateIDs {
+            guard let recent = recentPeripherals[id],
+                  peripheralIdentities[id] != currentIdentity,
+                  !resolvingPeripheralIDs.contains(id) else {
+                continue
+            }
+            connectAndReadIdentity(
+                peripheral: recent.peripheral,
+                rssi: recent.rssi,
+                eventEpoch: eventEpoch
+            )
+        }
+
+        if !candidateIDs.isEmpty {
+            logger.info(
+                "Armed \(candidateIDs.count) background BLE connection(s)"
+            )
+        }
+    }
+
+    private func retainBackgroundConnectionIfNeeded(
+        _ peripheral: CBPeripheral,
+        peerIdentity: UUID
+    ) -> Bool {
+        let id = peripheral.identifier
+        guard !isApplicationActive,
+              shouldScan,
+              backgroundConnectionIDs.contains(id),
+              let localIdentity = currentIdentity.flatMap(UUID.init(uuidString:)),
+              BLEBackgroundReconnectPolicy.shouldRetainConnection(
+                localIdentity: localIdentity,
+                peerIdentity: peerIdentity
+              ),
+              discoveredPeripherals[id] === peripheral,
+              peripheralEpochTracker.origin(for: id) != nil else {
+            backgroundConnectionIDs.remove(id)
+            return false
+        }
+
+        _ = peripheralEpochTracker.complete(peripheralID: id)
+        deferredPeripheralResolutions.removeValue(forKey: id)
+        resolvingPeripheralIDs.remove(id)
+        discoveredPeripherals.removeValue(forKey: id)
+        peripheralRSSI.removeValue(forKey: id)
+        peripheralResolutionServices.removeValue(forKey: id)
+        peripheralReadCharacteristics.removeValue(forKey: id)
+        peripheralWriteCharacteristics.removeValue(forKey: id)
+        peripheralFinishShouldRetry.removeValue(forKey: id)
+        identityResolutionTimeoutGenerations.removeValue(forKey: id)
+        retryNotBefore.removeValue(forKey: id)
+        identityResolutionFailures.removeValue(forKey: id)
+        backgroundConnectedPeripherals[id] = peripheral
+        logger.info("Retaining BLE link for background wake-on-proximity")
+        return true
+    }
+
+    private func releaseBackgroundConnections() {
+        let connections = Array(backgroundConnectedPeripherals.values)
+        backgroundConnectedPeripherals.removeAll()
+        backgroundConnectionIDs.removeAll()
+        for peripheral in connections {
+            cancelPeripheralConnectionIfPossible(peripheral)
+        }
+    }
+
+    private func rearmBackgroundConnectionIfNeeded(
+        _ peripheral: CBPeripheral
+    ) -> Bool {
+        let id = peripheral.identifier
+        guard !isApplicationActive,
+              shouldScan,
+              backgroundConnectionIDs.contains(id),
+              let recent = recentPeripherals[id],
+              let eventEpoch = currentDiscoveryEventEpoch() else {
+            backgroundConnectedPeripherals.removeValue(forKey: id)
+            backgroundConnectionIDs.remove(id)
+            return false
+        }
+
+        backgroundConnectedPeripherals.removeValue(forKey: id)
+        connectAndReadIdentity(
+            peripheral: peripheral,
+            rssi: recent.rssi,
+            eventEpoch: eventEpoch
+        )
+        logger.info("Rearmed pending BLE connection in the background")
+        return true
     }
 
     private func acceptedEpoch(
@@ -987,6 +1151,7 @@ extension BLEManager: CBCentralManagerDelegate {
         switch central.state {
         case .poweredOn:
             startScanningIfPossible()
+            armBackgroundConnections()
 
         case .poweredOff,
              .unauthorized,
@@ -1010,6 +1175,7 @@ extension BLEManager: CBCentralManagerDelegate {
         guard shouldScan,
               let eventEpoch = currentDiscoveryEventEpoch() else { return }
         let rssi = RSSI.intValue
+        recordRecentPeripheral(peripheral, rssi: rssi)
 
         logger.debug(
             "Discovered peripheral=\(peripheral.identifier), rssi=\(rssi), advertisement=\(advertisementData)"
@@ -1095,6 +1261,10 @@ extension BLEManager: CBCentralManagerDelegate {
             "Disconnected peripheral: \(peripheral.identifier)"
         )
 
+        if rearmBackgroundConnectionIfNeeded(peripheral) {
+            return
+        }
+
         completeIdentityResolution(
             peripheral,
             terminalRetryDefault: shouldScan
@@ -1121,6 +1291,8 @@ extension BLEManager: CBCentralManagerDelegate {
                       let eventEpoch = currentDiscoveryEventEpoch() else {
                     continue
                 }
+                recordRecentPeripheral(peripheral, rssi: -100)
+                backgroundConnectionIDs.insert(peripheral.identifier)
                 switch peripheral.state {
                 case .connected, .disconnected, .connecting, .disconnecting:
                     connectAndReadIdentity(
@@ -1247,8 +1419,13 @@ extension BLEManager: CBPeripheralDelegate {
             eventEpoch: eventEpoch
         )
 
-        guard identity.uuidString.lowercased() != currentIdentity,
-              let localIdentity = currentIdentity.flatMap(UUID.init(uuidString:)),
+        guard identity.uuidString.lowercased() != currentIdentity else {
+            backgroundConnectionIDs.remove(id)
+            finishIdentityResolution(peripheral, shouldRetry: false)
+            return
+        }
+
+        guard let localIdentity = currentIdentity.flatMap(UUID.init(uuidString:)),
               let localIdentityData = Self.encodedPeerIdentityWrite(
                   localIdentity,
                   rssi: rssi
@@ -1258,6 +1435,12 @@ extension BLEManager: CBPeripheralDelegate {
                     $0.uuid == peerIdentityWriteCharacteristicUUID
                         && $0.properties.contains(.write)
                 }) else {
+            if retainBackgroundConnectionIfNeeded(
+                peripheral,
+                peerIdentity: identity
+            ) {
+                return
+            }
             finishIdentityResolution(peripheral, shouldRetry: false)
             return
         }
@@ -1290,6 +1473,14 @@ extension BLEManager: CBPeripheralDelegate {
             )
         } else {
             logger.info("Peer identity handshake completed")
+            if let peerIdentity = peripheralIdentities[id]
+                .flatMap(UUID.init(uuidString:)),
+               retainBackgroundConnectionIfNeeded(
+                    peripheral,
+                    peerIdentity: peerIdentity
+               ) {
+                return
+            }
         }
 
         finishIdentityResolution(peripheral, shouldRetry: false)

@@ -172,6 +172,55 @@ struct BLEManagerTests {
         #expect(currentValueAccepted)
     }
 
+    @Test("Background reconnects prefer recent, eligible peripherals.")
+    func backgroundReconnectCandidateSelection() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let newest = UUID()
+        let secondNewest = UUID()
+        let excluded = UUID()
+        let stale = UUID()
+
+        let selected = BLEBackgroundReconnectPolicy.candidateIDs(
+            lastSeenAt: [
+                newest: now.addingTimeInterval(-5),
+                secondNewest: now.addingTimeInterval(-10),
+                excluded: now.addingTimeInterval(-1),
+                stale: now.addingTimeInterval(-901)
+            ],
+            excluding: [excluded],
+            now: now,
+            maximumAge: 900,
+            limit: 2
+        )
+
+        #expect(selected == [newest, secondNewest])
+    }
+
+    @Test("Only one phone retains a symmetric background BLE link.")
+    func backgroundLinkOwnershipIsDeterministic() {
+        let first = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        let second = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+
+        #expect(
+            BLEBackgroundReconnectPolicy.shouldRetainConnection(
+                localIdentity: first,
+                peerIdentity: second
+            )
+        )
+        #expect(
+            !BLEBackgroundReconnectPolicy.shouldRetainConnection(
+                localIdentity: second,
+                peerIdentity: first
+            )
+        )
+        #expect(
+            !BLEBackgroundReconnectPolicy.shouldRetainConnection(
+                localIdentity: first,
+                peerIdentity: first
+            )
+        )
+    }
+
     @Test("reset() clean active operations and allows you to start over.")
     func resetClearsActiveOperations() async throws {
         let manager = BLEManager.shared
