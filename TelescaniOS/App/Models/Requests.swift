@@ -42,7 +42,7 @@ enum ReportCommentValidationError: Error, Equatable {
 }
 
 enum ReportCommentPolicy {
-    static let maximumLength = 500
+    static let maximumLength = 120
 
     static func normalized(_ value: String?) throws -> String? {
         guard let value else { return nil }

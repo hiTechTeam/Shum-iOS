@@ -621,7 +621,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
 }
 
 private struct ProfileModerationDialogModifier: ViewModifier {
-    private enum ModerationAlert: Identifiable {
+    private enum ModerationAlert: Identifiable, Equatable {
         case reportConfirmation
         case error
 
@@ -678,9 +678,9 @@ private struct ProfileModerationDialogModifier: ViewModifier {
         )
     }
 
-    private var isModerationAlertPresented: Binding<Bool> {
+    private var isReportConfirmationPresented: Binding<Bool> {
         Binding(
-            get: { moderationAlert != nil },
+            get: { moderationAlert == .reportConfirmation },
             set: { isPresented in
                 if !isPresented {
                     moderationAlert = nil
@@ -697,33 +697,31 @@ private struct ProfileModerationDialogModifier: ViewModifier {
         )
     }
 
-    private var moderationAlertTitle: String {
-        switch moderationAlert {
-        case .reportConfirmation:
-            Inc.NearbyProfile.reportConfirmTitle.localized
-        case .error:
-            Inc.NearbyProfile.actionFailedTitle.localized
-        case nil:
-            ""
-        }
-    }
-
-    private var moderationAlertMessage: String {
-        switch moderationAlert {
-        case .reportConfirmation:
-            "\(Inc.NearbyProfile.reportDetailsMessage.localized)\n"
-                + "\(reportDetails.count)/"
-                + "\(ReportCommentPolicy.maximumLength)"
-        case .error:
-            Inc.NearbyProfile.actionFailedMessage.localized
-        case nil:
-            ""
-        }
+    private var isErrorAlertPresented: Binding<Bool> {
+        Binding(
+            get: { moderationAlert == .error },
+            set: { isPresented in
+                if !isPresented {
+                    moderationAlert = nil
+                    if !isSubmitting {
+                        activeUser = nil
+                        activeAccountGeneration = nil
+                        presentationToken = nil
+                        reportDetails = ""
+                        reportRequestID = nil
+                        hasSubmittedReport = false
+                    }
+                }
+            }
+        )
     }
 
     func body(content: Content) -> some View {
         content
-            .sheet(isPresented: isBlockDialogPresented) {
+            .sheet(
+                isPresented: isBlockDialogPresented,
+                onDismiss: finishOpeningReport
+            ) {
                 if let activeUser {
                     ProfileBlockOptionsSheet(
                         user: activeUser,
@@ -735,13 +733,33 @@ private struct ProfileModerationDialogModifier: ViewModifier {
                     .presentationDragIndicator(.hidden)
                 }
             }
+            .background {
+                ReportCommentAlertPresenter(
+                    isPresented: isReportConfirmationPresented,
+                    text: reportDetailsBinding,
+                    maximumLength: ReportCommentPolicy.maximumLength,
+                    title: Inc.NearbyProfile.reportConfirmTitle.localized,
+                    message: Inc.NearbyProfile.reportDetailsMessage.localized,
+                    placeholder: Inc.NearbyProfile
+                        .reportDetailsPlaceholder.localized,
+                    cancelTitle: Inc.Common.cancel.localized,
+                    submitTitle: Inc.NearbyProfile.reportSend.localized,
+                    onSubmit: submitReportAndBlock
+                )
+                .frame(width: 0, height: 0)
+            }
             .alert(
-                moderationAlertTitle,
-                isPresented: isModerationAlertPresented
+                Inc.NearbyProfile.actionFailedTitle.localized,
+                isPresented: isErrorAlertPresented
             ) {
-                moderationAlertActions
+                Button(Inc.Common.cancel.localized, role: .cancel) {
+                    cancel()
+                }
+                Button(Inc.NearbyProfile.retry.localized) {
+                    retryFailedOperation()
+                }
             } message: {
-                Text(moderationAlertMessage)
+                Text(Inc.NearbyProfile.actionFailedMessage.localized)
             }
             .onChange(of: request?.id) { _, _ in
                 guard let request else { return }
@@ -789,49 +807,27 @@ private struct ProfileModerationDialogModifier: ViewModifier {
             }
     }
 
-    @ViewBuilder
-    private var moderationAlertActions: some View {
-        switch moderationAlert {
-        case .reportConfirmation:
-            TextField(
-                Inc.NearbyProfile.reportDetailsPlaceholder.localized,
-                text: reportDetailsBinding
-            )
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-            Button(Inc.NearbyProfile.reportSend.localized, role: .destructive) {
-                submitReportAndBlock()
-            }
-        case .error:
-            Button(Inc.Common.cancel.localized, role: .cancel) {
-                cancel()
-            }
-            Button(Inc.NearbyProfile.retry.localized) {
-                retryFailedOperation()
-            }
-        case nil:
-            EmptyView()
-        }
-    }
-
     private func openReport() {
         isOpeningReport = true
-        showsBlockOptions = false
         reportDetails = ""
         reportRequestID = UUID()
         hasSubmittedReport = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            guard activeUser != nil,
-                  let activeAccountGeneration,
-                  peopleViewModel.isCurrentAccountStateGeneration(
-                    activeAccountGeneration
-                  ) else {
-                isOpeningReport = false
-                cancel()
-                return
-            }
-            moderationAlert = .reportConfirmation
+        showsBlockOptions = false
+    }
+
+    private func finishOpeningReport() {
+        guard isOpeningReport else { return }
+        guard activeUser != nil,
+              let activeAccountGeneration,
+              peopleViewModel.isCurrentAccountStateGeneration(
+                activeAccountGeneration
+              ) else {
             isOpeningReport = false
+            cancel()
+            return
         }
+        moderationAlert = .reportConfirmation
+        isOpeningReport = false
     }
 
     private func submitReportAndBlock() {
@@ -953,6 +949,169 @@ private struct ProfileModerationDialogModifier: ViewModifier {
         presentationToken = nil
         reportRequestID = nil
         hasSubmittedReport = false
+    }
+}
+
+private struct ReportCommentAlertPresenter: UIViewControllerRepresentable {
+    @Binding var isPresented: Bool
+    @Binding var text: String
+
+    let maximumLength: Int
+    let title: String
+    let message: String
+    let placeholder: String
+    let cancelTitle: String
+    let submitTitle: String
+    let onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        let viewController = UIViewController()
+        viewController.view.backgroundColor = .clear
+        return viewController
+    }
+
+    func updateUIViewController(
+        _ viewController: UIViewController,
+        context: Context
+    ) {
+        context.coordinator.parent = self
+        if isPresented {
+            context.coordinator.presentIfNeeded(from: viewController)
+        } else {
+            context.coordinator.dismissIfNeeded()
+        }
+    }
+
+    static func dismantleUIViewController(
+        _ viewController: UIViewController,
+        coordinator: Coordinator
+    ) {
+        coordinator.dismissIfNeeded(animated: false)
+    }
+
+    final class Coordinator: NSObject {
+        var parent: ReportCommentAlertPresenter
+
+        private weak var alertController: UIAlertController?
+        private var isPresentationScheduled = false
+
+        init(parent: ReportCommentAlertPresenter) {
+            self.parent = parent
+        }
+
+        func presentIfNeeded(from host: UIViewController) {
+            if let alertController {
+                synchronize(alertController)
+                return
+            }
+            guard !isPresentationScheduled else { return }
+            isPresentationScheduled = true
+
+            DispatchQueue.main.async { [weak self, weak host] in
+                guard let self, let host else { return }
+                self.isPresentationScheduled = false
+                guard self.parent.isPresented,
+                      let rootViewController = host.view.window?
+                        .rootViewController else { return }
+                self.presentAlert(
+                    from: self.topViewController(from: rootViewController)
+                )
+            }
+        }
+
+        func dismissIfNeeded(animated: Bool = true) {
+            guard let alertController else { return }
+            alertController.dismiss(animated: animated)
+            self.alertController = nil
+        }
+
+        private func presentAlert(from presenter: UIViewController) {
+            guard alertController == nil else { return }
+            let alertController = UIAlertController(
+                title: parent.title,
+                message: alertMessage(for: parent.text.count),
+                preferredStyle: .alert
+            )
+            alertController.addTextField { [weak self] textField in
+                guard let self else { return }
+                textField.placeholder = self.parent.placeholder
+                textField.text = self.parent.text
+                textField.clearButtonMode = .whileEditing
+                textField.addTarget(
+                    self,
+                    action: #selector(self.reportTextDidChange(_:)),
+                    for: .editingChanged
+                )
+            }
+            alertController.addAction(
+                UIAlertAction(
+                    title: parent.cancelTitle,
+                    style: .cancel
+                ) { [weak self] _ in
+                    guard let self else { return }
+                    self.alertController = nil
+                    self.parent.isPresented = false
+                }
+            )
+            alertController.addAction(
+                UIAlertAction(
+                    title: parent.submitTitle,
+                    style: .destructive
+                ) { [weak self] _ in
+                    guard let self else { return }
+                    self.alertController = nil
+                    self.parent.onSubmit()
+                    self.parent.isPresented = false
+                }
+            )
+            self.alertController = alertController
+            presenter.present(alertController, animated: true)
+        }
+
+        @objc
+        private func reportTextDidChange(_ textField: UITextField) {
+            guard textField.markedTextRange == nil else { return }
+            let limitedText = String(
+                (textField.text ?? "").prefix(parent.maximumLength)
+            )
+            if textField.text != limitedText {
+                textField.text = limitedText
+            }
+            parent.text = limitedText
+            alertController?.message = alertMessage(for: limitedText.count)
+        }
+
+        private func synchronize(_ alertController: UIAlertController) {
+            if alertController.textFields?.first?.text != parent.text {
+                alertController.textFields?.first?.text = parent.text
+            }
+            alertController.message = alertMessage(for: parent.text.count)
+        }
+
+        private func alertMessage(for count: Int) -> String {
+            "\(parent.message)\n\(count)/\(parent.maximumLength)"
+        }
+
+        private func topViewController(
+            from viewController: UIViewController
+        ) -> UIViewController {
+            if let presented = viewController.presentedViewController {
+                return topViewController(from: presented)
+            }
+            if let navigation = viewController as? UINavigationController,
+               let visible = navigation.visibleViewController {
+                return topViewController(from: visible)
+            }
+            if let tabs = viewController as? UITabBarController,
+               let selected = tabs.selectedViewController {
+                return topViewController(from: selected)
+            }
+            return viewController
+        }
     }
 }
 

@@ -1738,7 +1738,7 @@ struct FetchServiceTests {
         )
     }
 
-    @Test("Report comment is optional and limited to 500 characters")
+    @Test("Report comment is optional and limited to 120 characters")
     func reportCommentContractIsEnforcedClientSide() async throws {
         let sessions = AuthSessionStore(store: MemorySecureStore())
         try sessions.save(
