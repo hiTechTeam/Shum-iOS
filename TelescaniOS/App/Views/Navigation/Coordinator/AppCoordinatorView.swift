@@ -13,7 +13,9 @@ struct AppCoordinatorView: View {
         ZStack {
             Group {
                 if coordinator.isRegistered {
-                    MainContentView()
+                    MainContentView(
+                        profilePhotoViewModel: coordinator.profilePhotoViewModel
+                    )
                 } else if coordinator.isAuthenticated {
                     AuthenticatedOnboardingView()
                 } else {

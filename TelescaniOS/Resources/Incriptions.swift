@@ -267,6 +267,8 @@ struct Inc {
             "nearbyProfileTelegramTransitionMessage"
         static let telegramTransitionContinue: String =
             "nearbyProfileTelegramTransitionContinue"
+        static let telegramTransitionAlways: String =
+            "nearbyProfileTelegramTransitionAlways"
         static let noInformation: String = "nearbyProfileNoInformation"
         static let report: String = "nearbyProfileReport"
         static let block: String = "nearbyProfileBlock"

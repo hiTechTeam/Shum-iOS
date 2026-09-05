@@ -149,6 +149,7 @@
 "nearbyProfileTelegramTransitionTitle" = "Перейти в Telegram?";
 "nearbyProfileTelegramTransitionMessage" = "Диалог продолжится в приложении Telegram.";
 "nearbyProfileTelegramTransitionContinue" = "Перейти";
+"nearbyProfileTelegramTransitionAlways" = "Всегда переходить";
 "nearbyProfileNoInformation" = "Пишите в Telegram";
 "nearbyProfileReport" = "Пожаловаться";
 "nearbyProfileBlock" = "Заблокировать";

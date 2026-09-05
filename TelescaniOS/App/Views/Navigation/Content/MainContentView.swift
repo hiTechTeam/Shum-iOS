@@ -5,6 +5,7 @@ struct MainContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var coordinator: AppCoordinator
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
+    @ObservedObject var profilePhotoViewModel: ProfilePhotoViewModel
 
     @State private var selectedMainTab: MainTab = .nearby
     @State private var nearbyNavigationID = UUID()
@@ -24,11 +25,9 @@ struct MainContentView: View {
 
             profileTab
                 .tabItem {
-                    Label {
-                        Text(Inc.Tabs.profile.localized)
-                    } icon: {
-                        profileTabIcon
-                    }
+                    ProfileTabLabel(
+                        photoViewModel: profilePhotoViewModel
+                    )
                 }
                 .badge(peopleViewModel.unviewedEncounterCount)
                 .tag(MainTab.profile)
@@ -91,16 +90,59 @@ struct MainContentView: View {
         }
     }
 
-    @ViewBuilder
-    private var profileTabIcon: some View {
-        Image(systemName: "person.circle.fill")
-    }
-
     private func selectMainTab(_ tab: MainTab) {
         guard tab != selectedMainTab else { return }
         selectedMainTab = tab
     }
 
+}
+
+private struct ProfileTabLabel: View {
+    @ObservedObject var photoViewModel: ProfilePhotoViewModel
+
+    var body: some View {
+        Label {
+            Text(Inc.Tabs.profile.localized)
+        } icon: {
+            if let image = photoViewModel.uiImage {
+                Image(uiImage: image.tabBarAvatarImage())
+                    .renderingMode(.original)
+            } else {
+                Image(systemName: "person.circle.fill")
+            }
+        }
+    }
+}
+
+private extension UIImage {
+    func tabBarAvatarImage(diameter: CGFloat = 28) -> UIImage {
+        let bounds = CGRect(
+            origin: .zero,
+            size: CGSize(width: diameter, height: diameter)
+        )
+        let imageScale = max(diameter / size.width, diameter / size.height)
+        let drawSize = CGSize(
+            width: size.width * imageScale,
+            height: size.height * imageScale
+        )
+        let drawRect = CGRect(
+            x: (diameter - drawSize.width) / 2,
+            y: (diameter - drawSize.height) / 2,
+            width: drawSize.width,
+            height: drawSize.height
+        )
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.opaque = false
+
+        let avatar = UIGraphicsImageRenderer(
+            size: bounds.size,
+            format: format
+        ).image { _ in
+            UIBezierPath(ovalIn: bounds).addClip()
+            draw(in: drawRect)
+        }
+        return avatar.withRenderingMode(.alwaysOriginal)
+    }
 }
 
 private enum MainTab: Hashable {

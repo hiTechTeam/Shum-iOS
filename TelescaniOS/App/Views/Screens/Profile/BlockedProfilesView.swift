@@ -129,7 +129,6 @@ struct SavedProfilesView: View {
     @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
 
     @State private var selectedUser: NearbyUser?
-    @State private var photoPreviewUser: NearbyUser?
     @State private var telegramTransitionRequest: TelegramTransitionRequest?
 
     private var visibleSavedUsers: [NearbyUser] {
@@ -173,9 +172,8 @@ struct SavedProfilesView: View {
                 ) { user, _ in
                     SavedProfileRow(
                         user: user,
-                        action: { openUser(user) },
-                        photoAction: { openPhoto(of: user) },
-                        infoAction: { openInfo(for: user) },
+                        cardAction: { openInfo(for: user) },
+                        telegramAction: { openUser(user) },
                         removeAction: {
                             withAnimation {
                                 savedPeople.remove(user)
@@ -191,7 +189,6 @@ struct SavedProfilesView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
-        .nearbyUserPhotoPreview(user: $photoPreviewUser)
         .telegramTransitionAlert(request: $telegramTransitionRequest)
         .onChange(of: peopleViewModel.blockedProfiles.map(\.id)) { _, _ in
             closeBlockedProfileSurfaces()
@@ -224,18 +221,6 @@ struct SavedProfilesView: View {
         }
     }
 
-    private func openPhoto(of user: NearbyUser) {
-        guard !peopleViewModel.isProfileBlocked(user.id) else { return }
-        guard let photoURL = user.photoURL,
-              URL(string: photoURL) != nil else { return }
-
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            photoPreviewUser = user
-        }
-    }
-
     private func openInfo(for user: NearbyUser) {
         guard !peopleViewModel.isProfileBlocked(user.id) else { return }
         selectedUser = user
@@ -246,34 +231,24 @@ struct SavedProfilesView: View {
            peopleViewModel.isProfileBlocked(selectedUser.id) {
             self.selectedUser = nil
         }
-        if let photoPreviewUser,
-           peopleViewModel.isProfileBlocked(photoPreviewUser.id) {
-            self.photoPreviewUser = nil
-        }
         telegramTransitionRequest = nil
     }
 }
 
 private struct SavedProfileRow: View {
     let user: NearbyUser
-    let action: () -> Void
-    let photoAction: () -> Void
-    let infoAction: () -> Void
+    let cardAction: () -> Void
+    let telegramAction: () -> Void
     let removeAction: () -> Void
 
     private let avatarSize: CGFloat = 52
 
     var body: some View {
         HStack(spacing: 12) {
-            Button(action: photoAction) {
-                SavedProfileAvatar(user: user, size: avatarSize)
-            }
-            .buttonStyle(.plain)
-            .disabled(!hasPhoto)
-            .accessibilityLabel(Inc.Profile.openPhoto.localized)
-
-            Button(action: action) {
+            Button(action: cardAction) {
                 HStack(spacing: 12) {
+                    SavedProfileAvatar(user: user, size: avatarSize)
+
                     VStack(alignment: .leading, spacing: 3) {
                         Text(user.name)
                             .font(.body.weight(.semibold))
@@ -294,13 +269,13 @@ private struct SavedProfileRow: View {
             .buttonStyle(.plain)
             .accessibilityLabel(user.name)
 
-            ProfileInfoButton(action: infoAction)
+            ProfileTelegramButton(action: telegramAction)
         }
         .frame(maxWidth: .infinity, minHeight: avatarSize)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .contextMenu {
-            Button(action: action) {
+            Button(action: telegramAction) {
                 Label(
                     Inc.NearbyProfile.write.localized,
                     systemImage: "paperplane"
@@ -330,11 +305,6 @@ private struct SavedProfileRow: View {
                 subtitle: user.username
             )
         }
-    }
-
-    private var hasPhoto: Bool {
-        guard let photoURL = user.photoURL else { return false }
-        return URL(string: photoURL) != nil
     }
 
 }

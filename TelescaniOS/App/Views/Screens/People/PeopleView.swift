@@ -11,7 +11,6 @@ struct PeopleView: View {
     @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
 
     @State private var selectedUser: NearbyUser?
-    @State private var photoPreviewUser: NearbyUser?
     @State private var moderationRequest: ProfileModerationRequest?
     @State private var telegramTransitionRequest: TelegramTransitionRequest?
     @State private var showsSavedBlockInformation = false
@@ -91,9 +90,8 @@ struct PeopleView: View {
                         ProfileAvatarButton(
                             user: user,
                             isSaved: isSaved,
-                            action: { openUser(user) },
-                            photoAction: { openPhoto(of: user) },
-                            infoAction: { openInfo(for: user) },
+                            cardAction: { openInfo(for: user) },
+                            telegramAction: { openUser(user) },
                             blockAction: {
                                 if isSaved {
                                     requestSavedBlockInformation()
@@ -138,9 +136,6 @@ struct PeopleView: View {
             if let selectedUser, !ids.contains(selectedUser.id) {
                 self.selectedUser = nil
             }
-            if let photoPreviewUser, !ids.contains(photoPreviewUser.id) {
-                self.photoPreviewUser = nil
-            }
             if let moderationRequest,
                !ids.contains(moderationRequest.user.id) {
                 self.moderationRequest = nil
@@ -156,7 +151,6 @@ struct PeopleView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
-        .nearbyUserPhotoPreview(user: $photoPreviewUser)
         .telegramTransitionAlert(request: $telegramTransitionRequest)
         .profileModerationDialog(request: $moderationRequest)
         .alert(
@@ -233,61 +227,12 @@ struct PeopleView: View {
         }
     }
 
-    private func openPhoto(of user: NearbyUser) {
-        guard !peopleViewModel.isProfileBlocked(user.id) else { return }
-        guard let photoURL = user.photoURL,
-              URL(string: photoURL) != nil else { return }
-
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            photoPreviewUser = user
-        }
-    }
-
     private func requestSavedBlockInformation() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             showsSavedBlockInformation = true
         }
     }
 
-}
-
-private struct NearbyUserPhotoPreviewModifier: ViewModifier {
-    @Binding var user: NearbyUser?
-
-    private var isPresented: Binding<Bool> {
-        Binding(
-            get: { user != nil },
-            set: { isPresented in
-                if !isPresented {
-                    user = nil
-                }
-            }
-        )
-    }
-
-    func body(content: Content) -> some View {
-        content.fullScreenCover(item: $user) { selectedUser in
-            if let photoURL = selectedUser.photoURL,
-               let imageURL = URL(string: photoURL) {
-                FullScreenPhotoView(isPresented: isPresented) {
-                    KFImage(imageURL)
-                        .placeholder { ProgressView() }
-                        .resizable()
-                        .scaledToFit()
-                }
-            }
-        }
-    }
-}
-
-extension View {
-    func nearbyUserPhotoPreview(
-        user: Binding<NearbyUser?>
-    ) -> some View {
-        modifier(NearbyUserPhotoPreviewModifier(user: user))
-    }
 }
 
 struct TelegramChatDestination {
@@ -339,6 +284,7 @@ struct TelegramTransitionRequest: Identifiable {
 private struct TelegramTransitionAlertModifier: ViewModifier {
     @Environment(\.openURL) private var openURL
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
+    @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
 
     @Binding var request: TelegramTransitionRequest?
 
@@ -361,15 +307,13 @@ private struct TelegramTransitionAlertModifier: ViewModifier {
                 presenting: request
             ) { request in
                 Button(Inc.Common.cancel.localized, role: .cancel) { }
+                Button(
+                    Inc.NearbyProfile.telegramTransitionAlways.localized
+                ) {
+                    openTelegram(request, always: true)
+                }
                 Button(Inc.NearbyProfile.telegramTransitionContinue.localized) {
-                    guard peopleViewModel.isCurrentAccountStateGeneration(
-                            request.accountGeneration
-                          ),
-                          !peopleViewModel.isProfileBlocked(request.userID) else {
-                        self.request = nil
-                        return
-                    }
-                    request.destination.open(using: openURL)
+                    openTelegram(request, always: false)
                 }
             } message: { _ in
                 Text(Inc.NearbyProfile.telegramTransitionMessage.localized)
@@ -381,6 +325,23 @@ private struct TelegramTransitionAlertModifier: ViewModifier {
                       ) else { return }
                 self.request = nil
             }
+    }
+
+    private func openTelegram(
+        _ request: TelegramTransitionRequest,
+        always: Bool
+    ) {
+        guard peopleViewModel.isCurrentAccountStateGeneration(
+                request.accountGeneration
+              ),
+              !peopleViewModel.isProfileBlocked(request.userID) else {
+            self.request = nil
+            return
+        }
+        if always {
+            quickActions.isQuickChatEnabled = true
+        }
+        request.destination.open(using: openURL)
     }
 }
 
@@ -395,9 +356,8 @@ extension View {
 struct ProfileAvatarButton: View {
     let user: NearbyUser
     let isSaved: Bool
-    let action: () -> Void
-    let photoAction: () -> Void
-    let infoAction: () -> Void
+    let cardAction: () -> Void
+    let telegramAction: () -> Void
     let blockAction: () -> Void
 
     private let avatarSize: CGFloat = 52
@@ -406,24 +366,16 @@ struct ProfileAvatarButton: View {
         HStack(spacing: 12) {
             Button {
                 UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-                photoAction()
-            } label: {
-                profileImage
-                    .overlay(alignment: .bottomTrailing) {
-                        if isSaved {
-                            SavedProfileAvatarBadge()
-                        }
-                    }
-            }
-            .buttonStyle(.plain)
-            .disabled(!hasPhoto)
-            .accessibilityLabel(Inc.Profile.openPhoto.localized)
-
-            Button {
-                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-                action()
+                cardAction()
             } label: {
                 HStack(spacing: 12) {
+                    profileImage
+                        .overlay(alignment: .bottomTrailing) {
+                            if isSaved {
+                                SavedProfileAvatarBadge()
+                            }
+                        }
+
                     VStack(alignment: .leading, spacing: 3) {
                         Text(user.name)
                             .font(.body.weight(.semibold))
@@ -451,7 +403,7 @@ struct ProfileAvatarButton: View {
             .accessibilityLabel(user.name)
             .accessibilityAddTraits(.isButton)
 
-            ProfileInfoButton(action: infoAction)
+            ProfileTelegramButton(action: telegramAction)
         }
         .frame(maxWidth: .infinity, minHeight: avatarSize)
         .padding(.horizontal, 16)
@@ -459,14 +411,9 @@ struct ProfileAvatarButton: View {
         .profileRowContextMenu(
             user: user,
             isSaved: isSaved,
-            writeAction: action,
+            writeAction: telegramAction,
             blockAction: blockAction
         )
-    }
-
-    private var hasPhoto: Bool {
-        guard let photoURL = user.photoURL else { return false }
-        return URL(string: photoURL) != nil
     }
 
     private var profileInformation: String {
@@ -517,7 +464,7 @@ struct SavedProfileAvatarBadge: View {
     }
 }
 
-struct ProfileInfoButton: View {
+struct ProfileTelegramButton: View {
     let action: () -> Void
 
     var body: some View {
@@ -525,15 +472,14 @@ struct ProfileInfoButton: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             action()
         } label: {
-            Image(systemName: "info.circle")
-                .font(.system(size: 20, weight: .regular))
-                .symbolRenderingMode(.monochrome)
-                .foregroundStyle(.blue)
-                .frame(width: 44, height: 44)
-                .contentShape(Circle())
+            Image(systemName: "chevron.right")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 32, height: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Inc.NearbyProfile.openCard.localized)
+        .accessibilityLabel(Inc.NearbyProfile.telegramChat.localized)
     }
 }
 

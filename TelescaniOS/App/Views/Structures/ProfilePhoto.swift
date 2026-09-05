@@ -401,6 +401,8 @@ private struct ZoomablePhoto<Content: View>: View {
     @State private var settledScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var settledOffset: CGSize = .zero
+    @State private var contentSize: CGSize = .zero
+    @State private var viewportSize: CGSize = .zero
 
     private var magnificationGesture: some Gesture {
         MagnificationGesture()
@@ -410,6 +412,8 @@ private struct ZoomablePhoto<Content: View>: View {
                 if scale <= 1 {
                     offset = .zero
                     settledOffset = .zero
+                } else {
+                    offset = clampedOffset(offset, at: scale)
                 }
             }
             .onEnded { _ in
@@ -429,6 +433,11 @@ private struct ZoomablePhoto<Content: View>: View {
                     return
                 }
 
+                let boundedOffset = clampedOffset(offset, at: scale)
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+                    offset = boundedOffset
+                }
+                settledOffset = boundedOffset
                 settledScale = scale
             }
     }
@@ -438,40 +447,110 @@ private struct ZoomablePhoto<Content: View>: View {
             .onChanged { value in
                 guard scale > 1 else { return }
 
-                offset = CGSize(
+                let proposedOffset = CGSize(
                     width: settledOffset.width + value.translation.width,
                     height: settledOffset.height + value.translation.height
                 )
+                offset = clampedOffset(proposedOffset, at: scale)
             }
             .onEnded { _ in
                 guard scale > 1 else { return }
-                settledOffset = offset
+                let boundedOffset = clampedOffset(offset, at: scale)
+                offset = boundedOffset
+                settledOffset = boundedOffset
             }
+    }
+
+    private func clampedOffset(
+        _ proposedOffset: CGSize,
+        at currentScale: CGFloat
+    ) -> CGSize {
+        guard contentSize.width > 0,
+              contentSize.height > 0,
+              viewportSize.width > 0,
+              viewportSize.height > 0 else {
+            return .zero
+        }
+
+        let horizontalLimit = max(
+            (contentSize.width * currentScale - viewportSize.width) / 2,
+            0
+        )
+        let verticalLimit = max(
+            (contentSize.height * currentScale - viewportSize.height) / 2,
+            0
+        )
+
+        return CGSize(
+            width: min(max(proposedOffset.width, -horizontalLimit), horizontalLimit),
+            height: min(max(proposedOffset.height, -verticalLimit), verticalLimit)
+        )
+    }
+
+    private func reconcileOffset() {
+        let boundedOffset = clampedOffset(offset, at: scale)
+        offset = boundedOffset
+        settledOffset = boundedOffset
     }
 
     var body: some View {
         GeometryReader { proxy in
-            content
-                .frame(width: proxy.size.width, height: proxy.size.height)
-                .scaleEffect(scale)
-                .offset(offset)
-                .contentShape(Rectangle())
-                .simultaneousGesture(magnificationGesture)
-                .simultaneousGesture(dragGesture)
-                .onTapGesture(count: 2) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        if scale > 1 {
-                            scale = 1
-                            settledScale = 1
-                            offset = .zero
-                            settledOffset = .zero
-                        } else {
-                            scale = 2
-                            settledScale = 2
+            ZStack {
+                content
+                    .background {
+                        GeometryReader { contentProxy in
+                            Color.clear.preference(
+                                key: PhotoContentSizePreferenceKey.self,
+                                value: contentProxy.size
+                            )
                         }
                     }
+                    .scaleEffect(scale)
+                    .offset(offset)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .contentShape(Rectangle())
+            .simultaneousGesture(magnificationGesture)
+            .simultaneousGesture(dragGesture)
+            .onTapGesture(count: 2) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if scale > 1 {
+                        scale = 1
+                        settledScale = 1
+                        offset = .zero
+                        settledOffset = .zero
+                    } else {
+                        scale = 2
+                        settledScale = 2
+                        offset = .zero
+                        settledOffset = .zero
+                    }
                 }
+            }
+            .onAppear {
+                viewportSize = proxy.size
+                reconcileOffset()
+            }
+            .onChange(of: proxy.size) { _, newSize in
+                viewportSize = newSize
+                reconcileOffset()
+            }
+        }
+        .onPreferenceChange(PhotoContentSizePreferenceKey.self) { newSize in
+            guard newSize.width > 0, newSize.height > 0 else { return }
+            contentSize = newSize
+            reconcileOffset()
         }
         .clipped()
+    }
+}
+
+private struct PhotoContentSizePreferenceKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let nextSize = nextValue()
+        guard nextSize.width > 0, nextSize.height > 0 else { return }
+        value = nextSize
     }
 }

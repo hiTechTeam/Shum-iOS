@@ -9,7 +9,6 @@ struct EncounterHistoryView: View {
     @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
 
     @State private var selectedEncounter: EncounterHistoryEntry?
-    @State private var photoPreviewUser: NearbyUser?
     @State private var showsClearConfirmation = false
     @State private var relativeTimeReference = Date()
     @State private var moderationRequest: ProfileModerationRequest?
@@ -58,7 +57,6 @@ struct EncounterHistoryView: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
-        .nearbyUserPhotoPreview(user: $photoPreviewUser)
         .telegramTransitionAlert(request: $telegramTransitionRequest)
         .profileModerationDialog(request: $moderationRequest)
         .alert(
@@ -112,9 +110,6 @@ struct EncounterHistoryView: View {
             if let selectedEncounter,
                !ids.contains(selectedEncounter.id) {
                 self.selectedEncounter = nil
-            }
-            if let photoPreviewUser, !ids.contains(photoPreviewUser.id) {
-                self.photoPreviewUser = nil
             }
             if let moderationRequest,
                !ids.contains(moderationRequest.user.id) {
@@ -198,17 +193,14 @@ struct EncounterHistoryView: View {
                 encounter: encounter,
                 isSaved: isSaved,
                 relativeTimeReference: relativeTimeReference,
-                action: {
+                cardAction: {
+                    openInfo(for: encounter)
+                },
+                telegramAction: {
                     UIImpactFeedbackGenerator(
                         style: .light
                     ).impactOccurred()
                     openEncounter(encounter)
-                },
-                photoAction: {
-                    openPhoto(of: encounter.user)
-                },
-                infoAction: {
-                    openInfo(for: encounter)
                 },
                 deleteAction: {
                     deleteEncounter(encounter)
@@ -347,27 +339,14 @@ struct EncounterHistoryView: View {
         }
     }
 
-    private func openPhoto(of user: NearbyUser) {
-        guard !peopleViewModel.isProfileBlocked(user.id) else { return }
-        guard let photoURL = user.photoURL,
-              URL(string: photoURL) != nil else { return }
-
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            photoPreviewUser = user
-        }
-    }
-
 }
 
 private struct EncounterHistoryRow: View {
     let encounter: EncounterHistoryEntry
     let isSaved: Bool
     let relativeTimeReference: Date
-    let action: () -> Void
-    let photoAction: () -> Void
-    let infoAction: () -> Void
+    let cardAction: () -> Void
+    let telegramAction: () -> Void
     let deleteAction: () -> Void
     let blockAction: () -> Void
 
@@ -375,23 +354,18 @@ private struct EncounterHistoryRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Button(action: photoAction) {
-                EncounterHistoryAvatar(
-                    user: encounter.user,
-                    size: avatarSize
-                )
-                .overlay(alignment: .bottomTrailing) {
-                    if isSaved {
-                        SavedProfileAvatarBadge()
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-            .disabled(!hasPhoto)
-            .accessibilityLabel(Inc.Profile.openPhoto.localized)
-
-            Button(action: action) {
+            Button(action: cardAction) {
                 HStack(spacing: 12) {
+                    EncounterHistoryAvatar(
+                        user: encounter.user,
+                        size: avatarSize
+                    )
+                    .overlay(alignment: .bottomTrailing) {
+                        if isSaved {
+                            SavedProfileAvatarBadge()
+                        }
+                    }
+
                     VStack(alignment: .leading, spacing: 3) {
                         Text(encounter.user.name)
                             .font(.body.weight(.semibold))
@@ -422,7 +396,7 @@ private struct EncounterHistoryRow: View {
             .buttonStyle(.plain)
             .accessibilityLabel(encounter.user.name)
 
-            ProfileInfoButton(action: infoAction)
+            ProfileTelegramButton(action: telegramAction)
         }
         .frame(maxWidth: .infinity)
         .frame(minHeight: avatarSize)
@@ -433,15 +407,10 @@ private struct EncounterHistoryRow: View {
             isSaved: isSaved,
             lastMetAt: encounter.lastSeen,
             relativeTimeReference: relativeTimeReference,
-            writeAction: action,
+            writeAction: telegramAction,
             deleteAction: deleteAction,
             blockAction: blockAction
         )
-    }
-
-    private var hasPhoto: Bool {
-        guard let photoURL = encounter.user.photoURL else { return false }
-        return URL(string: photoURL) != nil
     }
 
     private var profileInformation: String {
