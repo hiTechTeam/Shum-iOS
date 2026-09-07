@@ -370,11 +370,7 @@ struct ProfileAvatarButton: View {
             } label: {
                 HStack(spacing: 12) {
                     profileImage
-                        .overlay(alignment: .bottomTrailing) {
-                            if isSaved {
-                                SavedProfileAvatarBadge()
-                            }
-                        }
+                        .savedProfileAvatarBadge(isSaved: isSaved)
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(user.name)
@@ -451,15 +447,43 @@ struct ProfileAvatarButton: View {
     }
 }
 
-struct SavedProfileAvatarBadge: View {
-    @Environment(\.profileRowSurfaceColor) private var surfaceColor
+extension View {
+    func savedProfileAvatarBadge(isSaved: Bool) -> some View {
+        modifier(SavedProfileAvatarBadgeModifier(isSaved: isSaved))
+    }
+}
 
+private struct SavedProfileAvatarBadgeModifier: ViewModifier {
+    let isSaved: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .mask {
+                Rectangle()
+                    .overlay(alignment: .bottomTrailing) {
+                        if isSaved {
+                            Circle()
+                                .frame(width: 18, height: 18)
+                                .offset(x: 2, y: 2)
+                                .blendMode(.destinationOut)
+                        }
+                    }
+                    .compositingGroup()
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if isSaved {
+                    SavedProfileAvatarBadge()
+                }
+            }
+    }
+}
+
+private struct SavedProfileAvatarBadge: View {
     var body: some View {
         Image(systemName: "heart.fill")
             .font(.system(size: 10, weight: .bold))
             .foregroundStyle(.primary)
             .frame(width: 18, height: 18)
-            .background(surfaceColor, in: Circle())
             .offset(x: 2, y: 2)
     }
 }
@@ -1303,11 +1327,7 @@ struct ProfileRowContextPreview: View {
     var body: some View {
         HStack(spacing: 12) {
             avatar
-                .overlay(alignment: .bottomTrailing) {
-                    if isSaved {
-                        SavedProfileAvatarBadge()
-                    }
-                }
+                .savedProfileAvatarBadge(isSaved: isSaved)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(user.name)
@@ -1325,11 +1345,11 @@ struct ProfileRowContextPreview: View {
 
             trailingInformation
 
-            Image(systemName: "info.circle")
-                .font(.system(size: 20, weight: .regular))
-                .symbolRenderingMode(.monochrome)
-                .foregroundStyle(.blue)
-                .frame(width: 44, height: 44)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 32, height: 44)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, horizontalPadding)
         .padding(.vertical, verticalPadding)
@@ -1338,7 +1358,6 @@ struct ProfileRowContextPreview: View {
             previewSurfaceColor,
             in: RoundedRectangle(cornerRadius: 26, style: .continuous)
         )
-        .environment(\.profileRowSurfaceColor, previewSurfaceColor)
         .scaleEffect(previewScale)
         .frame(
             width: previewWidth,

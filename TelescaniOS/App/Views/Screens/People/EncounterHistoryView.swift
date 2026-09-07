@@ -360,11 +360,7 @@ private struct EncounterHistoryRow: View {
                         user: encounter.user,
                         size: avatarSize
                     )
-                    .overlay(alignment: .bottomTrailing) {
-                        if isSaved {
-                            SavedProfileAvatarBadge()
-                        }
-                    }
+                    .savedProfileAvatarBadge(isSaved: isSaved)
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(encounter.user.name)

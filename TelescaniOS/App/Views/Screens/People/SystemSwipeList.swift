@@ -17,17 +17,6 @@ extension Color {
     }
 }
 
-private struct ProfileRowSurfaceColorKey: EnvironmentKey {
-    static let defaultValue = Color(uiColor: .systemBackground)
-}
-
-extension EnvironmentValues {
-    var profileRowSurfaceColor: Color {
-        get { self[ProfileRowSurfaceColorKey.self] }
-        set { self[ProfileRowSurfaceColorKey.self] = newValue }
-    }
-}
-
 struct SystemSwipeAction {
     struct SavedPresentation {
         let title: String
@@ -254,12 +243,6 @@ private struct NativeSwipeInteractionRow<Content: View>: View {
 
     var body: some View {
         content
-            .environment(
-                \.profileRowSurfaceColor,
-                isSwipeActive
-                    ? .profileRowSwipeSurface
-                    : Color(uiColor: .systemBackground)
-            )
             .background {
                 if #available(iOS 26.0, *) {
                     activeSurfaceColor
