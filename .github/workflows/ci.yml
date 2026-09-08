@@ -28,11 +28,7 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_26.3.app
 
       - name: Create local build configuration
-        run: |
-          cp TelescaniOS/Configuration/Configs/Debug.example.xcconfig \
-            TelescaniOS/Configuration/Configs/Debug.xcconfig
-          cp TelescaniOS/Configuration/Configs/Release.example.xcconfig \
-            TelescaniOS/Configuration/Configs/Release.xcconfig
+        run: ./ci_scripts/ci_post_clone.sh
 
       - name: Resolve Swift packages
         run: |

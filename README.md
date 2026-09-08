@@ -8,16 +8,14 @@ opens the public Telegram profiles they choose to share.
 Requires iOS 17.6+, Xcode and a physical iPhone for BLE testing.
 
 ```sh
-cp TelescaniOS/Configuration/Configs/Debug.example.xcconfig \
-  TelescaniOS/Configuration/Configs/Debug.xcconfig
-cp TelescaniOS/Configuration/Configs/Release.example.xcconfig \
-  TelescaniOS/Configuration/Configs/Release.xcconfig
+./ci_scripts/ci_post_clone.sh
 open TelescaniOS.xcodeproj
 ```
 
 Use the `Telescan` scheme for Personal Team development. Debug temporarily
 supports Telegram-code authentication because free signing cannot use Sign in
 with Apple. `Telescan Release` keeps the production Apple-first flow.
+Release signing uses FrameLabs LLC; Personal Team Debug is unchanged.
 
 ## Product behavior
 
@@ -52,6 +50,9 @@ xcodebuild build \
 
 GitHub Actions runs tests and validates an unsigned production archive on every
 pull request and push to `main`.
+Xcode Cloud and GitHub Actions create missing local configs from public templates
+with `ci_scripts/ci_post_clone.sh`; existing configs are preserved. App Store
+uploads also require access to cloud-managed distribution certificates.
 
 ## License
 

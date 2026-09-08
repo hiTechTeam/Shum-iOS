@@ -438,7 +438,7 @@
 				CODE_SIGN_ENTITLEMENTS = TelescaniOS/TelescaniOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = UF2FP85G5V;
+				DEVELOPMENT_TEAM = SDL7K9875S;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/TelescaniOS/Configuration/Info.plist";
@@ -543,7 +543,7 @@
 				B9559D622EBC4A0500FC3377 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		B9559D632EBC4A0500FC3377 /* Build configuration list for PBXNativeTarget "Telescan" */ = {
 			isa = XCConfigurationList;
@@ -552,7 +552,7 @@
 				B9559D652EBC4A0500FC3377 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		B98E8FF22F00964600D882A0 /* Build configuration list for PBXNativeTarget "TelescanTests" */ = {
 			isa = XCConfigurationList;
@@ -561,7 +561,7 @@
 				B98E8FF42F00964600D882A0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 
