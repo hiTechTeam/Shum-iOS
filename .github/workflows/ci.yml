@@ -87,6 +87,8 @@ jobs:
             'https://t.me/tgtelescan_bot'
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = \
             'hiTeam.TelescaniOS'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$PLIST")" = \
+            'APPL'
           test "$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$PLIST")" = \
             '17.6'
           test "$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily:0' "$PLIST")" = \
