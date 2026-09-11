@@ -2,14 +2,14 @@ import SwiftUI
 
 struct ProfileDataView: View {
     @EnvironmentObject var coordinator: AppCoordinator
-    @ObservedObject var authCodeViewModel: CodeViewModel
+    @ObservedObject var authCodeViewModel: LocalProfileViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
     @State private var showBioEditor = false
-    @State private var showTelegramLink = false
+    @State private var profileEditor: LocalCardDetailsMode?
     @State private var draftBio = ""
 
     init(
-        authCodeViewModel: CodeViewModel,
+        authCodeViewModel: LocalProfileViewModel,
         photoViewModel: ProfilePhotoViewModel
     ) {
         self.authCodeViewModel = authCodeViewModel
@@ -27,22 +27,26 @@ struct ProfileDataView: View {
 
     private var profileInformationCard: some View {
         VStack(spacing: 0) {
+            ProfileInformationRow(title: NSLocalizedString("local.profile.name", comment: ""),
+                value: authCodeViewModel.tgName ?? "—", showsAccentValue: false,
+                position: .top, action: { profileEditor = .name })
+            profileRowDivider
             ProfileInformationRow(
-                title: Inc.Profile.informationTitle.localized,
-                value: displayBio,
-                showsAccentValue: false,
-                position: .top,
-                action: openBioEditor
+                title: Inc.Profile.telegramTitle.localized,
+                value: displayTelegram,
+                showsAccentValue: telegramUsername == nil,
+                position: .middle,
+                action: openTelegramLink
             )
 
             profileRowDivider
 
             ProfileInformationRow(
-                title: Inc.Profile.telegramTitle.localized,
-                value: displayTelegram,
-                showsAccentValue: telegramUsername == nil,
+                title: Inc.Profile.informationTitle.localized,
+                value: displayBio,
+                showsAccentValue: false,
                 position: .bottom,
-                action: openTelegramLink
+                action: openBioEditor
             )
         }
         .background(
@@ -84,8 +88,7 @@ struct ProfileDataView: View {
     }
 
     private func openTelegramLink() {
-        authCodeViewModel.resetCodeEntry()
-        showTelegramLink = true
+        profileEditor = .telegram
     }
 
     private var scrollContent: some View {
@@ -95,7 +98,7 @@ struct ProfileDataView: View {
             }
             .padding(.bottom, 32)
         }
-        .scrollBounceBehavior(.always, axes: .vertical)
+        .telescanAlwaysBounce()
         .refreshable { await coordinator.refreshSession() }
     }
 
@@ -104,7 +107,7 @@ struct ProfileDataView: View {
             Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
             scrollContent
         }
-        .onChange(of: authCodeViewModel.photoS3URL) { _, value in
+        .telescanOnChange(of: authCodeViewModel.localPhotoURL) { _, value in
             photoVM.loadPhotoFromURL(value)
         }
         .sheet(isPresented: $showBioEditor) {
@@ -117,8 +120,12 @@ struct ProfileDataView: View {
             .presentationDragIndicator(.visible)
             .interactiveDismissDisabled(authCodeViewModel.isSavingBio)
         }
-        .sheet(isPresented: $showTelegramLink) {
-            TelegramLinkProfileSheet(authVM: authCodeViewModel)
+        .sheet(item: $profileEditor) { mode in
+            NavigationStack {
+                LocalCardDetailsView(profile: authCodeViewModel, photo: photoVM, mode: mode) {
+                    profileEditor = nil
+                }
+            }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
@@ -162,72 +169,6 @@ private struct ProfileInformationRow: View {
         .accessibilityValue(value)
         .accessibilityAddTraits(.isButton)
     }
-}
-
-private struct TelegramLinkProfileSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    @ObservedObject var authVM: CodeViewModel
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                ScrollView {
-                    CodeSpace()
-                        .environmentObject(authVM)
-                        .padding(.top, 4)
-                }
-                .scrollBounceBehavior(.basedOnSize)
-
-                Spacer(minLength: 8)
-
-                VStack(spacing: 14) {
-                    RegistrationPrimaryButton(
-                        title: Inc.Profile.linkTelegram.localized,
-                        isEnabled: authVM.codeStatus == true
-                            && !authVM.isLoading,
-                        accentColor: .blue,
-                        action: confirmTelegramCode
-                    )
-                }
-                .frame(maxWidth: 360)
-            }
-            .padding(.top, 10)
-            .padding(.bottom, 16)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text(Inc.Profile.telegramTitle.localized)
-                        .telescanSheetTitleStyle()
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    BotButton()
-                }
-            }
-        }
-        .onAppear {
-            authVM.resetCodeEntry()
-        }
-        .onDisappear {
-            authVM.resetCodeEntry()
-        }
-    }
-
-    private func confirmTelegramCode() {
-        Task {
-            guard await authVM.confirmCode() else { return }
-            dismiss()
-
-            if let telescanID = authVM.telescanID {
-                BLEManager.shared.restartAdvertising(
-                    id: telescanID.uuidString.lowercased()
-                )
-            }
-        }
-    }
-
 }
 
 struct ScanningSettingsSheet: View {

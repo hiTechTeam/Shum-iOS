@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HowTelescanWorksView: View {
+    @EnvironmentObject private var coordinator: AppCoordinator
 
     @State private var showIdentityVerification = false
 
@@ -123,7 +124,7 @@ struct HowTelescanWorksView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showIdentityVerification) {
-            AppleIdentityVerificationView()
+            LocalCardRegistration(photoViewModel: coordinator.profilePhotoViewModel)
         }
     }
 }

@@ -1,5 +1,4 @@
 import SwiftUI
-import Kingfisher
 
 struct BlockedProfilesView: View {
     @EnvironmentObject var peopleViewModel: PeopleViewModel
@@ -11,7 +10,7 @@ struct BlockedProfilesView: View {
         NavigationStack {
             Group {
                 if peopleViewModel.blockedProfiles.isEmpty {
-                    ContentUnavailableView(
+                    TelescanContentUnavailableView(
                         Inc.NearbyProfile.noBlockedProfiles.localized,
                         systemImage: "person.crop.circle.badge.checkmark"
                     )
@@ -98,7 +97,7 @@ private struct BlockedProfileAvatar: View {
         Group {
             if let photoURL = profile.photoUrl,
                let url = URL(string: photoURL) {
-                KFImage(url)
+                LocalAvatar(url)
                     .placeholder { placeholder }
                     .resizable()
                     .scaledToFill()
@@ -140,7 +139,7 @@ struct SavedProfilesView: View {
             Color.peopleListBackground.ignoresSafeArea()
 
             if visibleSavedUsers.isEmpty {
-                ContentUnavailableView(
+                TelescanContentUnavailableView(
                     Inc.NearbyProfile.noSavedProfiles.localized,
                     systemImage: "heart"
                 )
@@ -190,7 +189,7 @@ struct SavedProfilesView: View {
                 .presentationDragIndicator(.visible)
         }
         .telegramTransitionAlert(request: $telegramTransitionRequest)
-        .onChange(of: peopleViewModel.blockedProfiles.map(\.id)) { _, _ in
+        .telescanOnChange(of: peopleViewModel.blockedProfiles.map(\.id)) { _, _ in
             closeBlockedProfileSurfaces()
         }
         .navigationTitle("")
@@ -317,7 +316,7 @@ private struct SavedProfileAvatar: View {
         Group {
             if let photoURL = user.photoURL,
                let url = URL(string: photoURL) {
-                KFImage(url)
+                LocalAvatar(url)
                     .placeholder { placeholder }
                     .resizable()
                     .scaledToFill()

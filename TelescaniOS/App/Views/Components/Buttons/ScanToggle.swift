@@ -25,7 +25,7 @@ struct ScanToggle: View {
     private var scanToggle: some View {
         Toggle(Inc.Scanning.scanning.localized, isOn: $isScaning)
             .toggleStyle(SwitchToggleStyle(tint: .green))
-            .onChange(of: isScaning) { _, newValue in
+            .telescanOnChange(of: isScaning) { _, newValue in
                 coordinator.setScanning(newValue)
 
                 if newValue, !bleManager.isBluetoothAvailable {

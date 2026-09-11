@@ -1,5 +1,4 @@
 import SwiftUI
-import Kingfisher
 import UIKit
 
 struct PeopleView: View {
@@ -25,7 +24,7 @@ struct PeopleView: View {
                 if peopleViewModel.visibleUsers.isEmpty {
                     GeometryReader { geometry in
                         ScrollView {
-                            ContentUnavailableView(
+                            TelescanContentUnavailableView(
                                 Inc.Scanning.emptyTitle.localized,
                                 systemImage: "wave.3.up",
                                 description: Text(
@@ -35,7 +34,7 @@ struct PeopleView: View {
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: geometry.size.height)
                         }
-                        .scrollBounceBehavior(.always)
+                        .telescanAlwaysBounce()
                         .refreshable {
                             await peopleViewModel.refreshNearbyPeople()
                         }
@@ -109,7 +108,7 @@ struct PeopleView: View {
                     }
                 }
             } else {
-                ContentUnavailableView(
+                TelescanContentUnavailableView(
                     Inc.Scanning.scanning.localized,
                     systemImage: "eye.slash",
                     description: Text(
@@ -118,7 +117,7 @@ struct PeopleView: View {
                 )
             }
         }
-        .onChange(of: scenePhase) {  _, newPhase in
+        .telescanOnChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else {
                 return
             }
@@ -132,7 +131,7 @@ struct PeopleView: View {
                 await peopleViewModel.refreshVisibleUsers()
             }
         }
-        .onChange(of: peopleViewModel.visibleUsers.map(\.id)) { _, ids in
+        .telescanOnChange(of: peopleViewModel.visibleUsers.map(\.id)) { _, ids in
             if let selectedUser, !ids.contains(selectedUser.id) {
                 self.selectedUser = nil
             }
@@ -318,7 +317,7 @@ private struct TelegramTransitionAlertModifier: ViewModifier {
             } message: { _ in
                 Text(Inc.NearbyProfile.telegramTransitionMessage.localized)
             }
-            .onChange(of: peopleViewModel.accountStateGeneration) { _, _ in
+            .telescanOnChange(of: peopleViewModel.accountStateGeneration) { _, _ in
                 guard let request,
                       !peopleViewModel.isCurrentAccountStateGeneration(
                         request.accountGeneration
@@ -426,7 +425,7 @@ struct ProfileAvatarButton: View {
         Group {
             if let url = user.photoURL,
                let imageURL = URL(string: url) {
-                KFImage(imageURL)
+                LocalAvatar(imageURL)
                     .placeholder {
                         Image.personCropCircleFill
                             .resizable()
@@ -645,497 +644,39 @@ struct ProfileRowContextMenuModifier: ViewModifier {
 }
 
 private struct ProfileModerationDialogModifier: ViewModifier {
-    private enum ModerationAlert: Identifiable, Equatable {
-        case reportConfirmation
-        case error
-
-        var id: String {
-            switch self {
-            case .reportConfirmation:
-                "report-confirmation"
-            case .error:
-                "error"
-            }
-        }
-    }
-
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
-
     @Binding var request: ProfileModerationRequest?
-
     @State private var activeUser: NearbyUser?
-    @State private var showsBlockOptions = false
-    @State private var moderationAlert: ModerationAlert?
-    @State private var reportDetails = ""
-    @State private var isSubmitting = false
-    @State private var isOpeningReport = false
-    @State private var presentationToken: UUID?
-    @State private var activeAccountGeneration: UUID?
-    @State private var reportRequestID: UUID?
-    @State private var hasSubmittedReport = false
-
-    private var reportDetailsBinding: Binding<String> {
-        Binding(
-            get: { reportDetails },
-            set: {
-                reportDetails = String(
-                    $0.prefix(ReportCommentPolicy.maximumLength)
-                )
-            }
-        )
-    }
-
-    private var isBlockDialogPresented: Binding<Bool> {
-        Binding(
-            get: { showsBlockOptions },
-            set: { isPresented in
-                showsBlockOptions = isPresented
-                if !isPresented,
-                   moderationAlert == nil,
-                   !isSubmitting,
-                   !isOpeningReport {
-                    activeUser = nil
-                    activeAccountGeneration = nil
-                    presentationToken = nil
-                }
-            }
-        )
-    }
-
-    private var isReportConfirmationPresented: Binding<Bool> {
-        Binding(
-            get: { moderationAlert == .reportConfirmation },
-            set: { isPresented in
-                if !isPresented {
-                    moderationAlert = nil
-                    if !isSubmitting {
-                        activeUser = nil
-                        activeAccountGeneration = nil
-                        presentationToken = nil
-                        reportDetails = ""
-                        reportRequestID = nil
-                        hasSubmittedReport = false
-                    }
-                }
-            }
-        )
-    }
-
-    private var isErrorAlertPresented: Binding<Bool> {
-        Binding(
-            get: { moderationAlert == .error },
-            set: { isPresented in
-                if !isPresented {
-                    moderationAlert = nil
-                    if !isSubmitting {
-                        activeUser = nil
-                        activeAccountGeneration = nil
-                        presentationToken = nil
-                        reportDetails = ""
-                        reportRequestID = nil
-                        hasSubmittedReport = false
-                    }
-                }
-            }
-        )
-    }
+    @State private var generation: UUID?
+    @State private var showError = false
 
     func body(content: Content) -> some View {
         content
-            .sheet(
-                isPresented: isBlockDialogPresented,
-                onDismiss: finishOpeningReport
-            ) {
-                if let activeUser {
-                    ProfileBlockOptionsSheet(
-                        user: activeUser,
-                        onClose: cancel,
-                        onBlock: submitBlock,
-                        onReport: openReport
-                    )
-                    .presentationDetents([.height(250)])
-                    .presentationDragIndicator(.hidden)
-                }
-            }
-            .background {
-                ReportCommentAlertPresenter(
-                    isPresented: isReportConfirmationPresented,
-                    text: reportDetailsBinding,
-                    maximumLength: ReportCommentPolicy.maximumLength,
-                    title: Inc.NearbyProfile.reportConfirmTitle.localized,
-                    message: Inc.NearbyProfile.reportDetailsMessage.localized,
-                    placeholder: Inc.NearbyProfile
-                        .reportDetailsPlaceholder.localized,
-                    cancelTitle: Inc.Common.cancel.localized,
-                    submitTitle: Inc.NearbyProfile.reportSend.localized,
-                    onSubmit: submitReportAndBlock
-                )
-                .frame(width: 0, height: 0)
-            }
-            .alert(
-                Inc.NearbyProfile.actionFailedTitle.localized,
-                isPresented: isErrorAlertPresented
-            ) {
-                Button(Inc.Common.cancel.localized, role: .cancel) {
-                    cancel()
-                }
-                Button(Inc.NearbyProfile.retry.localized) {
-                    retryFailedOperation()
-                }
-            } message: {
-                Text(Inc.NearbyProfile.actionFailedMessage.localized)
-            }
-            .onChange(of: request?.id) { _, _ in
-                guard let request else { return }
-                let token = request.id
-                self.request = nil
-                guard peopleViewModel.isCurrentAccountStateGeneration(
-                    request.accountGeneration
-                ) else {
-                    cancel()
-                    return
-                }
-                activeUser = request.user
-                activeAccountGeneration = request.accountGeneration
-                presentationToken = token
-                reportDetails = ""
-                reportRequestID = nil
-                hasSubmittedReport = false
-
-                guard request.waitsForTransientUI else {
-                    showsBlockOptions = true
-                    return
-                }
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    guard presentationToken == token,
-                          activeUser != nil,
-                          peopleViewModel.isCurrentAccountStateGeneration(
-                            request.accountGeneration
-                          ),
-                          !isSubmitting else { return }
-                    showsBlockOptions = true
-                }
-            }
-            .onChange(of: peopleViewModel.blockedProfiles.map(\.id)) { _, _ in
-                guard let activeUser,
-                      peopleViewModel.isProfileBlocked(activeUser.id) else {
-                    return
-                }
-                cancel()
-            }
-            .onChange(of: peopleViewModel.accountStateGeneration) { _, newValue in
-                guard let activeAccountGeneration,
-                      activeAccountGeneration != newValue else { return }
-                cancel()
-            }
-    }
-
-    private func openReport() {
-        isOpeningReport = true
-        reportDetails = ""
-        reportRequestID = UUID()
-        hasSubmittedReport = false
-        showsBlockOptions = false
-    }
-
-    private func finishOpeningReport() {
-        guard isOpeningReport else { return }
-        guard activeUser != nil,
-              let activeAccountGeneration,
-              peopleViewModel.isCurrentAccountStateGeneration(
-                activeAccountGeneration
-              ) else {
-            isOpeningReport = false
-            cancel()
-            return
-        }
-        moderationAlert = .reportConfirmation
-        isOpeningReport = false
-    }
-
-    private func submitReportAndBlock() {
-        guard let user = activeUser,
-              let activeAccountGeneration,
-              peopleViewModel.isCurrentAccountStateGeneration(
-                activeAccountGeneration
-              ) else {
-            cancel()
-            return
-        }
-        let requestID = reportRequestID ?? UUID()
-        reportRequestID = requestID
-        let details = reportDetails
-        isSubmitting = true
-        Task {
-            if !hasSubmittedReport {
-                do {
-                    try await peopleViewModel.submitReport(
-                        for: user,
-                        details: details,
-                        requestID: requestID
-                    )
-                    hasSubmittedReport = true
-                } catch {
-                    guard peopleViewModel.isCurrentAccountStateGeneration(
-                        activeAccountGeneration
-                    ) else {
-                        isSubmitting = false
-                        cancel()
-                        return
+            .sheet(item: $activeUser) { user in
+                ProfileBlockOptionsSheet(user: user, onClose: { activeUser = nil }, onBlock: {
+                    guard generation == peopleViewModel.accountStateGeneration else { activeUser = nil; return }
+                    Task { @MainActor in
+                        do { try await peopleViewModel.block(user); activeUser = nil }
+                        catch { showError = true }
                     }
-                    isSubmitting = false
-                    moderationAlert = .error
-                    return
-                }
+                })
+                .presentationDetents([.height(195)])
+                .presentationDragIndicator(.hidden)
             }
-
-            guard peopleViewModel.isCurrentAccountStateGeneration(
-                activeAccountGeneration
-            ) else {
-                isSubmitting = false
-                cancel()
-                return
+            .task(id: request?.id) {
+                guard let pending = request else { return }
+                if pending.waitsForTransientUI { try? await Task.sleep(for: .milliseconds(250)) }
+                guard !Task.isCancelled, request?.id == pending.id,
+                      peopleViewModel.isCurrentAccountStateGeneration(pending.accountGeneration) else { return }
+                generation = pending.accountGeneration
+                activeUser = pending.user
             }
-            do {
-                try await peopleViewModel.block(user)
-                isSubmitting = false
-                reportDetails = ""
-                activeUser = nil
-                self.activeAccountGeneration = nil
-                presentationToken = nil
-                reportRequestID = nil
-                hasSubmittedReport = false
-            } catch {
-                guard peopleViewModel.isCurrentAccountStateGeneration(
-                    activeAccountGeneration
-                ) else {
-                    isSubmitting = false
-                    cancel()
-                    return
-                }
-                isSubmitting = false
-                moderationAlert = .error
+            .telescanOnChange(of: activeUser?.id) { _, id in
+                if id == nil { request = nil }
             }
-        }
-    }
-
-    private func retryFailedOperation() {
-        moderationAlert = nil
-        if reportRequestID != nil {
-            submitReportAndBlock()
-        } else {
-            submitBlock()
-        }
-    }
-
-    private func submitBlock() {
-        guard let user = activeUser,
-              let activeAccountGeneration,
-              peopleViewModel.isCurrentAccountStateGeneration(
-                activeAccountGeneration
-              ) else {
-            cancel()
-            return
-        }
-        showsBlockOptions = false
-        isSubmitting = true
-        Task {
-            do {
-                try await peopleViewModel.block(user)
-                isSubmitting = false
-                activeUser = nil
-                self.activeAccountGeneration = nil
-                presentationToken = nil
-                reportRequestID = nil
-                hasSubmittedReport = false
-            } catch {
-                guard peopleViewModel.isCurrentAccountStateGeneration(
-                    activeAccountGeneration
-                ) else {
-                    isSubmitting = false
-                    cancel()
-                    return
-                }
-                isSubmitting = false
-                moderationAlert = .error
+            .alert(Inc.NearbyProfile.actionFailedTitle.localized, isPresented: $showError) {
+                Button(Inc.Common.okey.localized, role: .cancel) { }
             }
-        }
-    }
-
-    private func cancel() {
-        showsBlockOptions = false
-        moderationAlert = nil
-        reportDetails = ""
-        isOpeningReport = false
-        activeUser = nil
-        activeAccountGeneration = nil
-        presentationToken = nil
-        reportRequestID = nil
-        hasSubmittedReport = false
-    }
-}
-
-private struct ReportCommentAlertPresenter: UIViewControllerRepresentable {
-    @Binding var isPresented: Bool
-    @Binding var text: String
-
-    let maximumLength: Int
-    let title: String
-    let message: String
-    let placeholder: String
-    let cancelTitle: String
-    let submitTitle: String
-    let onSubmit: () -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
-    }
-
-    func makeUIViewController(context: Context) -> UIViewController {
-        let viewController = UIViewController()
-        viewController.view.backgroundColor = .clear
-        return viewController
-    }
-
-    func updateUIViewController(
-        _ viewController: UIViewController,
-        context: Context
-    ) {
-        context.coordinator.parent = self
-        if isPresented {
-            context.coordinator.presentIfNeeded(from: viewController)
-        } else {
-            context.coordinator.dismissIfNeeded()
-        }
-    }
-
-    static func dismantleUIViewController(
-        _ viewController: UIViewController,
-        coordinator: Coordinator
-    ) {
-        coordinator.dismissIfNeeded(animated: false)
-    }
-
-    final class Coordinator: NSObject {
-        var parent: ReportCommentAlertPresenter
-
-        private weak var alertController: UIAlertController?
-        private var isPresentationScheduled = false
-
-        init(parent: ReportCommentAlertPresenter) {
-            self.parent = parent
-        }
-
-        func presentIfNeeded(from host: UIViewController) {
-            if let alertController {
-                synchronize(alertController)
-                return
-            }
-            guard !isPresentationScheduled else { return }
-            isPresentationScheduled = true
-
-            DispatchQueue.main.async { [weak self, weak host] in
-                guard let self, let host else { return }
-                self.isPresentationScheduled = false
-                guard self.parent.isPresented,
-                      let rootViewController = host.view.window?
-                        .rootViewController else { return }
-                self.presentAlert(
-                    from: self.topViewController(from: rootViewController)
-                )
-            }
-        }
-
-        func dismissIfNeeded(animated: Bool = true) {
-            guard let alertController else { return }
-            alertController.dismiss(animated: animated)
-            self.alertController = nil
-        }
-
-        private func presentAlert(from presenter: UIViewController) {
-            guard alertController == nil else { return }
-            let alertController = UIAlertController(
-                title: parent.title,
-                message: alertMessage(for: parent.text.count),
-                preferredStyle: .alert
-            )
-            alertController.addTextField { [weak self] textField in
-                guard let self else { return }
-                textField.placeholder = self.parent.placeholder
-                textField.text = self.parent.text
-                textField.clearButtonMode = .whileEditing
-                textField.addTarget(
-                    self,
-                    action: #selector(self.reportTextDidChange(_:)),
-                    for: .editingChanged
-                )
-            }
-            alertController.addAction(
-                UIAlertAction(
-                    title: parent.cancelTitle,
-                    style: .cancel
-                ) { [weak self] _ in
-                    guard let self else { return }
-                    self.alertController = nil
-                    self.parent.isPresented = false
-                }
-            )
-            alertController.addAction(
-                UIAlertAction(
-                    title: parent.submitTitle,
-                    style: .destructive
-                ) { [weak self] _ in
-                    guard let self else { return }
-                    self.alertController = nil
-                    self.parent.onSubmit()
-                    self.parent.isPresented = false
-                }
-            )
-            self.alertController = alertController
-            presenter.present(alertController, animated: true)
-        }
-
-        @objc
-        private func reportTextDidChange(_ textField: UITextField) {
-            guard textField.markedTextRange == nil else { return }
-            let limitedText = String(
-                (textField.text ?? "").prefix(parent.maximumLength)
-            )
-            if textField.text != limitedText {
-                textField.text = limitedText
-            }
-            parent.text = limitedText
-            alertController?.message = alertMessage(for: limitedText.count)
-        }
-
-        private func synchronize(_ alertController: UIAlertController) {
-            if alertController.textFields?.first?.text != parent.text {
-                alertController.textFields?.first?.text = parent.text
-            }
-            alertController.message = alertMessage(for: parent.text.count)
-        }
-
-        private func alertMessage(for count: Int) -> String {
-            "\(parent.message)\n\(count)/\(parent.maximumLength)"
-        }
-
-        private func topViewController(
-            from viewController: UIViewController
-        ) -> UIViewController {
-            if let presented = viewController.presentedViewController {
-                return topViewController(from: presented)
-            }
-            if let navigation = viewController as? UINavigationController,
-               let visible = navigation.visibleViewController {
-                return topViewController(from: visible)
-            }
-            if let tabs = viewController as? UITabBarController,
-               let selected = tabs.selectedViewController {
-                return topViewController(from: selected)
-            }
-            return viewController
-        }
     }
 }
 
@@ -1143,7 +684,6 @@ private struct ProfileBlockOptionsSheet: View {
     let user: NearbyUser
     let onClose: () -> Void
     let onBlock: () -> Void
-    let onReport: () -> Void
 
     var body: some View {
         VStack(spacing: 18) {
@@ -1180,19 +720,11 @@ private struct ProfileBlockOptionsSheet: View {
 
             VStack(spacing: 0) {
                 ProfileBlockOptionRow(
-                    title: Inc.NearbyProfile.blockWithoutReport.localized,
+                    title: Inc.NearbyProfile.block.localized,
                     systemImage: "person.crop.circle.badge.xmark",
                     action: onBlock
                 )
 
-                Divider()
-                    .padding(.leading, 58)
-
-                ProfileBlockOptionRow(
-                    title: Inc.NearbyProfile.reportSend.localized,
-                    systemImage: "exclamationmark.bubble",
-                    action: onReport
-                )
             }
             .background(
                 Color(uiColor: .secondarySystemBackground),
@@ -1209,7 +741,7 @@ private struct ProfileBlockOptionsSheet: View {
         Group {
             if let photoURL = user.photoURL,
                let url = URL(string: photoURL) {
-                KFImage(url)
+                LocalAvatar(url)
                     .placeholder { placeholder }
                     .resizable()
                     .scaledToFill()
@@ -1370,7 +902,7 @@ struct ProfileRowContextPreview: View {
         Group {
             if let photoURL = user.photoURL,
                let imageURL = URL(string: photoURL) {
-                KFImage(imageURL)
+                LocalAvatar(imageURL)
                     .placeholder { placeholder }
                     .resizable()
                     .scaledToFill()
@@ -1555,7 +1087,7 @@ struct ProfileSheetView: View {
         imageURL: URL,
         size: CGFloat
     ) -> some View {
-        KFImage(imageURL)
+        LocalAvatar(imageURL)
             .placeholder {
                 profilePlaceholder(size: size)
             }
@@ -1648,7 +1180,7 @@ struct ProfileSheetView: View {
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
-                .geometryGroup()
+                .telescanGeometryGroup()
                 .compositingGroup()
             }
             .padding(.top, 60)
@@ -1665,7 +1197,7 @@ struct ProfileSheetView: View {
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let imageURL {
                 FullScreenPhotoView(isPresented: $showPhotoPreview) {
-                    KFImage(imageURL)
+                    LocalAvatar(imageURL)
                         .placeholder { ProgressView() }
                         .resizable()
                         .scaledToFit()
@@ -1710,7 +1242,7 @@ private struct ProfileSheetControls: View {
                 .foregroundStyle(.primary)
                 .frame(width: 56, height: 44)
                 .contentShape(Capsule())
-                .contentTransition(.symbolEffect(.replace))
+                .telescanReplaceSymbolTransition()
         }
         .accessibilityLabel(
             isSaved

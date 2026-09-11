@@ -4,7 +4,7 @@ struct People: View {
     
     @EnvironmentObject var coordinator: AppCoordinator
     @EnvironmentObject var peopleViewModel: PeopleViewModel
-    @ObservedObject var authVM: CodeViewModel
+    @ObservedObject var authVM: LocalProfileViewModel
     
     private let peopNearleInc: String = Inc.Common.nearby.localized
     private let peopleInc: String = Inc.Common.nearby.localized

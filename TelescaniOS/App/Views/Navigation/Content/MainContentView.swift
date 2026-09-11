@@ -40,7 +40,7 @@ struct MainContentView: View {
                 isScanning: coordinator.isScaning
             )
         )
-        .onChange(of: coordinator.nearbyNotificationNavigationRequest) {
+        .telescanOnChange(of: coordinator.nearbyNotificationNavigationRequest) {
             _, _ in
             selectedMainTab = .nearby
             nearbyNavigationID = UUID()

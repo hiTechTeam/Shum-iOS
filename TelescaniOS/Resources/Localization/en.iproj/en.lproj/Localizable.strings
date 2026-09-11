@@ -138,7 +138,7 @@
 "quickActionsClear" = "Quick Clear";
 "quickActionsClearDescription" = "Remove a profile from Met immediately without confirmation.";
 "quickActionsBlock" = "Quick Block";
-"quickActionsBlockDescription" = "Block a profile immediately when swiping left, without a report.";
+"quickActionsBlockDescription" = "Immediately hide a profile on this phone when swiping left.";
 
 /* Nearby profile moderation */
 "nearbyProfileClose" = "Close profile";
@@ -172,9 +172,9 @@
 "nearbyProfileReportSentTitle" = "Report sent";
 "nearbyProfileReportSentMessage" = "Thank you. The report has been saved for moderation.";
 "nearbyProfileBlockTitle" = "Block this user?";
-"nearbyProfileBlockMessage" = "Choose a reason to send a report with the block, or block without reporting.";
+"nearbyProfileBlockMessage" = "This profile will be hidden on this phone. Blocking does not delete copies of your profile from other devices.";
 "nearbyProfileBlockConfirm" = "Block";
-"nearbyProfileBlockWithoutReport" = "Block without reporting";
+"nearbyProfileBlockWithoutReport" = "Block";
 "nearbyProfileBlockedMenu" = "Blocked";
 "nearbyProfileBlockedProfiles" = "Blocked profiles";
 "nearbyProfileSavedMenu" = "Saved";
@@ -213,8 +213,8 @@
 "deleteAccount" = "Delete account";
 "deleteAccountTitle" = "Delete account?";
 "deleteAccountMessage" = "Your Telescan profile, photo, and sessions on every device will be permanently deleted. Your Telegram account will not be affected.";
-"deleteAccountFailed" = "Account wasn't deleted";
-"deleteAccountFailedMessage" = "The server couldn't delete your account. Your profile data is unchanged. Please try again later.";
+"deleteAccountFailed" = "Profile wasn’t deleted";
+"deleteAccountFailedMessage" = "Couldn’t delete your profile. Please try again.";
 
 
 /* Info Sheet */
@@ -230,3 +230,18 @@
 "info_public_project" = "Public project information";
 "info_questions_and_suggestions" = "Questions and suggestions";
 "version" = "Version";
+
+"local.onboarding.photo.title" = "Add your photo";
+"local.onboarding.photo.description" = "Take a photo or choose one for your profile.";
+"local.onboarding.photo.next" = "Next";
+"local.onboarding.details.title" = "Your contact";
+"local.username.explanation" = "Enter your Telegram username without a link. Copy your username from your profile in Telegram.";
+"local.name.explanation" = "Enter your name";
+"local.profile.name" = "Name";
+"local.profile.save" = "Save";
+"local.profile.save.error" = "Check your name and Telegram username, then try again.";
+"local.sharing.explanation" = "While scanning is on, your name, Telegram username, bio and photo are shared with nearby devices over Bluetooth.";
+"local.photo.save.error" = "Couldn't save this photo. Please choose another image.";
+"local.delete.title" = "Delete profile?";
+"local.delete.action" = "Delete profile";
+"local.delete.message" = "Your profile, saved contacts, encounter history and blocked list will be removed from this iPhone. Copies already received by other people cannot be deleted remotely.";

@@ -25,7 +25,7 @@ struct BioEditorField: View {
                 .font(.system(size: 16))
                 .lineLimit(1...2)
                 .disabled(isSaving)
-                .onChange(of: text) { _, value in
+                .telescanOnChange(of: text) { _, value in
                     guard value.count > characterLimit else { return }
                     text = String(value.prefix(characterLimit))
                 }
@@ -76,7 +76,7 @@ struct BioEditorField: View {
 }
 
 struct BioProfileField: View {
-    @ObservedObject var authVM: CodeViewModel
+    @ObservedObject var authVM: LocalProfileViewModel
 
     @State private var draftBio = ""
     @State private var showEditor = false
@@ -111,7 +111,7 @@ struct BioProfileField: View {
         .onAppear {
             draftBio = authVM.bio ?? ""
         }
-        .onChange(of: showEditor) { _, isPresented in
+        .telescanOnChange(of: showEditor) { _, isPresented in
             if !isPresented {
                 draftBio = authVM.bio ?? ""
             }
@@ -133,7 +133,7 @@ struct BioEditorSheet: View {
     @Binding var draftBio: String
     @Binding var isPresented: Bool
 
-    @ObservedObject var authVM: CodeViewModel
+    @ObservedObject var authVM: LocalProfileViewModel
 
     private func apply() {
         Task {

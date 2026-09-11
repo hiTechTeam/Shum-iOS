@@ -266,7 +266,7 @@ private struct NativeSwipeInteractionRow<Content: View>: View {
                 .easeOut(duration: isSwipeActive ? 0.16 : 0.3),
                 value: isSwipeActive
             )
-            .onChange(of: isSwipeActive) { wasActive, isActive in
+            .telescanOnChange(of: isSwipeActive) { wasActive, isActive in
                 if isActive {
                     didBeginSwipe = true
                 } else if wasActive, persistentSurfaceColor != nil {
@@ -275,7 +275,7 @@ private struct NativeSwipeInteractionRow<Content: View>: View {
                     }
                 }
             }
-            .onChange(of: hasPersistentSurface) { _, hasSurface in
+            .telescanOnChange(of: hasPersistentSurface) { _, hasSurface in
                 guard hasSurface, !isSwipeActive else { return }
                 didBeginSwipe = false
                 suppressPersistentSurface = false

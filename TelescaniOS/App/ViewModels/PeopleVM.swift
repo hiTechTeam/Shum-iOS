@@ -95,13 +95,8 @@ final class PeopleViewModel: ObservableObject {
         -> TelescanProfileResponse
     private let blockedProfilesLoader: @MainActor () async throws
         -> [BlockedProfileResponse]
-    private let reportSubmitter: @MainActor (
-        UUID,
-        String?,
-        UUID
-    ) async throws -> ReportResponse
-    private let blockSubmitter: @MainActor (UUID) async throws
-        -> BlockedProfileResponse
+    private let blockSubmitter: (@MainActor (UUID) async throws
+        -> BlockedProfileResponse)?
     private let unblockSubmitter: @MainActor (UUID) async throws -> Void
     private let callbackGate = BLECallbackGate()
     private let callbackDispatcher: any BLECallbackDispatching
@@ -155,29 +150,16 @@ final class PeopleViewModel: ObservableObject {
             MainActorBLECallbackDispatcher(),
         profileLoader: @escaping @MainActor (UUID) async throws
             -> TelescanProfileResponse = {
-                try await FetchService.fetch.profile(telescanID: $0)
+                try LocalCardStore.shared.profile($0)
             },
         blockedProfilesLoader: @escaping @MainActor () async throws
             -> [BlockedProfileResponse] = {
-                try await FetchService.fetch.blockedProfiles()
+                LocalBlockedProfiles.load()
             },
-        reportSubmitter: @escaping @MainActor (
-            UUID,
-            String?,
-            UUID
-        ) async throws -> ReportResponse = { id, details, requestID in
-            try await FetchService.fetch.submitReport(
-                targetID: id,
-                details: details,
-                requestID: requestID
-            )
-        },
-        blockSubmitter: @escaping @MainActor (UUID) async throws
-            -> BlockedProfileResponse = { id in
-                try await FetchService.fetch.blockProfile(telescanID: id)
-        },
+        blockSubmitter: (@MainActor (UUID) async throws
+            -> BlockedProfileResponse)? = nil,
         unblockSubmitter: @escaping @MainActor (UUID) async throws -> Void = {
-            try await FetchService.fetch.unblockProfile(telescanID: $0)
+            _ = $0
         },
         nowProvider: @escaping () -> Date = Date.init
     ) {
@@ -219,7 +201,6 @@ final class PeopleViewModel: ObservableObject {
         self.callbackDispatcher = callbackDispatcher
         self.profileLoader = profileLoader
         self.blockedProfilesLoader = blockedProfilesLoader
-        self.reportSubmitter = reportSubmitter
         self.blockSubmitter = blockSubmitter
         self.unblockSubmitter = unblockSubmitter
         unviewedEncounterIDs = self.unviewedEncounterStore.ids
@@ -314,29 +295,20 @@ final class PeopleViewModel: ObservableObject {
         }
     }
 
-    func submitReport(
-        for user: NearbyUser,
-        details: String?,
-        requestID: UUID
-    ) async throws {
-        let generation = accountGeneration
-        _ = try await reportSubmitter(
-            user.id,
-            ReportCommentPolicy.normalized(details),
-            requestID
-        )
-        guard generation == accountGeneration else {
-            throw CancellationError()
-        }
-    }
-
     func isCurrentAccountStateGeneration(_ generation: UUID) -> Bool {
         generation == accountGeneration
     }
 
     func block(_ user: NearbyUser) async throws {
         let generation = accountGeneration
-        let blockedProfile = try await blockSubmitter(user.id)
+        let blockedProfile: BlockedProfileResponse
+        if let blockSubmitter {
+            blockedProfile = try await blockSubmitter(user.id)
+        } else {
+            blockedProfile = BlockedProfileResponse(telescanId: user.id,
+                name: user.name, username: user.username, photoUrl: user.photoURL,
+                blockedAt: ISO8601DateFormatter().string(from: nowProvider()))
+        }
         guard generation == accountGeneration else {
             throw CancellationError()
         }
@@ -347,6 +319,7 @@ final class PeopleViewModel: ObservableObject {
         } else {
             blockedProfiles.insert(blockedProfile, at: 0)
         }
+        LocalBlockedProfiles.save(blockedProfiles)
         purgeEncounterData(canonicalIDs: [user.discoveryID])
         loseDevice(id: user.discoveryID)
     }
@@ -360,6 +333,7 @@ final class PeopleViewModel: ObservableObject {
         blockedStateRevision += 1
         blockedProfileStore.remove(profile.telescanId)
         blockedProfiles.removeAll { $0.id == profile.id }
+        LocalBlockedProfiles.save(blockedProfiles)
         refreshEncounterHistory(at: nowProvider())
     }
 
@@ -371,6 +345,7 @@ final class PeopleViewModel: ObservableObject {
         blockedStateRevision += 1
         blockedProfileStore.removeAll()
         blockedProfiles.removeAll()
+        LocalBlockedProfiles.save([])
     }
 
     func resetAccountScopedState() {
@@ -775,6 +750,7 @@ final class PeopleViewModel: ObservableObject {
                 return
             }
             userCache[id] = user
+            SavedPeopleStateStore.shared.refreshProfile(user)
             notifyResolvedProfileIfNeeded(id: id)
             let lastSeenAt = lastSignals[id] ?? nowProvider()
             bufferEncounter(user, at: lastSeenAt, force: true)
@@ -844,7 +820,7 @@ final class PeopleViewModel: ObservableObject {
             ?? username
         let photoURL = profile.photoUrl.flatMap { value -> String? in
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, URL(string: trimmed) != nil else { return nil }
+            guard !trimmed.isEmpty, URL(string: trimmed)?.isFileURL == true else { return nil }
             return trimmed
         }
         return NearbyUser(
@@ -857,33 +833,15 @@ final class PeopleViewModel: ObservableObject {
     }
 
     private func isTerminalProfileError(_ error: Error) -> Bool {
-        if error is NearbyProfileError {
-            return true
+        if error is NearbyProfileError { return true }
+        switch error {
+        case LocalCardError.invalidProfile, LocalCardError.invalidPhoto, LocalCardError.invalidPacket: return true
+        default: return false
         }
-        guard case APIClientError.httpStatus(let status) = error else {
-            return false
-        }
-        return (400...499).contains(status)
-            && status != 408
-            && status != 425
-            && status != 429
     }
 
     private func shouldRetryProfileResolution(_ error: Error) -> Bool {
-        if error is URLError {
-            return true
-        }
-        switch error {
-        case APIClientError.invalidResponse:
-            return true
-        case APIClientError.httpStatus(let status):
-            return status == 408
-                || status == 425
-                || status == 429
-                || (500...599).contains(status)
-        default:
-            return false
-        }
+        error is LocalCardError || error is URLError
     }
 
     private func loseDevice(id: String) {
@@ -1130,6 +1088,13 @@ final class PeopleViewModel: ObservableObject {
 }
 
 extension PeopleViewModel: BLEManagerDelegate {
+    nonisolated func didReceiveProfile(id: String, epoch: UUID) {
+        callbackDispatcher.dispatch { @MainActor [weak self] in
+            guard let self, self.callbackGate.accepts(epoch) else { return }
+            Task { @MainActor in await self.refreshUser(telescanID: id) }
+        }
+    }
+
     nonisolated func didDiscoverDevice(id: String, rssi: Int, epoch: UUID) {
         callbackDispatcher.dispatch { @MainActor [weak self] in
             guard let self, self.callbackGate.accepts(epoch) else { return }

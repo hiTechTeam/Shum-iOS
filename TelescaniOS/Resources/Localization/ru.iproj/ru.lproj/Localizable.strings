@@ -138,7 +138,7 @@
 "quickActionsClear" = "Быстрая очистка";
 "quickActionsClearDescription" = "Сразу убирать профиль из «Виделись» без подтверждения.";
 "quickActionsBlock" = "Быстрый блок";
-"quickActionsBlockDescription" = "Сразу блокировать профиль при свайпе влево, без жалобы.";
+"quickActionsBlockDescription" = "Сразу скрывать профиль на этом телефоне при свайпе влево.";
 
 /* Модерация профиля пользователя рядом */
 "nearbyProfileClose" = "Закрыть профиль";
@@ -172,9 +172,9 @@
 "nearbyProfileReportSentTitle" = "Жалоба отправлена";
 "nearbyProfileReportSentMessage" = "Спасибо. Жалоба сохранена и будет рассмотрена модератором.";
 "nearbyProfileBlockTitle" = "Заблокировать пользователя?";
-"nearbyProfileBlockMessage" = "Выберите причину, чтобы отправить жалобу вместе с блокировкой, или заблокируйте без жалобы.";
+"nearbyProfileBlockMessage" = "Профиль будет скрыт на этом телефоне. Блокировка не удаляет копии вашего профиля с других устройств.";
 "nearbyProfileBlockConfirm" = "Заблокировать";
-"nearbyProfileBlockWithoutReport" = "Заблокировать без жалобы";
+"nearbyProfileBlockWithoutReport" = "Заблокировать";
 "nearbyProfileBlockedMenu" = "Заблокированные";
 "nearbyProfileBlockedProfiles" = "Заблокированные профили";
 "nearbyProfileSavedMenu" = "Сохранённые";
@@ -213,8 +213,8 @@
 "deleteAccount" = "Удалить аккаунт";
 "deleteAccountTitle" = "Удалить аккаунт?";
 "deleteAccountMessage" = "Ваш профиль Telescan, фотография и сессии на всех устройствах будут удалены без возможности восстановления. Аккаунт Telegram не изменится.";
-"deleteAccountFailed" = "Аккаунт не удалён";
-"deleteAccountFailedMessage" = "Сервер не смог удалить аккаунт. Данные профиля не изменены. Попробуйте ещё раз позже.";
+"deleteAccountFailed" = "Профиль не удалён";
+"deleteAccountFailedMessage" = "Не удалось удалить профиль. Попробуйте ещё раз.";
 
 /* Info Sheet */
 "Telescan" = "Telescan";
@@ -229,3 +229,18 @@
 "info_public_project" = "Публичная информация о проекте";
 "info_questions_and_suggestions" = "По вопросам и предложениям";
 "version" = "Версия";
+
+"local.onboarding.photo.title" = "Добавьте фото";
+"local.onboarding.photo.description" = "Сделайте фото или выберите его для своего профиля.";
+"local.onboarding.photo.next" = "Дальше";
+"local.onboarding.details.title" = "Ваш контакт";
+"local.username.explanation" = "Введите username Telegram без ссылки. Скопируйте свой username из вашего профиля в Telegram.";
+"local.name.explanation" = "Введите ваше имя";
+"local.profile.name" = "Имя";
+"local.profile.save" = "Сохранить";
+"local.profile.save.error" = "Проверьте имя и username Telegram и попробуйте ещё раз.";
+"local.sharing.explanation" = "При включённом сканировании ваше имя, username Telegram, описание и фото передаются находящимся рядом устройствам по Bluetooth.";
+"local.photo.save.error" = "Не удалось сохранить фото. Попробуйте выбрать другое изображение.";
+"local.delete.title" = "Удалить профиль?";
+"local.delete.action" = "Удалить профиль";
+"local.delete.message" = "С этого iPhone будут удалены ваш профиль, сохранённые контакты, история встреч и список блокировок. Копии, уже полученные другими людьми, удалённо удалить нельзя.";

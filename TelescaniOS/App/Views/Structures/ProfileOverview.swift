@@ -6,7 +6,7 @@ struct ProfileOverviewView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
-    @ObservedObject var authCodeViewModel: CodeViewModel
+    @ObservedObject var authCodeViewModel: LocalProfileViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
     @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
     @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
@@ -28,7 +28,7 @@ struct ProfileOverviewView: View {
         UNAuthorizationStatus = .notDetermined
 
     init(
-        authCodeViewModel: CodeViewModel,
+        authCodeViewModel: LocalProfileViewModel,
         photoViewModel: ProfilePhotoViewModel
     ) {
         self.authCodeViewModel = authCodeViewModel
@@ -72,13 +72,13 @@ struct ProfileOverviewView: View {
                 .padding(.top, 30)
                 .padding(.bottom, 36)
             }
-            .scrollBounceBehavior(.always, axes: .vertical)
+            .telescanAlwaysBounce()
             .refreshable { await coordinator.refreshSession() }
         }
-        .onChange(of: authCodeViewModel.photoS3URL) { _, value in
+        .telescanOnChange(of: authCodeViewModel.localPhotoURL) { _, value in
             photoVM.loadPhotoFromURL(value)
         }
-        .onChange(of: scenePhase) { _, phase in
+        .telescanOnChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task {
                 await refreshNotificationAuthorizationStatus()
@@ -150,49 +150,17 @@ struct ProfileOverviewView: View {
             }
         }
         .alert(
-            Inc.Profile.accountActionsTitle.localized,
-            isPresented: $showLogoutOptions
-        ) {
-            Button(Inc.Profile.logoutCurrent.localized, role: .destructive) {
-                DispatchQueue.main.async {
-                    showLogoutConfirmation = true
-                }
-            }
-            Button(Inc.Profile.deleteAccount.localized, role: .destructive) {
-                DispatchQueue.main.async {
-                    showDeleteConfirmation = true
-                }
-            }
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-        }
-        .alert(
-            Inc.Profile.logoutCurrentTitle.localized,
-            isPresented: $showLogoutConfirmation
-        ) {
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-            Button(
-                Inc.Profile.logoutCurrent.localized,
-                role: .destructive,
-                action: logoutCurrent
-            )
-        } message: {
-            Text(Inc.Profile.logoutCurrentMessage.localized)
-        }
-        .alert(Inc.Profile.logoutFailed.localized, isPresented: $showLogoutError) {
-            Button(Inc.Common.okey.localized, role: .cancel) { }
-        }
-        .alert(
-            Inc.Profile.deleteAccountTitle.localized,
+            NSLocalizedString("local.delete.title", comment: ""),
             isPresented: $showDeleteConfirmation
         ) {
             Button(Inc.Common.cancel.localized, role: .cancel) { }
             Button(
-                Inc.Profile.deleteAccount.localized,
+                NSLocalizedString("local.delete.action", comment: ""),
                 role: .destructive,
                 action: deleteAccount
             )
         } message: {
-            Text(Inc.Profile.deleteAccountMessage.localized)
+            Text(NSLocalizedString("local.delete.message", comment: ""))
         }
         .alert(Inc.Profile.deleteAccountFailed.localized, isPresented: $showDeleteError) {
             Button(Inc.Common.okey.localized, role: .cancel) { }
@@ -341,15 +309,13 @@ struct ProfileOverviewView: View {
             }
             .tint(.primary)
 
-            Divider()
-
             Button(role: .destructive) {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                showLogoutOptions = true
+                showDeleteConfirmation = true
             } label: {
                 Label(
-                    Inc.Profile.logout.localized,
-                    systemImage: "rectangle.portrait.and.arrow.right"
+                    NSLocalizedString("local.delete.action", comment: ""),
+                    systemImage: "trash"
                 )
                 .foregroundStyle(.red)
             }
@@ -425,18 +391,6 @@ struct ProfileOverviewView: View {
         let settings = await UNUserNotificationCenter.current()
             .notificationSettings()
         notificationAuthorizationStatus = settings.authorizationStatus
-    }
-
-    private func logoutCurrent() {
-        isWorking = true
-        Task {
-            do {
-                try await coordinator.logoutCurrentSession()
-            } catch {
-                isWorking = false
-                showLogoutError = true
-            }
-        }
     }
 
     private func deleteAccount() {

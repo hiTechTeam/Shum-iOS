@@ -97,7 +97,7 @@ struct ProfilePhotoView: View {
                     }
             }
             .background(Color.black.ignoresSafeArea())
-            .presentationBackground(.black)
+            .telescanPresentationBackground(.black)
         }
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let uiImage = viewModel.uiImage {
@@ -109,7 +109,10 @@ struct ProfilePhotoView: View {
             }
         }
         .photosPicker(isPresented: $showGalleryPicker, selection: $selectedItem, matching: .images)
-        .onChange(of: selectedItem) { _, newItem in
+        .alert("local.photo.save.error", isPresented: $viewModel.saveFailed) {
+            Button(Inc.Common.okey.localized, role: .cancel) { }
+        }
+        .telescanOnChange(of: selectedItem) { _, newItem in
             Task {
                 if let data = try? await newItem?.loadTransferable(type: Data.self),
                    let uiImg = UIImage(data: data) {
@@ -381,7 +384,7 @@ struct FullScreenPhotoView<Content: View>: View {
             )
         }
         .background(Color.clear)
-        .presentationBackground(.clear)
+        .telescanPresentationBackground(.clear)
         .statusBarHidden(true)
         .onAppear {
             DispatchQueue.main.async {
@@ -531,7 +534,7 @@ private struct ZoomablePhoto<Content: View>: View {
                 viewportSize = proxy.size
                 reconcileOffset()
             }
-            .onChange(of: proxy.size) { _, newSize in
+            .telescanOnChange(of: proxy.size) { _, newSize in
                 viewportSize = newSize
                 reconcileOffset()
             }

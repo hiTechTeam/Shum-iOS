@@ -1,5 +1,4 @@
 import SwiftUI
-import Kingfisher
 import UIKit
 
 struct EncounterHistoryView: View {
@@ -24,7 +23,7 @@ struct EncounterHistoryView: View {
                 .ignoresSafeArea()
 
             if peopleViewModel.encounterHistory.isEmpty {
-                ContentUnavailableView(
+                TelescanContentUnavailableView(
                     Inc.EncounterHistory.emptyTitle.localized,
                     systemImage: "clock.arrow.circlepath",
                     description: Text(
@@ -101,12 +100,12 @@ struct EncounterHistoryView: View {
         } message: { _ in
             Text(Inc.EncounterHistory.deleteMessage.localized)
         }
-        .onChange(of: scenePhase) { _, newPhase in
+        .telescanOnChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             peopleViewModel.refreshEncounterHistory()
             relativeTimeReference = Date()
         }
-        .onChange(of: peopleViewModel.encounterHistory.map(\.id)) { _, ids in
+        .telescanOnChange(of: peopleViewModel.encounterHistory.map(\.id)) { _, ids in
             if let selectedEncounter,
                !ids.contains(selectedEncounter.id) {
                 self.selectedEncounter = nil
@@ -427,7 +426,7 @@ private struct EncounterHistoryAvatar: View {
         Group {
             if let photoURL = user.photoURL,
                let url = URL(string: photoURL) {
-                KFImage(url)
+                LocalAvatar(url)
                     .placeholder { placeholder }
                     .resizable()
                     .scaledToFill()

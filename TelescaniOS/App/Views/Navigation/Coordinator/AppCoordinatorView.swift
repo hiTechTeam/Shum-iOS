@@ -16,8 +16,6 @@ struct AppCoordinatorView: View {
                     MainContentView(
                         profilePhotoViewModel: coordinator.profilePhotoViewModel
                     )
-                } else if coordinator.isAuthenticated {
-                    AuthenticatedOnboardingView()
                 } else {
                     Welcome()
                         .id(coordinator.authenticationFlowID)
@@ -55,12 +53,12 @@ struct AppCoordinatorView: View {
             guard !Task.isCancelled, coordinator.showSplash else { return }
             hideSplash()
         }
-        .onChange(of: coordinator.hasCompletedInitialSessionRefresh) {
+        .telescanOnChange(of: coordinator.hasCompletedInitialSessionRefresh) {
             _, isComplete in
             guard isComplete else { return }
             hideSplashIfReady()
         }
-        .onChange(of: scenePhase) { _, phase in
+        .telescanOnChange(of: scenePhase) { _, phase in
             coordinator.updateApplicationState(isActive: phase == .active)
             if phase == .active {
                 Task {
@@ -84,15 +82,6 @@ struct AppCoordinatorView: View {
 
         withAnimation(.easeOut(duration: 0.18)) {
             coordinator.showSplash = false
-        }
-    }
-}
-
-private struct AuthenticatedOnboardingView: View {
-    var body: some View {
-        NavigationStack {
-            AuthCode()
-                .navigationBarBackButtonHidden(true)
         }
     }
 }

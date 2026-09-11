@@ -4,11 +4,7 @@
 
 <plist version="1.0">
 <dict>
-    <key>API_ORIGIN</key>
-    <string>$(API_ORIGIN)</string>
 
-    <key>TELESCAN_BOT</key>
-    <string>$(TELESCAN_BOT)</string>
 
     <key>CFBundleDisplayName</key>
     <string>$(PRODUCT_NAME)</string>

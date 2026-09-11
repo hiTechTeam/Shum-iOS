@@ -1,3 +1,1 @@
 // Copy this file to Release.xcconfig and use only public release values
-API_ORIGIN = https://api.tgtelescan.ru
-TELESCAN_BOT = https://t.me/tgtelescan_bot

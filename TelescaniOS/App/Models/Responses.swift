@@ -1,18 +1,5 @@
 import Foundation
 
-struct TokenResponse: Codable, Equatable {
-    let accessToken: String
-    let refreshToken: String
-    let tokenType: String
-    let expiresIn: Int
-}
-
-struct AccessTokenResponse: Codable, Equatable {
-    let accessToken: String
-    let tokenType: String
-    let expiresIn: Int
-}
-
 struct TelescanProfileResponse: Codable, Equatable {
     let telescanId: UUID
     let name: String?
@@ -42,22 +29,6 @@ struct TelescanProfileResponse: Codable, Equatable {
         self.photoUrl = photoUrl
         self.telegramLinked = telegramLinked
     }
-}
-
-struct AuthenticatedAccountResponse: Codable, Equatable {
-    let tokens: TokenResponse
-    let profile: TelescanProfileResponse
-}
-
-struct TelegramLinkResponse: Codable, Equatable {
-    let access: AccessTokenResponse
-    let profile: TelescanProfileResponse
-}
-
-struct ReportResponse: Codable, Equatable {
-    let reportId: UUID
-    let status: String
-    let createdAt: String
 }
 
 struct BlockedProfileResponse: Codable, Equatable, Identifiable {

@@ -125,7 +125,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     private let discoveryEventEpochGate: BLESourceEpochGate
 
     private let serviceUUID = CBUUID(
-        string: "A6B50001-8A5D-4F7A-9E4C-123456789001"
+        string: "A6B51001-8A5D-4F7A-9E4C-123456789001"
     )
 
     private let identityCharacteristicUUID = CBUUID(
@@ -157,6 +157,26 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     private var identityCharacteristic: CBMutableCharacteristic?
     private var compactIdentityCharacteristic: CBMutableCharacteristic?
     private var peerIdentityWriteCharacteristic: CBMutableCharacteristic?
+    private let cardCharacteristicUUID = CBUUID(string: "A6B51005-8A5D-4F7A-9E4C-123456789005")
+    private var cardCharacteristic: CBMutableCharacteristic?
+    private final class CardClient {
+        let exchange: BLECardExchange
+        let characteristic: CBCharacteristic
+        var writing = false
+        init(_ exchange: BLECardExchange, _ characteristic: CBCharacteristic) {
+            self.exchange = exchange; self.characteristic = characteristic
+        }
+    }
+    private final class CardServer {
+        let exchange: BLECardExchange
+        let central: CBCentral
+        var pending: Data?
+        init(_ exchange: BLECardExchange, _ central: CBCentral) {
+            self.exchange = exchange; self.central = central
+        }
+    }
+    private var cardClients: [UUID: CardClient] = [:]
+    private var cardServers: [UUID: CardServer] = [:]
     private var publishedService: CBMutableService?
 
     private var shouldScan = false
@@ -230,18 +250,12 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
 
         logger.info("BLEManager init")
 
-        if let storedIdentity = UserDefaults.standard.string(
-            forKey: storedIdentityKey
-        ), let uuid = UUID(uuidString: storedIdentity) {
-            currentIdentity = uuid.uuidString.lowercased()
-        } else {
-            currentIdentity = nil
-        }
+        currentIdentity = LocalCardStore.shared.ownManifest?.body.id.uuidString.lowercased()
 
         let discoveryEnabled = UserDefaults.standard.bool(
             forKey: discoveryEnabledKey
         )
-        shouldScan = discoveryEnabled
+        shouldScan = discoveryEnabled && currentIdentity != nil
         shouldAdvertise = discoveryEnabled && currentIdentity != nil
 
         centralManager = CBCentralManager(
@@ -646,6 +660,8 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     }
 
     private func clearPublishedServiceState() {
+        cardServers.removeAll()
+        cardCharacteristic = nil
         identityCharacteristic = nil
         compactIdentityCharacteristic = nil
         peerIdentityWriteCharacteristic = nil
@@ -724,7 +740,11 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             primary: true
         )
 
+        let card = CBMutableCharacteristic(type: cardCharacteristicUUID,
+            properties: [.write, .notify], value: nil, permissions: [.writeable])
+        cardCharacteristic = card
         service.characteristics = [
+            card,
             compactCharacteristic,
             characteristic,
             peerIdentityWriteCharacteristic
@@ -835,6 +855,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         guard centralManager.state == .poweredOn else { return }
 
         let peripheralID = peripheral.identifier
+        guard resolvingPeripheralIDs.contains(peripheralID) || resolvingPeripheralIDs.count < 8 else { return }
         guard let eventEpoch = eventEpoch
                 ?? peripheralEpochTracker.origin(for: peripheralID)
                 ?? currentDiscoveryEventEpoch(),
@@ -892,6 +913,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     private func scheduleForegroundIdentityTimeout(
         for peripheral: CBPeripheral
     ) {
+        guard cardClients[peripheral.identifier] == nil else { return }
         guard isApplicationActive else {
             logger.info(
                 "Identity connection remains pending in the background"
@@ -964,6 +986,8 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
     }
 
     private func cancelIdentityResolutions() {
+        cardClients.removeAll()
+        cardServers.removeAll()
         deferredPeripheralResolutions.removeAll()
         peripheralEpochTracker.discardDeferred()
         for (id, peripheral) in discoveredPeripherals {
@@ -987,6 +1011,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         shouldRetry: Bool
     ) {
         let id = peripheral.identifier
+        cardClients.removeValue(forKey: id)
         guard discoveredPeripherals[id] === peripheral,
               peripheralEpochTracker.origin(for: id) != nil else {
             return
@@ -1002,6 +1027,7 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
         terminalRetryDefault: Bool
     ) {
         let id = peripheral.identifier
+        cardClients.removeValue(forKey: id)
         guard discoveredPeripherals[id] === peripheral,
               let eventEpoch = peripheralEpochTracker.origin(for: id) else {
             return
@@ -1136,6 +1162,136 @@ public final class BLEManager: NSObject, BLEManagerProtocol {
             identity: identity,
             rssi: Int(Int8(bitPattern: data[16]))
         )
+    }
+}
+
+extension BLEManager {
+    private func makeCardExchange(peerID: UUID, epoch: UUID) throws -> BLECardExchange {
+        guard let own = LocalCardStore.shared.ownManifest else { throw LocalCardError.unavailable }
+        let expected = peripheralIdentities[peerID].flatMap(UUID.init(uuidString:))
+        if let expected, LocalCardStore.shared.isBlocked(expected) { throw LocalCardError.unavailable }
+        return try BLECardExchange(own: own, expectedPeer: expected) { [weak self] manifest in
+            guard let self, self.shouldScan, self.isCurrentDiscoveryEventEpoch(epoch) else { return }
+            self.handleIdentity(manifest.body.id.uuidString,
+                rssi: self.peripheralRSSI[peerID] ?? self.recentPeripherals[peerID]?.rssi ?? -70,
+                peripheralID: peerID, eventEpoch: epoch)
+            DispatchQueue.main.async { [weak self] in
+                self?.delegate?.didReceiveProfile(id: manifest.body.id.uuidString.lowercased(), epoch: epoch)
+            }
+        }
+    }
+
+    private func beginCardExchange(_ peripheral: CBPeripheral, service: CBService?) -> Bool {
+        guard let epoch = acceptedEpoch(for: peripheral),
+              let characteristic = service?.characteristics?.first(where: { $0.uuid == cardCharacteristicUUID }) else { return false }
+        do {
+            let client = CardClient(try makeCardExchange(peerID: peripheral.identifier, epoch: epoch), characteristic)
+            cardClients[peripheral.identifier] = client
+            identityResolutionTimeoutGenerations.removeValue(forKey: peripheral.identifier)
+            peripheral.setNotifyValue(true, for: characteristic)
+            queue.asyncAfter(deadline: .now() + 90) { [weak self, weak peripheral] in
+                guard let self, let peripheral, self.cardClients[peripheral.identifier] === client else { return }
+                self.finishIdentityResolution(peripheral, shouldRetry: true)
+            }
+        } catch {
+            finishIdentityResolution(peripheral, shouldRetry: false)
+        }
+        return true
+    }
+
+    public func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+        guard characteristic.uuid == cardCharacteristicUUID,
+              cardClients[peripheral.identifier] != nil,
+              acceptedEpoch(for: peripheral) != nil else { return }
+        guard error == nil, characteristic.isNotifying else {
+            finishIdentityResolution(peripheral, shouldRetry: true); return
+        }
+        pumpCardClient(peripheral)
+    }
+
+    private func receiveCardNotification(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, error: Error?) {
+        guard acceptedEpoch(for: peripheral) != nil,
+              let client = cardClients[peripheral.identifier], client.characteristic === characteristic else { return }
+        do {
+            guard error == nil, let data = characteristic.value else { throw LocalCardError.invalidPacket }
+            try client.exchange.receive(data)
+            pumpCardClient(peripheral)
+        } catch { finishIdentityResolution(peripheral, shouldRetry: true) }
+    }
+
+    private func pumpCardClient(_ peripheral: CBPeripheral) {
+        guard shouldScan, acceptedEpoch(for: peripheral) != nil,
+              let client = cardClients[peripheral.identifier], !client.writing,
+              client.characteristic.isNotifying else { return }
+        if let peer = client.exchange.peer, LocalCardStore.shared.isBlocked(peer.body.id) {
+            finishIdentityResolution(peripheral, shouldRetry: false); return
+        }
+        if let frame = client.exchange.nextFrame(maximumBytes: min(512, peripheral.maximumWriteValueLength(for: .withResponse))) {
+            client.writing = true
+            peripheral.writeValue(frame, for: client.characteristic, type: .withResponse)
+        } else if client.exchange.complete {
+            cardClients.removeValue(forKey: peripheral.identifier)
+            // End this exchange even when keeping the background connection.
+            // A later refresh must subscribe afresh and receive a new manifest.
+            peripheral.setNotifyValue(false, for: client.characteristic)
+            if let peer = client.exchange.peer,
+               retainBackgroundConnectionIfNeeded(peripheral, peerIdentity: peer.body.id) { return }
+            finishIdentityResolution(peripheral, shouldRetry: false)
+        }
+    }
+
+    public func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
+        guard characteristic === cardCharacteristic, shouldAdvertise, shouldScan,
+              cardServers.count < 8, let epoch = currentDiscoveryEventEpoch() else { return }
+        do {
+            let server = CardServer(try makeCardExchange(peerID: central.identifier, epoch: epoch), central)
+            cardServers[central.identifier] = server
+            pumpCardServer(server)
+            queue.asyncAfter(deadline: .now() + 90) { [weak self] in
+                guard let self, self.cardServers[central.identifier] === server else { return }
+                self.cardServers.removeValue(forKey: central.identifier)
+            }
+        } catch { cardServers.removeValue(forKey: central.identifier) }
+    }
+
+    public func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
+        if characteristic.uuid == cardCharacteristicUUID { cardServers.removeValue(forKey: central.identifier) }
+    }
+
+    public func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
+        for server in Array(cardServers.values) { pumpCardServer(server) }
+    }
+
+    private func receiveCardWrite(_ request: CBATTRequest) {
+        guard request.characteristic === cardCharacteristic, request.offset == 0,
+              shouldAdvertise, shouldScan, currentDiscoveryEventEpoch() != nil,
+              let server = cardServers[request.central.identifier], let data = request.value else {
+            peripheralManager.respond(to: request, withResult: .requestNotSupported); return
+        }
+        do {
+            try server.exchange.receive(data)
+            peripheralManager.respond(to: request, withResult: .success)
+            pumpCardServer(server)
+        } catch {
+            cardServers.removeValue(forKey: request.central.identifier)
+            peripheralManager.respond(to: request, withResult: .invalidAttributeValueLength)
+        }
+    }
+
+    private func pumpCardServer(_ server: CardServer) {
+        guard shouldAdvertise, shouldScan, let characteristic = cardCharacteristic,
+              peripheralManager.state == .poweredOn else { return }
+        if let peer = server.exchange.peer, LocalCardStore.shared.isBlocked(peer.body.id) {
+            cardServers.removeValue(forKey: server.central.identifier); return
+        }
+        while true {
+            if server.pending == nil {
+                server.pending = server.exchange.nextFrame(maximumBytes: min(512, server.central.maximumUpdateValueLength))
+            }
+            guard let frame = server.pending else { return }
+            guard peripheralManager.updateValue(frame, for: characteristic, onSubscribedCentrals: [server.central]) else { return }
+            server.pending = nil
+        }
     }
 }
 
@@ -1280,7 +1436,7 @@ extension BLEManager: CBCentralManagerDelegate {
 
         shouldScan = UserDefaults.standard.bool(
             forKey: discoveryEnabledKey
-        )
+        ) && currentIdentity != nil
 
         if let peripherals =
             dict[CBCentralManagerRestoredStatePeripheralsKey]
@@ -1345,7 +1501,8 @@ extension BLEManager: CBPeripheralDelegate {
             [
                 compactIdentityCharacteristicUUID,
                 identityCharacteristicUUID,
-                peerIdentityWriteCharacteristicUUID
+                peerIdentityWriteCharacteristicUUID,
+                cardCharacteristicUUID
             ],
             for: service
         )
@@ -1388,6 +1545,10 @@ extension BLEManager: CBPeripheralDelegate {
         didUpdateValueFor characteristic: CBCharacteristic,
         error: Error?
     ) {
+        if characteristic.uuid == cardCharacteristicUUID {
+            receiveCardNotification(peripheral, characteristic: characteristic, error: error)
+            return
+        }
         let id = peripheral.identifier
         guard shouldScan,
               let eventEpoch = acceptedEpoch(for: peripheral),
@@ -1461,6 +1622,14 @@ extension BLEManager: CBPeripheralDelegate {
         didWriteValueFor characteristic: CBCharacteristic,
         error: Error?
     ) {
+        if characteristic.uuid == cardCharacteristicUUID {
+            guard let client = cardClients[peripheral.identifier],
+                  acceptedEpoch(for: peripheral) != nil else { return }
+            if error != nil { finishIdentityResolution(peripheral, shouldRetry: true); return }
+            client.writing = false
+            pumpCardClient(peripheral)
+            return
+        }
         let id = peripheral.identifier
         guard characteristic.uuid == peerIdentityWriteCharacteristicUUID,
               acceptedEpoch(for: peripheral) != nil,
@@ -1473,6 +1642,7 @@ extension BLEManager: CBPeripheralDelegate {
             )
         } else {
             logger.info("Peer identity handshake completed")
+            if beginCardExchange(peripheral, service: characteristic.service) { return }
             if let peerIdentity = peripheralIdentities[id]
                 .flatMap(UUID.init(uuidString:)),
                retainBackgroundConnectionIfNeeded(
@@ -1612,6 +1782,10 @@ extension BLEManager: CBPeripheralManagerDelegate {
         didReceiveWrite requests: [CBATTRequest]
     ) {
         for request in requests {
+            if request.characteristic.uuid == cardCharacteristicUUID {
+                receiveCardWrite(request)
+                continue
+            }
             guard request.characteristic.uuid
                     == peerIdentityWriteCharacteristicUUID,
                   request.characteristic

@@ -1,304 +1,57 @@
-import Foundation
 import SwiftUI
 
-enum CodeEntryError: Equatable {
-    case invalidCode
-    case telegramUsernameRequired
-
-    var localizedMessage: String {
-        switch self {
-        case .invalidCode:
-            Inc.Registration.incorrectCode.localized
-        case .telegramUsernameRequired:
-            Inc.Registration.telegramUsernameRequired.localized
-        }
-    }
-}
-
 @MainActor
-final class CodeViewModel: ObservableObject {
+final class LocalProfileViewModel: ObservableObject {
     @Published var telescanID: UUID?
     @Published var tgName: String?
     @Published var tgUsername: String?
     @Published var bio: String?
-    @Published var photoS3URL: String?
+    @Published var localPhotoURL: String?
     @Published var isUsernameConfirmed = false
-    @Published var codeStatus: Bool?
-    @Published var codeError: CodeEntryError?
-    @Published var isLoading = false
     @Published var isSavingBio = false
     @Published var bioSaveFailed = false
     @Published var bioContentRejected = false
-    @Published var tmpTgUsername: String?
-    @Published var tmpCode = ""
-
-    private let linkAction: @MainActor (String) async throws -> TelegramLinkResponse
-    private let updateBioAction: @MainActor (String?) async throws
-        -> TelescanProfileResponse
-    private var linkTask: Task<Void, Never>?
-    private var pendingCode: String?
-    private var stateGeneration = UUID()
-    private let codeCount = 8
-
-    init(
-        linkAction: @escaping @MainActor (String) async throws -> TelegramLinkResponse = {
-            try await FetchService.fetch.linkTelegram(code: $0)
-        }
-    ) {
-        self.linkAction = linkAction
-        self.updateBioAction = {
-            try await FetchService.fetch.updateProfile(bio: $0)
-        }
-    }
-
-    init(
-        linkAction: @escaping @MainActor (String) async throws -> TelegramLinkResponse,
-        updateBioAction: @escaping @MainActor (String?) async throws
-            -> TelescanProfileResponse
-    ) {
-        self.linkAction = linkAction
-        self.updateBioAction = updateBioAction
-    }
-
-    func checkCode(_ input: String) {
-        let normalizedCode = input.uppercased()
-        let allowed = normalizedCode.allSatisfy {
-            $0.isASCII && ($0.isLetter || $0.isNumber)
-        }
-
-        guard normalizedCode.count == codeCount else {
-            invalidateCodeCheck()
-            return
-        }
-
-        guard allowed else {
-            linkTask?.cancel()
-            linkTask = nil
-            pendingCode = nil
-            isLoading = false
-            tmpTgUsername = nil
-            codeError = .invalidCode
-            if codeStatus != false {
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
-            }
-            codeStatus = false
-            return
-        }
-
-        guard pendingCode != normalizedCode
-                || (!isLoading && codeStatus != true) else { return }
-
-        linkTask?.cancel()
-        pendingCode = normalizedCode
-        isLoading = true
-        codeStatus = nil
-        codeError = nil
-        tmpTgUsername = nil
-        let stateGeneration = self.stateGeneration
-        let sessionGeneration = AccountSessionGeneration.shared.value
-
-        linkTask = Task { [weak self] in
-            guard let self else { return }
-            defer {
-                if stateGeneration == self.stateGeneration,
-                   sessionGeneration == AccountSessionGeneration.shared.value,
-                   pendingCode == normalizedCode {
-                    isLoading = false
-                    linkTask = nil
-                }
-            }
-
-            let feedback = UINotificationFeedbackGenerator()
-            do {
-                let response = try await linkAction(normalizedCode)
-                guard !Task.isCancelled,
-                      stateGeneration == self.stateGeneration,
-                      sessionGeneration == AccountSessionGeneration.shared.value,
-                      tmpCode.uppercased() == normalizedCode else { return }
-                ProfileCache.clear()
-                applyProfile(response.profile)
-                codeStatus = true
-                codeError = nil
-                feedback.notificationOccurred(.success)
-            } catch is CancellationError {
-                return
-            } catch APIClientError.telegramUsernameRequired {
-                guard stateGeneration == self.stateGeneration,
-                      sessionGeneration == AccountSessionGeneration.shared.value,
-                      tmpCode.uppercased() == normalizedCode else { return }
-                tmpTgUsername = nil
-                codeError = .telegramUsernameRequired
-                codeStatus = false
-                feedback.notificationOccurred(.error)
-            } catch {
-                guard stateGeneration == self.stateGeneration,
-                      sessionGeneration == AccountSessionGeneration.shared.value,
-                      tmpCode.uppercased() == normalizedCode else { return }
-                tmpTgUsername = nil
-                codeError = .invalidCode
-                codeStatus = false
-                feedback.notificationOccurred(.error)
-            }
-        }
-    }
-
-    @discardableResult
-    func confirmCode() async -> Bool {
-        guard codeStatus == true, !isLoading, isUsernameConfirmed else {
-            return false
-        }
-        resetCodeEntry()
-        return true
-    }
-
-    @discardableResult
-    func updateBio(_ value: String) async -> Bool {
-        guard !isSavingBio else { return false }
-        let normalizedBio = Self.normalizedBio(value)
-        guard normalizedBio != bio else { return true }
-
-        isSavingBio = true
-        bioSaveFailed = false
-        bioContentRejected = false
-        let stateGeneration = self.stateGeneration
-        let sessionGeneration = AccountSessionGeneration.shared.value
-        defer {
-            if stateGeneration == self.stateGeneration,
-               sessionGeneration == AccountSessionGeneration.shared.value {
-                isSavingBio = false
-            }
-        }
-        do {
-            let profile = try await updateBioAction(normalizedBio)
-            guard stateGeneration == self.stateGeneration,
-                  sessionGeneration == AccountSessionGeneration.shared.value else {
-                return false
-            }
-            applyProfile(profile)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            return true
-        } catch APIClientError.publicContentRejected {
-            guard stateGeneration == self.stateGeneration,
-                  sessionGeneration == AccountSessionGeneration.shared.value else {
-                return false
-            }
-            bioSaveFailed = true
-            bioContentRejected = true
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
-            return false
-        } catch {
-            guard stateGeneration == self.stateGeneration,
-                  sessionGeneration == AccountSessionGeneration.shared.value else {
-                return false
-            }
-            bioSaveFailed = true
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
-            return false
-        }
-    }
-
-    func resetBioSaveState() {
-        bioSaveFailed = false
-        bioContentRejected = false
-    }
-
-    func resetCodeEntry() {
-        linkTask?.cancel()
-        linkTask = nil
-        pendingCode = nil
-        codeStatus = nil
-        codeError = nil
-        isLoading = false
-        isSavingBio = false
-        bioSaveFailed = false
-        bioContentRejected = false
-        tmpTgUsername = nil
-        tmpCode = ""
-    }
-
+    @Published var saveError: String?
+    private let store: LocalCardStore
+    init(store: LocalCardStore = .shared) { self.store = store; restoreLocalProfile() }
     func restoreLocalProfile() {
-        if let value = UserDefaults.standard.string(
-            forKey: Keys.telescanIDKey.rawValue
-        ) {
-            telescanID = UUID(uuidString: value)
-        }
-        tgName = UserDefaults.standard.string(forKey: Keys.tgNameKey.rawValue)
-        tgUsername = UserDefaults.standard.string(forKey: Keys.usernameKey.rawValue)
-        bio = UserDefaults.standard.string(forKey: Keys.bioKey.rawValue)
-        photoS3URL = UserDefaults.standard.string(forKey: Keys.photoS3URLKey.rawValue)
-        isUsernameConfirmed = telescanID != nil
-            && !(tgUsername?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ?? true)
+        guard let own = store.ownManifest else { return }
+        let profile = store.snapshot(own)
+        telescanID = profile.telescanId; tgName = profile.name
+        tgUsername = profile.username.map { "@" + $0 }
+        bio = profile.bio; localPhotoURL = profile.photoUrl; isUsernameConfirmed = true
     }
-
+    @discardableResult func save(name: String, username: String, photo: Data?) -> Bool {
+        do {
+            try store.saveOwn(name: name, username: username, bio: bio, photo: photo)
+            restoreLocalProfile(); saveError = nil; return true
+        } catch {
+            saveError = NSLocalizedString("local.profile.save.error", comment: "")
+            return false
+        }
+    }
+    @discardableResult func updateName(_ value: String) -> Bool {
+        guard let own = store.ownManifest else { return false }
+        return save(name: value, username: own.body.username, photo: store.photo(own.body.photoHash))
+    }
+    @discardableResult func updateUsername(_ value: String) -> Bool {
+        guard let own = store.ownManifest else { return false }
+        return save(name: own.body.name, username: value, photo: store.photo(own.body.photoHash))
+    }
+    func updateBio(_ value: String) async -> Bool {
+        guard let own = store.ownManifest else { return false }
+        isSavingBio = true
+        defer { isSavingBio = false }
+        do {
+            try store.saveOwn(name: own.body.name, username: own.body.username,
+                bio: value.trimmingCharacters(in: .whitespacesAndNewlines),
+                photo: store.photo(own.body.photoHash))
+            restoreLocalProfile(); bioSaveFailed = false; return true
+        } catch { bioSaveFailed = true; return false }
+    }
+    func resetBioSaveState() { bioSaveFailed = false; bioContentRejected = false }
     func clearProfile() {
-        stateGeneration = UUID()
-        linkTask?.cancel()
-        linkTask = nil
-        pendingCode = nil
-        telescanID = nil
-        tgName = nil
-        tgUsername = nil
-        bio = nil
-        photoS3URL = nil
-        isUsernameConfirmed = false
-        codeStatus = nil
-        codeError = nil
-        isLoading = false
-        isSavingBio = false
-        bioSaveFailed = false
-        bioContentRejected = false
-        tmpTgUsername = nil
-        tmpCode = ""
-    }
-
-    func applyProfile(_ profile: TelescanProfileResponse) {
-        let username = profile.username?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let formattedUsername = username.flatMap { value in
-            value.isEmpty ? nil : (value.hasPrefix("@") ? value : "@" + value)
-        }
-        telescanID = profile.telescanId
-        tgName = profile.name
-        tgUsername = formattedUsername
-        bio = Self.normalizedBio(profile.bio)
-        photoS3URL = profile.photoUrl
-        tmpTgUsername = tgUsername
-        isUsernameConfirmed = formattedUsername != nil
-        UserDefaults.standard.set(
-            profile.telescanId.uuidString.lowercased(),
-            forKey: Keys.telescanIDKey.rawValue
-        )
-        UserDefaults.standard.set(profile.name, forKey: Keys.tgNameKey.rawValue)
-        if let formattedUsername {
-            UserDefaults.standard.set(
-                formattedUsername,
-                forKey: Keys.usernameKey.rawValue
-            )
-        } else {
-            UserDefaults.standard.removeObject(forKey: Keys.usernameKey.rawValue)
-        }
-        if let bio {
-            UserDefaults.standard.set(bio, forKey: Keys.bioKey.rawValue)
-        } else {
-            UserDefaults.standard.removeObject(forKey: Keys.bioKey.rawValue)
-        }
-        UserDefaults.standard.set(profile.photoUrl, forKey: Keys.photoS3URLKey.rawValue)
-    }
-
-    private static func normalizedBio(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : String(trimmed.prefix(36))
-    }
-
-    private func invalidateCodeCheck() {
-        linkTask?.cancel()
-        linkTask = nil
-        pendingCode = nil
-        isLoading = false
-        codeStatus = nil
-        codeError = nil
-        tmpTgUsername = nil
+        telescanID = nil; tgName = nil; tgUsername = nil; bio = nil
+        localPhotoURL = nil; isUsernameConfirmed = false; saveError = nil
     }
 }

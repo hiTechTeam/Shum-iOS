@@ -180,6 +180,10 @@ struct Inc {
         static let goNext: String = "goNext"
         // EN: Next
         // RU: Далее
+
+        static let photoNext: String = "local.onboarding.photo.next"
+        // EN: Next
+        // RU: Дальше
         
         static let goStart: String = "go"
         // EN: Go
@@ -431,10 +435,7 @@ struct IncLogos {
 
 struct Links {
     
-    static let telescanBot = AppConfig.telescanBot
-    static let origin = AppConfig.apiOrigin
     
-    static let apiV1 = origin + "/api/v1"
     static let privacyPolicy = "https://tgtelescan.ru/privacy"
     static let termsOfService = "https://tgtelescan.ru/terms"
 }

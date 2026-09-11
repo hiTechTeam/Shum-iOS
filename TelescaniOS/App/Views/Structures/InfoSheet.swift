@@ -126,8 +126,7 @@ struct InfoSheetView: View {
             appDetailsSection
         }
         .listStyle(.insetGrouped)
-        .listSectionSpacing(sectionSpacing)
-        .contentMargins(.vertical, 16, for: .scrollContent)
+        .telescanInfoListLayout(sectionSpacing: sectionSpacing)
     }
 
     var body: some View {

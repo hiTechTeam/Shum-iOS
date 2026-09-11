@@ -2,7 +2,7 @@ import SwiftUI
 
 struct Profile: View {
     
-    @ObservedObject var authVM: CodeViewModel
+    @ObservedObject var authVM: LocalProfileViewModel
     @StateObject private var photoViewModel = ProfilePhotoViewModel()
     
     private let profileInc: String = Inc.Tabs.profile.localized

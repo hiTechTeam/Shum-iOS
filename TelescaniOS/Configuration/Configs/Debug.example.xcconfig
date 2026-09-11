@@ -1,3 +1,1 @@
 // Copy this file to Debug.xcconfig and fill your values
-API_ORIGIN = https://api.tgtelescan.ru
-TELESCAN_BOT = https://t.me/tgtelescan_bot

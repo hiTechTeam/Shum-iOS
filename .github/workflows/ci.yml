@@ -81,16 +81,12 @@ jobs:
           APP="$ARCHIVE/Products/Applications/Telescan.app"
           PLIST="$APP/Info.plist"
           test -d "$APP"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :API_ORIGIN' "$PLIST")" = \
-            'https://api.tgtelescan.ru'
-          test "$(/usr/libexec/PlistBuddy -c 'Print :TELESCAN_BOT' "$PLIST")" = \
-            'https://t.me/tgtelescan_bot'
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = \
             'hiTeam.TelescaniOS'
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$PLIST")" = \
             'APPL'
           test "$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$PLIST")" = \
-            '17.6'
+            '16.0'
           test "$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily:0' "$PLIST")" = \
             '1'
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleSupportedPlatforms:0' "$PLIST")" = \
@@ -103,9 +99,6 @@ jobs:
           BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")"
           [[ "$VERSION" =~ ^[0-9]+([.][0-9]+)*$ ]]
           [[ "$BUILD" =~ ^[0-9]+([.][0-9]+)*$ ]]
-          test "$(/usr/libexec/PlistBuddy \
-            -c 'Print :com.apple.developer.applesignin:0' \
-            TelescaniOS/TelescaniOS.entitlements)" = 'Default'
           test -f "$APP/PrivacyInfo.xcprivacy"
           test -f "$APP/en.lproj/InfoPlist.strings"
           test -f "$APP/ru.lproj/InfoPlist.strings"
@@ -120,7 +113,7 @@ jobs:
           test -n "$APP_UUID"
           test "$APP_UUID" = "$DSYM_UUID"
           test -z "$(strings "$EXECUTABLE" | grep -E \
-            'localhost|linkForDevelopment|/api/v1/auth/link|TELESCAN_PERSONAL_TEAM' \
+            'api.tgtelescan.ru|/api/v1/|tgtelescan_bot|TELESCAN_PERSONAL_TEAM' \
             || true)"
           test ! -f "$APP/embedded.mobileprovision"
           test -z "$(find "$APP" \

@@ -13,6 +13,11 @@ public protocol BLEManagerDelegate: AnyObject {
     func didUpdateDevice(id: String, rssi: Int, epoch: UUID)
     func didLoseDevice(id: String, epoch: UUID)
     func didFail(with error: Error, epoch: UUID)
+    func didReceiveProfile(id: String, epoch: UUID)
+}
+
+extension BLEManagerDelegate {
+    public func didReceiveProfile(id: String, epoch: UUID) { }
 }
 
 protocol BLEManagerProtocol: AnyObject {
