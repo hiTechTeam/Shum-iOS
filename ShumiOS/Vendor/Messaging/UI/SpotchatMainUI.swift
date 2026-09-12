@@ -3,7 +3,7 @@ import SwiftUI
 
 // Current Spotchat chat list, adapted to Shum's navigation and palette.
 enum SpotchatUIRoute: Hashable {
-    case conversation(SpotchatPeer), nearby, newChat
+    case conversation(SpotchatPeer), nearby, newChat, requests
 }
 struct SpotchatDestinationUI: View {
     @ObservedObject var runtime: SpotchatRuntime
@@ -12,11 +12,14 @@ struct SpotchatDestinationUI: View {
     var body: some View {
         Group {
             switch route {
-            case .conversation(let peer): SpotchatConversationView(runtime: runtime, peer: peer)
+            case .conversation(let peer):
+                SpotchatConversationView(runtime: runtime, peer: peer)
+                    .toolbar(.hidden, for: .tabBar)
             case .nearby: ShumPeopleScreen(runtime: runtime) { open(.conversation($0)) }
             case .newChat: SpotchatContactsView(runtime: runtime) { open(.conversation($0)) }
+            case .requests: SpotchatContactRequestsView(runtime: runtime) { open(.conversation($0)) }
             }
-        }.toolbar(.hidden, for: .tabBar)
+        }
     }
 }
 
@@ -37,7 +40,7 @@ struct SpotchatChatsUI: View {
             Section {
                 nearbyRow
                 if let requests = runtime.permanent?.state.requests, !requests.isEmpty {
-                    Button { open(.newChat) } label: { Label("Приглашения: \(requests.count)", systemImage: "person.badge.plus") }
+                    Button { open(.requests) } label: { Label("Приглашения: \(requests.count)", systemImage: "person.badge.plus") }
                 }
             }
 
@@ -69,6 +72,7 @@ struct SpotchatChatsUI: View {
                     }
                 }
             }
+            .listSectionSeparator(.hidden, edges: .top)
         }
         .listStyle(.insetGrouped)
         .scrollDismissesKeyboard(.interactively)
@@ -84,7 +88,7 @@ struct SpotchatChatsUI: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { open(.newChat) } label: {
-                    Label("Новый чат", systemImage: "plus")
+                    Label("Новый контакт", systemImage: "plus")
                 }
                 .foregroundStyle(.primary)
                 .tint(.primary)
@@ -127,33 +131,31 @@ struct SpotchatChatsUI: View {
 
     private var nearbyRow: some View {
         Button { open(.nearby) } label: {
-            HStack(spacing: 13) {
+            HStack(spacing: 12) {
                 Image("PixelPeople")
+                    .renderingMode(.template)
                     .resizable()
                     .interpolation(.none)
                     .scaledToFit()
                     .frame(width: 24, height: 24)
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 38, height: 38)
-                    .background(Color.accentColor.opacity(0.13), in: Circle())
+                    .foregroundStyle(.white)
                 Text("Люди рядом")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.body)
                 Spacer(minLength: 8)
-                SpotchatNearbyAvatarsUI(runtime: runtime)
                 Text(String(runtime.peers.count))
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.black)
-                    .frame(minWidth: 30, minHeight: 30)
-                    .background(Color.accentColor, in: Circle())
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.body)
                     .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
-            .frame(minHeight: 54)
+            .frame(minHeight: 52)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
         .accessibilityLabel("Люди рядом: \(runtime.peers.count)")
+        .accessibilityIdentifier("shum.nearby")
     }
 
     private var emptyState: some View {
@@ -221,24 +223,6 @@ private struct SpotchatChatRowUI: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(unread > 0 ? "Непрочитанных: \(unread). Открыть чат" : "Открыть чат")
-    }
-}
-
-private struct SpotchatNearbyAvatarsUI: View {
-    @ObservedObject var runtime: SpotchatRuntime
-
-    var body: some View {
-        HStack(spacing: -8) {
-            ForEach(Array(runtime.peers.prefix(3))) { peer in
-                SpotchatAvatar(
-                    name: runtime.displayName(peer),
-                    size: 30,
-                    imageData: runtime.profile(for: peer.id)?.avatar
-                )
-                .overlay(Circle().stroke(Color.black, lineWidth: 2))
-            }
-        }
-        .frame(minWidth: runtime.peers.isEmpty ? 0 : 48, alignment: .trailing)
     }
 }
 

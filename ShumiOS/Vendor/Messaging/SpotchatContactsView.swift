@@ -13,7 +13,7 @@ struct SpotchatContactsView: View {
     @ObservedObject var runtime: SpotchatRuntime
     var select: (SpotchatPeer) -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var search = ""
+    @ScaledMetric(relativeTo: .body) private var sheetHeight = 280
     @State private var showQR = false
     @State private var showScanner = false
     @State private var showPhoneBook = false
@@ -24,41 +24,21 @@ struct SpotchatContactsView: View {
         NavigationStack {
             List {
                 Section {
-                    Button { showScanner = true } label: { Label("Сканировать QR-код", systemImage: "qrcode.viewfinder") }
+                    Button { showScanner = true } label: { Label("Сканировать код", systemImage: "qrcode.viewfinder") }
                     Button { showQR = true } label: { Label("Мой QR-код", systemImage: "qrcode") }
-                    Button { showPhoneBook = true } label: { Label("Пригласить из контактов", systemImage: "person.badge.plus") }
-                }
-                if let requests = service?.state.requests, !requests.isEmpty {
-                    Section("Приглашения") {
-                        ForEach(requests) { card in
-                            Button { invitation = card } label: { contactRow(card, nearby: false, detail: "Хочет добавить вас", add: true) }
-                                .swipeActions { Button("Отклонить", role: .destructive) { service?.dismissRequest(card) } }
-                        }
-                    }
-                }
-                Section("Рядом") {
-                    let cards = (service?.nearby.values.map { $0 } ?? []).filter(matches).sorted { $0.name < $1.name }
-                    if cards.isEmpty { Text("Ищем пользователей Shum поблизости…").font(.subheadline).foregroundStyle(.secondary) }
-                    ForEach(cards) { card in
-                        Button { open(card, source: "nearby") } label: {
-                            contactRow(card, nearby: true, detail: "Можно добавить без интернета", add: !isSaved(card))
-                        }.buttonStyle(.plain)
-                    }
-                }
-                Section("Сохранённые") {
-                    ForEach((service?.state.contacts ?? []).filter { matches($0.card) }.sorted { $0.card.name < $1.card.name }) { contact in
-                        HStack(spacing: 0) {
-                            Button { open(contact.card, source: "saved") } label: {
-                                contactRow(contact.card, nearby: runtime.isNearby(contact.card.peerID), detail: runtime.isBlocked(contact.card.peerID) ? "Заблокирован" : nil, add: false)
-                            }.buttonStyle(.plain)
-                            SpotchatContactActionsMenu(runtime: runtime, card: contact.card)
-                        }
-                    }
+                    Button { showPhoneBook = true } label: { Label("Пригласить", systemImage: "person.badge.plus") }
                 }
             }
-            .searchable(text: $search, prompt: "Поиск")
-            .navigationTitle("Контакты").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Закрыть") { dismiss() } } }
+            .listStyle(.insetGrouped)
+            .scrollDisabled(true)
+            .navigationTitle("Новый контакт").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Закрыть")
+                        .tint(.primary)
+                }
+            }
             .sheet(isPresented: $showQR) { if let card = service?.ownCard { SpotchatQRView(card: card) } }
             .sheet(isPresented: $showScanner) { SpotchatScanView { card in showScanner = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { invitation = card } } }
             .sheet(isPresented: $showPhoneBook) {
@@ -75,26 +55,56 @@ struct SpotchatContactsView: View {
             }
             .sheet(item: $share) { SpotchatShareSheet(items: [$0.text]) }
             .sheet(item: $invitation) { card in SpotchatContactConfirmation(card: card) { open(card, source: "invitation") } }
-        }.tint(.accentColor)
+        }
+        .tint(.accentColor)
+        .presentationDetents([.height(sheetHeight)])
+        .presentationDragIndicator(.visible)
     }
-    private func matches(_ card: SpotchatContactCard) -> Bool { search.isEmpty || card.name.localizedCaseInsensitiveContains(search) }
-    private func isSaved(_ card: SpotchatContactCard) -> Bool { service?.state.contacts.contains { $0.id == card.id } == true }
     private func open(_ card: SpotchatContactCard, source: String) {
         guard let peer = runtime.addContact(card, source: source) else { return }
         dismiss(); select(peer)
     }
-    private func contactRow(_ card: SpotchatContactCard, nearby: Bool, detail: String?, add: Bool) -> some View {
-        HStack(spacing: 12) {
-            SpotchatAvatar(name: card.name, size: 48, nearby: nearby, imageData: runtime.profile(for: card.peerID)?.avatar)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(card.name).font(.body.weight(.semibold)).foregroundStyle(.primary)
-                if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
+}
+
+struct SpotchatContactRequestsView: View {
+    @ObservedObject var runtime: SpotchatRuntime
+    var select: (SpotchatPeer) -> Void
+    @State private var invitation: SpotchatContactCard?
+
+    var body: some View {
+        List {
+            ForEach(runtime.permanent?.state.requests ?? []) { card in
+                Button { invitation = card } label: {
+                    HStack(spacing: 12) {
+                        SpotchatAvatar(name: card.name, size: 48, imageData: runtime.profile(for: card.peerID)?.avatar)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(card.name).font(.body.weight(.semibold)).foregroundStyle(.primary)
+                            Text("Хочет добавить вас").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
+                    }
+                    .padding(.vertical, 3)
+                }
+                .buttonStyle(.plain)
+                .swipeActions {
+                    Button("Отклонить", role: .destructive) { runtime.permanent?.dismissRequest(card) }
+                }
             }
-            Spacer()
-            Image(systemName: add ? "plus.circle.fill" : "chevron.right").foregroundStyle(add ? Color.accentColor : .secondary)
-        }.padding(.vertical, 3)
+        }
+        .navigationTitle("Приглашения")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $invitation) { card in
+            SpotchatContactConfirmation(card: card) {
+                if let peer = runtime.addContact(card, source: "invitation") {
+                    invitation = nil
+                    select(peer)
+                }
+            }
+        }
     }
 }
+
 struct SpotchatContactConfirmation: View {
     let card: SpotchatContactCard
     var accept: () -> Void
