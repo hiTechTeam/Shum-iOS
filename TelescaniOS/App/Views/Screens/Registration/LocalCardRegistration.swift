@@ -56,10 +56,12 @@ struct LocalCardDetailsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                Text(mode.title).font(.largeTitle.bold())
+                if mode == .registration {
+                    Text(mode.title).font(.largeTitle.bold())
+                }
                 if mode.showsUsername {
                 VStack(alignment: .leading, spacing: 10) {
-                    if mode == .registration { Text("Telegram username").font(.headline) }
+                    Text("Telegram username").font(.headline)
                     TextField("@username", text: $username)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                         .keyboardType(.asciiCapable).textContentType(.username)
@@ -77,7 +79,7 @@ struct LocalCardDetailsView: View {
                 }
                 if mode.showsName {
                 VStack(alignment: .leading, spacing: 10) {
-                    if mode == .registration { Text("local.profile.name").font(.headline) }
+                    Text("local.profile.name").font(.headline)
                     TextField("local.profile.name", text: $name)
                         .textContentType(.nickname).focused($focused, equals: .name).submitLabel(.done).onSubmit { focused = nil }
                         .padding(16)

@@ -38,6 +38,29 @@ struct LocalCardTests {
         #expect(store.snapshot(second).photoUrl?.hasPrefix("file:") == true)
     }
 
+    @Test func savedUsersPersistLocalPhotosByStableHash() throws {
+        let hash = String(repeating: "a", count: 64)
+        let oldURL = URL(
+            fileURLWithPath: "/old-container/Library/Application Support/LocalCards-v1/\(hash).jpg"
+        ).absoluteString
+        let user = NearbyUser(
+            id: UUID(),
+            name: "Alina",
+            username: "@alina_11",
+            bio: nil,
+            photoURL: oldURL
+        )
+
+        let encoded = try JSONEncoder().encode(user)
+        let json = try #require(String(data: encoded, encoding: .utf8))
+        #expect(json.contains("\"photoHash\":\"\(hash)\""))
+        #expect(!json.contains("old-container"))
+
+        let restored = try JSONDecoder().decode(NearbyUser.self, from: encoded)
+        #expect(restored == user)
+        #expect(restored.photoURL == nil)
+    }
+
     @Test func profileEditorsShowOnlyTheirOwnField() {
         #expect(LocalCardDetailsMode.name.showsName)
         #expect(!LocalCardDetailsMode.name.showsUsername)
