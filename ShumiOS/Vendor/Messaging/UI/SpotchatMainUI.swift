@@ -3,7 +3,7 @@ import SwiftUI
 
 // Current Spotchat chat list, adapted to Shum's navigation and palette.
 enum SpotchatUIRoute: Hashable {
-    case conversation(SpotchatPeer), nearby, newChat, requests
+    case conversation(SpotchatPeer), newChat, requests
 }
 struct SpotchatDestinationUI: View {
     @ObservedObject var runtime: SpotchatRuntime
@@ -15,7 +15,6 @@ struct SpotchatDestinationUI: View {
             case .conversation(let peer):
                 SpotchatConversationView(runtime: runtime, peer: peer)
                     .toolbar(.hidden, for: .tabBar)
-            case .nearby: ShumPeopleScreen(runtime: runtime) { open(.conversation($0)) }
             case .newChat: SpotchatContactsView(runtime: runtime) { open(.conversation($0)) }
             case .requests: SpotchatContactRequestsView(runtime: runtime) { open(.conversation($0)) }
             }
@@ -37,9 +36,8 @@ struct SpotchatChatsUI: View {
 
     var body: some View {
         List {
-            Section {
-                nearbyRow
-                if let requests = runtime.permanent?.state.requests, !requests.isEmpty {
+            if let requests = runtime.permanent?.state.requests, !requests.isEmpty {
+                Section {
                     Button { open(.requests) } label: { Label("Приглашения: \(requests.count)", systemImage: "person.badge.plus") }
                 }
             }
@@ -84,7 +82,7 @@ struct SpotchatChatsUI: View {
         }
         .navigationTitle("Чаты")
         .navigationBarTitleDisplayMode(.large)
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Поиск")
+        .modifier(ShumCompactChatSearch(text: $search))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { open(.newChat) } label: {
@@ -129,35 +127,6 @@ struct SpotchatChatsUI: View {
         }
     }
 
-    private var nearbyRow: some View {
-        Button { open(.nearby) } label: {
-            HStack(spacing: 12) {
-                Image("PixelPeople")
-                    .renderingMode(.template)
-                    .resizable()
-                    .interpolation(.none)
-                    .scaledToFit()
-                    .frame(width: 24, height: 24)
-                    .foregroundStyle(.white)
-                Text("Люди рядом")
-                    .font(.body)
-                Spacer(minLength: 8)
-                Text(String(runtime.peers.count))
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .frame(minHeight: 52)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
-        .accessibilityLabel("Люди рядом: \(runtime.peers.count)")
-        .accessibilityIdentifier("shum.nearby")
-    }
-
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "bubble.left.and.bubble.right")
@@ -165,7 +134,7 @@ struct SpotchatChatsUI: View {
                 .foregroundStyle(Color.accentColor)
             Text("Здесь будут ваши чаты")
                 .font(.headline)
-            Text("Нажмите +, чтобы начать разговор, или откройте людей рядом.")
+            Text("Нажмите +, чтобы начать разговор, или откройте вкладку «Рядом».")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -173,6 +142,24 @@ struct SpotchatChatsUI: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 44)
         .listRowBackground(Color.clear)
+    }
+}
+
+private struct ShumCompactChatSearch: ViewModifier {
+    @Binding var text: String
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .searchable(text: $text, placement: .toolbar, prompt: "Поиск")
+                .searchToolbarBehavior(.minimize)
+                .toolbar {
+                    DefaultToolbarItem(kind: .search, placement: .topBarTrailing)
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                }
+        } else {
+            content.searchable(text: $text, placement: .toolbar, prompt: "Поиск")
+        }
     }
 }
 

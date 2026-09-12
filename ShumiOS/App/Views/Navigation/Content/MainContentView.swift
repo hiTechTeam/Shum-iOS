@@ -9,6 +9,14 @@ struct MainContentView: View {
     @State private var showContacts = false
     var body: some View {
         TabView(selection: $selectedTab) {
+            NavigationStack {
+                ShumPeopleScreen(runtime: chat) { peer in
+                    chatsPath.append(.conversation(peer))
+                    selectedTab = 1
+                }
+            }
+            .tabItem { Label("Рядом", image: "PixelPeople") }
+            .tag(0)
             NavigationStack(path: $chatsPath) {
                 SpotchatChatsUI(runtime: chat) { route in
                     if case .newChat = route { showContacts = true }
@@ -56,7 +64,7 @@ struct MainContentView: View {
         #if DEBUG && targetEnvironment(simulator)
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments
-            if arguments.contains("-ShumPreviewPeople") { chatsPath = [.nearby] }
+            if arguments.contains("-ShumPreviewPeople") { selectedTab = 0 }
             else if arguments.contains("-ShumPreviewProfile") { selectedTab = 2 }
             else if arguments.contains("-ShumPreviewChat"), let peer = chat.chatPeers.first {
                 chatsPath = [.conversation(peer)]
