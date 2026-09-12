@@ -128,7 +128,8 @@ struct SpotchatConversationView: View {
                     Text(name).font(.system(size: 17, weight: .semibold)).lineLimit(1)
                     HStack(spacing: 4) {
                         Circle().fill(runtime.isNearby(peer.id) ? Color.green : Color.secondary).frame(width: 5, height: 5)
-                        Text(runtime.isBlocked(peer.id) ? "Заблокирован" : (runtime.isNearby(peer.id) ? "Рядом" : "Не рядом")).font(.system(size: 11))
+                        Text(presenceText)
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
                 }.accessibilityElement(children: .combine)
@@ -147,6 +148,12 @@ struct SpotchatConversationView: View {
         .onChange(of: showPeerProfile) { visible in
             runtime.openConversation(!visible && runtime.chatPeers.contains(where: { $0.id == peer.id }) ? peer.id : nil)
         }
+    }
+
+    private var presenceText: String {
+        if runtime.isBlocked(peer.id) { return "Заблокирован" }
+        if let meters = runtime.distanceMeters(for: peer.id) { return "\(meters) м" }
+        return runtime.isNearby(peer.id) ? "Рядом" : "Не рядом"
     }
 
     private var composer: some View {
@@ -227,7 +234,15 @@ struct SpotchatMessageBubble: View {
             .background(bubbleColor, in: SpotchatBubbleShape(outgoing: message.outgoing, tail: showsTail))
             // The cap lives OUTSIDE the background: a short message keeps its intrinsic bubble width.
             .frame(maxWidth: maximumWidth, alignment: message.outgoing ? .trailing : .leading)
-            .contextMenu { Button { UIPasteboard.general.string = message.text } label: { Label("Скопировать", systemImage: "doc.on.doc") } }
+            .contextMenu {
+                Button {
+                    UIPasteboard.general.string = message.text
+                } label: {
+                    Label("Скопировать", systemImage: "doc.on.doc")
+                        .foregroundStyle(.primary)
+                }
+                .tint(.primary)
+            }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(message.outgoing ? "Вы" : "Собеседник"): \(message.text), \(message.date.formatted(date: .omitted, time: .shortened))\(message.outgoing ? ", " + statusDescription : "")")
             if message.outgoing, let label = message.deliveryLabel, label == "В очереди" || label.hasPrefix("Передаётся") {

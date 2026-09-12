@@ -1,13 +1,20 @@
 import SwiftUI
 import UIKit
 
+private struct ShumProfileBlockRequest: Identifiable {
+    let id = UUID()
+    let peer: SpotchatPeer
+    let card: SpotchatContactCard
+    let waitsForTransientUI: Bool
+}
+
 struct ShumPeopleScreen: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @ObservedObject var runtime: SpotchatRuntime
     let select: (SpotchatPeer) -> Void
 
     @State private var selectedPeer: SpotchatPeer?
-    @State private var pendingBlock: SpotchatContactCard?
+    @State private var blockRequest: ShumProfileBlockRequest?
     @State private var showsSavedBlockInformation = false
 
     var body: some View {
@@ -59,24 +66,7 @@ struct ShumPeopleScreen: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
-        .confirmationDialog(
-            "Заблокировать пользователя?",
-            isPresented: Binding(
-                get: { pendingBlock != nil },
-                set: { if !$0 { pendingBlock = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Заблокировать", role: .destructive) {
-                guard let card = pendingBlock else { return }
-                do { try runtime.permanent?.setBlocked(card, blocked: true) }
-                catch { runtime.error = error.localizedDescription }
-                pendingBlock = nil
-            }
-            Button("Отмена", role: .cancel) { pendingBlock = nil }
-        } message: {
-            Text("Сообщения и приглашения этого пользователя будут отклоняться на вашем iPhone.")
-        }
+        .shumProfileBlockSheet(runtime: runtime, request: $blockRequest)
         .alert("Сначала удалите из сохранённых", isPresented: $showsSavedBlockInformation) {
             Button("Понятно", role: .cancel) { }
         } message: {
@@ -99,21 +89,30 @@ struct ShumPeopleScreen: View {
                 let card = runtime.permanent?.card(for: peer.id)
                 let isSaved = card.map { runtime.permanent?.isSaved($0) == true } ?? false
 
-                ShumPeopleRow(
-                    runtime: runtime,
-                    peer: peer,
-                    isSaved: isSaved,
-                    cardAction: { selectedPeer = peer },
-                    writeAction: { select(peer) }
-                )
-                .shumPeopleContextMenu(
-                    runtime: runtime,
-                    peer: peer,
-                    card: card,
-                    isSaved: isSaved,
-                    writeAction: { select(peer) },
-                    blockAction: { requestBlock(card, isSaved: isSaved) }
-                )
+                NativeSwipeInteractionRow {
+                    ShumPeopleRow(
+                        runtime: runtime,
+                        peer: peer,
+                        isSaved: isSaved,
+                        cardAction: { selectedPeer = peer },
+                        writeAction: { select(peer) }
+                    )
+                    .shumPeopleContextMenu(
+                        runtime: runtime,
+                        peer: peer,
+                        card: card,
+                        isSaved: isSaved,
+                        writeAction: { select(peer) },
+                        blockAction: {
+                            requestBlock(
+                                card,
+                                peer: peer,
+                                isSaved: isSaved,
+                                waitsForTransientUI: false
+                            )
+                        }
+                    )
+                }
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color(uiColor: .systemBackground))
                 .listRowSeparator(.hidden)
@@ -135,9 +134,17 @@ struct ShumPeopleScreen: View {
                             }
                             .tint(Color(uiColor: .systemGray))
                         } else {
-                            Button(role: .destructive) { pendingBlock = card } label: {
+                            Button {
+                                requestBlock(
+                                    card,
+                                    peer: peer,
+                                    isSaved: false,
+                                    waitsForTransientUI: true
+                                )
+                            } label: {
                                 Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
                             }
+                            .tint(.red)
                         }
                     }
                 }
@@ -158,13 +165,24 @@ struct ShumPeopleScreen: View {
         } catch { runtime.error = error.localizedDescription }
     }
 
-    private func requestBlock(_ card: SpotchatContactCard?, isSaved: Bool) {
+    private func requestBlock(
+        _ card: SpotchatContactCard?,
+        peer: SpotchatPeer,
+        isSaved: Bool,
+        waitsForTransientUI: Bool
+    ) {
         guard let card else {
             runtime.error = "Дождитесь проверки профиля пользователя."
             return
         }
         if isSaved { showsSavedBlockInformation = true }
-        else { pendingBlock = card }
+        else {
+            blockRequest = ShumProfileBlockRequest(
+                peer: peer,
+                card: card,
+                waitsForTransientUI: waitsForTransientUI
+            )
+        }
     }
 }
 
@@ -489,7 +507,9 @@ private struct ShumPersonContextMenuModifier: ViewModifier {
     private var menu: some View {
         Button(action: writeAction) {
             Label("Написать", systemImage: "paperplane")
+                .foregroundStyle(.primary)
         }
+        .tint(.primary)
 
         if let card {
             Button { toggleSaved(card) } label: {
@@ -497,14 +517,18 @@ private struct ShumPersonContextMenuModifier: ViewModifier {
                     isSaved ? "Убрать из сохранённых" : "Сохранить",
                     systemImage: isSaved ? "heart.slash" : "heart"
                 )
+                .foregroundStyle(.primary)
             }
+            .tint(.primary)
         }
 
         if let deleteAction {
             Divider()
-            Button(role: .destructive, action: deleteAction) {
+            Button(action: deleteAction) {
                 Label("Удалить", systemImage: "trash")
+                    .foregroundStyle(.primary)
             }
+            .tint(.primary)
         }
 
         Divider()
@@ -512,11 +536,15 @@ private struct ShumPersonContextMenuModifier: ViewModifier {
         if isSaved {
             Button(action: blockAction) {
                 Label("Сначала удалите из сохранённых", systemImage: "lock.fill")
+                    .foregroundStyle(.secondary)
             }
+            .tint(.secondary)
         } else {
             Button(role: .destructive, action: blockAction) {
                 Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                    .foregroundStyle(.red)
             }
+            .tint(.red)
         }
     }
 
@@ -618,7 +646,7 @@ struct ShumEncounterHistoryView: View {
     @State private var selectedEncounter: SpotchatEncounter?
     @State private var conversationPeer: SpotchatPeer?
     @State private var pendingDelete: SpotchatEncounter?
-    @State private var pendingBlock: SpotchatContactCard?
+    @State private var blockRequest: ShumProfileBlockRequest?
     @State private var showsClearConfirmation = false
     @State private var showsSavedBlockInformation = false
 
@@ -670,48 +698,33 @@ struct ShumEncounterHistoryView: View {
                     .toolbar(.hidden, for: .tabBar)
             }
         }
-        .confirmationDialog(
-            "Удалить из истории?",
+        .alert(
+            "Удалить из «Виделись»?",
             isPresented: Binding(
                 get: { pendingDelete != nil },
                 set: { if !$0 { pendingDelete = nil } }
             ),
-            titleVisibility: .visible
+            presenting: pendingDelete
         ) {
-            Button("Удалить", role: .destructive) {
-                if let pendingDelete { runtime.permanent?.deleteEncounter(pendingDelete.card) }
+            encounter in
+            Button("Отмена", role: .cancel) { pendingDelete = nil }
+            Button("Очистить", role: .destructive) {
+                runtime.permanent?.deleteEncounter(encounter.card)
                 pendingDelete = nil
             }
-            Button("Отмена", role: .cancel) { pendingDelete = nil }
         } message: {
-            Text("Профиль исчезнет из раздела «Виделись». Сохранённый профиль и переписка останутся.")
+            _ in
+            Text("Карточка будет удалена из списка «Виделись».")
         }
-        .confirmationDialog(
-            "Очистить историю встреч?",
-            isPresented: $showsClearConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Очистить", role: .destructive) { runtime.permanent?.clearEncounters() }
+        .alert("Очистить историю встреч?", isPresented: $showsClearConfirmation) {
             Button("Отмена", role: .cancel) { }
-        } message: {
-            Text("Сохранённые профили и переписки останутся.")
-        }
-        .confirmationDialog(
-            "Заблокировать пользователя?",
-            isPresented: Binding(
-                get: { pendingBlock != nil },
-                set: { if !$0 { pendingBlock = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Заблокировать", role: .destructive) {
-                guard let pendingBlock else { return }
-                do { try runtime.permanent?.setBlocked(pendingBlock, blocked: true) }
-                catch { runtime.error = error.localizedDescription }
-                self.pendingBlock = nil
+            Button("Очистить историю", role: .destructive) {
+                runtime.permanent?.clearEncounters()
             }
-            Button("Отмена", role: .cancel) { pendingBlock = nil }
+        } message: {
+            Text("Все сохранённые на этом устройстве встречи будут удалены.")
         }
+        .shumProfileBlockSheet(runtime: runtime, request: $blockRequest)
         .alert("Сначала удалите из сохранённых", isPresented: $showsSavedBlockInformation) {
             Button("Понятно", role: .cancel) { }
         } message: {
@@ -735,27 +748,35 @@ struct ShumEncounterHistoryView: View {
                 let peer = encounter.peer
                 let isSaved = runtime.permanent?.isSaved(encounter.card) == true
 
-                ShumStoredPersonRow(
-                    runtime: runtime,
-                    peer: peer,
-                    isSaved: isSaved,
-                    lastMetAt: encounter.lastSeen,
-                    cardAction: { selectedEncounter = encounter },
-                    writeAction: { conversationPeer = peer }
-                )
-                .shumPeopleContextMenu(
-                    runtime: runtime,
-                    peer: peer,
-                    card: encounter.card,
-                    isSaved: isSaved,
-                    lastMetAt: encounter.lastSeen,
-                    deleteAction: { pendingDelete = encounter },
-                    writeAction: { conversationPeer = peer },
-                    blockAction: {
-                        if isSaved { showsSavedBlockInformation = true }
-                        else { pendingBlock = encounter.card }
-                    }
-                )
+                NativeSwipeInteractionRow {
+                    ShumStoredPersonRow(
+                        runtime: runtime,
+                        peer: peer,
+                        isSaved: isSaved,
+                        lastMetAt: encounter.lastSeen,
+                        cardAction: { selectedEncounter = encounter },
+                        writeAction: { conversationPeer = peer }
+                    )
+                    .shumPeopleContextMenu(
+                        runtime: runtime,
+                        peer: peer,
+                        card: encounter.card,
+                        isSaved: isSaved,
+                        lastMetAt: encounter.lastSeen,
+                        deleteAction: { pendingDelete = encounter },
+                        writeAction: { conversationPeer = peer },
+                        blockAction: {
+                            if isSaved { showsSavedBlockInformation = true }
+                            else {
+                                blockRequest = ShumProfileBlockRequest(
+                                    peer: peer,
+                                    card: encounter.card,
+                                    waitsForTransientUI: false
+                                )
+                            }
+                        }
+                    )
+                }
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color(uiColor: .systemBackground))
                 .listRowSeparator(.hidden)
@@ -770,7 +791,7 @@ struct ShumEncounterHistoryView: View {
                     Button { pendingDelete = encounter } label: {
                         Label("Удалить", systemImage: "trash")
                     }
-                    .tint(Color(uiColor: .systemGray))
+                    .tint(.red)
 
                     if isSaved {
                         Button { showsSavedBlockInformation = true } label: {
@@ -778,9 +799,16 @@ struct ShumEncounterHistoryView: View {
                         }
                         .tint(Color(uiColor: .systemGray2))
                     } else {
-                        Button(role: .destructive) { pendingBlock = encounter.card } label: {
+                        Button {
+                            blockRequest = ShumProfileBlockRequest(
+                                peer: peer,
+                                card: encounter.card,
+                                waitsForTransientUI: true
+                            )
+                        } label: {
                             Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
                         }
+                        .tint(.red)
                     }
                 }
             }
@@ -799,6 +827,132 @@ struct ShumEncounterHistoryView: View {
     private func toggleSaved(_ encounter: SpotchatEncounter) {
         do { _ = try runtime.permanent?.toggleSaved(encounter.card, avatar: encounter.avatar) }
         catch { runtime.error = error.localizedDescription }
+    }
+}
+
+private struct ShumProfileBlockSheetModifier: ViewModifier {
+    @ObservedObject var runtime: SpotchatRuntime
+    @Binding var request: ShumProfileBlockRequest?
+    @State private var activeRequest: ShumProfileBlockRequest?
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $activeRequest) { pending in
+                ShumProfileBlockOptionsSheet(
+                    runtime: runtime,
+                    request: pending,
+                    onClose: { activeRequest = nil },
+                    onBlock: { block(pending) }
+                )
+                .presentationDetents([.height(195)])
+                .presentationDragIndicator(.hidden)
+            }
+            .task(id: request?.id) {
+                guard let pending = request else { return }
+                if pending.waitsForTransientUI {
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+                guard !Task.isCancelled, request?.id == pending.id else { return }
+                activeRequest = pending
+            }
+            .onChange(of: activeRequest?.id) { id in
+                if id == nil { request = nil }
+            }
+    }
+
+    private func block(_ pending: ShumProfileBlockRequest) {
+        do {
+            try runtime.permanent?.setBlocked(pending.card, blocked: true)
+            activeRequest = nil
+        } catch {
+            runtime.error = error.localizedDescription
+        }
+    }
+}
+
+private struct ShumProfileBlockOptionsSheet: View {
+    @ObservedObject var runtime: SpotchatRuntime
+    let request: ShumProfileBlockRequest
+    let onClose: () -> Void
+    let onBlock: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            HStack(spacing: 12) {
+                ShumProfileAvatar(
+                    size: 44,
+                    imageData: runtime.profile(for: request.peer.id)?.avatar
+                )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Заблокировать пользователя?")
+                        .font(.system(size: 17, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+
+                    Text(runtime.displayName(request.peer))
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 42, height: 42)
+                        .background(
+                            Color(uiColor: .tertiarySystemFill),
+                            in: Circle()
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Закрыть")
+            }
+
+            VStack(spacing: 0) {
+                Button(role: .destructive, action: onBlock) {
+                    HStack(spacing: 18) {
+                        Image(systemName: "person.crop.circle.badge.xmark")
+                            .font(.system(size: 20, weight: .regular))
+                            .frame(width: 22)
+
+                        Text("Заблокировать")
+                            .font(.system(size: 16))
+
+                        Spacer()
+                    }
+                    .foregroundStyle(Color.red)
+                    .padding(.horizontal, 18)
+                    .frame(height: 54)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .background(
+                Color(uiColor: .secondarySystemBackground),
+                in: RoundedRectangle(cornerRadius: 20)
+            )
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
+        .padding(.bottom, 18)
+    }
+}
+
+private extension View {
+    func shumProfileBlockSheet(
+        runtime: SpotchatRuntime,
+        request: Binding<ShumProfileBlockRequest?>
+    ) -> some View {
+        modifier(
+            ShumProfileBlockSheetModifier(
+                runtime: runtime,
+                request: request
+            )
+        )
     }
 }
 
@@ -865,27 +1019,29 @@ struct ShumSavedProfilesView: View {
             ForEach(profiles) { profile in
                 let peer = profile.peer
 
-                ShumStoredPersonRow(
-                    runtime: runtime,
-                    peer: peer,
-                    isSaved: true,
-                    cardAction: { selectedProfile = profile },
-                    writeAction: { conversationPeer = peer }
-                )
-                .shumPeopleContextMenu(
-                    runtime: runtime,
-                    peer: peer,
-                    card: profile.card,
-                    isSaved: true,
-                    writeAction: { conversationPeer = peer },
-                    blockAction: { showsSavedBlockInformation = true }
-                )
+                NativeSwipeInteractionRow {
+                    ShumStoredPersonRow(
+                        runtime: runtime,
+                        peer: peer,
+                        isSaved: true,
+                        cardAction: { selectedProfile = profile },
+                        writeAction: { conversationPeer = peer }
+                    )
+                    .shumPeopleContextMenu(
+                        runtime: runtime,
+                        peer: peer,
+                        card: profile.card,
+                        isSaved: true,
+                        writeAction: { conversationPeer = peer },
+                        blockAction: { showsSavedBlockInformation = true }
+                    )
+                }
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color(uiColor: .systemBackground))
                 .listRowSeparator(.hidden)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) { remove(profile) } label: {
+                    Button { remove(profile) } label: {
                         Label("Убрать", systemImage: "heart.slash")
                     }
                     .tint(Color(uiColor: .systemGray))

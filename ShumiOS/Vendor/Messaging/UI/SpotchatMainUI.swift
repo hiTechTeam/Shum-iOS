@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 
 // Current Spotchat chat list, adapted to Shum's navigation and palette.
 enum SpotchatUIRoute: Hashable {
@@ -47,23 +48,31 @@ struct SpotchatChatsUI: View {
                     emptyState
                 } else {
                     ForEach(chats) { peer in
-                        Button { open(.conversation(peer)) } label: {
-                            SpotchatChatRowUI(runtime: runtime, peer: peer)
+                        NativeSwipeInteractionRow {
+                            Button { open(.conversation(peer)) } label: {
+                                SpotchatChatRowUI(runtime: runtime, peer: peer)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.vertical, 11)
+                            .shumChatRowContextMenu(
+                                runtime: runtime,
+                                peer: peer,
+                                profileAction: { selectedPeer = peer },
+                                deleteAction: runtime.permanent == nil
+                                    ? nil
+                                    : { deleteChatPeer = peer }
+                            )
                         }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Посмотреть профиль") { selectedPeer = peer }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             if runtime.permanent != nil {
-                                Button("Удалить чат", role: .destructive) { deleteChatPeer = peer }
+                                Button { deleteChatPeer = peer } label: {
+                                    Label("Удалить", systemImage: "trash")
+                                }
+                                .tint(.red)
                             }
                         }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            if runtime.permanent != nil {
-                                Button("Удалить", role: .destructive) { deleteChatPeer = peer }
-                            }
-                        }
-                        .listRowInsets(EdgeInsets(top: 11, leading: 0, bottom: 11, trailing: 0))
-                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color(uiColor: .systemBackground))
                         .listRowSeparator(.visible)
                         .alignmentGuide(.listRowSeparatorLeading) { _ in 72 }
                         .alignmentGuide(.listRowSeparatorTrailing) { dimensions in dimensions.width }
@@ -101,28 +110,28 @@ struct SpotchatChatsUI: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
-        .confirmationDialog(
+        .alert(
             "Удалить чат?",
             isPresented: Binding(
                 get: { deleteChatPeer != nil },
                 set: { if !$0 { deleteChatPeer = nil } }
             ),
-            titleVisibility: .visible
+            presenting: deleteChatPeer
         ) {
-            if let peer = deleteChatPeer {
-                Button("Удалить чат", role: .destructive) {
-                    if let card = runtime.permanent?.card(for: peer.id) {
-                        do {
-                            try runtime.permanent?.deleteConversation(with: card)
-                        } catch {
-                            runtime.error = error.localizedDescription
-                        }
-                    }
-                    deleteChatPeer = nil
-                }
-            }
+            peer in
             Button("Отмена", role: .cancel) { deleteChatPeer = nil }
+            Button("Удалить чат", role: .destructive) {
+                if let card = runtime.permanent?.card(for: peer.id) {
+                    do {
+                        try runtime.permanent?.deleteConversation(with: card)
+                    } catch {
+                        runtime.error = error.localizedDescription
+                    }
+                }
+                deleteChatPeer = nil
+            }
         } message: {
+            _ in
             Text("История и очередь будут удалены на этом iPhone. Контакт и копии у собеседника сохранятся.")
         }
     }
@@ -207,9 +216,87 @@ private struct SpotchatChatRowUI: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(unread > 0 ? "Непрочитанных: \(unread). Открыть чат" : "Открыть чат")
+    }
+}
+
+private struct ShumChatRowContextMenuModifier: ViewModifier {
+    @ObservedObject var runtime: SpotchatRuntime
+    let peer: SpotchatPeer
+    let profileAction: () -> Void
+    let deleteAction: (() -> Void)?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.contextMenu { menu } preview: {
+                ShumChatRowContextPreview(runtime: runtime, peer: peer)
+            }
+        } else {
+            content.contextMenu { menu }
+        }
+    }
+
+    @ViewBuilder
+    private var menu: some View {
+        Button(action: profileAction) {
+            Label("Посмотреть профиль", systemImage: "person.crop.circle")
+                .foregroundStyle(.primary)
+        }
+        .tint(.primary)
+
+        if let deleteAction {
+            Divider()
+
+            Button(role: .destructive, action: deleteAction) {
+                Label("Удалить чат", systemImage: "trash")
+                    .foregroundStyle(.red)
+            }
+            .tint(.red)
+        }
+    }
+}
+
+private struct ShumChatRowContextPreview: View {
+    @ObservedObject var runtime: SpotchatRuntime
+    let peer: SpotchatPeer
+
+    private var sourceWidth: CGFloat { UIScreen.main.bounds.width }
+    private var previewWidth: CGFloat { min(sourceWidth, max(320, sourceWidth - 32)) }
+    private var previewScale: CGFloat { sourceWidth > 0 ? previewWidth / sourceWidth : 1 }
+
+    var body: some View {
+        SpotchatChatRowUI(runtime: runtime, peer: peer)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+            .frame(width: sourceWidth, height: 80)
+            .background(
+                Color(uiColor: .tertiarySystemBackground),
+                in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+            )
+            .scaleEffect(previewScale)
+            .frame(width: previewWidth, height: 80 * previewScale)
+    }
+}
+
+private extension View {
+    func shumChatRowContextMenu(
+        runtime: SpotchatRuntime,
+        peer: SpotchatPeer,
+        profileAction: @escaping () -> Void,
+        deleteAction: (() -> Void)?
+    ) -> some View {
+        modifier(
+            ShumChatRowContextMenuModifier(
+                runtime: runtime,
+                peer: peer,
+                profileAction: profileAction,
+                deleteAction: deleteAction
+            )
+        )
     }
 }
 

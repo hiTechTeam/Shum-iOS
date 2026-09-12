@@ -225,7 +225,7 @@ where Item: SavedPeopleListItem, RowContent: View {
     }
 }
 
-private struct NativeSwipeInteractionRow<Content: View>: View {
+struct NativeSwipeInteractionRow<Content: View>: View {
     @State private var isSwipeActive = false
     @State private var didBeginSwipe = false
     @State private var suppressPersistentSurface = false

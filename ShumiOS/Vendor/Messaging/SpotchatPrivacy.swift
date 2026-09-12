@@ -98,9 +98,29 @@ struct SpotchatContactActionsMenu: View {
     private var blocked: Bool { runtime.permanent?.isBlocked(card) == true }
     var body: some View {
         Menu {
-            Button { action = "block" } label: { Label(blocked ? "Разблокировать" : "Заблокировать", systemImage: "hand.raised") }
-            Button(role: .destructive) { action = "chat" } label: { Label("Удалить чат", systemImage: "trash") }
-            Button(role: .destructive) { action = "contact" } label: { Label("Удалить контакт", systemImage: "person.crop.circle.badge.minus") }
+            if blocked {
+                Button { action = "block" } label: {
+                    Label("Разблокировать", systemImage: "hand.raised.slash")
+                        .foregroundStyle(.primary)
+                }
+                .tint(.primary)
+            } else {
+                Button(role: .destructive) { action = "block" } label: {
+                    Label("Заблокировать", systemImage: "hand.raised")
+                        .foregroundStyle(.red)
+                }
+                .tint(.red)
+            }
+            Button { action = "chat" } label: {
+                Label("Удалить чат", systemImage: "trash")
+                    .foregroundStyle(.primary)
+            }
+            .tint(.primary)
+            Button { action = "contact" } label: {
+                Label("Удалить контакт", systemImage: "person.crop.circle.badge.minus")
+                    .foregroundStyle(.primary)
+            }
+            .tint(.primary)
         } label: { Image(systemName: "ellipsis.circle").font(.title3).frame(width: 44, height: 44).contentShape(Circle()) }
         .accessibilityLabel("Действия с контактом")
         .confirmationDialog(title, isPresented: Binding(get: { action != nil }, set: { if !$0 { action = nil } }), titleVisibility: .visible) {

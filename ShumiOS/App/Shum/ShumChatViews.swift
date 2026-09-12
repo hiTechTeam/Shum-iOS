@@ -141,7 +141,17 @@ struct ShumConversationView: View {
                             }
                             .padding(12)
                             .background(message.outgoing ? Color.accentColor.opacity(0.18) : Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
-                            .contextMenu { if message.outgoing, case .failed = message.status { Button("Отправить снова") { chat.send(message.text, to: contact.id) } } }
+                            .contextMenu {
+                                if message.outgoing, case .failed = message.status {
+                                    Button {
+                                        chat.send(message.text, to: contact.id)
+                                    } label: {
+                                        Text("Отправить снова")
+                                            .foregroundStyle(.primary)
+                                    }
+                                    .tint(.primary)
+                                }
+                            }
                             if !message.outgoing { Spacer(minLength: 48) }
                         }.id(message.id)
                     }
