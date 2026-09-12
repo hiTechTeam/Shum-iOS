@@ -1,0 +1,247 @@
+/* Alerts */
+"turnOnBLE" = "Turn on Bluetooth";
+
+/* Common */
+"SignIn" = "Sign in";
+"ok" = "Okey";
+"cancel" = "Cancel";
+"close" = "Close";
+"nearby" = "Nearby";
+"distanceMetersFormat" = "%d m";
+"disappearsInSecondsFormat" = "Hides in %d s";
+"countdownSecondsFormat" = "%d s";
+"signalLostCountdownFormat" = "Signal lost. Profile hides in %d seconds.";
+
+/* Tabs */
+"peopleNearby" = "People nearby";
+"people" = "People";
+"settings" = "Settings";
+"profile" = "Profile";
+"me" = "Me";
+"metTitle" = "Met";
+"metHeader" = "Met recently";
+
+/* Chats */
+
+/* Encounter history */
+"encounterHistoryEmptyTitle" = "No encounters yet";
+"encounterHistoryEmptyMessage" = "People you meet during the last 24 hours will appear here.";
+"encounterHistoryListDescription" = "People you met during the last 24 hours";
+"encounterHistoryClear" = "Clear history";
+"encounterHistoryDelete" = "Clear";
+"encounterHistorySave" = "Save";
+"encounterHistoryRemove" = "Remove";
+"encounterHistoryDeleteTitle" = "Remove from Met?";
+"encounterHistoryDeleteMessage" = "This card will be removed from the Met list.";
+"encounterHistoryClearTitle" = "Clear encounter history?";
+"encounterHistoryClearMessage" = "All encounters saved on this device will be removed.";
+"encounterHistoryLastSeenFormat" = "Met %@";
+
+/* People filters */
+"peopleDistanceFilterTitle" = "Distance";
+"peopleDistanceFilterDescription" = "Choose the maximum distance. Nearby will only show people within the selected scanning range.";
+"peopleDistanceFilterUnlimited" = "No limit";
+"peopleDistanceFilterValueFormat" = "Up to %d m";
+"peopleFilterMaximum" = "max";
+"peopleDistanceFilterEmptyTitle" = "No one in this range";
+"peopleDistanceFilterEmptyMessage" = "Increase the distance to see more people.";
+"peopleHistoryButton" = "Time";
+
+/* Registration */
+"messengerLinkTitle" = "Link Shum";
+"placeCode" = "Code";
+"codePlaceholder" = "Code";
+"enterCode" = "Enter code";
+"code" = "Code";
+"registration" = "Registration";
+"incorrectCode" = "Invalid or expired code";
+"messengerUsernameRequired" = "Create a public Shum username and request a new code";
+"warningCharactersEight" = "Maximum of 8 characters";
+"regDescription" = "Enter the code from Shum_bot to link your Shum account to the app.";
+"localUsername" = "Shum username";
+"usernamePlaceholder" = "@_";
+"profileBioTitle" = "BIO";
+"profileBioPlaceholder" = "A few words about you...";
+"profileBioEmpty" = "Add BIO";
+"profileBioApply" = "Apply";
+"profileBioSaveFailed" = "Couldn’t save BIO. Please try again.";
+"profileBioContentRejected" = "This BIO can’t be published. Please change the text.";
+"profileNameTitle" = "Name";
+"profileInformationTitle" = "Description";
+"profileMessengerTitle" = "Username";
+"profileNotSpecified" = "Not set";
+"profileLinkMessenger" = "Link";
+"profileChangePhoto" = "Change photo";
+"profileChangePhotoTitle" = "Change profile photo";
+"profileSaveName" = "Save";
+"profileNamePlaceholder" = "Your name";
+"profileNameDescription" = "This is the name other Shum users will see.";
+"profileInformationDescription" = "Briefly describe yourself.";
+"profileEdit" = "Edit profile";
+"profileOpenPhoto" = "Open photo";
+/* Onboarding */
+"appleSignInFailed" = "Couldn’t sign in with Apple. Please try again.";
+"appleIdentityTitle" = "Identity verification is required";
+"appleIdentityDescription" = "Sign in with your Apple ID. After verification, you’ll need to link your Shum profile.";
+"appleSignInButton" = "Sign in with Apple";
+"appleSignInHint" = "Continues registration without contacting Apple in development builds";
+"howItWorksTitle" = "How Shum works";
+"nearbyFeatureTitle" = "Finds people nearby";
+"nearbyFeatureDescription" = "Bluetooth helps discover other Shum users around you.";
+"profileFeatureTitle" = "Shows your card";
+"profileFeatureDescription" = "When scanning is on, nearby users can see your profile.";
+"messengerFeatureTitle" = "Chat without internet";
+"messengerFeatureDescription" = "Message people nearby over Bluetooth.";
+"welcome_title" = "Shum";
+"poweredByTG" = "Nearby. Without internet.";
+"aboutOnBoardingMsg" = "Shum helps you find people nearby and chat without internet.";
+"shortOnboardingMsg" = "Connect with people nearby you";
+"start" = "Continue";
+"legalAgreement" = "By continuing, you accept %@ and %@";
+"privacyPolicy" = "Privacy Policy";
+"termsOfService" = "Terms of Service";
+"continueHint" = "Opens the identity verification screen";
+"goNext" = "Got it";
+"go" = "Go";
+"confirmButton" = "Confirm";
+
+/* Settings */
+"settingsStatusOn" = "On";
+"settingsStatusOff" = "Off";
+
+/* Scanning */
+"nearbyEmptyTitle" = "No one nearby yet";
+"nearbyListDescription" = "People who are around you";
+"scanning" = "Scanning";
+"scanningStatusActive" = "Active";
+"scanningStatusInactive" = "Inactive";
+"justTurnScaning" = "Turn on scanning";
+"scanToggleDescription" = "While scanning is active, you can see nearby Shum users and they can see you.";
+"turnedOffScaning" = "Scanning is turned off. Enable scanning in the app to see nearby people.";
+"noPeopleNearby" = "Scanning is active. When Shum users are nearby, they will appear on this screen.";
+"scanAlertText" = "Enable scanning in Settings to open the Nearby section.";
+
+/* Nearby notifications */
+"nearbyNotificationTitle" = "People nearby";
+"nearbyNotificationInitialCountFormat" = "Nearby: %d";
+"nearbyNotificationUpdateCountFormat" = "New nearby: +%d · Total: %d";
+"nearbyNotificationSettingsTitle" = "Notifications";
+"nearbyNotificationEnabled" = "On";
+"nearbyNotificationDisabled" = "Off";
+"nearbyNotificationConfigure" = "Set Up";
+
+/* Quick actions */
+"quickActionsTitle" = "Quick Actions";
+"quickActionsDescription" = "Selected actions will run immediately without confirmation.";
+"quickActionsChat" = "Quick Chat";
+"quickActionsChatDescription" = "Open Shum immediately when you tap a profile card.";
+"quickActionsClear" = "Quick Clear";
+"quickActionsClearDescription" = "Remove a profile from Met immediately without confirmation.";
+"quickActionsBlock" = "Quick Block";
+"quickActionsBlockDescription" = "Immediately hide a profile on this phone when swiping left.";
+
+/* Nearby profile moderation */
+"nearbyProfileClose" = "Close profile";
+"nearbyProfileOpenCard" = "Open profile card";
+"nearbyProfileActions" = "Profile actions";
+"nearbyProfileWrite" = "Write";
+"nearbyProfileMessengerChat" = "Shum Chat";
+"nearbyProfileMessengerTransitionTitle" = "Continue in Shum?";
+"nearbyProfileMessengerTransitionMessage" = "The Shum chats tab will open.";
+"nearbyProfileMessengerTransitionContinue" = "Continue";
+"nearbyProfileMessengerTransitionAlways" = "Always Continue";
+"nearbyProfileNoInformation" = "Message on Shum";
+"nearbyProfileReport" = "Report user";
+"nearbyProfileBlock" = "Block user";
+"nearbyProfileSavedBlockAction" = "Unavailable";
+"nearbyProfileSavedBlockTitle" = "Blocking unavailable";
+"nearbyProfileSavedBlockMessage" = "To block this person, remove them from Saved first.";
+"nearbyProfileSavedBlockOK" = "OK";
+"nearbyProfileReportTitle" = "Why are you reporting this user?";
+"nearbyProfileReportMessage" = "Choose the reason that best describes the problem.";
+"nearbyProfileReportSpam" = "Spam";
+"nearbyProfileReportHarassment" = "Harassment or bullying";
+"nearbyProfileReportInappropriate" = "Inappropriate content";
+"nearbyProfileReportImpersonation" = "Impersonation";
+"nearbyProfileReportOther" = "Other";
+"nearbyProfileReportConfirmTitle" = "Report and block?";
+"nearbyProfileReportConfirmMessage" = "Reason: %@. You can add optional context to the report before blocking.";
+"nearbyProfileReportDetailsPlaceholder" = "Comment (optional)";
+"nearbyProfileReportDetailsMessage" = "The comment is optional. The user will be blocked after you submit the report.";
+"nearbyProfileReportSend" = "Report and block";
+"nearbyProfileReportSentTitle" = "Report sent";
+"nearbyProfileReportSentMessage" = "Thank you. The report has been saved for moderation.";
+"nearbyProfileBlockTitle" = "Block this user?";
+"nearbyProfileBlockMessage" = "This profile will be hidden on this phone. Blocking does not delete copies of your profile from other devices.";
+"nearbyProfileBlockConfirm" = "Block";
+"nearbyProfileBlockWithoutReport" = "Block";
+"nearbyProfileBlockedMenu" = "Blocked";
+"nearbyProfileBlockedProfiles" = "Blocked profiles";
+"nearbyProfileSavedMenu" = "Saved";
+"nearbyProfileSavedProfiles" = "Saved profiles";
+"nearbyProfileSavedListDescription" = "People you saved";
+"nearbyProfileSavedInformationTitle" = "Profile saved";
+"nearbyProfileSavedInformationMessage" = "The profile was added to Saved. You can open it from the corresponding section in your profile.";
+"nearbyProfileSavedInformationDoNotShow" = "Got it, don’t show again";
+"nearbyProfileNoSaved" = "None";
+"nearbyProfileNoSavedProfiles" = "No saved profiles";
+"nearbyProfileNoBlockedProfiles" = "No blocked profiles";
+"nearbyProfileNoBlocked" = "None";
+"nearbyProfileUnblock" = "Unblock";
+"nearbyProfileActionFailedTitle" = "Couldn’t complete action";
+"nearbyProfileActionFailedMessage" = "Check your connection and try again.";
+"nearbyProfileAcknowledge" = "OK";
+"nearbyProfileRetry" = "Try again";
+
+/* Profile */
+"photoOptions" = "Photo Options";
+"takePhoto" = "Take Photo";
+"galleryPhoto" = "Choose from Gallery";
+"deletePhoto" = "Delete Photo";
+"shareUtg" = "Share your profile";
+"creatorCredit" = "from Ruslan Chukavin";
+"profileMoreActions" = "More";
+"developerLinksTitle" = "App developer";
+"developerLinksMessage" = "Ruslan Chukavin is the developer of Shum. Where would you like to go?";
+"messengerChannel" = "Shum channel";
+"logout" = "Sign out";
+"accountActionsTitle" = "Account actions";
+"logoutCurrent" = "Sign out on this device";
+"logoutCurrentTitle" = "Sign out on this device?";
+"logoutCurrentMessage" = "You will need to sign in with Apple again on this device.";
+"logoutFailed" = "Couldn't sign out. Please try again.";
+"deleteAccount" = "Delete account";
+"deleteAccountTitle" = "Delete account?";
+"deleteAccountMessage" = "Your local profile and conversations will be removed from this iPhone.";
+"deleteAccountFailed" = "Profile wasn’t deleted";
+"deleteAccountFailedMessage" = "Couldn’t delete your profile. Please try again.";
+
+
+/* Info Sheet */
+"Shum" = "Shum";
+"info_title" = "Information";
+"info_why_shum" = "Why Shum";
+"info_how_it_works" = "How it works";
+"info_how_it_works_description" = "Shum uses Bluetooth to find people nearby, then lets you contact them through Shum. The app continues searching in the background: you can minimize it, but do not quit it. When a Shum user is detected nearby, the app sends a notification.";
+"proprietaryLicense" = "Copyright © 2021 - 2026 Ruslan Chukavin. All rights reserved.";
+"info_story" = "Every day, we find ourselves near people we could have talked to, gotten to know, spent an evening with, or one day remembered the encounter as something important. We cross paths on the metro, at school, in cafés, and on the street. We look at one another and almost always simply keep walking.\n\nToo many good stories end before they have a chance to begin. Shum is an attempt to give those encounters another chance.";
+"rulesAndPrivacy" = "Documents";
+"info_about_app" = "About the app";
+"info_public_project" = "Public project information";
+"info_questions_and_suggestions" = "Questions and suggestions";
+"version" = "Version";
+
+"local.onboarding.photo.title" = "Add your photo";
+"local.onboarding.photo.description" = "Add a profile photo or continue without one.";
+"local.onboarding.photo.next" = "Next";
+"local.onboarding.details.title" = "Your contact";
+"local.username.explanation" = "Choose a Shum username. It is saved in your local profile.";
+"local.name.explanation" = "Enter your name";
+"local.profile.name" = "Name";
+"local.profile.save" = "Save";
+"local.profile.save.error" = "Check your name and Shum username, then try again.";
+"local.sharing.explanation" = "Your profile is stored on this device. Enable nearby visibility to chat.";
+"local.photo.save.error" = "Couldn't save this photo. Please choose another image.";
+"local.delete.title" = "Delete profile?";
+"local.delete.action" = "Delete profile";
+"local.delete.message" = "Your profile and chat history will be removed from this iPhone. Messages on other people’s devices will remain.";

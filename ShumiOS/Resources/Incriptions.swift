@@ -1,0 +1,474 @@
+import Foundation
+
+struct Inc {
+    
+    // MARK: - Alerts
+    struct Alerts {
+        static let turnOnBLE: String = "turnOnBLE"
+        // EN: Turn on Bluetooth
+        // RU: Включите Bluetooth
+    }
+    
+    // MARK: - Common
+    struct Common {
+        
+        static let SignIn: String = "SignIn"
+        // EN: Sign in
+        // RU: Зарегистрироваться
+        
+        static let cancel: String = "cancel"
+        // EN: Cancel
+        // RU: Отмена
+        
+        // EN: Copied
+        // RU: Скопировано
+        
+        static let nearby: String = "nearby"
+        static let distanceMetersFormat: String = "distanceMetersFormat"
+        static let disappearsInSecondsFormat: String =
+            "disappearsInSecondsFormat"
+        static let countdownSecondsFormat: String =
+            "countdownSecondsFormat"
+        static let signalLostCountdownFormat: String =
+            "signalLostCountdownFormat"
+        // EN: Nearby
+        // RU: Рядом
+        
+        static let okey: String = "Ok"
+        static let close: String = "close"
+        static let Shum: String = "Shum"
+    }
+
+    // MARK: - Settings
+    struct Settings {
+        static let statusOn: String = "settingsStatusOn"
+        static let statusOff: String = "settingsStatusOff"
+    }
+    
+    // MARK: - Tabs
+    struct Tabs {
+        static let settings: String = "settings"
+        // EN: Settings
+        // RU: Настройки
+        
+        static let peopleNearby: String = "peopleNearby"
+        // EN: People nearby
+        // RU: Люди рядом
+        
+        static let people: String = "people"
+        // EN: People
+        // RU: Люди
+        
+        static let profile: String = "profile"
+        // EN: Profile
+        // RU: Профиль
+
+        static let me: String = "me"
+        // EN: Me
+        // RU: Я
+        
+        static let metTitle: String = "metTitle"
+        // EN: Met recently
+        // RU: Виделись недавно
+
+        static let metHeader: String = "metHeader"
+        // EN: Met recently
+        // RU: Виделись недавно
+    }
+
+    // MARK: - Encounter history
+    struct EncounterHistory {
+        static let emptyTitle: String = "encounterHistoryEmptyTitle"
+        static let emptyMessage: String = "encounterHistoryEmptyMessage"
+        static let listDescription: String =
+            "encounterHistoryListDescription"
+        static let clear: String = "encounterHistoryClear"
+        static let delete: String = "encounterHistoryDelete"
+        static let save: String = "encounterHistorySave"
+        static let remove: String = "encounterHistoryRemove"
+        static let deleteTitle: String = "encounterHistoryDeleteTitle"
+        static let deleteMessage: String = "encounterHistoryDeleteMessage"
+        static let clearTitle: String = "encounterHistoryClearTitle"
+        static let clearMessage: String = "encounterHistoryClearMessage"
+        static let lastSeenFormat: String = "encounterHistoryLastSeenFormat"
+    }
+
+    // MARK: - People filters
+    struct PeopleFilters {
+        static let distanceTitle: String = "peopleDistanceFilterTitle"
+        static let distanceDescription: String =
+            "peopleDistanceFilterDescription"
+        static let distanceUnlimited: String =
+            "peopleDistanceFilterUnlimited"
+        static let distanceValueFormat: String =
+            "peopleDistanceFilterValueFormat"
+        static let maximum: String = "peopleFilterMaximum"
+        static let nearbyEmptyTitle: String = "peopleDistanceFilterEmptyTitle"
+        static let nearbyEmptyMessage: String =
+            "peopleDistanceFilterEmptyMessage"
+        static let historyButton: String = "peopleHistoryButton"
+    }
+    
+    // MARK: - Registration
+    struct Registration {
+        static let messengerLinkTitle: String = "messengerLinkTitle"
+        static let placeCode: String = "placeCode"
+        // EN: Code
+        // RU: Код
+        
+        static let enterCode: String = "enterCode"
+        // EN: Enter code
+        // RU: Введите код
+        
+        static let codePlaceholder: String = "codePlaceholder"
+        // EN: Code
+        // RU: Код
+        
+        static let registration: String = "registration"
+        // EN: Registration
+        // RU: Регистрация
+        
+        static let incorrectCode: String = "incorrectCode"
+        // EN: Invalid or expired code
+        // RU: Код недействителен или истёк
+
+        static let messengerUsernameRequired: String = "messengerUsernameRequired"
+        // EN: Create a public Имя пользователя Shum and request a new code
+        // RU: Создайте публичный Имя пользователя Shum и запросите новый код
+        
+        static let warningCharactersEight: String = "warningCharactersEight"
+        // EN: Maximum of 8 characters
+        // RU: Максимум 8 символов
+        
+        static let regDescription: String = "regDescription"
+        // EN: Enter the code sent to you by Shum_bot so the app can link your Messenger.
+        // RU: Введите код, который отправил вам Shum_bot, чтобы приложение могло привязать ваш Messenger.
+        
+        static let localUsername: String = "Имя пользователя Shum"
+        static let usernamePlaceholder: String = "@_"
+    }
+    
+    // MARK: - Onboarding
+    struct Onboarding {
+        static let appleSignInFailed: String = "appleSignInFailed"
+        static let appleIdentityTitle: String = "appleIdentityTitle"
+        static let appleIdentityDescription: String = "appleIdentityDescription"
+        static let appleSignInButton: String = "appleSignInButton"
+        static let appleSignInHint: String = "appleSignInHint"
+        static let howItWorksTitle: String = "howItWorksTitle"
+        static let nearbyFeatureTitle: String = "nearbyFeatureTitle"
+        static let nearbyFeatureDescription: String = "nearbyFeatureDescription"
+        static let profileFeatureTitle: String = "profileFeatureTitle"
+        static let profileFeatureDescription: String = "profileFeatureDescription"
+        static let messengerFeatureTitle: String = "messengerFeatureTitle"
+        static let messengerFeatureDescription: String = "messengerFeatureDescription"
+        static let welcomeTitle: String = "welcome_title"
+        // EN/RU: Shum
+        
+        static let aboutOnBoardingMsg: String = "aboutOnBoardingMsg"
+        // EN: Shum lets you instantly find and share profiles.
+        // RU: Shum позволяет быстро находить и обмениваться профилями.
+        
+        static let shortOnboardingMsg: String = "shortOnboardingMsg"
+        // EN: Connect with people nearby you
+        // RU: В коннекте с теми, кто рядом
+        
+        static let start: String = "start"
+        // EN: Get started with Messenger
+        // RU: Начать с Messenger
+        
+        static let goNext: String = "goNext"
+        // EN: Next
+        // RU: Далее
+
+        static let photoNext: String = "local.onboarding.photo.next"
+        // EN: Next
+        // RU: Дальше
+        
+        static let goStart: String = "go"
+        // EN: Go
+        // RU: Начать
+        
+        static let confirmButton: String = "confirmButton"
+        // EN: Confirm
+        // RU: Применить
+        
+        static let poweredByTG: String = "poweredByTG"
+
+        static let legalAgreement: String = "legalAgreement"
+        static let privacyPolicy: String = "privacyPolicy"
+        static let termsOfService: String = "termsOfService"
+        static let continueHint: String = "continueHint"
+    }
+    
+    // MARK: - Scanning
+    struct Scanning {
+        static let emptyTitle: String = "nearbyEmptyTitle"
+        static let listDescription: String = "nearbyListDescription"
+
+        static let scanning: String = "scanning"
+        static let active: String = "scanningStatusActive"
+        static let inactive: String = "scanningStatusInactive"
+        // EN: Scanning
+        // RU: Сканирование
+        
+        static let justTurnScaning: String = "justTurnScaning"
+        // EN: Turn on scaning
+        // RU: Включите сканирование
+        
+        static let scanToggleDescription: String = "scanToggleDescription"
+        // EN: Turn on Bluetooth scanning so that you can see people around you.
+        // RU: Включите Bluetooth-сканирование, чтобы видеть людей рядом.
+        
+        static let turnedOffScanning: String = "turnedOffScaning"
+        // EN: Scanning is turned off. Enable it to see nearby people.
+        // RU: Сканирование отключено. Включите его, чтобы видеть людей рядом.
+        
+        static let noPeopleNeaby: String = "noPeopleNearby"
+        // EN: Scanning is active. Nearby Shum users will appear here.
+        // RU: Сканирование активно. Пользователи Shum поблизости появятся здесь.
+        
+        static let scanAlertText: String = "scanAlertText"
+        // EN: Enable scanning in Settings to open the Nearby section.
+        // RU: Включите сканирование в настройках, чтобы открыть раздел «Рядом».
+        
+    }
+
+    // MARK: - Nearby notifications
+    struct NearbyNotifications {
+        static let title: String = "nearbyNotificationTitle"
+        static let initialCountFormat: String =
+            "nearbyNotificationInitialCountFormat"
+        static let updateCountFormat: String =
+            "nearbyNotificationUpdateCountFormat"
+        static let settingsTitle: String = "nearbyNotificationSettingsTitle"
+        static let enabled: String = "nearbyNotificationEnabled"
+        static let disabled: String = "nearbyNotificationDisabled"
+        static let configure: String = "nearbyNotificationConfigure"
+    }
+
+    struct QuickActions {
+        static let title: String = "quickActionsTitle"
+        static let description: String = "quickActionsDescription"
+        static let chat: String = "quickActionsChat"
+        static let chatDescription: String = "quickActionsChatDescription"
+        static let clear: String = "quickActionsClear"
+        static let clearDescription: String = "quickActionsClearDescription"
+        static let block: String = "quickActionsBlock"
+        static let blockDescription: String = "quickActionsBlockDescription"
+    }
+
+    // MARK: - Nearby profile moderation
+    struct NearbyProfile {
+        static let close: String = "nearbyProfileClose"
+        static let openCard: String = "nearbyProfileOpenCard"
+        static let actions: String = "nearbyProfileActions"
+        static let write: String = "nearbyProfileWrite"
+        static let messengerChat: String = "nearbyProfileMessengerChat"
+        static let messengerTransitionTitle: String =
+            "nearbyProfileMessengerTransitionTitle"
+        static let messengerTransitionMessage: String =
+            "nearbyProfileMessengerTransitionMessage"
+        static let messengerTransitionContinue: String =
+            "nearbyProfileMessengerTransitionContinue"
+        static let messengerTransitionAlways: String =
+            "nearbyProfileMessengerTransitionAlways"
+        static let noInformation: String = "nearbyProfileNoInformation"
+        static let report: String = "nearbyProfileReport"
+        static let block: String = "nearbyProfileBlock"
+        static let savedBlockAction: String =
+            "nearbyProfileSavedBlockAction"
+        static let savedBlockTitle: String = "nearbyProfileSavedBlockTitle"
+        static let savedBlockMessage: String =
+            "nearbyProfileSavedBlockMessage"
+        static let savedBlockOK: String = "nearbyProfileSavedBlockOK"
+
+        static let reportTitle: String = "nearbyProfileReportTitle"
+        static let reportMessage: String = "nearbyProfileReportMessage"
+        static let reportSpam: String = "nearbyProfileReportSpam"
+        static let reportHarassment: String = "nearbyProfileReportHarassment"
+        static let reportInappropriate: String = "nearbyProfileReportInappropriate"
+        static let reportImpersonation: String = "nearbyProfileReportImpersonation"
+        static let reportOther: String = "nearbyProfileReportOther"
+        static let reportConfirmTitle: String = "nearbyProfileReportConfirmTitle"
+        static let reportConfirmMessage: String = "nearbyProfileReportConfirmMessage"
+        static let reportDetailsPlaceholder: String =
+            "nearbyProfileReportDetailsPlaceholder"
+        static let reportDetailsMessage: String =
+            "nearbyProfileReportDetailsMessage"
+        static let reportSend: String = "nearbyProfileReportSend"
+        static let reportSentTitle: String = "nearbyProfileReportSentTitle"
+        static let reportSentMessage: String = "nearbyProfileReportSentMessage"
+
+        static let blockTitle: String = "nearbyProfileBlockTitle"
+        static let blockMessage: String = "nearbyProfileBlockMessage"
+        static let blockConfirm: String = "nearbyProfileBlockConfirm"
+        static let blockWithoutReport: String =
+            "nearbyProfileBlockWithoutReport"
+        static let blockedMenu: String = "nearbyProfileBlockedMenu"
+        static let blockedProfiles: String = "nearbyProfileBlockedProfiles"
+        static let savedMenu: String = "nearbyProfileSavedMenu"
+        static let savedProfiles: String = "nearbyProfileSavedProfiles"
+        static let savedListDescription: String =
+            "nearbyProfileSavedListDescription"
+        static let savedInformationTitle: String =
+            "nearbyProfileSavedInformationTitle"
+        static let savedInformationMessage: String =
+            "nearbyProfileSavedInformationMessage"
+        static let savedInformationDoNotShow: String =
+            "nearbyProfileSavedInformationDoNotShow"
+        static let noSaved: String = "nearbyProfileNoSaved"
+        static let noSavedProfiles: String =
+            "nearbyProfileNoSavedProfiles"
+        static let noBlockedProfiles: String = "nearbyProfileNoBlockedProfiles"
+        static let noBlocked: String = "nearbyProfileNoBlocked"
+        static let unblock: String = "nearbyProfileUnblock"
+
+        static let actionFailedTitle: String = "nearbyProfileActionFailedTitle"
+        static let actionFailedMessage: String = "nearbyProfileActionFailedMessage"
+        static let acknowledge: String = "nearbyProfileAcknowledge"
+        static let retry: String = "nearbyProfileRetry"
+    }
+    
+    // MARK: - Profile
+    struct Profile {
+        static let shumBot: String = "Shum_bot"
+        
+        static let photoOptions: String = "photoOptions"
+        // EN: Photo Options
+        // RU: Настройки фото
+        
+        static let takePhoto: String = "takePhoto"
+        // EN: Take Photo
+        // RU: Сделать фото
+        
+        static let galleryPhoto: String = "galleryPhoto"
+        // EN: Choose from Gallery
+        // RU: Выбрать из галереи
+        
+        static let deletePhoto: String = "deletePhoto"
+        // EN: Delete Photo
+        // RU: Удалить фото
+        
+        static let shareUtg: String = "shareUtg"
+        // EN: Share your profile
+        // RU: Поделиться профилем
+        
+        static let creatorCredit: String = "creatorCredit"
+        // EN/RU: from Ruslan Chukavin
+
+        static let moreActions: String = "profileMoreActions"
+
+        static let developerLinksTitle: String = "developerLinksTitle"
+        static let developerLinksMessage: String = "developerLinksMessage"
+        static let messengerChannel: String = "messengerChannel"
+
+        static let bioTitle: String = "profileBioTitle"
+        static let bioPlaceholder: String = "profileBioPlaceholder"
+        static let bioEmpty: String = "profileBioEmpty"
+        static let bioApply: String = "profileBioApply"
+        static let bioSaveFailed: String = "profileBioSaveFailed"
+        static let bioContentRejected: String = "profileBioContentRejected"
+
+        static let nameTitle: String = "profileNameTitle"
+        static let informationTitle: String = "profileInformationTitle"
+        static let messengerTitle: String = "profileMessengerTitle"
+        static let notSpecified: String = "profileNotSpecified"
+        static let linkMessenger: String = "profileLinkMessenger"
+        static let changePhoto: String = "profileChangePhoto"
+        static let changePhotoTitle: String = "profileChangePhotoTitle"
+        static let saveName: String = "profileSaveName"
+        static let namePlaceholder: String = "profileNamePlaceholder"
+        static let nameDescription: String = "profileNameDescription"
+        static let informationDescription: String =
+            "profileInformationDescription"
+        static let editProfile: String = "profileEdit"
+        static let openPhoto: String = "profileOpenPhoto"
+
+        static let logout: String = "logout"
+        static let accountActionsTitle: String = "accountActionsTitle"
+        static let logoutCurrent: String = "logoutCurrent"
+        static let logoutCurrentTitle: String = "logoutCurrentTitle"
+        static let logoutCurrentMessage: String = "logoutCurrentMessage"
+        static let logoutFailed: String = "logoutFailed"
+
+        static let deleteAccount: String = "deleteAccount"
+        static let deleteAccountTitle: String = "deleteAccountTitle"
+        static let deleteAccountMessage: String = "deleteAccountMessage"
+        static let deleteAccountFailed: String = "deleteAccountFailed"
+        static let deleteAccountFailedMessage: String = "deleteAccountFailedMessage"
+    }
+    
+    struct Info {
+        static let title = "info_title"
+
+        static let whyShum = "info_why_shum"
+        static let howItWorks = "info_how_it_works"
+        static let howItWorksDescription = "info_how_it_works_description"
+        
+        static let version = "version"
+        // EN: Version
+        // RU: Версия
+        
+        // EN: Copy and paste into Messenger search
+        // RU: Скопируйте и вставьте в поле поиска Messenger
+        
+        static let proprietaryLicense = "proprietaryLicense"
+        // EN: Copyright © 2021 - 2026 Ruslan Chukavin. All rights reserved.
+        // RU: © 2021 - 2026 Ruslan Chukavin. Все права защищены.
+
+        static let story = "info_story"
+
+        static let rulesAndPrivacy = "rulesAndPrivacy"
+        static let aboutApp = "info_about_app"
+        static let publicProject = "info_public_project"
+        static let questionsAndSuggestions = "info_questions_and_suggestions"
+        
+        static let currentVersion = "1.0.0"
+    }
+}
+
+struct IncLogos {
+    static let shareplay = "shareplay"
+    static let personFillViewwfinder = "person.fill.viewfinder"
+}
+
+struct Links {
+    
+    
+    static let privacyPolicy = "shum://about/privacy"
+    static let termsOfService = "shum://about/terms"
+}
+
+enum SelectedTab: Int {
+    case near = 0
+    case profile = 1
+    case met = 2
+}
+
+enum Keys: String {
+    case shumIDKey = "shum_id"
+    case localNameKey = "localName"
+    case usernameKey = "username"
+    case bioKey = "bio"
+    case photoS3URLKey = "photoS3Url"
+    case isScaning = "isScaning"
+    case isReg = "isReg"
+}
+
+enum HTTPStatus: Int {
+    case okey = 200
+    case created = 201
+    case badRequest = 400
+    case unauthorized = 401
+    case forbidden = 403
+    case notFound = 404
+    case serverError = 500
+}
+
+enum HTTPMethods: String {
+    case get = "GET"
+    case post = "POST"
+    case put = "PUT"
+    case delete = "DELETE"
+}

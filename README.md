@@ -1,36 +1,37 @@
-# Telescan for iOS — local Bluetooth version
+# Shum - iOS
 
-Branch: `feature/local-bluetooth-profiles`. Local prototype, not deployed.
+Отдельный локальный форк Telescan iOS. Исходный проект не меняется. У Shum свой bundle identifier `hiTeam.ShumiOS`, контейнер приложения, ключи и Bluetooth service UUID; его можно установить рядом с Telescan и Spotchat.
 
-## Behavior
+Открыть `ShumiOS.xcodeproj`, схема `Shum`. iOS 16+, Xcode 26. Для установки на телефон выберите свою команду подписи. App Store / GitHub-публикация не выполнялась; upstream remote удалён из этого локального форка.
 
-- Registration: choose/take a photo, then enter Telegram username and name.
-- No Apple login, bot codes, API, server accounts or remote image loading.
-- Phones exchange a signed local card and a small photo directly over BLE.
-  The signature identifies the local card; it does **not** verify Telegram ownership.
-- Existing nearby, approximate distance, 24-hour Met history, Saved and Telegram
-  handoff remain. Blocking hides a card on this phone only; server reports are removed.
-- Delete Card clears this phone’s data, not copies already received by others.
-- Existing locally stored profile and saved contacts are preserved where available.
+## Подложка
 
-Both phones need this new version: it uses a different BLE service from the
-previous server-backed release. iOS still controls background delivery; full
-background discovery is not guaranteed.
+- Иконка и экран запуска: зелёное сплошное пиксельное облачко без глаз.
+- Вкладки: **Люди — Чаты — Профиль**, пиксельные иконки; по умолчанию Чаты.
+- Локальная регистрация, редактирование имени, username, описания и фото из Telescan. Фото при регистрации необязательно.
+- Прямые текстовые чаты с людьми рядом: Bluetooth/Noise транспорт из соседнего Spotchat (BitChat), собственный компактный интерфейс и слой истории.
+- История шифруется AES-GCM; ключ в Keychain, идентификатор собеседника связан с ключом аутентифицированного Noise-сеанса. Есть подтверждения доставки/прочтения и защита от дублирования входящих сообщений.
+- Старые упоминания и переходы во внешний мессенджер удалены. Нет внешней авторизации, интернет-доставки, Nostr/Tor/relay-клиентов или серверных API в активной композиции.
 
-## Build and test
+## Ограничения этой версии
 
-Requires iOS 16.0+, Xcode and two physical iPhones for radio testing.
-Run `./ci_scripts/ci_post_clone.sh`, open `TelescaniOS.xcodeproj`, select the
-`Telescan` scheme and an authorized signing team (FrameLabs for the existing ID).
-Debug and Release use the same offline behavior.
+- В чате пока только текст: максимум 255 байт UTF-8 на сообщение — ограничение унаследованного private-message TLV. Для русского текста это обычно до 127 букв. Интерфейс сообщает о превышении, текст не обрезается.
+- История остаётся после ухода собеседника; новая отправка возможна, когда снова установлено Bluetooth-соединение. Интернет-очереди нет.
+- Карточки соседей пока показывают имя и инициалы; обмен фотографиями профиля, файлы, голос, группы, поиск по username и приглашения ещё не подключены. Username локальный и не проверяется на глобальную уникальность.
+- При смене ключей собеседника создаётся новый контакт. Автоматической привязки только по имени нет.
+- Блокировки, сохранённые встречи и быстрые действия из Telescan скрыты в текущем интерфейсе, поскольку относятся к другому протоколу карточек.
+- Симулятор не проверяет реальное BLE-радио. Для сквозной проверки установить Shum на два физических iPhone, включить видимость и проверить отправку в обе стороны, переподключение и фоновые переходы.
 
-Tests cover packet fragmentation, two-way photo transfer, photo reuse,
-signature/size validation, blocking, saved contacts and encounter history.
+## Проверка
 
-Before an App Store submission, update public privacy/review documentation for
-this architecture and separately resolve moderation/review requirements.
-No App Store approval is implied by this prototype.
+12 сентября 2026: сборка для iPhone 17 Simulator выполнена; **68 тестов в 4 наборах прошли**. Реальный обмен между двумя телефонами пока не проверялся.
 
-## License
+`xcodebuild -project ShumiOS.xcodeproj -scheme Shum -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO test`
 
-Proprietary and confidential. See [LICENSE.md](LICENSE.md).
+Новые тесты: граница UTF-8, недоступный получатель, привязка подтверждения к собеседнику, защита подтверждённого статуса от позднего callback, дедупликация, шифрование и восстановление истории, прочтение и удаление истории. Также сохранены регрессионные тесты локального профиля.
+
+Для визуальной проверки Debug Simulator поддерживает аргумент `-ShumPreview`: только демонстрационные чаты, без включения радио. Обычный запуск не создаёт переписки.
+
+## Происхождение
+
+`ShumiOS/Vendor/Bluetooth` — локально выделенная часть Spotchat/BitChat: BLE, Noise, пакетные форматы и их зависимости. Интернет-клиенты и исходная точка входа приложения не включены. Удалены Nostr identity bridge и методы профилей Spotchat; Shum объявляет только фактически доступные возможности. Лицензия транспорта: `BLUETOOTH-LICENSE` (Unlicense). Исходная лицензия Telescan сохранена в `LICENSE.md`.
