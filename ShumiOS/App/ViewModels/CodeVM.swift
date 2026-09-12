@@ -21,9 +21,12 @@ final class LocalProfileViewModel: ObservableObject {
         localUsername = profile.username.map { "@" + $0 }
         bio = profile.bio; localPhotoURL = profile.photoUrl; isUsernameConfirmed = true
     }
-    @discardableResult func save(name: String, username: String, photo: Data?) -> Bool {
+    @discardableResult func save(name: String, username: String? = nil, photo: Data?) -> Bool {
+        guard let name = ShumProfileValidation.name(name) else {
+            saveError = "Введите короткое имя без служебных символов."; return false
+        }
         do {
-            try store.saveOwn(name: name, username: username, bio: bio, photo: photo)
+            try store.saveOwn(name: name, bio: bio, photo: photo)
             restoreLocalProfile(); saveError = nil; return true
         } catch {
             saveError = NSLocalizedString("local.profile.save.error", comment: "")
@@ -32,18 +35,14 @@ final class LocalProfileViewModel: ObservableObject {
     }
     @discardableResult func updateName(_ value: String) -> Bool {
         guard let own = store.ownManifest else { return false }
-        return save(name: value, username: own.body.username, photo: store.photo(own.body.photoHash))
-    }
-    @discardableResult func updateUsername(_ value: String) -> Bool {
-        guard let own = store.ownManifest else { return false }
-        return save(name: own.body.name, username: value, photo: store.photo(own.body.photoHash))
+        return save(name: value, photo: store.photo(own.body.photoHash))
     }
     func updateBio(_ value: String) async -> Bool {
         guard let own = store.ownManifest else { return false }
         isSavingBio = true
         defer { isSavingBio = false }
         do {
-            try store.saveOwn(name: own.body.name, username: own.body.username,
+            try store.saveOwn(name: own.body.name,
                 bio: value.trimmingCharacters(in: .whitespacesAndNewlines),
                 photo: store.photo(own.body.photoHash))
             restoreLocalProfile(); bioSaveFailed = false; return true

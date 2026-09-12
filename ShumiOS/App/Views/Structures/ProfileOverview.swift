@@ -12,6 +12,8 @@ struct ProfileOverviewView: View {
     @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
 
     @State private var showScanningSettings = false
+    @State private var showQR = false
+    @State private var showPrivacy = false
     @State private var showInfoSheet = false
     @State private var showLogoutOptions = false
     @State private var showBlockedProfiles = false
@@ -92,6 +94,8 @@ struct ProfileOverviewView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
+                Button { showQR = true } label: { Image(systemName: "qrcode") }
+                    .accessibilityLabel("Мой QR-код")
                 profileMenu
 
                 NavigationLink {
@@ -107,6 +111,14 @@ struct ProfileOverviewView: View {
                 }
                 .tint(.primary)
                 .accessibilityLabel(Inc.Profile.editProfile.localized)
+            }
+        }
+        .sheet(isPresented: $showQR) {
+            if let card = coordinator.chat?.permanent?.ownCard { SpotchatQRView(card: card) }
+        }
+        .sheet(isPresented: $showPrivacy) {
+            if let chat = coordinator.chat {
+                NavigationStack { SpotchatPrivacySettings(runtime: chat) }
             }
         }
         .sheet(isPresented: $showScanningSettings) {
@@ -198,12 +210,7 @@ struct ProfileOverviewView: View {
                 .font(.system(size: 28, weight: .semibold))
                 .multilineTextAlignment(.center)
 
-            if let messengerUsername {
-                Text(messengerUsername)
-                    .font(.system(size: 17))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+
         }
         .frame(maxWidth: .infinity)
     }
@@ -212,6 +219,9 @@ struct ProfileOverviewView: View {
         VStack(spacing: 0) {
             ProfileOverviewRow(title: "Видимость рядом", systemImage: "dot.radiowaves.left.and.right",
                 value: scanningStatusTitle, position: .top) { showScanningSettings = true }
+            Divider().padding(.leading, 60).padding(.trailing, 20)
+            ProfileOverviewRow(title: "Конфиденциальность", systemImage: "lock.shield",
+                value: "", position: .middle) { showPrivacy = true }
             Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(title: "О приложении", systemImage: "info.circle",
                 value: "Shum", position: .bottom) { showInfoSheet = true }

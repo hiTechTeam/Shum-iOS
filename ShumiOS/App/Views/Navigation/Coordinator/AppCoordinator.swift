@@ -8,85 +8,114 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     @Published var nearbyNotificationNavigationRequest = UUID()
     @Published var showSplash = true
     @Published var isScaning = false
-    let chat = ShumChatRuntime()
+    @Published private(set) var chat: SpotchatRuntime?
+    @Published var deletionError: String?
+    @Published var invitation: SpotchatContactCard?
+    @Published var invitationError: String?
+    @Published var deletingProfile = false
     let authCodeViewModel: LocalProfileViewModel
     let peopleViewModel: PeopleViewModel
     let profilePhotoViewModel: ProfilePhotoViewModel
+    private let deletion = SpotchatDeletionService.live()
     private var photoObserver: NSObjectProtocol?
+    private var active = false
 
     init() {
-        // Import only what is already on this phone. Never contact the old API.
         let store = LocalCardStore.shared
-        let defaults = UserDefaults.standard
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("-ShumPreview"), store.ownManifest == nil {
-            _ = try? store.saveOwn(name: "Руслан", username: "ruslan", bio: "Пробую Shum", photo: nil)
+            _ = try? store.saveOwn(name: "Руслан", bio: "Пробую Shum", photo: nil)
         }
         #endif
-        if store.ownManifest == nil, defaults.bool(forKey: Keys.isReg.rawValue),
-           let name = defaults.string(forKey: Keys.localNameKey.rawValue),
-           let username = defaults.string(forKey: Keys.usernameKey.rawValue) {
-            let photo = ProfileImageStorage.load().flatMap { try? LocalCardPhoto.prepare($0) }
-            _ = try? store.saveOwn(name: name, username: username,
-                bio: defaults.string(forKey: Keys.bioKey.rawValue), photo: photo)
-        }
         authCodeViewModel = LocalProfileViewModel()
         profilePhotoViewModel = ProfilePhotoViewModel()
         peopleViewModel = PeopleViewModel(bleManager: ShumInactiveCardRadio())
+        #if DEBUG
+        if TestEnvironment.isRunningTests { return }
+        #endif
         isRegistered = store.ownManifest != nil
-        if isRegistered {
-            for key in ["shum.auth.access-token", "shum.auth.refresh-token",
-                        "shum.auth.apple-primary-session-v1", "shum.auth.reset-pending-v1"] {
-                try? KeychainStore.shared.remove(key)
-            }
-        }
-        isScaning = isRegistered && defaults.bool(forKey: Keys.isScaning.rawValue)
-        if let id = authCodeViewModel.shumID {
-            defaults.set(id.uuidString, forKey: Keys.shumIDKey.rawValue)
-        }
-        AppNotificationRouter.shared.configure { [weak self] in self?.nearbyNotificationNavigationRequest = UUID() }
+        isScaning = isRegistered && UserDefaults.standard.bool(forKey: Keys.isScaning.rawValue)
+        if deletion.hasDeletion {
+            deletingProfile = true
+            finishDeletion()
+        } else if isRegistered { prepareMessaging() }
         photoObserver = NotificationCenter.default.addObserver(forName: .localCardChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
-                guard let self else { return }
-                self.authCodeViewModel.restoreLocalProfile()
-                self.chat.configure(name: self.authCodeViewModel.localName ?? "Гость", enabled: self.isScaning,
-                    active: UIApplication.shared.applicationState == .active)
+                self?.authCodeViewModel.restoreLocalProfile()
+                self?.synchronizeProfile()
             }
         }
     }
     deinit { if let photoObserver { NotificationCenter.default.removeObserver(photoObserver) } }
     func start() -> AnyView {
         AnyView(AppCoordinatorView().environmentObject(self)
-            .environmentObject(authCodeViewModel).environmentObject(peopleViewModel).environmentObject(chat))
+            .environmentObject(authCodeViewModel).environmentObject(peopleViewModel))
+    }
+    private func prepareMessaging() {
+        guard !deletingProfile, isRegistered else { return }
+        let model = SpotchatRuntime.live()
+        model.deleteProfileHandler = { [weak self] in
+            Task { @MainActor in try? await self?.deleteAccount() }
+        }
+        model.setBluetoothEnabled(isScaning)
+        model.setAppActive(false)
+        chat = model
+        synchronizeProfile()
+    }
+    func retryMessaging() {
+        chat?.retireForDeletion()
+        chat = nil
+        prepareMessaging()
+        updateApplicationState(isActive: active)
+    }
+    private func synchronizeProfile() {
+        guard !deletingProfile, let own = LocalCardStore.shared.ownManifest, let chat, chat.isReady else { return }
+        let avatar = LocalCardStore.shared.photo(own.body.photoHash)
+        let profile = SpotchatProfile(name: own.body.name, bio: own.body.bio ?? "", avatar: avatar)
+        if chat.profiles.own != profile { _ = chat.saveProfile(name: profile.name, bio: profile.bio, avatar: profile.avatar) }
     }
     func completedRegistration() {
         guard LocalCardStore.shared.ownManifest != nil else { return }
         authCodeViewModel.restoreLocalProfile(); isRegistered = true
         UserDefaults.standard.set(true, forKey: Keys.isReg.rawValue)
-        setScanning(true); updateApplicationState(isActive: true)
+        isScaning = true
+        UserDefaults.standard.set(true, forKey: Keys.isScaning.rawValue)
+        if chat == nil { prepareMessaging() }
+        updateApplicationState(isActive: true)
     }
     func setScanning(_ enabled: Bool) {
         isScaning = enabled && isRegistered
         UserDefaults.standard.set(isScaning, forKey: Keys.isScaning.rawValue)
-        chat.configure(name: authCodeViewModel.localName ?? "Гость", enabled: isScaning, active: true)
+        chat?.setBluetoothEnabled(isScaning)
     }
     func refreshSession() async {
         authCodeViewModel.restoreLocalProfile(); profilePhotoViewModel.loadPhotoIfNeeded()
+        synchronizeProfile()
     }
     func deleteAccount() async throws {
-        setScanning(false)
-        try chat.reset()
-        try LocalCardStore.shared.reset()
-        AccountSessionGeneration.shared.advance()
-        peopleViewModel.resetAccountScopedState()
-        authCodeViewModel.clearProfile(); profilePhotoViewModel.resetAccountScopedState()
-        SavedPeopleStateStore.shared.removeAll(); QuickActionsSettingsStore.shared.reset()
-        for key in [Keys.isReg, .shumIDKey, .localNameKey, .usernameKey, .bioKey, .photoS3URLKey] {
-            UserDefaults.standard.removeObject(forKey: key.rawValue)
-        }
-        isRegistered = false; authenticationFlowID = UUID()
+        try deletion.begin()
+        deletingProfile = true
+        chat?.retireForDeletion(); chat = nil
+        finishDeletion()
+        if deletingProfile { throw SpotchatFailure.storage }
+    }
+    func finishDeletion() {
+        do {
+            try deletion.finish()
+            try LocalCardStore.shared.reset()
+            AccountSessionGeneration.shared.advance()
+            peopleViewModel.resetAccountScopedState()
+            authCodeViewModel.clearProfile(); profilePhotoViewModel.resetAccountScopedState()
+            SavedPeopleStateStore.shared.removeAll(); QuickActionsSettingsStore.shared.reset()
+            try deletion.allowNewProfile()
+            isRegistered = false; isScaning = false; authenticationFlowID = UUID()
+            deletionError = nil; deletingProfile = false
+        } catch { deletionError = "Удаление не завершено. Разблокируйте iPhone и повторите. Обмен сообщениями остановлен." }
     }
     func updateApplicationState(isActive: Bool) {
-        chat.configure(name: authCodeViewModel.localName ?? "Гость", enabled: isRegistered && isScaning, active: isActive)
+        active = isActive
+        guard !deletingProfile, isRegistered, let chat else { return }
+        chat.setAppActive(isActive)
+        if isActive { chat.start() }
     }
 }

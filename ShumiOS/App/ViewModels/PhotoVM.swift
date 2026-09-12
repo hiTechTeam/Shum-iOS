@@ -29,7 +29,7 @@ final class ProfilePhotoViewModel: ObservableObject {
         do {
             let data = try image.map { try LocalCardPhoto.prepare($0) }
             if let own = LocalCardStore.shared.ownManifest {
-                try LocalCardStore.shared.saveOwn(name: own.body.name, username: own.body.username, bio: own.body.bio, photo: data)
+                try LocalCardStore.shared.saveOwn(name: own.body.name, bio: own.body.bio, photo: data)
             }
             preparedPhoto = data; uiImage = data.flatMap { UIImage(data: $0) }
             profileImage = uiImage.map { Image(uiImage: $0) } ?? .noPhoto

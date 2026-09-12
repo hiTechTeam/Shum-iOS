@@ -2,7 +2,6 @@ import SwiftUI
 
 struct AppCoordinatorView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @EnvironmentObject private var chat: ShumChatRuntime
     @EnvironmentObject var coordinator: AppCoordinator
 
     @State private var hasReachedMinimumSplashDuration = false
@@ -13,8 +12,14 @@ struct AppCoordinatorView: View {
     var body: some View {
         ZStack {
             Group {
-                if coordinator.isRegistered {
-                    MainContentView(
+                if coordinator.deletingProfile {
+                    VStack(spacing: 20) {
+                        Text("Завершение удаления").font(.title2.bold())
+                        Text(coordinator.deletionError ?? "Обмен сообщениями остановлен.").multilineTextAlignment(.center)
+                        RegistrationPrimaryButton(title: "Повторить удаление") { coordinator.finishDeletion() }
+                    }.padding(24)
+                } else if coordinator.isRegistered, let chat = coordinator.chat {
+                    MainContentView(chat: chat,
                         profilePhotoViewModel: coordinator.profilePhotoViewModel
                     )
                 } else {
@@ -29,10 +34,14 @@ struct AppCoordinatorView: View {
                     .zIndex(1)
             }
         }
+        .onOpenURL { url in
+            do { coordinator.invitation = try SpotchatContactCard.parse(url) }
+            catch { coordinator.invitationError = error.localizedDescription }
+        }
+        .alert("Контакт Shum", isPresented: Binding(get: { coordinator.invitationError != nil }, set: { if !$0 { coordinator.invitationError = nil } })) {
+            Button("Понятно") { coordinator.invitationError = nil }
+        } message: { Text(coordinator.invitationError ?? "") }
         .environmentObject(coordinator)
-        .alert("Shum", isPresented: Binding(get: { chat.error != nil }, set: { if !$0 { chat.error = nil } })) {
-            Button("Понятно") { chat.error = nil }
-        } message: { Text(chat.error ?? "") }
         .task {
             coordinator.updateApplicationState(
                 isActive: scenePhase == .active

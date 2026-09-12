@@ -6,8 +6,8 @@ struct RegistrationPrimaryButton: View {
 
     let title: String
     var isEnabled = true
-    var accentColor: Color = .bl2
-    var enabledForegroundColor: Color = .white
+    var accentColor: Color = .accentColor
+    var enabledForegroundColor: Color = .black
     let action: () -> Void
 
     private var foregroundColor: Color {
@@ -29,12 +29,12 @@ struct RegistrationPrimaryButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 17, weight: .regular))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(foregroundColor)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
                 .background(backgroundColor)
-                .clipShape(Capsule())
+                .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
@@ -51,9 +51,20 @@ struct StartButton: View {
         RegistrationPrimaryButton(
             title: title,
             accentColor: accentColor,
-            enabledForegroundColor: .white,
+            enabledForegroundColor: .black,
             action: onStart
         )
         .accessibilityHint(Inc.Onboarding.continueHint.localized)
+    }
+}
+
+struct ShumPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(enabled ? Color.black : Color.secondary)
+            .padding(.horizontal, 20).frame(minHeight: 50)
+            .background(enabled ? Color.accentColor : Color.secondary.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
+            .opacity(configuration.isPressed ? 0.72 : 1)
     }
 }

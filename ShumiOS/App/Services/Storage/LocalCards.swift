@@ -35,8 +35,8 @@ struct LocalCardManifest: Codable, Equatable {
     }
 
     func validate() throws {
-        guard body.version == 1, body.id == Self.identity(for: publicKey),
-              Self.username(body.username) == body.username,
+        guard [1, 2].contains(body.version), body.id == Self.identity(for: publicKey),
+              (body.version == 1 ? Self.username(body.username) == body.username : body.username.isEmpty),
               !body.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               body.name.count <= 64, body.name.utf8.count <= 256,
               !body.name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
@@ -142,7 +142,7 @@ final class LocalCardStore: @unchecked Sendable {
     }
     func snapshot(_ manifest: LocalCardManifest) -> ShumProfileResponse {
         let body = manifest.body
-        return ShumProfileResponse(shumId: body.id, name: body.name, username: body.username,
+        return ShumProfileResponse(shumId: body.id, name: body.name, username: body.username.isEmpty ? nil : body.username,
             bio: body.bio, photoUrl: photoURL(body.photoHash)?.absoluteString)
     }
     func profile(_ id: UUID) throws -> ShumProfileResponse {
@@ -152,9 +152,10 @@ final class LocalCardStore: @unchecked Sendable {
         }
     }
     @discardableResult
-    func saveOwn(name: String, username: String, bio: String?, photo: Data?) throws -> LocalCardManifest {
+    func saveOwn(name: String, username: String? = nil, bio: String?, photo: Data?) throws -> LocalCardManifest {
         try lock.withLock {
-            guard let username = LocalCardManifest.username(username) else { throw LocalCardError.invalidProfile }
+            let normalizedUsername = username.flatMap(LocalCardManifest.username)
+            if username != nil && normalizedUsername == nil { throw LocalCardError.invalidProfile }
             let key: Curve25519.Signing.PrivateKey
             if let bytes = try secureStore.data(for: keyName) {
                 key = try Curve25519.Signing.PrivateKey(rawRepresentation: bytes)
@@ -163,8 +164,8 @@ final class LocalCardStore: @unchecked Sendable {
                 try secureStore.set(key.rawRepresentation, for: keyName)
             }
             let publicKey = key.publicKey.rawRepresentation
-            let body = LocalCardBody(id: LocalCardManifest.identity(for: publicKey),
-                name: name.trimmingCharacters(in: .whitespacesAndNewlines), username: username,
+            let body = LocalCardBody(version: username == nil ? 2 : 1, id: LocalCardManifest.identity(for: publicKey),
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines), username: normalizedUsername ?? "",
                 bio: bio.flatMap { $0.isEmpty ? nil : String($0.prefix(36)) },
                 photoHash: photo.map(LocalCardPhoto.hash), photoBytes: photo?.count ?? 0)
             let result = LocalCardManifest(body: body, publicKey: publicKey,

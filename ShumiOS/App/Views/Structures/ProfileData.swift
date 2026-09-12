@@ -32,16 +32,6 @@ struct ProfileDataView: View {
                 position: .top, action: { profileEditor = .name })
             profileRowDivider
             ProfileInformationRow(
-                title: Inc.Profile.messengerTitle.localized,
-                value: displayMessenger,
-                showsAccentValue: messengerUsername == nil,
-                position: .middle,
-                action: openMessengerLink
-            )
-
-            profileRowDivider
-
-            ProfileInformationRow(
                 title: Inc.Profile.informationTitle.localized,
                 value: displayBio,
                 showsAccentValue: false,
@@ -67,14 +57,6 @@ struct ProfileDataView: View {
             ?? Inc.Profile.notSpecified.localized
     }
 
-    private var messengerUsername: String? {
-        normalized(authCodeViewModel.localUsername)
-    }
-
-    private var displayMessenger: String {
-        messengerUsername ?? Inc.Profile.linkMessenger.localized
-    }
-
     private func normalized(_ value: String?) -> String? {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -85,10 +67,6 @@ struct ProfileDataView: View {
         draftBio = String((authCodeViewModel.bio ?? "").prefix(36))
         authCodeViewModel.resetBioSaveState()
         showBioEditor = true
-    }
-
-    private func openMessengerLink() {
-        profileEditor = .messenger
     }
 
     private var scrollContent: some View {
@@ -222,7 +200,7 @@ struct ScanningSettingsSheet: View {
                 coordinator.setScanning(isScanning)
                 UISelectionFeedbackGenerator().selectionChanged()
 
-                if isScanning, !BLEManager.shared.isBluetoothAvailable {
+                if isScanning, coordinator.chat?.bluetoothState != .poweredOn {
                     showBluetoothAlert = true
                 }
             }

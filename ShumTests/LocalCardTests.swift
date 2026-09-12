@@ -61,31 +61,40 @@ struct LocalCardTests {
         #expect(restored.photoURL == nil)
     }
 
-    @Test func profileEditorsShowOnlyTheirOwnField() {
-        #expect(LocalCardDetailsMode.name.showsName)
-        #expect(!LocalCardDetailsMode.name.showsUsername)
-        #expect(LocalCardDetailsMode.messenger.showsUsername)
-        #expect(!LocalCardDetailsMode.messenger.showsName)
-        #expect(LocalCardDetailsMode.registration.showsName)
-        #expect(LocalCardDetailsMode.registration.showsUsername)
+    @Test func registrationSavesWithOnlyNameAndSurvivesRelaunch() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let keys = CardMemoryKeychain()
+        let store = LocalCardStore(directory: root, secureStore: keys)
+        let model = LocalProfileViewModel(store: store)
+        #expect(model.save(name: "  Руслан  ", photo: nil))
+        let own = try #require(store.ownManifest)
+        #expect(own.body.name == "Руслан")
+        #expect(own.body.version == 2 && own.body.username.isEmpty)
+        try own.validate()
+        #expect(model.saveError == nil)
+        let restored = LocalCardStore(directory: root, secureStore: keys)
+        #expect(restored.ownManifest == own)
+        #expect(restored.snapshot(own).username == nil)
+        #expect(!model.save(name: "  ", photo: nil))
+        #expect(!model.save(name: "bad\nname", photo: nil))
+        #expect(!model.save(name: String(repeating: "Я", count: 33), photo: nil))
+        #expect(store.ownManifest == own)
     }
 
-    @Test func editingOneProfileFieldPreservesTheOthers() throws {
+    @Test func editingLegacyProfileDropsUsernameAndPreservesIdentityAndPhoto() throws {
         let (store, url, _) = makeStore()
         defer { try? FileManager.default.removeItem(at: url) }
         let original = try store.saveOwn(name: "Руслан", username: "ruslan_11", bio: "Привет", photo: photo(.blue))
         let model = LocalProfileViewModel(store: store)
         #expect(model.updateName("Ruslan"))
-        #expect(store.ownManifest?.body.name == "Ruslan")
-        #expect(store.ownManifest?.body.username == original.body.username)
-        #expect(model.updateUsername("@ruslan_new"))
-        #expect(store.ownManifest?.body.name == "Ruslan")
-        #expect(store.ownManifest?.body.username == "ruslan_new")
-        #expect(store.ownManifest?.body.id == original.body.id)
-        #expect(store.ownManifest?.body.bio == original.body.bio)
-        #expect(store.ownManifest?.body.photoHash == original.body.photoHash)
-        #expect(!model.updateUsername("bad/link"))
-        #expect(store.ownManifest?.body.username == "ruslan_new")
+        let updated = try #require(store.ownManifest)
+        #expect(updated.body.name == "Ruslan")
+        #expect(updated.body.username.isEmpty && updated.body.version == 2)
+        #expect(updated.body.id == original.body.id)
+        #expect(updated.body.bio == original.body.bio)
+        #expect(updated.body.photoHash == original.body.photoHash)
+        try updated.validate()
     }
 
     @Test func modifiedManifestIsRejected() throws {

@@ -357,6 +357,7 @@ final class BLEService: NSObject {
     private let noiseResponderHandshakeTimeout: TimeInterval
     private let identityManager: SecureIdentityStateManagerProtocol
     private let keychain: KeychainManagerProtocol
+    private let idBridge: NostrIdentityBridge
     private let localIdentityState = BLELocalIdentityStateStore()
 
     // MARK: - Advertising Privacy
@@ -498,6 +499,7 @@ final class BLEService: NSObject {
     
     init(
         keychain: KeychainManagerProtocol,
+        idBridge: NostrIdentityBridge,
         identityManager: SecureIdentityStateManagerProtocol,
         initializeBluetoothManagers: Bool = true,
         incomingFileStore: BLEIncomingFileStore = BLEIncomingFileStore(),
@@ -508,6 +510,7 @@ final class BLEService: NSObject {
     ) {
         self.engineScheduler = engineScheduler
         self.keychain = keychain
+        self.idBridge = idBridge
         self.incomingFileStore = incomingFileStore
         self.shouldInitializeBluetoothManagers = initializeBluetoothManagers
         self._isPanicSuspended = startSuspendedForPanicRecovery
@@ -2634,7 +2637,18 @@ final class BLEService: NSObject {
     func sendFavoriteNotification(to peerID: PeerID, isFavorite: Bool) {
         SecureLogger.debug("🔔 sendFavoriteNotification peer=\(peerID.id.prefix(8))… isFavorite=\(isFavorite)", category: .session)
         
-        let content = isFavorite ? "[FAVORITED]" : "[UNFAVORITED]"
+        // Include Nostr public key in the notification
+        var content = isFavorite ? "[FAVORITED]" : "[UNFAVORITED]"
+        var includesNostrIdentity = false
+
+        // Add our Nostr public key if available
+        if let myNostrIdentity = try? idBridge.getCurrentNostrIdentity() {
+            content += ":" + myNostrIdentity.npub
+            includesNostrIdentity = true
+            SecureLogger.debug("📝 Favorite notification includes Nostr npub=\(myNostrIdentity.npub.prefix(16))…", category: .session)
+        }
+
+        SecureLogger.debug("📤 Sending favorite notification to \(peerID.id.prefix(8))… isFavorite=\(isFavorite) includesNostrIdentity=\(includesNostrIdentity)", category: .session)
         sendPrivateMessage(content, to: peerID, messageID: UUID().uuidString)
     }
     
@@ -4344,6 +4358,25 @@ extension BLEService {
 
 
     
+    // Spotchat application envelopes reuse the existing Noise and BLE packet path.
+    func sendSpotchatPacket(_ data: Data, to peer: PeerID) {
+        guard data.count <= 24_000, isPeerConnected(peer) else { return }
+        sendNoisePayload(NoisePayload(type: .spotchatEnvelope, data: data).encode(), to: peer)
+    }
+
+    func sealSpotchatPayload(_ data: Data, recipient: Data) throws -> Data {
+        try noiseService.sealCourierPayload(data, recipientStaticKey: recipient)
+    }
+
+    func openSpotchatPayload(_ data: Data) throws -> (payload: Data, senderStaticKey: Data) {
+        try noiseService.openCourierPayload(data)
+    }
+
+    func sendSpotchatProfile(_ data: Data, to peer: PeerID) {
+        guard data.count <= SpotchatProfilePacket.maxWireBytes, isPeerConnected(peer) else { return }
+        sendNoisePayload(NoisePayload(type: .spotchatProfile, data: data).encode(), to: peer)
+    }
+
     private func sendNoisePayload(_ typedPayload: Data, to peerID: PeerID) {
         // Hop like sendMessage: the Transport-facing wrappers (verify/vouch/
         // group payloads) call this from the main actor, and the send path

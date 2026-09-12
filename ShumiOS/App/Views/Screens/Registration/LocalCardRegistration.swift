@@ -26,17 +26,9 @@ struct LocalCardRegistration: View {
 }
 
 enum LocalCardDetailsMode: String, Identifiable {
-    case registration, name, messenger
+    case registration, name
     var id: Self { self }
-    var showsName: Bool { self != .messenger }
-    var showsUsername: Bool { self != .name }
-    var title: LocalizedStringKey {
-        switch self {
-        case .registration: "local.onboarding.details.title"
-        case .name: "local.profile.name"
-        case .messenger: "Имя пользователя Shum"
-        }
-    }
+    var title: LocalizedStringKey { self == .registration ? "local.onboarding.details.title" : "local.profile.name" }
 }
 
 struct LocalCardDetailsView: View {
@@ -46,81 +38,51 @@ struct LocalCardDetailsView: View {
     var mode: LocalCardDetailsMode = .registration
     let onSave: () -> Void
     @State private var name = ""
-    @State private var username = ""
-    @FocusState private var focused: Field?
-    private enum Field { case username, name }
-    private var valid: Bool {
-        (!mode.showsUsername || LocalCardManifest.username(username) != nil) &&
-        (!mode.showsName || (!name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && name.count <= 64))
-    }
+    @FocusState private var focused: Bool
+    private var valid: Bool { ShumProfileValidation.name(name) != nil }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                if mode == .registration {
-                    Text(mode.title).font(.largeTitle.bold())
-                }
-                if mode.showsUsername {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Имя пользователя Shum").font(.headline)
-                    TextField("@username", text: $username)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                        .keyboardType(.asciiCapable).textContentType(.username)
-                        .focused($focused, equals: .username)
-                        .submitLabel(mode == .registration ? .next : .done)
-                        .onSubmit { focused = mode == .registration ? .name : nil }
-                        .padding(16)
-                        .background(
-                            Color.tField,
-                            in: RoundedRectangle(cornerRadius: 16)
-                        )
-                        .accessibilityIdentifier("local.username")
-                    Text("local.username.explanation").font(.footnote).foregroundStyle(.secondary)
-                }
-                }
-                if mode.showsName {
+                if mode == .registration { Text(mode.title).font(.largeTitle.bold()) }
                 VStack(alignment: .leading, spacing: 10) {
                     Text("local.profile.name").font(.headline)
-                    TextField("local.profile.name", text: $name)
-                        .textContentType(.nickname).focused($focused, equals: .name).submitLabel(.done).onSubmit { focused = nil }
-                        .padding(16)
-                        .background(
-                            Color.tField,
-                            in: RoundedRectangle(cornerRadius: 16)
-                        )
+                    TextField("Как вас зовут?", text: $name)
+                        .textContentType(.nickname).textInputAutocapitalization(.words)
+                        .focused($focused).submitLabel(.done).onSubmit { save() }
+                        .padding(16).background(Color.tField, in: RoundedRectangle(cornerRadius: 8))
                         .accessibilityIdentifier("local.name")
-                    Text("local.name.explanation").font(.footnote).foregroundStyle(.secondary)
-                }
+                    Text("Так вас увидят собеседники. Имя можно изменить в профиле.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if !name.isEmpty && !valid {
+                        Text("Сократите имя и уберите переносы строки.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                 }
                 if let error = profile.saveError { Text(error).foregroundStyle(.red).font(.footnote) }
-                if mode == .registration {
-                    Text("local.sharing.explanation").font(.footnote).foregroundStyle(.secondary)
-                }
-                RegistrationPrimaryButton(title: NSLocalizedString("local.profile.save", comment: ""), isEnabled: valid, accentColor: .accentColor) {
-                    let saved: Bool
-                    switch mode {
-                    case .registration: saved = profile.save(name: name, username: username, photo: photo.preparedPhoto)
-                    case .name: saved = profile.updateName(name)
-                    case .messenger: saved = profile.updateUsername(username)
-                    }
-                    if saved {
-                        focused = nil; onSave()
-                    }
-                }
-                .padding(.top, 12).accessibilityIdentifier("local.save")
+                RegistrationPrimaryButton(title: NSLocalizedString("local.profile.save", comment: ""), isEnabled: valid, action: save)
+                    .padding(.top, 12).accessibilityIdentifier("local.save")
             }.padding(24)
         }
         .background(Color("ls-Background").ignoresSafeArea()).scrollDismissesKeyboard(.interactively)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if mode != .registration {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(Inc.Common.close.localized) { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button(Inc.Common.close.localized) { dismiss() } }
             }
         }
-        .onAppear {
-            name = profile.localName ?? ""; username = profile.localUsername ?? ""
-            profile.saveError = nil
-        }
+        .onAppear { name = profile.localName ?? ""; profile.saveError = nil }
+    }
+    private func save() {
+        guard let value = ShumProfileValidation.name(name) else { return }
+        let saved = mode == .registration ? profile.save(name: value, photo: photo.preparedPhoto) : profile.updateName(value)
+        if saved { focused = false; onSave() }
+    }
+}
+
+enum ShumProfileValidation {
+    static func name(_ value: String) -> String? {
+        guard let value = InputValidator.validateNickname(value), value.utf8.count <= 64,
+              !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { return nil }
+        return value
     }
 }
