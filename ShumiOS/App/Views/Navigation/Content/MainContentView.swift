@@ -5,34 +5,25 @@ struct MainContentView: View {
     @ObservedObject var chat: SpotchatRuntime
     @ObservedObject var profilePhotoViewModel: ProfilePhotoViewModel
     @State private var selectedTab = 1
-    @State private var nearbyPath: [SpotchatUIRoute] = []
-    @State private var pendingContactPeer: SpotchatPeer?
     @State private var chatsPath: [SpotchatUIRoute] = []
     @State private var showContacts = false
     var body: some View {
         TabView(selection: $selectedTab) {
-            NavigationStack(path: $nearbyPath) {
+            NavigationStack {
                 ShumPeopleScreen(runtime: chat) { peer in
-                    withAnimation { nearbyPath.append(.conversation(peer)) }
-                }
-                .navigationDestination(for: SpotchatUIRoute.self) { route in
-                    SpotchatDestinationUI(runtime: chat, route: route) { next in
-                        withAnimation { nearbyPath.append(next) }
-                    }
+                    chatsPath.append(.conversation(peer))
+                    selectedTab = 1
                 }
             }
             .tabItem { Label("Рядом", image: "PixelPeople") }
-            .badge(coordinator.isScaning ? chat.peers.count : 0)
             .tag(0)
             NavigationStack(path: $chatsPath) {
                 SpotchatChatsUI(runtime: chat) { route in
                     if case .newChat = route { showContacts = true }
-                    else { withAnimation { chatsPath.append(route) } }
+                    else { chatsPath.append(route) }
                 }
                 .navigationDestination(for: SpotchatUIRoute.self) { route in
-                    SpotchatDestinationUI(runtime: chat, route: route) { next in
-                        withAnimation { chatsPath.append(next) }
-                    }
+                    SpotchatDestinationUI(runtime: chat, route: route) { chatsPath.append($0) }
                 }
             }.tabItem { Label("Чаты", image: "PixelChats") }
                 .badge(chat.chatPeers.reduce(0) { $0 + chat.unreadCount(for: $1.id) }).tag(1)
@@ -49,22 +40,21 @@ struct MainContentView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             if !chat.isReady {
                 Button { coordinator.retryMessaging() } label: {
-                    Label("Не удалось открыть сообщения. Повторить", shumSymbol: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+                    Label("Не удалось открыть сообщения. Повторить", systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
                         .font(.footnote).padding(12).frame(maxWidth: .infinity).background(.thinMaterial)
                 }
             }
         }
-        .sheet(isPresented: $showContacts, onDismiss: openPendingContact) {
+        .sheet(isPresented: $showContacts) {
             SpotchatContactsView(runtime: chat) { peer in
-                pendingContactPeer = peer
-                showContacts = false
+                showContacts = false; selectedTab = 1
+                chatsPath.append(.conversation(peer))
             }
         }
-        .sheet(item: $coordinator.invitation, onDismiss: openPendingContact) { card in
+        .sheet(item: $coordinator.invitation) { card in
             SpotchatContactConfirmation(card: card) {
                 if let peer = chat.addContact(card, source: "link") {
-                    pendingContactPeer = peer
-                    coordinator.invitation = nil
+                    coordinator.invitation = nil; selectedTab = 1; chatsPath.append(.conversation(peer))
                 }
             }
         }
@@ -81,12 +71,5 @@ struct MainContentView: View {
             }
         }
         #endif
-    }
-
-    private func openPendingContact() {
-        guard let peer = pendingContactPeer else { return }
-        pendingContactPeer = nil
-        selectedTab = 1
-        DispatchQueue.main.async { withAnimation { chatsPath.append(.conversation(peer)) } }
     }
 }

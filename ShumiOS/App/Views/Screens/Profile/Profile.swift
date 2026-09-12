@@ -21,7 +21,7 @@ struct Profile: View {
             authVM.restoreLocalProfile()
         }
         .tabItem {
-            Label(profileTabInc, shumSymbol: IncLogos.personFillViewwfinder)
+            Label(profileTabInc, systemImage: IncLogos.personFillViewwfinder)
         }
         .tag(SelectedTab.profile)
     }

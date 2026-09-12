@@ -50,7 +50,7 @@ struct ShumChatsView: View {
         .listStyle(.plain).navigationTitle("Чаты")
         .searchable(text: $query, prompt: "Поиск")
         .toolbar { ToolbarItem(placement: .navigationBarTrailing) {
-            Button { showPeople = true } label: { Image(shumSymbol: "square.and.pencil") }.accessibilityLabel("Новый чат")
+            Button { showPeople = true } label: { Image(systemName: "square.and.pencil") }.accessibilityLabel("Новый чат")
         } }
         .sheet(isPresented: $showPeople) {
             NavigationStack { ShumPeopleView().toolbar { ToolbarItem(placement: .cancellationAction) { Button("Готово") { showPeople = false } } } }
@@ -159,7 +159,7 @@ struct ShumConversationView: View {
                 TextField("Сообщение", text: $draft, axis: .vertical).lineLimit(1...5)
                     .padding(.horizontal, 14).padding(.vertical, 11).background(Color(uiColor: .secondarySystemBackground), in: Capsule())
                 Button { if chat.send(draft, to: contact.id) { draft = "" } } label: {
-                    Image(shumSymbol: "arrow.up").font(.body.bold()).frame(width: 44, height: 44)
+                    Image(systemName: "arrow.up").font(.body.bold()).frame(width: 44, height: 44)
                 }.buttonStyle(.borderedProminent).clipShape(Circle()).disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityLabel("Отправить")
             }.padding(.horizontal, 14).padding(.vertical, 8).background(.bar)

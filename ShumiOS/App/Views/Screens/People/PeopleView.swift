@@ -447,7 +447,8 @@ private struct SavedProfileAvatarBadgeModifier: ViewModifier {
 
 private struct SavedProfileAvatarBadge: View {
     var body: some View {
-        Image(shumSymbol: "heart.fill").resizable().scaledToFit().frame(width: 10, height: 10)
+        Image(systemName: "heart.fill")
+            .font(.system(size: 10, weight: .bold))
             .foregroundStyle(.primary)
             .frame(width: 18, height: 18)
             .offset(x: 2, y: 2)
@@ -462,7 +463,8 @@ struct ProfileMessengerButton: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             action()
         } label: {
-            Image(shumSymbol: "chevron.right").resizable().scaledToFit().frame(width: 17, height: 17)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(.primary)
                 .frame(width: 32, height: 44)
                 .contentShape(Rectangle())
@@ -534,7 +536,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
         } label: {
             Label(
                 Inc.NearbyProfile.write.localized,
-                shumSymbol: "paperplane"
+                systemImage: "paperplane"
             )
             .foregroundStyle(.primary)
         }
@@ -548,7 +550,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
                 isSaved
                     ? Inc.EncounterHistory.remove.localized
                     : Inc.EncounterHistory.save.localized,
-                shumSymbol: isSaved ? "heart.slash" : "heart"
+                systemImage: isSaved ? "heart.slash" : "heart"
             )
             .foregroundStyle(.primary)
         }
@@ -562,7 +564,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
             } label: {
                 Label(
                     Inc.EncounterHistory.delete.localized,
-                    shumSymbol: "trash"
+                    systemImage: "trash"
                 )
                 .foregroundStyle(.primary)
             }
@@ -577,7 +579,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
             } label: {
                 Label(
                     Inc.NearbyProfile.savedBlockAction.localized,
-                    shumSymbol: "lock.fill"
+                    systemImage: "lock.fill"
                 )
                 .foregroundStyle(.secondary)
             }
@@ -588,7 +590,7 @@ struct ProfileRowContextMenuModifier: ViewModifier {
             } label: {
                 Label(
                     Inc.NearbyProfile.block.localized,
-                    shumSymbol: "person.crop.circle.badge.xmark"
+                    systemImage: "person.crop.circle.badge.xmark"
                 )
                 .foregroundStyle(.red)
             }
@@ -671,7 +673,8 @@ private struct ProfileBlockOptionsSheet: View {
                 Spacer(minLength: 8)
 
                 Button(action: onClose) {
-                    Image(shumSymbol: "xmark").resizable().scaledToFit().frame(width: 17, height: 17)
+                    Image(systemName: "xmark")
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.primary)
                         .frame(width: 42, height: 42)
                         .background(
@@ -743,7 +746,8 @@ private struct ProfileBlockOptionRow: View {
     var body: some View {
         Button(role: .destructive, action: action) {
             HStack(spacing: 18) {
-                Image(shumSymbol: systemImage).resizable().scaledToFit().frame(width: 20, height: 20)
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .regular))
                     .frame(width: 22)
 
                 Text(title)
@@ -841,7 +845,8 @@ struct ProfileRowContextPreview: View {
 
             trailingInformation
 
-            Image(shumSymbol: "chevron.right").resizable().scaledToFit().frame(width: 17, height: 17)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(.primary)
                 .frame(width: 32, height: 44)
                 .accessibilityHidden(true)
@@ -1177,7 +1182,8 @@ private struct ProfileSheetControls: View {
             }
             showsSaveInformation = true
         } label: {
-            Image(shumSymbol: isSaved ? "heart.fill" : "heart").resizable().scaledToFit().frame(width: 19, height: 19)
+            Image(systemName: isSaved ? "heart.fill" : "heart")
+                .font(.system(size: 19, weight: .semibold))
                 .foregroundStyle(.primary)
                 .frame(width: 56, height: 44)
                 .contentShape(Capsule())

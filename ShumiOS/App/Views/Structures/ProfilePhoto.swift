@@ -166,7 +166,8 @@ private struct ProfilePhotoOptionsSheet: View {
                 Spacer(minLength: 8)
 
                 Button(action: onClose) {
-                    Image(shumSymbol: "xmark").resizable().scaledToFit().frame(width: 17, height: 17)
+                    Image(systemName: "xmark")
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.primary)
                         .frame(width: 42, height: 42)
                         .background(
@@ -225,7 +226,7 @@ private struct ProfilePhotoOptionsSheet: View {
                 .frame(width: 44, height: 44)
                 .clipShape(Circle())
         } else {
-            Image(shumSymbol: "person.crop.circle.fill")
+            Image(systemName: "person.crop.circle.fill")
                 .resizable()
                 .foregroundStyle(.secondary)
                 .frame(width: 44, height: 44)
@@ -247,7 +248,8 @@ private struct ProfilePhotoOptionRow: View {
     var body: some View {
         Button(role: role, action: action) {
             HStack(spacing: 18) {
-                Image(shumSymbol: systemImage).resizable().scaledToFit().frame(width: 20, height: 20)
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .regular))
                     .frame(width: 22)
 
                 Text(title)

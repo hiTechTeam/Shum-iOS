@@ -178,7 +178,7 @@ struct SpotchatConversationView: View {
                     guard canSend else { return }
                     if runtime.send(draft, to: peer.id) { draft = "" }
                 } label: {
-                    Image(shumSymbol: "paperplane.fill").resizable().scaledToFit().frame(width: 21, height: 21)
+                    Image(systemName: "paperplane.fill").font(.system(size: 21))
                         .rotationEffect(.degrees(45))
                         .foregroundStyle(.black).frame(width: 46, height: 46)
                         .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 8))
@@ -227,14 +227,14 @@ struct SpotchatMessageBubble: View {
             .background(bubbleColor, in: SpotchatBubbleShape(outgoing: message.outgoing, tail: showsTail))
             // The cap lives OUTSIDE the background: a short message keeps its intrinsic bubble width.
             .frame(maxWidth: maximumWidth, alignment: message.outgoing ? .trailing : .leading)
-            .contextMenu { Button { UIPasteboard.general.string = message.text } label: { Label("Скопировать", shumSymbol: "doc.on.doc") } }
+            .contextMenu { Button { UIPasteboard.general.string = message.text } label: { Label("Скопировать", systemImage: "doc.on.doc") } }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(message.outgoing ? "Вы" : "Собеседник"): \(message.text), \(message.date.formatted(date: .omitted, time: .shortened))\(message.outgoing ? ", " + statusDescription : "")")
             if message.outgoing, let label = message.deliveryLabel, label == "В очереди" || label.hasPrefix("Передаётся") {
                 Text(label).font(.caption).foregroundStyle(.secondary).padding(.top, 2)
             }
             if message.outgoing && message.waitingForConnection {
-                Label("Ожидаем связь", shumSymbol: "antenna.radiowaves.left.and.right")
+                Label("Ожидаем связь", systemImage: "antenna.radiowaves.left.and.right")
                     .font(.caption).foregroundStyle(.secondary).padding(.vertical, 4)
             }
             if message.outgoing, message.deliveryLabel == "Отменено" {
@@ -242,7 +242,7 @@ struct SpotchatMessageBubble: View {
             }
             if message.outgoing, message.deliveryLabel != "Отменено", case .failed = message.status {
                 Button(action: retry) {
-                    Label("Не доставлено · Повторить", shumSymbol: "arrow.clockwise")
+                    Label("Не доставлено · Повторить", systemImage: "arrow.clockwise")
                         .font(.system(size: 12)).foregroundStyle(.red).padding(.vertical, 8)
                 }.buttonStyle(.plain)
             }
@@ -262,11 +262,11 @@ struct SpotchatMessageBubble: View {
             SpotchatDoubleCheck().stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
                 .frame(width: 16, height: 10)
         case .delivered:
-            Image(shumSymbol: "checkmark").resizable().scaledToFit().frame(width: 10, height: 10)
+            Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
         case .failed:
-            Image(shumSymbol: "exclamationmark.circle.fill").foregroundStyle(.red)
+            Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
         default:
-            Image(shumSymbol: "clock").resizable().scaledToFit().frame(width: 10, height: 10)
+            Image(systemName: "clock").font(.system(size: 10))
         }
     }
     private var statusDescription: String {

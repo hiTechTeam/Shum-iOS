@@ -26,25 +26,19 @@ struct SpotchatChatsUI: View {
     @ObservedObject var runtime: SpotchatRuntime
     let open: (SpotchatUIRoute) -> Void
     @State private var search = ""
-    @State private var isSearchPresented = false
-    @State private var unreadOnly = false
-    @State private var pendingConversation: SpotchatPeer?
     @State private var selectedPeer: SpotchatPeer?
     @State private var deleteChatPeer: SpotchatPeer?
 
     private var chats: [SpotchatPeer] {
-        runtime.chatPeers.filter { peer in
-            (!unreadOnly || runtime.unreadCount(for: peer.id) > 0)
-                && (search.isEmpty || runtime.displayName(peer).localizedCaseInsensitiveContains(search))
-        }
+        guard !search.isEmpty else { return runtime.chatPeers }
+        return runtime.chatPeers.filter { runtime.displayName($0).localizedCaseInsensitiveContains(search) }
     }
 
     var body: some View {
         List {
-            filterRow
             if let requests = runtime.permanent?.state.requests, !requests.isEmpty {
                 Section {
-                    Button { open(.requests) } label: { Label("Приглашения: \(requests.count)", shumSymbol: "person.badge.plus") }
+                    Button { open(.requests) } label: { Label("Приглашения: \(requests.count)", systemImage: "person.badge.plus") }
                 }
             }
 
@@ -65,8 +59,7 @@ struct SpotchatChatsUI: View {
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             if runtime.permanent != nil {
-                                Button(role: .destructive) { deleteChatPeer = peer } label: { ShumSwipeLabel(title: "Удалить", symbol: "trash") }
-                                    .tint(.red)
+                                Button("Удалить", role: .destructive) { deleteChatPeer = peer }
                             }
                         }
                         .listRowInsets(EdgeInsets(top: 11, leading: 0, bottom: 11, trailing: 0))
@@ -83,39 +76,27 @@ struct SpotchatChatsUI: View {
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 6) {
-                Image(shumSymbol: "lock.fill").resizable().scaledToFit().frame(width: 11, height: 11)
+                Image(systemName: "lock.fill")
                 Text(runtime.internetConnected ? "Сквозное шифрование · Nostr подключён" : "Сквозное шифрование · Ожидаем сеть")
             }.font(.caption2).foregroundStyle(.secondary).padding(8)
         }
         .navigationTitle("Чаты")
         .navigationBarTitleDisplayMode(.large)
-        .background(ShumChatSearchController(text: $search, isPresented: $isSearchPresented).frame(width: 0, height: 0))
-        .onDisappear { isSearchPresented = false }
+        .modifier(ShumCompactChatSearch(text: $search))
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { isSearchPresented = true } label: { Image(shumSymbol: "magnifyingglass") }
-                    .tint(.primary)
-                    .accessibilityLabel("Поиск")
-                    .accessibilityIdentifier("shum.search")
-            }
-            if #available(iOS 26.0, *) { ToolbarSpacer(.fixed, placement: .topBarTrailing) }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .primaryAction) {
                 Button { open(.newChat) } label: {
-                    Label("Новый контакт", shumSymbol: "plus")
+                    Label("Новый контакт", systemImage: "plus")
                 }
                 .foregroundStyle(.primary)
                 .tint(.primary)
                 .accessibilityIdentifier("spotchat.addContact")
             }
         }
-        .sheet(item: $selectedPeer, onDismiss: {
-            guard let peer = pendingConversation else { return }
-            pendingConversation = nil
-            withAnimation { open(.conversation(peer)) }
-        }) { peer in
+        .sheet(item: $selectedPeer) { peer in
             ShumPeerCard(runtime: runtime, peer: peer) {
-                pendingConversation = peer
                 selectedPeer = nil
+                open(.conversation(peer))
             }
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
@@ -146,41 +127,14 @@ struct SpotchatChatsUI: View {
         }
     }
 
-    private var filterRow: some View {
-        HStack(spacing: 8) {
-            filterButton("Все", unread: false)
-            filterButton("Непрочитанное", unread: true)
-            Spacer(minLength: 0)
-        }
-        .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 16, trailing: 0))
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
-        .listSectionSeparator(.hidden)
-    }
-
-    private func filterButton(_ title: String, unread: Bool) -> some View {
-        let selected = unreadOnly == unread
-        return Button { unreadOnly = unread } label: {
-            Text(title)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(selected ? Color.accentColor : .secondary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(selected ? Color.accentColor.opacity(0.15) : Color(.secondarySystemGroupedBackground), in: Capsule())
-                .overlay(Capsule().strokeBorder(selected ? Color.accentColor.opacity(0.2) : Color(.separator).opacity(0.5), lineWidth: 1))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
     private var emptyState: some View {
         VStack(spacing: 12) {
-            Image(shumSymbol: "bubble.left.and.bubble.right").resizable().scaledToFit().frame(width: 34, height: 34)
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 34, weight: .light))
                 .foregroundStyle(Color.accentColor)
-            Text(!search.isEmpty ? "Ничего не найдено" : unreadOnly ? "Нет непрочитанных чатов" : "Здесь будут ваши чаты")
+            Text("Здесь будут ваши чаты")
                 .font(.headline)
-            Text(!search.isEmpty ? "Попробуйте другое имя." : unreadOnly ? "Все сообщения прочитаны." : "Нажмите +, чтобы начать разговор, или откройте вкладку «Рядом».")
+            Text("Нажмите +, чтобы начать разговор, или откройте вкладку «Рядом».")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -188,6 +142,24 @@ struct SpotchatChatsUI: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 44)
         .listRowBackground(Color.clear)
+    }
+}
+
+private struct ShumCompactChatSearch: ViewModifier {
+    @Binding var text: String
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .searchable(text: $text, placement: .toolbar, prompt: "Поиск")
+                .searchToolbarBehavior(.minimize)
+                .toolbar {
+                    DefaultToolbarItem(kind: .search, placement: .topBarTrailing)
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                }
+        } else {
+            content.searchable(text: $text, placement: .toolbar, prompt: "Поиск")
+        }
     }
 }
 

@@ -8,7 +8,7 @@ struct LocalAvatar: View {
         return cache
     }()
     let url: URL?
-    private var fallback = AnyView(Image(shumSymbol: "person.crop.circle.fill").resizable().foregroundStyle(.secondary))
+    private var fallback = AnyView(Image(systemName: "person.crop.circle.fill").resizable().foregroundStyle(.secondary))
     private var mode: ContentMode = .fill
     init(_ url: URL?) { self.url = url }
     func placeholder<V: View>(@ViewBuilder _ content: () -> V) -> Self {

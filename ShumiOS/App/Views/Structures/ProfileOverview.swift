@@ -98,7 +98,7 @@ struct ProfileOverviewView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { showQR = true } label: { Image(shumSymbol: "qrcode") }
+                Button { showQR = true } label: { Image(systemName: "qrcode") }
                     .accessibilityLabel("Мой QR-код")
 
                 NavigationLink {
@@ -109,7 +109,7 @@ struct ProfileOverviewView: View {
                     .navigationTitle(Inc.Tabs.profile.localized)
                     .navigationBarTitleDisplayMode(.inline)
                 } label: {
-                    Image(shumSymbol: "pencil")
+                    Image(systemName: "pencil")
                         .foregroundStyle(.primary)
                 }
                 .tint(.primary)
@@ -381,7 +381,8 @@ private struct ProfileOverviewRow: View {
         showsDisclosureIndicator: Bool
     ) -> some View {
         HStack(spacing: 16) {
-            Image(shumSymbol: systemImage).resizable().scaledToFit().frame(width: 20, height: 20)
+            Image(systemName: systemImage)
+                .font(.system(size: 20, weight: .regular))
                 .frame(width: 24)
 
             Text(title)
@@ -404,7 +405,8 @@ private struct ProfileOverviewRow: View {
             }
 
             if showsDisclosureIndicator {
-                Image(shumSymbol: "chevron.right").resizable().scaledToFit().frame(width: 13, height: 13)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.tertiary)
             }
         }

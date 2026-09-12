@@ -115,16 +115,19 @@ struct ShumContentUnavailableView: View {
     @ViewBuilder
     var body: some View {
         if #available(iOS 17.0, *) {
-            ContentUnavailableView {
-                Label { Text(title) } icon: {
-                    Image(shumSymbol: systemImage).resizable().scaledToFit().frame(width: 42, height: 42)
-                }
-            } description: {
-                if let description { description }
+            if let description {
+                ContentUnavailableView(
+                    title,
+                    systemImage: systemImage,
+                    description: description
+                )
+            } else {
+                ContentUnavailableView(title, systemImage: systemImage)
             }
         } else {
             VStack(spacing: 12) {
-                Image(shumSymbol: systemImage).resizable().scaledToFit().frame(width: 42, height: 42)
+                Image(systemName: systemImage)
+                    .font(.system(size: 42))
                     .foregroundStyle(.secondary)
 
                 Text(title)

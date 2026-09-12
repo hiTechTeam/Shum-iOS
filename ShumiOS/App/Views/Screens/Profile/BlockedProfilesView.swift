@@ -114,7 +114,8 @@ private struct BlockedProfileAvatar: View {
         Circle()
             .fill(Color(uiColor: .tertiarySystemFill))
             .overlay {
-                Image(shumSymbol: "person.fill").resizable().scaledToFit().frame(width: 19, height: 19)
+                Image(systemName: "person.fill")
+                    .font(.system(size: 19))
                     .foregroundStyle(.secondary)
             }
     }
@@ -276,7 +277,7 @@ private struct SavedProfileRow: View {
             Button(action: messengerAction) {
                 Label(
                     Inc.NearbyProfile.write.localized,
-                    shumSymbol: "paperplane"
+                    systemImage: "paperplane"
                 )
                 .foregroundStyle(.primary)
             }
@@ -287,7 +288,7 @@ private struct SavedProfileRow: View {
             Button(action: removeAction) {
                 Label(
                     Inc.EncounterHistory.remove.localized,
-                    shumSymbol: "heart.slash"
+                    systemImage: "heart.slash"
                 )
                 .foregroundStyle(.primary)
             }
@@ -332,7 +333,8 @@ private struct SavedProfileAvatar: View {
         Circle()
             .fill(Color(uiColor: .tertiarySystemFill))
             .overlay {
-                Image(shumSymbol: "person.fill").resizable().scaledToFit().frame(width: 19, height: 19)
+                Image(systemName: "person.fill")
+                    .font(.system(size: 19))
                     .foregroundStyle(.secondary)
             }
     }

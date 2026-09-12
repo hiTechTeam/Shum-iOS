@@ -30,7 +30,7 @@ struct SpotchatPhotoViewer: View {
             }
         }.overlay(alignment: .topTrailing) {
             Button { dismiss() } label: {
-                Image(shumSymbol: "xmark").font(.body.weight(.semibold)).foregroundStyle(.white)
+                Image(systemName: "xmark").font(.body.weight(.semibold)).foregroundStyle(.white)
                     .frame(width: 44, height: 44).background(.ultraThinMaterial, in: Circle())
             }.padding().accessibilityLabel("Закрыть фото")
         }

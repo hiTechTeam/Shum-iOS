@@ -41,7 +41,7 @@ struct EncounterHistoryView: View {
                 Button {
                     showsClearConfirmation = true
                 } label: {
-                    Image(shumSymbol: "trash")
+                    Image(systemName: "trash")
                 }
                 .disabled(peopleViewModel.encounterHistory.isEmpty)
                 .accessibilityLabel(Inc.EncounterHistory.clear.localized)
