@@ -65,6 +65,8 @@ final class SpotchatMessageStore: ObservableObject {
             ?? nearby[peer]
             ?? state.savedProfiles?.first(where: { $0.card.peerID == peer })?.card
             ?? state.encounters?.first(where: { $0.card.peerID == peer })?.card
+            ?? state.requests.first(where: { $0.peerID == peer })
+            ?? state.blocked?.values.first(where: { $0.peerID == peer })
     }
     func session(for card: SpotchatContactCard) -> PeerID? {
         nearby.first(where: { $0.value.id == card.id && transport.isPeerConnected($0.key) && transport.noiseSessionPublicKeyData(for: $0.key) == card.noiseKey })?.key

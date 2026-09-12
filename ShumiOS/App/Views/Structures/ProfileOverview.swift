@@ -18,8 +18,6 @@ struct ProfileOverviewView: View {
     @State private var showInfoSheet = false
     @State private var showLogoutOptions = false
     @State private var showBlockedProfiles = false
-    @State private var showSavedProfiles = false
-    @State private var showEncounterHistory = false
     @State private var showQuickActions = false
     @State private var showLogoutConfirmation = false
     @State private var showLogoutError = false
@@ -70,7 +68,6 @@ struct ProfileOverviewView: View {
 
                     VStack(spacing: 20) {
                         settingsCard
-                        peopleCard
                     }
                 }
                 .padding(.horizontal, 20)
@@ -141,12 +138,6 @@ struct ProfileOverviewView: View {
                 .environmentObject(coordinator.peopleViewModel)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-        }
-        .navigationDestination(isPresented: $showEncounterHistory) {
-            ShumEncounterHistoryView(runtime: chat)
-        }
-        .navigationDestination(isPresented: $showSavedProfiles) {
-            ShumSavedProfilesView(runtime: chat)
         }
         .sheet(isPresented: $showQuickActions) {
             QuickActionsSettingsSheet()
@@ -231,42 +222,6 @@ struct ProfileOverviewView: View {
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
     }
 
-    private var peopleCard: some View {
-        VStack(spacing: 0) {
-            ProfileOverviewRow(
-                title: Inc.Tabs.metTitle.localized,
-                systemImage: "clock.arrow.circlepath",
-                accentValue: (chat.permanent?.unviewedEncounterCount ?? 0) > 0
-                    ? "+\(chat.permanent?.unviewedEncounterCount ?? 0)"
-                    : nil,
-                value: String(chat.permanent?.encounterHistory.count ?? 0),
-                position: .top
-            ) {
-                showEncounterHistory = true
-            }
-
-            Divider()
-                .padding(.leading, 60)
-                .padding(.trailing, 20)
-
-            ProfileOverviewRow(
-                title: Inc.NearbyProfile.savedMenu.localized,
-                systemImage: "heart.fill",
-                value: savedProfilesStatusTitle,
-                position: .bottom
-            ) {
-                showSavedProfiles = true
-            }
-        }
-        .background(
-            Color(uiColor: .secondarySystemGroupedBackground),
-            in: RoundedRectangle(cornerRadius: 22)
-        )
-        .clipShape(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-        )
-    }
-
     private func normalized(_ value: String?) -> String? {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -294,13 +249,6 @@ struct ProfileOverviewView: View {
         quickActions.hasEnabledActions
             ? Inc.Settings.statusOn.localized
             : Inc.Settings.statusOff.localized
-    }
-
-    private var savedProfilesStatusTitle: String {
-        let count = chat.permanent?.savedProfiles.count ?? 0
-        return count == 0
-            ? Inc.NearbyProfile.noSaved.localized
-            : String(count)
     }
 
     private func manageNotificationAuthorization() {

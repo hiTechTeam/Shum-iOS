@@ -88,7 +88,9 @@ struct SpotchatContactRequestsView: View {
                 }
                 .buttonStyle(.plain)
                 .swipeActions {
-                    Button("Отклонить", role: .destructive) { runtime.permanent?.dismissRequest(card) }
+                    Button { runtime.permanent?.dismissRequest(card) } label: {
+                        ShumSwipeLabel("Отклонить", systemImage: "xmark")
+                    }.tint(.red)
                 }
             }
         }

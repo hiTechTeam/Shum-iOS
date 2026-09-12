@@ -146,8 +146,16 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
                 nostrKey: try NostrIdentity.generate().publicKeyHex, name: name, bio: "Кофе, прогулки и хорошие разговоры")
             card.signature = try signing.signature(for: card.signedBytes())
             try permanent.add(card, source: "preview")
+            try permanent.recordEncounter(card)
+            if name == "Соня" { _ = try permanent.toggleSaved(card) }
             _ = permanent.send(name == "Максим" ? "Буду через десять минут" : "До встречи!", to: card)
         }
+        let noise = Curve25519.KeyAgreement.PrivateKey()
+        let signing = Curve25519.Signing.PrivateKey()
+        var invitation = SpotchatContactCard(noiseKey: noise.publicKey.rawRepresentation, signingKey: signing.publicKey.rawRepresentation,
+            nostrKey: try NostrIdentity.generate().publicKeyHex, name: "Александра", bio: "")
+        invitation.signature = try signing.signature(for: invitation.signedBytes())
+        try permanent.store.transaction { $0.requests.append(invitation) }
     }
     #endif
 

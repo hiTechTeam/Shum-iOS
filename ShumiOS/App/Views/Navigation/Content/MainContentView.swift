@@ -7,16 +7,25 @@ struct MainContentView: View {
     @State private var selectedTab = 1
     @State private var chatsPath: [SpotchatUIRoute] = []
     @State private var showContacts = false
+    @State private var showMultichat = false
+
+    private var tabSelection: Binding<Int> {
+        Binding(get: { selectedTab }, set: { value in
+            if value == 0 { openMultichat() } else { selectedTab = value }
+        })
+    }
+
+    private func openMultichat() {
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        showMultichat = true
+    }
+
     var body: some View {
-        TabView(selection: $selectedTab) {
-            NavigationStack {
-                ShumPeopleScreen(runtime: chat) { peer in
-                    chatsPath.append(.conversation(peer))
-                    selectedTab = 1
-                }
-            }
-            .tabItem { Label("Рядом", image: "PixelPeople") }
-            .tag(0)
+        TabView(selection: tabSelection) {
+            Color.clear
+                .tabItem { Label { Text("Мультичат") } icon: { Image(uiImage: ShumMultichatIcon.image).renderingMode(.original) } }
+                .badge(0)
+                .tag(0)
             NavigationStack(path: $chatsPath) {
                 SpotchatChatsUI(runtime: chat) { route in
                     if case .newChat = route { showContacts = true }
@@ -26,7 +35,7 @@ struct MainContentView: View {
                     SpotchatDestinationUI(runtime: chat, route: route) { chatsPath.append($0) }
                 }
             }.tabItem { Label("Чаты", image: "PixelChats") }
-                .badge(chat.chatPeers.reduce(0) { $0 + chat.unreadCount(for: $1.id) }).tag(1)
+                .badge(chat.directoryEntries.reduce(0) { $0 + max($1.unread, $1.isInvitation ? 1 : 0) }).tag(1)
             NavigationStack {
                 ProfileOverviewView(
                     chat: chat,
@@ -37,6 +46,8 @@ struct MainContentView: View {
             }.tabItem { Label("Профиль", image: "PixelProfile") }.tag(2)
         }
         .tint(.accentColor)
+        .background(ShumMultichatTabAction(action: openMultichat))
+        .sheet(isPresented: $showMultichat) { ShumMultichatPlaceholder() }
         .safeAreaInset(edge: .top, spacing: 0) {
             if !chat.isReady {
                 Button { coordinator.retryMessaging() } label: {
@@ -64,7 +75,7 @@ struct MainContentView: View {
         #if DEBUG && targetEnvironment(simulator)
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments
-            if arguments.contains("-ShumPreviewPeople") { selectedTab = 0 }
+            if arguments.contains("-ShumPreviewPeople") { selectedTab = 1 }
             else if arguments.contains("-ShumPreviewProfile") { selectedTab = 2 }
             else if arguments.contains("-ShumPreviewChat"), let peer = chat.chatPeers.first {
                 chatsPath = [.conversation(peer)]

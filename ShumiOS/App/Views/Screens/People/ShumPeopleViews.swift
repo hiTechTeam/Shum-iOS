@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-private struct ShumProfileBlockRequest: Identifiable {
+struct ShumProfileBlockRequest: Identifiable {
     let id = UUID()
     let peer: SpotchatPeer
     let card: SpotchatContactCard
@@ -121,7 +121,7 @@ struct ShumPeopleScreen: View {
                         Button {
                             toggleSaved(card, peer: peer)
                         } label: {
-                            Label(isSaved ? "Убрать" : "Сохранить", systemImage: isSaved ? "heart.slash" : "heart")
+                            ShumSwipeLabel(isSaved ? "Убрать" : "Сохранить", systemImage: isSaved ? "heart.slash" : "heart")
                         }
                         .tint(isSaved ? Color(uiColor: .systemGray) : .green)
                     }
@@ -130,7 +130,7 @@ struct ShumPeopleScreen: View {
                     if let card {
                         if isSaved {
                             Button { showsSavedBlockInformation = true } label: {
-                                Label("Сохранён", systemImage: "lock.fill")
+                                ShumSwipeLabel("Сохранён", systemImage: "lock.fill")
                             }
                             .tint(Color(uiColor: .systemGray))
                         } else {
@@ -142,7 +142,7 @@ struct ShumPeopleScreen: View {
                                     waitsForTransientUI: true
                                 )
                             } label: {
-                                Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                                ShumSwipeLabel("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
                             }
                             .tint(.red)
                         }
@@ -261,18 +261,6 @@ private struct ShumPeopleRow: View {
             }
             .buttonStyle(.plain)
 
-            Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                writeAction()
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 32, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Написать")
         }
         .frame(maxWidth: .infinity, minHeight: 52)
         .padding(.horizontal, 16)
@@ -304,7 +292,7 @@ private extension View {
     }
 }
 
-private struct ShumProfileAvatar: View {
+struct ShumProfileAvatar: View {
     let size: CGFloat
     let imageData: Data?
 
@@ -614,9 +602,6 @@ private struct ShumPersonContextPreview: View {
                 ShumDistanceLabel(runtime: runtime, peer: peer)
             }
 
-            Image(systemName: "chevron.right")
-                .font(.system(size: 17, weight: .semibold))
-                .frame(width: 32, height: 44)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -783,19 +768,19 @@ struct ShumEncounterHistoryView: View {
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
                     Button { toggleSaved(encounter) } label: {
-                        Label(isSaved ? "Убрать" : "Сохранить", systemImage: isSaved ? "heart.slash" : "heart")
+                        ShumSwipeLabel(isSaved ? "Убрать" : "Сохранить", systemImage: isSaved ? "heart.slash" : "heart")
                     }
                     .tint(isSaved ? Color(uiColor: .systemGray) : .green)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: !isSaved) {
                     Button { pendingDelete = encounter } label: {
-                        Label("Удалить", systemImage: "trash")
+                        ShumSwipeLabel("Очистить", systemImage: "trash")
                     }
-                    .tint(.red)
+                    .tint(Color(uiColor: .systemGray))
 
                     if isSaved {
                         Button { showsSavedBlockInformation = true } label: {
-                            Label("Сохранён", systemImage: "lock.fill")
+                            ShumSwipeLabel("Сохранён", systemImage: "lock.fill")
                         }
                         .tint(Color(uiColor: .systemGray2))
                     } else {
@@ -806,7 +791,7 @@ struct ShumEncounterHistoryView: View {
                                 waitsForTransientUI: true
                             )
                         } label: {
-                            Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                            ShumSwipeLabel("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
                         }
                         .tint(.red)
                     }
@@ -942,7 +927,7 @@ private struct ShumProfileBlockOptionsSheet: View {
     }
 }
 
-private extension View {
+extension View {
     func shumProfileBlockSheet(
         runtime: SpotchatRuntime,
         request: Binding<ShumProfileBlockRequest?>
@@ -1042,7 +1027,7 @@ struct ShumSavedProfilesView: View {
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { remove(profile) } label: {
-                        Label("Убрать", systemImage: "heart.slash")
+                        ShumSwipeLabel("Убрать", systemImage: "heart.slash")
                     }
                     .tint(Color(uiColor: .systemGray))
                 }
@@ -1106,17 +1091,6 @@ private struct ShumStoredPersonRow: View {
             }
             .buttonStyle(.plain)
 
-            Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                writeAction()
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 32, height: 44)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Написать")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
