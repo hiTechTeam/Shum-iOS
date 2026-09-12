@@ -9,6 +9,20 @@ struct SpotchatContact: Codable, Identifiable {
     var metadata: [String: String] = [:]
     var id: String { card.id }
 }
+struct SpotchatEncounter: Codable, Equatable, Identifiable {
+    var card: SpotchatContactCard
+    var firstSeen: Date
+    var lastSeen: Date
+    var seenCount: Int
+    var avatar: Data?
+    var id: String { card.id }
+}
+struct SpotchatSavedProfile: Codable, Equatable, Identifiable {
+    var card: SpotchatContactCard
+    var savedAt: Date
+    var avatar: Data?
+    var id: String { card.id }
+}
 struct SpotchatConversation: Codable, Identifiable {
     var id: String
     var contactID: String
@@ -138,6 +152,9 @@ struct SpotchatDatabase: Codable {
     var blocked: [String: SpotchatContactCard]?
     var deletedMessageIDs: [String: Date]?
     var legacyHistory: ShumLegacyArchive?
+    var encounters: [SpotchatEncounter]?
+    var savedProfiles: [SpotchatSavedProfile]?
+    var unviewedEncounterIDs: Set<String>?
 }
 
 @MainActor

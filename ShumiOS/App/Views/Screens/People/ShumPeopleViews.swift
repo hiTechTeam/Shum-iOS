@@ -1,0 +1,948 @@
+import SwiftUI
+import UIKit
+
+struct ShumPeopleScreen: View {
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @ObservedObject var runtime: SpotchatRuntime
+    let select: (SpotchatPeer) -> Void
+
+    @State private var selectedPeer: SpotchatPeer?
+    @State private var pendingBlock: SpotchatContactCard?
+    @State private var showsSavedBlockInformation = false
+
+    var body: some View {
+        ZStack {
+            Color.peopleListBackground.ignoresSafeArea()
+
+            if !coordinator.isScaning {
+                ShumPeopleUnavailable(
+                    title: "Люди рядом скрыты",
+                    message: "Включите видимость, чтобы находить людей поблизости.",
+                    systemImage: "eye.slash",
+                    actionTitle: "Найти людей"
+                ) {
+                    coordinator.setScanning(true)
+                }
+            } else if runtime.bluetoothState == .unauthorized {
+                ShumPeopleUnavailable(
+                    title: "Нужен Bluetooth",
+                    message: "Разрешите Bluetooth для Shum в настройках iPhone.",
+                    systemImage: "antenna.radiowaves.left.and.right.slash",
+                    actionTitle: "Открыть настройки"
+                ) {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    UIApplication.shared.open(url)
+                }
+            } else if runtime.bluetoothState == .poweredOff {
+                ShumPeopleUnavailable(
+                    title: "Bluetooth выключен",
+                    message: "Включите Bluetooth на iPhone, чтобы увидеть людей рядом.",
+                    systemImage: "antenna.radiowaves.left.and.right.slash"
+                )
+            } else if runtime.peers.isEmpty {
+                ShumPeopleUnavailable(
+                    title: "Никого рядом",
+                    message: "Откройте Shum на другом iPhone. Человек появится здесь, когда окажется поблизости.",
+                    systemImage: "wave.3.up"
+                )
+            } else {
+                peopleList
+            }
+        }
+        .navigationTitle("Люди")
+        .sheet(item: $selectedPeer) { peer in
+            ShumPeerCard(runtime: runtime, peer: peer) {
+                selectedPeer = nil
+                select(peer)
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog(
+            "Заблокировать пользователя?",
+            isPresented: Binding(
+                get: { pendingBlock != nil },
+                set: { if !$0 { pendingBlock = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Заблокировать", role: .destructive) {
+                guard let card = pendingBlock else { return }
+                do { try runtime.permanent?.setBlocked(card, blocked: true) }
+                catch { runtime.error = error.localizedDescription }
+                pendingBlock = nil
+            }
+            Button("Отмена", role: .cancel) { pendingBlock = nil }
+        } message: {
+            Text("Сообщения и приглашения этого пользователя будут отклоняться на вашем iPhone.")
+        }
+        .alert("Сначала удалите из сохранённых", isPresented: $showsSavedBlockInformation) {
+            Button("Понятно", role: .cancel) { }
+        } message: {
+            Text("Сохранённый профиль нельзя заблокировать. Удалите его из сохранённых и повторите.")
+        }
+    }
+
+    private var peopleList: some View {
+        List {
+            Text("Здесь появляются пользователи Shum поблизости. Потяните строку вправо, чтобы сохранить профиль, или удерживайте её для быстрых действий.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+            ForEach(runtime.peers) { peer in
+                let card = runtime.permanent?.card(for: peer.id)
+                let isSaved = card.map { runtime.permanent?.isSaved($0) == true } ?? false
+
+                ShumPeopleRow(
+                    runtime: runtime,
+                    peer: peer,
+                    isSaved: isSaved,
+                    cardAction: { selectedPeer = peer },
+                    writeAction: { select(peer) }
+                )
+                .shumPeopleContextMenu(
+                    runtime: runtime,
+                    peer: peer,
+                    card: card,
+                    isSaved: isSaved,
+                    writeAction: { select(peer) },
+                    blockAction: { requestBlock(card, isSaved: isSaved) }
+                )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color(uiColor: .systemBackground))
+                .listRowSeparator(.hidden)
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    if let card {
+                        Button {
+                            toggleSaved(card, peer: peer)
+                        } label: {
+                            Label(isSaved ? "Убрать" : "Сохранить", systemImage: isSaved ? "heart.slash" : "heart")
+                        }
+                        .tint(isSaved ? Color(uiColor: .systemGray) : .green)
+                    }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: !isSaved) {
+                    if let card {
+                        if isSaved {
+                            Button { showsSavedBlockInformation = true } label: {
+                                Label("Сохранён", systemImage: "lock.fill")
+                            }
+                            .tint(Color(uiColor: .systemGray))
+                        } else {
+                            Button(role: .destructive) { pendingBlock = card } label: {
+                                Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .refreshable { runtime.tick() }
+    }
+
+    private func toggleSaved(_ card: SpotchatContactCard, peer: SpotchatPeer) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        do {
+            _ = try runtime.permanent?.toggleSaved(
+                card,
+                avatar: runtime.profile(for: peer.id)?.avatar
+            )
+        } catch { runtime.error = error.localizedDescription }
+    }
+
+    private func requestBlock(_ card: SpotchatContactCard?, isSaved: Bool) {
+        guard let card else {
+            runtime.error = "Дождитесь проверки профиля пользователя."
+            return
+        }
+        if isSaved { showsSavedBlockInformation = true }
+        else { pendingBlock = card }
+    }
+}
+
+private struct ShumPeopleUnavailable: View {
+    let title: String
+    let message: String
+    let systemImage: String
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    init(
+        title: String,
+        message: String,
+        systemImage: String,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.title = title
+        self.message = message
+        self.systemImage = systemImage
+        self.actionTitle = actionTitle
+        self.action = action
+    }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: systemImage)
+                .font(.system(size: 42, weight: .light))
+                .foregroundStyle(.secondary)
+            Text(title).font(.title2.bold())
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            if let actionTitle, let action {
+                RegistrationPrimaryButton(title: actionTitle, action: action)
+                    .frame(maxWidth: 320)
+                    .padding(.top, 8)
+            }
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct ShumPeopleRow: View {
+    @ObservedObject var runtime: SpotchatRuntime
+    let peer: SpotchatPeer
+    let isSaved: Bool
+    let cardAction: () -> Void
+    let writeAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button {
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                cardAction()
+            } label: {
+                HStack(spacing: 12) {
+                    SpotchatAvatar(
+                        name: runtime.displayName(peer),
+                        size: 52,
+                        nearby: true,
+                        imageData: runtime.profile(for: peer.id)?.avatar
+                    )
+                    .shumSavedProfileBadge(isSaved: isSaved)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(runtime.displayName(peer))
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text(profileInformation)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Text("рядом")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                writeAction()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 32, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Написать")
+        }
+        .frame(maxWidth: .infinity, minHeight: 52)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private var profileInformation: String {
+        let bio = runtime.profile(for: peer.id)?.bio.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return bio.isEmpty ? "Нет информации" : bio
+    }
+}
+
+private extension View {
+    func shumSavedProfileBadge(isSaved: Bool) -> some View {
+        mask {
+            Rectangle()
+                .overlay(alignment: .bottomTrailing) {
+                    if isSaved {
+                        Circle().frame(width: 18, height: 18).offset(x: 2, y: 2).blendMode(.destinationOut)
+                    }
+                }
+                .compositingGroup()
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if isSaved {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 18, height: 18)
+                    .offset(x: 2, y: 2)
+            }
+        }
+    }
+}
+
+struct ShumPeerCard: View {
+    @ObservedObject var runtime: SpotchatRuntime
+    let peer: SpotchatPeer
+    let profileCard: SpotchatContactCard?
+    var lastMetAt: Date?
+    let write: () -> Void
+
+    @State private var showPhoto = false
+
+    init(
+        runtime: SpotchatRuntime,
+        peer: SpotchatPeer,
+        card: SpotchatContactCard? = nil,
+        lastMetAt: Date? = nil,
+        write: @escaping () -> Void
+    ) {
+        self.runtime = runtime
+        self.peer = peer
+        self.profileCard = card
+        self.lastMetAt = lastMetAt
+        self.write = write
+    }
+
+    private var card: SpotchatContactCard? { profileCard ?? runtime.permanent?.card(for: peer.id) }
+    private var isSaved: Bool { card.map { runtime.permanent?.isSaved($0) == true } ?? false }
+    private var avatar: Data? { runtime.profile(for: peer.id)?.avatar }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .top) {
+                VStack(spacing: 8) {
+                    Spacer(minLength: 0)
+
+                    let photoSize = max(118, min(190, min(geometry.size.width - 72, geometry.size.height * 0.43)))
+                    Button { showPhoto = avatar != nil } label: {
+                        SpotchatAvatar(
+                            name: runtime.displayName(peer),
+                            size: photoSize,
+                            nearby: lastMetAt == nil && runtime.isNearby(peer.id),
+                            imageData: avatar
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Посмотреть фото")
+
+                    VStack(spacing: 0) {
+                        Text(runtime.displayName(peer))
+                            .font(.title.bold())
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+
+                        Text(profileInformation)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 360, minHeight: 48)
+
+                        RegistrationPrimaryButton(title: "Написать", action: write)
+                            .frame(maxWidth: 360)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 48)
+                .padding(.bottom, 10)
+
+                HStack {
+                    if let lastMetAt {
+                        Text("Виделись \(lastMetAt.shumRelativeDescription)")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(runtime.isNearby(peer.id) ? "Рядом" : "Не рядом")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    if let card {
+                        Button { toggleSaved(card) } label: {
+                            Image(systemName: isSaved ? "heart.fill" : "heart")
+                                .font(.system(size: 19, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .frame(width: 56, height: 44)
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(isSaved ? "Убрать из сохранённых" : "Сохранить")
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+            }
+        }
+        .fullScreenCover(isPresented: $showPhoto) {
+            if let avatar { SpotchatPhotoViewer(data: avatar) }
+        }
+    }
+
+    private var profileInformation: String {
+        let bio = runtime.profile(for: peer.id)?.bio.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return bio.isEmpty ? "Нет информации" : bio
+    }
+
+    private func toggleSaved(_ card: SpotchatContactCard) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        do { _ = try runtime.permanent?.toggleSaved(card, avatar: avatar) }
+        catch { runtime.error = error.localizedDescription }
+    }
+}
+
+private struct ShumPersonContextMenuModifier: ViewModifier {
+    @ObservedObject var runtime: SpotchatRuntime
+    let peer: SpotchatPeer
+    let card: SpotchatContactCard?
+    let isSaved: Bool
+    var lastMetAt: Date?
+    var deleteAction: (() -> Void)?
+    let writeAction: () -> Void
+    let blockAction: () -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.contextMenu { menu } preview: {
+                ShumPersonContextPreview(
+                    runtime: runtime,
+                    peer: peer,
+                    isSaved: isSaved,
+                    lastMetAt: lastMetAt
+                )
+            }
+        } else {
+            content.contextMenu { menu }
+        }
+    }
+
+    @ViewBuilder
+    private var menu: some View {
+        Button(action: writeAction) {
+            Label("Написать", systemImage: "paperplane")
+        }
+
+        if let card {
+            Button { toggleSaved(card) } label: {
+                Label(
+                    isSaved ? "Убрать из сохранённых" : "Сохранить",
+                    systemImage: isSaved ? "heart.slash" : "heart"
+                )
+            }
+        }
+
+        if let deleteAction {
+            Divider()
+            Button(role: .destructive, action: deleteAction) {
+                Label("Удалить", systemImage: "trash")
+            }
+        }
+
+        Divider()
+
+        if isSaved {
+            Button(action: blockAction) {
+                Label("Сначала удалите из сохранённых", systemImage: "lock.fill")
+            }
+        } else {
+            Button(role: .destructive, action: blockAction) {
+                Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+            }
+        }
+    }
+
+    private func toggleSaved(_ card: SpotchatContactCard) {
+        do {
+            _ = try runtime.permanent?.toggleSaved(
+                card,
+                avatar: runtime.profile(for: peer.id)?.avatar
+            )
+        } catch { runtime.error = error.localizedDescription }
+    }
+}
+
+private extension View {
+    func shumPeopleContextMenu(
+        runtime: SpotchatRuntime,
+        peer: SpotchatPeer,
+        card: SpotchatContactCard?,
+        isSaved: Bool,
+        lastMetAt: Date? = nil,
+        deleteAction: (() -> Void)? = nil,
+        writeAction: @escaping () -> Void,
+        blockAction: @escaping () -> Void
+    ) -> some View {
+        modifier(
+            ShumPersonContextMenuModifier(
+                runtime: runtime,
+                peer: peer,
+                card: card,
+                isSaved: isSaved,
+                lastMetAt: lastMetAt,
+                deleteAction: deleteAction,
+                writeAction: writeAction,
+                blockAction: blockAction
+            )
+        )
+    }
+}
+
+private struct ShumPersonContextPreview: View {
+    @ObservedObject var runtime: SpotchatRuntime
+    let peer: SpotchatPeer
+    let isSaved: Bool
+    let lastMetAt: Date?
+
+    private var previewWidth: CGFloat { min(UIScreen.main.bounds.width - 32, 420) }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SpotchatAvatar(
+                name: runtime.displayName(peer),
+                size: 52,
+                nearby: lastMetAt == nil && runtime.isNearby(peer.id),
+                imageData: runtime.profile(for: peer.id)?.avatar
+            )
+            .shumSavedProfileBadge(isSaved: isSaved)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(runtime.displayName(peer)).font(.body.weight(.semibold)).lineLimit(1)
+                Text(profileInformation).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            if let lastMetAt {
+                Text(lastMetAt.shumRelativeDescription)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 32, height: 44)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(width: previewWidth, height: 72)
+        .background(
+            Color(uiColor: .tertiarySystemBackground),
+            in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+        )
+    }
+
+    private var profileInformation: String {
+        let bio = runtime.profile(for: peer.id)?.bio.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return bio.isEmpty ? "Нет информации" : bio
+    }
+}
+
+extension Date {
+    fileprivate var shumRelativeDescription: String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: self, relativeTo: Date())
+    }
+}
+
+struct ShumEncounterHistoryView: View {
+    @ObservedObject var runtime: SpotchatRuntime
+
+    @State private var selectedEncounter: SpotchatEncounter?
+    @State private var conversationPeer: SpotchatPeer?
+    @State private var pendingDelete: SpotchatEncounter?
+    @State private var pendingBlock: SpotchatContactCard?
+    @State private var showsClearConfirmation = false
+    @State private var showsSavedBlockInformation = false
+
+    private var encounters: [SpotchatEncounter] {
+        runtime.permanent?.encounterHistory ?? []
+    }
+
+    var body: some View {
+        ZStack {
+            Color.peopleListBackground.ignoresSafeArea()
+
+            if encounters.isEmpty {
+                ShumPeopleUnavailable(
+                    title: "Пока никого",
+                    message: "Здесь появятся люди, которых Shum заметил рядом.",
+                    systemImage: "clock.arrow.circlepath"
+                )
+            } else {
+                encounterList
+            }
+        }
+        .navigationTitle("Виделись")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showsClearConfirmation = true } label: {
+                    Image(systemName: "trash")
+                }
+                .accessibilityLabel("Очистить историю")
+            }
+        }
+        .sheet(item: $selectedEncounter) { encounter in
+            let peer = encounter.peer
+            ShumPeerCard(
+                runtime: runtime,
+                peer: peer,
+                card: encounter.card,
+                lastMetAt: encounter.lastSeen
+            ) {
+                selectedEncounter = nil
+                conversationPeer = peer
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
+        .navigationDestination(isPresented: conversationBinding) {
+            if let conversationPeer {
+                SpotchatConversationView(runtime: runtime, peer: conversationPeer)
+                    .toolbar(.hidden, for: .tabBar)
+            }
+        }
+        .confirmationDialog(
+            "Удалить из истории?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Удалить", role: .destructive) {
+                if let pendingDelete { runtime.permanent?.deleteEncounter(pendingDelete.card) }
+                pendingDelete = nil
+            }
+            Button("Отмена", role: .cancel) { pendingDelete = nil }
+        } message: {
+            Text("Профиль исчезнет из раздела «Виделись». Сохранённый профиль и переписка останутся.")
+        }
+        .confirmationDialog(
+            "Очистить историю встреч?",
+            isPresented: $showsClearConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Очистить", role: .destructive) { runtime.permanent?.clearEncounters() }
+            Button("Отмена", role: .cancel) { }
+        } message: {
+            Text("Сохранённые профили и переписки останутся.")
+        }
+        .confirmationDialog(
+            "Заблокировать пользователя?",
+            isPresented: Binding(
+                get: { pendingBlock != nil },
+                set: { if !$0 { pendingBlock = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Заблокировать", role: .destructive) {
+                guard let pendingBlock else { return }
+                do { try runtime.permanent?.setBlocked(pendingBlock, blocked: true) }
+                catch { runtime.error = error.localizedDescription }
+                self.pendingBlock = nil
+            }
+            Button("Отмена", role: .cancel) { pendingBlock = nil }
+        }
+        .alert("Сначала удалите из сохранённых", isPresented: $showsSavedBlockInformation) {
+            Button("Понятно", role: .cancel) { }
+        } message: {
+            Text("Сохранённый профиль нельзя заблокировать. Удалите его из сохранённых и повторите.")
+        }
+        .task { runtime.permanent?.markEncountersViewed() }
+    }
+
+    private var encounterList: some View {
+        List {
+            Text("История хранится только на этом iPhone в зашифрованном виде.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+            ForEach(encounters) { encounter in
+                let peer = encounter.peer
+                let isSaved = runtime.permanent?.isSaved(encounter.card) == true
+
+                ShumStoredPersonRow(
+                    runtime: runtime,
+                    peer: peer,
+                    isSaved: isSaved,
+                    lastMetAt: encounter.lastSeen,
+                    cardAction: { selectedEncounter = encounter },
+                    writeAction: { conversationPeer = peer }
+                )
+                .shumPeopleContextMenu(
+                    runtime: runtime,
+                    peer: peer,
+                    card: encounter.card,
+                    isSaved: isSaved,
+                    lastMetAt: encounter.lastSeen,
+                    deleteAction: { pendingDelete = encounter },
+                    writeAction: { conversationPeer = peer },
+                    blockAction: {
+                        if isSaved { showsSavedBlockInformation = true }
+                        else { pendingBlock = encounter.card }
+                    }
+                )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color(uiColor: .systemBackground))
+                .listRowSeparator(.visible)
+                .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    Button { toggleSaved(encounter) } label: {
+                        Label(isSaved ? "Убрать" : "Сохранить", systemImage: isSaved ? "heart.slash" : "heart")
+                    }
+                    .tint(isSaved ? Color(uiColor: .systemGray) : .green)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: !isSaved) {
+                    Button { pendingDelete = encounter } label: {
+                        Label("Удалить", systemImage: "trash")
+                    }
+                    .tint(Color(uiColor: .systemGray))
+
+                    if isSaved {
+                        Button { showsSavedBlockInformation = true } label: {
+                            Label("Сохранён", systemImage: "lock.fill")
+                        }
+                        .tint(Color(uiColor: .systemGray2))
+                    } else {
+                        Button(role: .destructive) { pendingBlock = encounter.card } label: {
+                            Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                        }
+                    }
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+
+    private var conversationBinding: Binding<Bool> {
+        Binding(
+            get: { conversationPeer != nil },
+            set: { if !$0 { conversationPeer = nil } }
+        )
+    }
+
+    private func toggleSaved(_ encounter: SpotchatEncounter) {
+        do { _ = try runtime.permanent?.toggleSaved(encounter.card, avatar: encounter.avatar) }
+        catch { runtime.error = error.localizedDescription }
+    }
+}
+
+struct ShumSavedProfilesView: View {
+    @ObservedObject var runtime: SpotchatRuntime
+
+    @State private var selectedProfile: SpotchatSavedProfile?
+    @State private var conversationPeer: SpotchatPeer?
+    @State private var showsSavedBlockInformation = false
+
+    private var profiles: [SpotchatSavedProfile] {
+        runtime.permanent?.savedProfiles ?? []
+    }
+
+    var body: some View {
+        ZStack {
+            Color.peopleListBackground.ignoresSafeArea()
+
+            if profiles.isEmpty {
+                ShumPeopleUnavailable(
+                    title: "Нет сохранённых",
+                    message: "Смахните профиль вправо в разделе «Люди» или «Виделись», чтобы сохранить его.",
+                    systemImage: "heart"
+                )
+            } else {
+                savedList
+            }
+        }
+        .navigationTitle("Сохранённые")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $selectedProfile) { profile in
+            let peer = profile.peer
+            ShumPeerCard(runtime: runtime, peer: peer, card: profile.card) {
+                selectedProfile = nil
+                conversationPeer = peer
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
+        .navigationDestination(isPresented: conversationBinding) {
+            if let conversationPeer {
+                SpotchatConversationView(runtime: runtime, peer: conversationPeer)
+                    .toolbar(.hidden, for: .tabBar)
+            }
+        }
+        .alert("Сначала удалите из сохранённых", isPresented: $showsSavedBlockInformation) {
+            Button("Понятно", role: .cancel) { }
+        } message: {
+            Text("Сохранённый профиль нельзя заблокировать. Удалите его из сохранённых и повторите.")
+        }
+    }
+
+    private var savedList: some View {
+        List {
+            Text("Сохранённые профили доступны без интернета и остаются только на этом iPhone.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+            ForEach(profiles) { profile in
+                let peer = profile.peer
+
+                ShumStoredPersonRow(
+                    runtime: runtime,
+                    peer: peer,
+                    isSaved: true,
+                    cardAction: { selectedProfile = profile },
+                    writeAction: { conversationPeer = peer }
+                )
+                .shumPeopleContextMenu(
+                    runtime: runtime,
+                    peer: peer,
+                    card: profile.card,
+                    isSaved: true,
+                    writeAction: { conversationPeer = peer },
+                    blockAction: { showsSavedBlockInformation = true }
+                )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color(uiColor: .systemBackground))
+                .listRowSeparator(.visible)
+                .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) { remove(profile) } label: {
+                        Label("Убрать", systemImage: "heart.slash")
+                    }
+                    .tint(Color(uiColor: .systemGray))
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+
+    private var conversationBinding: Binding<Bool> {
+        Binding(
+            get: { conversationPeer != nil },
+            set: { if !$0 { conversationPeer = nil } }
+        )
+    }
+
+    private func remove(_ profile: SpotchatSavedProfile) {
+        do { _ = try runtime.permanent?.toggleSaved(profile.card, avatar: profile.avatar) }
+        catch { runtime.error = error.localizedDescription }
+    }
+}
+
+private struct ShumStoredPersonRow: View {
+    @ObservedObject var runtime: SpotchatRuntime
+    let peer: SpotchatPeer
+    let isSaved: Bool
+    var lastMetAt: Date?
+    let cardAction: () -> Void
+    let writeAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button {
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                cardAction()
+            } label: {
+                HStack(spacing: 12) {
+                    SpotchatAvatar(
+                        name: runtime.displayName(peer),
+                        size: 52,
+                        nearby: runtime.isNearby(peer.id),
+                        imageData: runtime.profile(for: peer.id)?.avatar
+                    )
+                    .shumSavedProfileBadge(isSaved: isSaved)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(runtime.displayName(peer))
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text(profileInformation)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if let lastMetAt {
+                        Text(lastMetAt.shumRelativeDescription)
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                writeAction()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 32, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Написать")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private var profileInformation: String {
+        let bio = runtime.profile(for: peer.id)?.bio.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return bio.isEmpty ? "Нет информации" : bio
+    }
+}
+
+private extension SpotchatEncounter {
+    var peer: SpotchatPeer {
+        SpotchatPeer(id: card.peerID, name: card.name, lastConnected: lastSeen)
+    }
+}
+
+private extension SpotchatSavedProfile {
+    var peer: SpotchatPeer {
+        SpotchatPeer(id: card.peerID, name: card.name, lastConnected: savedAt)
+    }
+}

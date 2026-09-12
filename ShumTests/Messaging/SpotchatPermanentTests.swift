@@ -79,6 +79,41 @@ struct SpotchatPermanentTests {
         #expect(throws: (any Error).self) { _ = try SpotchatConversationStore(ownerID: a.card.id, key: a.identity.storageKey, url: url) }
         #expect(try Data(contentsOf: url) == Data([1,2,3]))
     }
+
+    @Test func encounterHistoryAndSavedProfilesAreDurableAndIndependent() throws {
+        let clock = Clock()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".enc")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let a = try Node("Аня", clock: clock, url: url)
+        let b = try Node("Борис", clock: clock)
+        let avatar = Data([1, 2, 3, 4])
+
+        try a.service.recordEncounter(b.card, avatar: avatar)
+        #expect(a.service.encounterHistory.count == 1)
+        #expect(a.service.encounterHistory[0].seenCount == 1)
+        #expect(a.service.unviewedEncounterCount == 1)
+
+        clock.date.addTimeInterval(61)
+        try a.service.recordEncounter(b.card, avatar: avatar)
+        #expect(a.service.encounterHistory[0].seenCount == 2)
+
+        #expect(try a.service.toggleSaved(b.card, avatar: avatar))
+        #expect(a.service.savedProfiles.count == 1)
+        a.service.markEncountersViewed()
+        #expect(a.service.unviewedEncounterCount == 0)
+        a.service.deleteEncounter(b.card)
+        #expect(a.service.encounterHistory.isEmpty)
+        #expect(a.service.savedProfiles.count == 1)
+
+        let restored = try SpotchatConversationStore(
+            ownerID: a.card.id,
+            key: a.identity.storageKey,
+            url: url
+        )
+        #expect(restored.state.encounters?.isEmpty == true)
+        #expect(restored.state.savedProfiles?.first?.card == b.card)
+        #expect(restored.state.savedProfiles?.first?.avatar == avatar)
+    }
     @Test func directDeliveryReadAndSessionChange() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
         try a.service.add(b.card, source: "QR"); try b.service.add(a.card, source: "QR")

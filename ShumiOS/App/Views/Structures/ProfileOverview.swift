@@ -6,6 +6,7 @@ struct ProfileOverviewView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
+    @ObservedObject var chat: SpotchatRuntime
     @ObservedObject var authCodeViewModel: LocalProfileViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
     @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
@@ -30,9 +31,11 @@ struct ProfileOverviewView: View {
         UNAuthorizationStatus = .notDetermined
 
     init(
+        chat: SpotchatRuntime,
         authCodeViewModel: LocalProfileViewModel,
         photoViewModel: ProfilePhotoViewModel
     ) {
+        self.chat = chat
         self.authCodeViewModel = authCodeViewModel
         self.photoVM = photoViewModel
     }
@@ -67,6 +70,7 @@ struct ProfileOverviewView: View {
 
                     VStack(spacing: 20) {
                         settingsCard
+                        peopleCard
                     }
                 }
                 .padding(.horizontal, 20)
@@ -140,11 +144,10 @@ struct ProfileOverviewView: View {
                 .presentationDragIndicator(.visible)
         }
         .navigationDestination(isPresented: $showEncounterHistory) {
-            EncounterHistoryView()
-                .environmentObject(peopleViewModel)
+            ShumEncounterHistoryView(runtime: chat)
         }
         .navigationDestination(isPresented: $showSavedProfiles) {
-            SavedProfilesView()
+            ShumSavedProfilesView(runtime: chat)
         }
         .sheet(isPresented: $showQuickActions) {
             QuickActionsSettingsSheet()
@@ -234,10 +237,10 @@ struct ProfileOverviewView: View {
             ProfileOverviewRow(
                 title: Inc.Tabs.metTitle.localized,
                 systemImage: "clock.arrow.circlepath",
-                accentValue: peopleViewModel.unviewedEncounterCount > 0
-                    ? "+\(peopleViewModel.unviewedEncounterCount)"
+                accentValue: (chat.permanent?.unviewedEncounterCount ?? 0) > 0
+                    ? "+\(chat.permanent?.unviewedEncounterCount ?? 0)"
                     : nil,
-                value: String(peopleViewModel.encounterHistory.count),
+                value: String(chat.permanent?.encounterHistory.count ?? 0),
                 position: .top
             ) {
                 showEncounterHistory = true
@@ -325,9 +328,7 @@ struct ProfileOverviewView: View {
     }
 
     private var savedProfilesStatusTitle: String {
-        let count = savedPeople.users.filter {
-            !peopleViewModel.isProfileBlocked($0.id)
-        }.count
+        let count = chat.permanent?.savedProfiles.count ?? 0
         return count == 0
             ? Inc.NearbyProfile.noSaved.localized
             : String(count)

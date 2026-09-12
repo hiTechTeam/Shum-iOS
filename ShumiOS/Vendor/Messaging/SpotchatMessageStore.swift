@@ -36,6 +36,20 @@ final class SpotchatMessageStore: ObservableObject {
     }
     var internetConnected: Bool { internet?.connected == true }
     var state: SpotchatDatabase { store.state }
+    var encounterHistory: [SpotchatEncounter] {
+        (state.encounters ?? [])
+            .filter { !isBlocked($0.card) }
+            .sorted { $0.lastSeen > $1.lastSeen }
+    }
+    var savedProfiles: [SpotchatSavedProfile] {
+        (state.savedProfiles ?? [])
+            .filter { !isBlocked($0.card) }
+            .sorted { $0.savedAt > $1.savedAt }
+    }
+    var unviewedEncounterCount: Int {
+        let visibleIDs = Set(encounterHistory.map(\.id))
+        return (state.unviewedEncounterIDs ?? []).intersection(visibleIDs).count
+    }
     func start() { if !retired && foreground { internet?.start() } }
     func setActive(_ active: Bool) {
         guard !retired else { return }
@@ -47,7 +61,10 @@ final class SpotchatMessageStore: ObservableObject {
         ownCard = try identity.card(name: name, bio: bio); helloTimes.removeAll()
     }
     func card(for peer: PeerID) -> SpotchatContactCard? {
-        state.contacts.first(where: { $0.card.peerID == peer })?.card ?? nearby[peer]
+        state.contacts.first(where: { $0.card.peerID == peer })?.card
+            ?? nearby[peer]
+            ?? state.savedProfiles?.first(where: { $0.card.peerID == peer })?.card
+            ?? state.encounters?.first(where: { $0.card.peerID == peer })?.card
     }
     func session(for card: SpotchatContactCard) -> PeerID? {
         nearby.first(where: { $0.value.id == card.id && transport.isPeerConnected($0.key) && transport.noiseSessionPublicKeyData(for: $0.key) == card.noiseKey })?.key
@@ -73,9 +90,141 @@ final class SpotchatMessageStore: ObservableObject {
     }
     func updateAvatar(_ avatar: Data?, for peer: PeerID) {
         guard !retired else { return }
-        guard (avatar?.count ?? 0) <= 40_960, let card = nearby[peer],
-              let index = state.contacts.firstIndex(where: { $0.id == card.id }), state.contacts[index].avatar != avatar else { return }
-        do { try store.transaction { $0.contacts[index].avatar = avatar }; changed() } catch { fail(error) }
+        guard (avatar?.count ?? 0) <= 40_960, let card = nearby[peer] else { return }
+        let contactNeedsUpdate = state.contacts.first(where: { $0.id == card.id })?.avatar != avatar
+        let encounterNeedsUpdate = state.encounters?.first(where: { $0.id == card.id })?.avatar != avatar
+        let savedNeedsUpdate = state.savedProfiles?.first(where: { $0.id == card.id })?.avatar != avatar
+        guard contactNeedsUpdate || encounterNeedsUpdate || savedNeedsUpdate else { return }
+        do {
+            try store.transaction { state in
+                if let index = state.contacts.firstIndex(where: { $0.id == card.id }) {
+                    state.contacts[index].avatar = avatar
+                }
+                if let index = state.encounters?.firstIndex(where: { $0.id == card.id }) {
+                    state.encounters?[index].avatar = avatar
+                }
+                if let index = state.savedProfiles?.firstIndex(where: { $0.id == card.id }) {
+                    state.savedProfiles?[index].avatar = avatar
+                }
+            }
+            changed()
+        } catch { fail(error) }
+    }
+
+    func recordEncounter(_ card: SpotchatContactCard, avatar: Data? = nil) throws {
+        guard !retired else { throw SpotchatFailure.unavailableIdentity }
+        try card.validate()
+        guard card.id != ownCard.id, !isBlocked(card), (avatar?.count ?? 0) <= 40_960 else { return }
+        let timestamp = now()
+        if let existing = state.encounters?.first(where: { $0.id == card.id }),
+           timestamp.timeIntervalSince(existing.lastSeen) < 60,
+           existing.card == card,
+           avatar == nil || existing.avatar == avatar {
+            return
+        }
+        try store.transaction { state in
+            if state.encounters == nil { state.encounters = [] }
+            if state.unviewedEncounterIDs == nil { state.unviewedEncounterIDs = [] }
+            if let index = state.encounters?.firstIndex(where: { $0.id == card.id }) {
+                guard state.encounters?[index].card.signingKey == card.signingKey,
+                      state.encounters?[index].card.nostrKey == card.nostrKey else {
+                    throw SpotchatFailure.invalidContact
+                }
+                let previous = state.encounters?[index].lastSeen ?? timestamp
+                state.encounters?[index].card = card
+                state.encounters?[index].lastSeen = timestamp
+                if timestamp.timeIntervalSince(previous) >= 60 {
+                    state.encounters?[index].seenCount += 1
+                }
+                if let avatar { state.encounters?[index].avatar = avatar }
+            } else {
+                state.encounters?.append(
+                    SpotchatEncounter(
+                        card: card,
+                        firstSeen: timestamp,
+                        lastSeen: timestamp,
+                        seenCount: 1,
+                        avatar: avatar
+                    )
+                )
+                state.unviewedEncounterIDs?.insert(card.id)
+                if let count = state.encounters?.count, count > 1_000 {
+                    let savedIDs = Set((state.savedProfiles ?? []).map(\.id))
+                    state.encounters = state.encounters?
+                        .sorted { $0.lastSeen > $1.lastSeen }
+                        .enumerated()
+                        .filter { $0.offset < 1_000 || savedIDs.contains($0.element.id) }
+                        .map(\.element)
+                }
+            }
+            if let index = state.savedProfiles?.firstIndex(where: { $0.id == card.id }) {
+                guard state.savedProfiles?[index].card.signingKey == card.signingKey,
+                      state.savedProfiles?[index].card.nostrKey == card.nostrKey else {
+                    throw SpotchatFailure.invalidContact
+                }
+                state.savedProfiles?[index].card = card
+                if let avatar { state.savedProfiles?[index].avatar = avatar }
+            }
+        }
+        changed()
+    }
+
+    @discardableResult
+    func toggleSaved(_ card: SpotchatContactCard, avatar: Data? = nil) throws -> Bool {
+        guard !retired else { throw SpotchatFailure.unavailableIdentity }
+        try card.validate()
+        guard card.id != ownCard.id, !isBlocked(card), (avatar?.count ?? 0) <= 40_960 else {
+            throw SpotchatFailure.invalidContact
+        }
+        var isSaved = false
+        try store.transaction { state in
+            if state.savedProfiles == nil { state.savedProfiles = [] }
+            if let index = state.savedProfiles?.firstIndex(where: { $0.id == card.id }) {
+                state.savedProfiles?.remove(at: index)
+            } else {
+                guard (state.savedProfiles?.count ?? 0) < 2_000 else { throw SpotchatFailure.quota }
+                state.savedProfiles?.append(
+                    SpotchatSavedProfile(card: card, savedAt: now(), avatar: avatar)
+                )
+                isSaved = true
+            }
+        }
+        changed()
+        return isSaved
+    }
+
+    func isSaved(_ card: SpotchatContactCard) -> Bool {
+        state.savedProfiles?.contains(where: { $0.id == card.id }) == true
+    }
+
+    func markEncountersViewed() {
+        guard !retired, !(state.unviewedEncounterIDs ?? []).isEmpty else { return }
+        do {
+            try store.transaction { $0.unviewedEncounterIDs = [] }
+            changed()
+        } catch { fail(error) }
+    }
+
+    func deleteEncounter(_ card: SpotchatContactCard) {
+        guard !retired, state.encounters?.contains(where: { $0.id == card.id }) == true else { return }
+        do {
+            try store.transaction { state in
+                state.encounters?.removeAll { $0.id == card.id }
+                state.unviewedEncounterIDs?.remove(card.id)
+            }
+            changed()
+        } catch { fail(error) }
+    }
+
+    func clearEncounters() {
+        guard !retired, !(state.encounters ?? []).isEmpty else { return }
+        do {
+            try store.transaction { state in
+                state.encounters = []
+                state.unviewedEncounterIDs = []
+            }
+            changed()
+        } catch { fail(error) }
     }
     @discardableResult
     func send(_ text: String, to card: SpotchatContactCard) -> Bool {
@@ -153,6 +302,7 @@ final class SpotchatMessageStore: ObservableObject {
                     guard transport.noiseSessionPublicKeyData(for: peer) == card.noiseKey else { return }
                     let first = nearby[peer] == nil; nearby[peer] = card
                     if first { sendPacket(SpotchatPacket(card: ownCard), to: peer) }
+                    try recordEncounter(card)
                     if state.contacts.contains(where: { $0.id == card.id }) { try contacts.add(card, source: "nearby", now: now()) }
                     changed()
                 } else if nostrSender == card.nostrKey { try request(card) }
