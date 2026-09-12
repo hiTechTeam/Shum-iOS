@@ -30,6 +30,7 @@ struct SpotchatMessage: Identifiable {
 @MainActor
 final class SpotchatRuntime: ObservableObject, TransportEventDelegate, TransportPeerEventsDelegate {
     @Published private(set) var peers: [SpotchatPeer] = []
+    @Published private var nearbyDistances: [PeerID: Int] = [:]
     @Published private(set) var messages: [SpotchatMessage] = []
     @Published private var unreadMessageIDs: Set<String> = []
     @Published private(set) var nickname: String
@@ -194,7 +195,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         if let ble = transport as? BLEService { ble.suspendForPanicReset() }
         else { transport.stopServices() }
         permanentChanges?.cancel(); profileChanges?.cancel()
-        permanent = nil; messages = []; peers = []; knownPeers = [:]; unreadMessageIDs = []
+        permanent = nil; messages = []; peers = []; knownPeers = [:]; nearbyDistances = [:]; unreadMessageIDs = []
     }
 
     func start(runTimer: Bool = true) {
@@ -213,7 +214,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         guard !retired else { return }
         bluetoothEnabled = enabled
         if enabled && started && appActive { transport.startServices() }
-        else if !enabled { transport.stopServices(); peers = [] }
+        else if !enabled { transport.stopServices(); peers = []; nearbyDistances = [:] }
     }
 
     func setAppActive(_ active: Bool) {
@@ -292,6 +293,8 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         if let permanent, let card = permanent.card(for: peer) {
             let avatar = permanent.session(for: card).flatMap { profiles.remote[$0]?.avatar }
                 ?? permanent.state.contacts.first(where: { $0.id == card.id })?.avatar
+                ?? permanent.state.savedProfiles?.first(where: { $0.id == card.id })?.avatar
+                ?? permanent.state.encounters?.first(where: { $0.id == card.id })?.avatar
             return SpotchatProfile(name: card.name, bio: card.bio, avatar: avatar)
         }
         if let saved = permanent?.state.savedProfiles?.first(where: { $0.card.peerID == peer }) {
@@ -367,6 +370,12 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         guard bluetoothState == .poweredOn else { return false }
         if let permanent, let card = permanent.card(for: peer) { return permanent.session(for: card) != nil }
         return transport.isPeerConnected(peer)
+    }
+
+    func distanceMeters(for peer: PeerID) -> Int? {
+        guard isNearby(peer) else { return nil }
+        let session = permanent?.card(for: peer).flatMap { permanent?.session(for: $0) } ?? peer
+        return nearbyDistances[session]
     }
 
     @discardableResult
@@ -478,6 +487,11 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         let current = now()
         let connected = snapshots.filter { bluetoothState == .poweredOn && $0.peerID != transport.myPeerID && $0.isConnected && !isBlockedSession($0.peerID) }
         let ids = Set(connected.map(\.peerID))
+        let distances = Dictionary(connected.compactMap { snapshot -> (PeerID, Int)? in
+            guard let meters = snapshot.distanceMeters, meters > 0 else { return nil }
+            return (snapshot.peerID, meters)
+        }, uniquingKeysWith: { _, latest in latest })
+        if nearbyDistances != distances { nearbyDistances = distances }
         #if DEBUG
         if defaults.string(forKey: "ShumSelfTestRun") != nil {
             for peer in ids.subtracting(testConnectedPeers) { recordSelfTestEvent("peer-connected", messageID: peer.id) }
@@ -498,7 +512,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         switch event {
         case .bluetoothStateUpdated(let state):
             bluetoothState = state
-            if state != .poweredOn { knownPeers.removeAll(); peers = []; profiles.updatePeers([]) }
+            if state != .poweredOn { knownPeers.removeAll(); peers = []; nearbyDistances = [:]; profiles.updatePeers([]) }
         case .peerSnapshotsUpdated(let snapshots): didUpdatePeerSnapshots(snapshots)
         case .peerConnected, .peerDisconnected, .peerListUpdated:
             internetConnected = permanent?.internetConnected == true

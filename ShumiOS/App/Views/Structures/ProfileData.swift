@@ -4,9 +4,7 @@ struct ProfileDataView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @ObservedObject var authCodeViewModel: LocalProfileViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
-    @State private var showBioEditor = false
     @State private var profileEditor: LocalCardDetailsMode?
-    @State private var draftBio = ""
 
     init(
         authCodeViewModel: LocalProfileViewModel,
@@ -29,44 +27,13 @@ struct ProfileDataView: View {
         VStack(spacing: 0) {
             ProfileInformationRow(title: NSLocalizedString("local.profile.name", comment: ""),
                 value: authCodeViewModel.localName ?? "—", showsAccentValue: false,
-                position: .top, action: { profileEditor = .name })
-            profileRowDivider
-            ProfileInformationRow(
-                title: Inc.Profile.informationTitle.localized,
-                value: displayBio,
-                showsAccentValue: false,
-                position: .bottom,
-                action: openBioEditor
-            )
+                position: .single, action: { profileEditor = .name })
         }
         .background(
             Color(uiColor: .secondarySystemGroupedBackground),
             in: RoundedRectangle(cornerRadius: 22)
         )
         .padding(.horizontal, 20)
-    }
-
-    private var profileRowDivider: some View {
-        Divider()
-            .padding(.leading, 20)
-            .padding(.trailing, 20)
-    }
-
-    private var displayBio: String {
-        normalized(authCodeViewModel.bio).map { String($0.prefix(36)) }
-            ?? Inc.Profile.notSpecified.localized
-    }
-
-    private func normalized(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private func openBioEditor() {
-        draftBio = String((authCodeViewModel.bio ?? "").prefix(36))
-        authCodeViewModel.resetBioSaveState()
-        showBioEditor = true
     }
 
     private var scrollContent: some View {
@@ -87,16 +54,6 @@ struct ProfileDataView: View {
         }
         .shumOnChange(of: authCodeViewModel.localPhotoURL) { _, value in
             photoVM.loadPhotoFromURL(value)
-        }
-        .sheet(isPresented: $showBioEditor) {
-            BioEditorSheet(
-                draftBio: $draftBio,
-                isPresented: $showBioEditor,
-                authVM: authCodeViewModel
-            )
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-            .interactiveDismissDisabled(authCodeViewModel.isSavingBio)
         }
         .sheet(item: $profileEditor) { mode in
             NavigationStack {

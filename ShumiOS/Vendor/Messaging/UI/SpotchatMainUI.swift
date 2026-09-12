@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 
-// Current Spotchat chat list, adapted to Shum's three-tab navigation and palette.
+// Current Spotchat chat list, adapted to Shum's navigation and palette.
 enum SpotchatUIRoute: Hashable {
     case conversation(SpotchatPeer), nearby, newChat
 }
@@ -13,7 +13,7 @@ struct SpotchatDestinationUI: View {
         Group {
             switch route {
             case .conversation(let peer): SpotchatConversationView(runtime: runtime, peer: peer)
-            case .nearby: SpotchatNearbyUI(runtime: runtime) { open(.conversation($0)) }
+            case .nearby: ShumPeopleScreen(runtime: runtime) { open(.conversation($0)) }
             case .newChat: SpotchatContactsView(runtime: runtime) { open(.conversation($0)) }
             }
         }.toolbar(.hidden, for: .tabBar)
@@ -91,7 +91,12 @@ struct SpotchatChatsUI: View {
             }
         }
         .sheet(item: $selectedPeer) { peer in
-            SpotchatPeerProfileSheet(runtime: runtime, peer: peer)
+            ShumPeerCard(runtime: runtime, peer: peer) {
+                selectedPeer = nil
+                open(.conversation(peer))
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
         }
         .confirmationDialog(
             "Удалить чат?",
@@ -122,8 +127,11 @@ struct SpotchatChatsUI: View {
     private var nearbyRow: some View {
         Button { open(.nearby) } label: {
             HStack(spacing: 13) {
-                Image(systemName: "person.2.fill")
-                    .font(.system(size: 21, weight: .medium))
+                Image("PixelPeople")
+                    .resizable()
+                    .interpolation(.none)
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 38, height: 38)
                     .background(Color.accentColor.opacity(0.13), in: Circle())
@@ -232,42 +240,5 @@ private struct SpotchatNearbyAvatarsUI: View {
         .frame(minWidth: runtime.peers.isEmpty ? 0 : 48, alignment: .trailing)
     }
 }
-
-struct SpotchatNearbyUI: View {
-    @ObservedObject var runtime: SpotchatRuntime
-    let select: (SpotchatPeer) -> Void
-
-    var body: some View {
-        List {
-            Section {
-                if runtime.peers.isEmpty {
-                    Text("Ищем пользователей Shum поблизости…")
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(runtime.peers) { peer in
-                    Button { select(peer) } label: {
-                        HStack(spacing: 14) {
-                            SpotchatAvatar(name: runtime.displayName(peer), size: 52, nearby: true, imageData: runtime.profile(for: peer.id)?.avatar)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(runtime.displayName(peer)).font(.body.weight(.semibold))
-                                Text(runtime.profile(for: peer.id)?.bio ?? "Рядом")
-                                    .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundStyle(.secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-            } header: {
-                Text("Люди, которые находятся вокруг вас").textCase(nil)
-            }
-        }
-        .listStyle(.plain)
-        .navigationTitle("Рядом")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
 
 #endif

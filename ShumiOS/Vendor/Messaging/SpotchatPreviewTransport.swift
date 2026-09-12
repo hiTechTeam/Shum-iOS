@@ -11,7 +11,8 @@ final class SpotchatPreviewTransport: Transport {
     var myNickname = "Руслан"
     let samples: [TransportPeerSnapshot] = ["Аня", "Дима", "Маша", "Саша"].enumerated().map {
         TransportPeerSnapshot(peerID: PeerID(str: String(repeating: String($0.offset + 1), count: 16)),
-            nickname: $0.element, isConnected: true, noisePublicKey: nil, lastSeen: Date())
+            nickname: $0.element, isConnected: true, noisePublicKey: nil, lastSeen: Date(),
+            distanceMeters: [2, 5, 8, 12][$0.offset])
     }
     func currentPeerSnapshots() -> [TransportPeerSnapshot] { samples }
     func setNickname(_ nickname: String) { myNickname = nickname }

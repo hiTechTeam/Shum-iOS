@@ -46,12 +46,12 @@ struct LocalCardDetailsView: View {
                 if mode == .registration { Text(mode.title).font(.largeTitle.bold()) }
                 VStack(alignment: .leading, spacing: 10) {
                     Text("local.profile.name").font(.headline)
-                    TextField("Как вас зовут?", text: $name)
-                        .textContentType(.nickname).textInputAutocapitalization(.words)
+                    TextField("Имя пользователя", text: $name)
+                        .textContentType(.nickname).textInputAutocapitalization(.never)
                         .focused($focused).submitLabel(.done).onSubmit { save() }
                         .padding(16).background(Color.tField, in: RoundedRectangle(cornerRadius: 8))
                         .accessibilityIdentifier("local.name")
-                    Text("Так вас увидят собеседники. Имя можно изменить в профиле.")
+                    Text("Так вас увидят собеседники.")
                         .font(.footnote).foregroundStyle(.secondary)
                     if !name.isEmpty && !valid {
                         Text("Сократите имя и уберите переносы строки.")

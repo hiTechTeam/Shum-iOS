@@ -236,7 +236,7 @@
 "local.onboarding.details.title" = "Ваш контакт";
 "local.username.explanation" = "Выберите имя пользователя Shum. Оно хранится в вашем локальном профиле.";
 "local.name.explanation" = "Введите ваше имя";
-"local.profile.name" = "Имя";
+"local.profile.name" = "Имя пользователя";
 "local.profile.save" = "Сохранить";
 "local.profile.save.error" = "Не удалось сохранить профиль. Проверьте свободное место и попробуйте ещё раз.";
 "local.sharing.explanation" = "Профиль хранится на этом устройстве. Для общения включите видимость рядом.";

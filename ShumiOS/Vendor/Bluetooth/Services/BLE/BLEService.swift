@@ -202,6 +202,8 @@ final class BLEService: NSObject {
 
     // 1. Consolidated BLE link tracking for both central and peripheral roles.
     var linkStateStore = BLELinkStateStore()
+    let proximityStore = BLEProximityStore()
+    private var lastProximityReadAt = Date.distantPast // bleQueue-owned
 
     // The engine-owned identity domain: per-link Noise authentication +
     // rebind containment (courier handover needs the stronger fact that a
@@ -898,7 +900,13 @@ final class BLEService: NSObject {
     weak var peerEventsDelegate: TransportPeerEventsDelegate?
 
     func currentPeerSnapshots() -> [TransportPeerSnapshot] {
-        peerRegistry.transportSnapshots(selfNickname: myNickname)
+        peerRegistry.transportSnapshots(selfNickname: myNickname).map { snapshot in
+            var snapshot = snapshot
+            if snapshot.isConnected {
+                snapshot.distanceMeters = proximityStore.distanceMeters(for: snapshot.peerID)
+            }
+            return snapshot
+        }
     }
     
     // MARK: Identity
@@ -1079,6 +1087,7 @@ final class BLEService: NSObject {
             // Identity domain is engine-owned: bindings and link proofs
             // clear here, physical link state clears on bleQueue below.
             linkBindings.removeAll()
+            proximityStore.reset()
             linkAuth.removeAll()
             return (transfers: entries, pingTimeouts: pingTimeouts)
         }
@@ -2982,6 +2991,7 @@ extension BLEService: BLERadioControllerDelegate {
     /// (proof, epoch, binding repair) rides a separate engine hop —
     /// `retirePeripheralLinkIdentity`. bleQueue-confined.
     func discardPeripheralLinkPhysical(_ peripheralID: String) {
+        proximityStore.remove(peripheralID)
         pendingPeripheralWrites.discardAll(for: peripheralID)
         linkStateStore.removePeripheral(peripheralID)
     }
@@ -3014,6 +3024,7 @@ extension BLEService: BLERadioControllerDelegate {
     func bindPeripheralLink(_ peripheralUUID: String, to peerID: PeerID) {
         guard readLinkState({ $0.state(forPeripheralID: peripheralUUID) }) != nil else { return }
         linkBindings.bindPeripheral(peripheralUUID, to: peerID)
+        proximityStore.bind(peripheralUUID, to: peerID)
     }
 
     /// Whether the peer holds a live direct link in either role: bindings
@@ -5787,6 +5798,7 @@ extension BLEService {
             }
 
         case let .allPeripheralLinksEnded(peripheralIDs, retireProofsAndNotify):
+            proximityStore.reset()
             guard retireProofsAndNotify else {
                 _ = linkBindings.clearPeripherals()
                 return
@@ -7000,16 +7012,29 @@ extension BLEService {
     
     // NEW: Publish peer snapshots to subscribers and notify Transport delegates
     private func publishFullPeerData() {
-        let transportPeers = peerRegistry.transportSnapshots(selfNickname: myNickname)
+        let transportPeers = currentPeerSnapshots()
         notifyUI { [weak self] in
             self?.peerEventsDelegate?.didUpdatePeerSnapshots(transportPeers)
         }
     }
     
     // MARK: Consolidated Maintenance
+
+    private func refreshProximityMeasurements() {
+        #if os(iOS)
+        guard isAppActive else { return }
+        #endif
+        let now = Date()
+        guard now.timeIntervalSince(lastProximityReadAt) >= 10 else { return }
+        lastProximityReadAt = now
+        for link in linkStateStore.peripheralStates where link.isConnected {
+            link.peripheral.readRSSI()
+        }
+    }
     
     private func performMaintenance() {
         guard !isPanicSuspended else { return }
+        refreshProximityMeasurements()
         maintenanceCounter += 1
         lastMaintenanceAt = Date()
 

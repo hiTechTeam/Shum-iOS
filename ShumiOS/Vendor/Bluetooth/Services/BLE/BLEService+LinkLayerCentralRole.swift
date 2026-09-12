@@ -137,6 +137,9 @@ extension BLEService: CBCentralManagerDelegate {
     
     
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
+        if !isPanicSuspended {
+            proximityStore.record(RSSI.intValue, peripheralID: peripheral.identifier.uuidString)
+        }
         radio.handleDiscovery(peripheral, advertisementData: advertisementData, rssi: RSSI)
     }
 
@@ -165,6 +168,7 @@ extension BLEService: CBCentralManagerDelegate {
         
         // Discover services
         peripheral.discoverServices([BLEService.serviceUUID])
+        peripheral.readRSSI()
     }
     
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
@@ -232,6 +236,12 @@ extension BLEService: CBCentralManagerDelegate {
 // MARK: - CBPeripheralDelegate
 
 extension BLEService: CBPeripheralDelegate {
+    func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
+        guard error == nil, !isPanicSuspended,
+              linkStateStore.state(forPeripheralID: peripheral.identifier.uuidString)?.isConnected == true else { return }
+        proximityStore.record(RSSI.intValue, peripheralID: peripheral.identifier.uuidString)
+    }
+
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard !isPanicSuspended else { return }
         if let error = error {

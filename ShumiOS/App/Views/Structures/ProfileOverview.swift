@@ -100,7 +100,6 @@ struct ProfileOverviewView: View {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button { showQR = true } label: { Image(systemName: "qrcode") }
                     .accessibilityLabel("Мой QR-код")
-                profileMenu
 
                 NavigationLink {
                     ProfileDataView(
@@ -266,36 +265,6 @@ struct ProfileOverviewView: View {
         .clipShape(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
         )
-    }
-
-    private var profileMenu: some View {
-        Menu {
-            Button {
-                showInfoSheet = true
-            } label: {
-                Label(Inc.Common.Shum.localized, systemImage: "info.circle")
-                    .foregroundStyle(.primary)
-            }
-            .tint(.primary)
-
-            Button(role: .destructive) {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                showDeleteConfirmation = true
-            } label: {
-                Label(
-                    NSLocalizedString("local.delete.action", comment: ""),
-                    systemImage: "trash"
-                )
-                .foregroundStyle(.red)
-            }
-            .tint(.red)
-            .disabled(isWorking)
-        } label: {
-            Image(systemName: "ellipsis")
-                .foregroundStyle(.primary)
-        }
-        .tint(.primary)
-        .accessibilityLabel(Inc.Profile.moreActions.localized)
     }
 
     private func normalized(_ value: String?) -> String? {

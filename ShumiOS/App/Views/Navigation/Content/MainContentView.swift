@@ -5,17 +5,10 @@ struct MainContentView: View {
     @ObservedObject var chat: SpotchatRuntime
     @ObservedObject var profilePhotoViewModel: ProfilePhotoViewModel
     @State private var selectedTab = 1
-    @State private var peoplePath: [SpotchatPeer] = []
     @State private var chatsPath: [SpotchatUIRoute] = []
     @State private var showContacts = false
     var body: some View {
         TabView(selection: $selectedTab) {
-            NavigationStack(path: $peoplePath) {
-                ShumPeopleScreen(runtime: chat) { peoplePath.append($0) }
-                    .navigationDestination(for: SpotchatPeer.self) { peer in
-                        SpotchatConversationView(runtime: chat, peer: peer).toolbar(.hidden, for: .tabBar)
-                    }
-            }.tabItem { Label("Люди", image: "PixelPeople") }.tag(0)
             NavigationStack(path: $chatsPath) {
                 SpotchatChatsUI(runtime: chat) { route in
                     if case .newChat = route { showContacts = true }
@@ -32,7 +25,7 @@ struct MainContentView: View {
                     authCodeViewModel: coordinator.authCodeViewModel,
                     photoViewModel: profilePhotoViewModel
                 )
-                    .navigationTitle("Профиль").navigationBarTitleDisplayMode(.inline)
+                    .navigationTitle("").navigationBarTitleDisplayMode(.inline)
             }.tabItem { Label("Профиль", image: "PixelProfile") }.tag(2)
         }
         .tint(.accentColor)
@@ -63,7 +56,7 @@ struct MainContentView: View {
         #if DEBUG && targetEnvironment(simulator)
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments
-            if arguments.contains("-ShumPreviewPeople") { selectedTab = 0 }
+            if arguments.contains("-ShumPreviewPeople") { chatsPath = [.nearby] }
             else if arguments.contains("-ShumPreviewProfile") { selectedTab = 2 }
             else if arguments.contains("-ShumPreviewChat"), let peer = chat.chatPeers.first {
                 chatsPath = [.conversation(peer)]

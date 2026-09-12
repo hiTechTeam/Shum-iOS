@@ -49,7 +49,8 @@ struct ShumPeopleScreen: View {
                 peopleList
             }
         }
-        .navigationTitle("Люди")
+        .navigationTitle("Люди рядом")
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedPeer) { peer in
             ShumPeerCard(runtime: runtime, peer: peer) {
                 selectedPeer = nil
@@ -85,7 +86,7 @@ struct ShumPeopleScreen: View {
 
     private var peopleList: some View {
         List {
-            Text("Здесь появляются пользователи Shum поблизости. Потяните строку вправо, чтобы сохранить профиль, или удерживайте её для быстрых действий.")
+            Text("Здесь появляются пользователи Shum поблизости.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)
@@ -223,30 +224,19 @@ private struct ShumPeopleRow: View {
                 cardAction()
             } label: {
                 HStack(spacing: 12) {
-                    SpotchatAvatar(
-                        name: runtime.displayName(peer),
-                        size: 52,
-                        nearby: true,
-                        imageData: runtime.profile(for: peer.id)?.avatar
-                    )
+                    ShumProfileAvatar(size: 52, imageData: runtime.profile(for: peer.id)?.avatar)
                     .shumSavedProfileBadge(isSaved: isSaved)
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(runtime.displayName(peer))
-                            .font(.body.weight(.semibold))
+                            .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Text(profileInformation)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
 
                     Spacer(minLength: 8)
 
-                    Text("рядом")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
+                    ShumDistanceLabel(runtime: runtime, peer: peer)
                 }
                 .frame(maxWidth: .infinity, minHeight: 52)
                 .contentShape(Rectangle())
@@ -271,10 +261,6 @@ private struct ShumPeopleRow: View {
         .padding(.vertical, 10)
     }
 
-    private var profileInformation: String {
-        let bio = runtime.profile(for: peer.id)?.bio.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return bio.isEmpty ? "Нет информации" : bio
-    }
 }
 
 private extension View {
@@ -297,6 +283,48 @@ private extension View {
                     .offset(x: 2, y: 2)
             }
         }
+    }
+}
+
+private struct ShumProfileAvatar: View {
+    let size: CGFloat
+    let imageData: Data?
+
+    var body: some View {
+        Group {
+            if let imageData, let image = UIImage(data: imageData) {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(.gray)
+            }
+        }
+        .frame(width: size, height: size)
+        .background(Color(uiColor: .secondarySystemBackground), in: Circle())
+        .clipShape(Circle())
+    }
+}
+
+private struct ShumDistanceLabel: View {
+    @ObservedObject var runtime: SpotchatRuntime
+    let peer: SpotchatPeer
+
+    var body: some View {
+        Group {
+            if let meters = runtime.distanceMeters(for: peer.id) {
+                Text("\(meters) м")
+                    .accessibilityLabel("Примерное расстояние: \(meters) метров")
+            } else {
+                Text(runtime.isNearby(peer.id) ? "Рядом" : "Не рядом")
+            }
+        }
+        .font(.system(size: 14))
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+        .layoutPriority(1)
     }
 }
 
@@ -329,80 +357,100 @@ struct ShumPeerCard: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let contentWidth = min(360, max(0, geometry.size.width - 32))
+
             ZStack(alignment: .top) {
                 VStack(spacing: 8) {
                     Spacer(minLength: 0)
 
-                    let photoSize = max(118, min(190, min(geometry.size.width - 72, geometry.size.height * 0.43)))
-                    Button { showPhoto = avatar != nil } label: {
-                        SpotchatAvatar(
-                            name: runtime.displayName(peer),
-                            size: photoSize,
-                            nearby: lastMetAt == nil && runtime.isNearby(peer.id),
-                            imageData: avatar
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Посмотреть фото")
+                    GeometryReader { photoGeometry in
+                        let availableSize = max(0, min(photoGeometry.size.width, photoGeometry.size.height) - 24)
+                        let photoSize = availableSize * 0.9 * 1.04
 
-                    VStack(spacing: 0) {
+                        ShumProfileAvatar(size: photoSize, imageData: avatar)
+                            .contentShape(Circle())
+                            .onTapGesture(perform: openPhoto)
+                            .accessibilityLabel("Посмотреть фото")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                            .offset(y: -10)
+                    }
+
+                    VStack(spacing: 16) {
                         Text(runtime.displayName(peer))
                             .font(.title.bold())
                             .multilineTextAlignment(.center)
                             .lineLimit(2)
-
-                        Text(profileInformation)
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(3)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 360, minHeight: 48)
+                            .frame(width: contentWidth)
+                            .offset(y: -10)
 
                         RegistrationPrimaryButton(title: "Написать", action: write)
-                            .frame(maxWidth: 360)
+                            .frame(width: contentWidth)
                     }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
+                    .shumGeometryGroup()
+                    .compositingGroup()
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 48)
-                .padding(.bottom, 10)
+                .padding(.top, 60)
+                .offset(y: -10)
+                .ignoresSafeArea(.keyboard, edges: .bottom)
 
-                HStack {
-                    if let lastMetAt {
-                        Text("Виделись \(lastMetAt.shumRelativeDescription)")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(runtime.isNearby(peer.id) ? "Рядом" : "Не рядом")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                    }
+                ZStack(alignment: .top) {
+                    presenceInfo
+                        .frame(width: contentWidth, height: 44, alignment: .leading)
 
-                    Spacer()
-
-                    if let card {
-                        Button { toggleSaved(card) } label: {
-                            Image(systemName: isSaved ? "heart.fill" : "heart")
-                                .font(.system(size: 19, weight: .semibold))
-                                .foregroundStyle(.primary)
-                                .frame(width: 56, height: 44)
-                                .contentShape(Capsule())
+                    HStack {
+                        Spacer()
+                        if let card {
+                            Button { toggleSaved(card) } label: {
+                                Image(systemName: isSaved ? "heart.fill" : "heart")
+                                    .font(.system(size: 19, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                                    .frame(width: 56, height: 44)
+                                    .contentShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(isSaved ? "Убрать из сохранённых" : "Сохранить")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(isSaved ? "Убрать из сохранённых" : "Сохранить")
                     }
+                    .padding(.horizontal, 8)
                 }
-                .padding(.horizontal, 20)
                 .padding(.top, 8)
             }
         }
         .fullScreenCover(isPresented: $showPhoto) {
-            if let avatar { SpotchatPhotoViewer(data: avatar) }
+            if let avatar, let image = UIImage(data: avatar) {
+                FullScreenPhotoView(isPresented: $showPhoto) {
+                    Image(uiImage: image).resizable().scaledToFit()
+                }
+            }
         }
     }
 
-    private var profileInformation: String {
-        let bio = runtime.profile(for: peer.id)?.bio.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return bio.isEmpty ? "Нет информации" : bio
+    private var presenceInfo: some View {
+        Group {
+            if let lastMetAt, !runtime.isNearby(peer.id) {
+                Text("Виделись \(lastMetAt.shumRelativeDescription)")
+            } else {
+                HStack(spacing: 8) {
+                    Text(runtime.isNearby(peer.id) ? "Рядом" : "Не рядом")
+                    if let meters = runtime.distanceMeters(for: peer.id) {
+                        Text("\(meters) м")
+                            .accessibilityLabel("Примерное расстояние: \(meters) метров")
+                    }
+                }
+            }
+        }
+        .font(.system(size: 13))
+        .foregroundStyle(.gray)
+        .lineLimit(1)
+    }
+
+    private func openPhoto() {
+        guard avatar != nil else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { showPhoto = true }
     }
 
     private func toggleSaved(_ card: SpotchatContactCard) {
@@ -514,21 +562,17 @@ private struct ShumPersonContextPreview: View {
     let isSaved: Bool
     let lastMetAt: Date?
 
-    private var previewWidth: CGFloat { min(UIScreen.main.bounds.width - 32, 420) }
+    private var sourceWidth: CGFloat { UIScreen.main.bounds.width }
+    private var previewWidth: CGFloat { min(sourceWidth, max(320, sourceWidth - 32)) }
+    private var previewScale: CGFloat { sourceWidth > 0 ? previewWidth / sourceWidth : 1 }
 
     var body: some View {
         HStack(spacing: 12) {
-            SpotchatAvatar(
-                name: runtime.displayName(peer),
-                size: 52,
-                nearby: lastMetAt == nil && runtime.isNearby(peer.id),
-                imageData: runtime.profile(for: peer.id)?.avatar
-            )
+            ShumProfileAvatar(size: 52, imageData: runtime.profile(for: peer.id)?.avatar)
             .shumSavedProfileBadge(isSaved: isSaved)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(runtime.displayName(peer)).font(.body.weight(.semibold)).lineLimit(1)
-                Text(profileInformation).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                Text(runtime.displayName(peer)).font(.system(size: 15, weight: .medium)).lineLimit(1)
             }
 
             Spacer(minLength: 8)
@@ -538,6 +582,8 @@ private struct ShumPersonContextPreview: View {
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+            } else {
+                ShumDistanceLabel(runtime: runtime, peer: peer)
             }
 
             Image(systemName: "chevron.right")
@@ -546,17 +592,15 @@ private struct ShumPersonContextPreview: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .frame(width: previewWidth, height: 72)
+        .frame(width: sourceWidth, height: 72)
         .background(
             Color(uiColor: .tertiarySystemBackground),
             in: RoundedRectangle(cornerRadius: 26, style: .continuous)
         )
+        .scaleEffect(previewScale)
+        .frame(width: previewWidth, height: 72 * previewScale)
     }
 
-    private var profileInformation: String {
-        let bio = runtime.profile(for: peer.id)?.bio.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return bio.isEmpty ? "Нет информации" : bio
-    }
 }
 
 extension Date {
@@ -714,7 +758,7 @@ struct ShumEncounterHistoryView: View {
                 )
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color(uiColor: .systemBackground))
-                .listRowSeparator(.visible)
+                .listRowSeparator(.hidden)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
                     Button { toggleSaved(encounter) } label: {
@@ -838,7 +882,7 @@ struct ShumSavedProfilesView: View {
                 )
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color(uiColor: .systemBackground))
-                .listRowSeparator(.visible)
+                .listRowSeparator(.hidden)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button(role: .destructive) { remove(profile) } label: {
@@ -880,22 +924,13 @@ private struct ShumStoredPersonRow: View {
                 cardAction()
             } label: {
                 HStack(spacing: 12) {
-                    SpotchatAvatar(
-                        name: runtime.displayName(peer),
-                        size: 52,
-                        nearby: runtime.isNearby(peer.id),
-                        imageData: runtime.profile(for: peer.id)?.avatar
-                    )
+                    ShumProfileAvatar(size: 52, imageData: runtime.profile(for: peer.id)?.avatar)
                     .shumSavedProfileBadge(isSaved: isSaved)
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(runtime.displayName(peer))
-                            .font(.body.weight(.semibold))
+                            .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Text(profileInformation)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
 
@@ -906,6 +941,8 @@ private struct ShumStoredPersonRow: View {
                             .font(.system(size: 14))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                    } else {
+                        ShumDistanceLabel(runtime: runtime, peer: peer)
                     }
                 }
                 .frame(maxWidth: .infinity, minHeight: 52)
@@ -929,10 +966,6 @@ private struct ShumStoredPersonRow: View {
         .padding(.vertical, 10)
     }
 
-    private var profileInformation: String {
-        let bio = runtime.profile(for: peer.id)?.bio.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return bio.isEmpty ? "Нет информации" : bio
-    }
 }
 
 private extension SpotchatEncounter {

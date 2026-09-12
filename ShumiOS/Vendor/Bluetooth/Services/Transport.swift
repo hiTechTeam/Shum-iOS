@@ -13,6 +13,7 @@ struct TransportPeerSnapshot: Equatable, Hashable {
     let lastSeen: Date
     /// Whether the peer's announce was signature-verified (courier tier gate).
     let isVerified: Bool
+    var distanceMeters: Int?
 
     init(
         peerID: PeerID,
@@ -20,7 +21,8 @@ struct TransportPeerSnapshot: Equatable, Hashable {
         isConnected: Bool,
         noisePublicKey: Data?,
         lastSeen: Date,
-        isVerified: Bool = false
+        isVerified: Bool = false,
+        distanceMeters: Int? = nil
     ) {
         self.peerID = peerID
         self.nickname = nickname
@@ -28,6 +30,7 @@ struct TransportPeerSnapshot: Equatable, Hashable {
         self.noisePublicKey = noisePublicKey
         self.lastSeen = lastSeen
         self.isVerified = isVerified
+        self.distanceMeters = distanceMeters
     }
 }
 
