@@ -112,8 +112,7 @@ private struct QuickActionToggleRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.system(size: 19, weight: .medium))
+            Image(shumSymbol: systemImage).resizable().scaledToFit().frame(width: 19, height: 19)
                 .foregroundStyle(.primary)
                 .frame(width: 26)
 

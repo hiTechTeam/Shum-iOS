@@ -6,6 +6,7 @@ struct ShumPeopleScreen: View {
     @ObservedObject var runtime: SpotchatRuntime
     let select: (SpotchatPeer) -> Void
 
+    @State private var pendingConversation: SpotchatPeer?
     @State private var selectedPeer: SpotchatPeer?
     @State private var pendingBlock: SpotchatContactCard?
     @State private var showsSavedBlockInformation = false
@@ -51,10 +52,14 @@ struct ShumPeopleScreen: View {
         }
         .navigationTitle("Люди рядом")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $selectedPeer) { peer in
+        .sheet(item: $selectedPeer, onDismiss: {
+            guard let peer = pendingConversation else { return }
+            pendingConversation = nil
+            withAnimation { select(peer) }
+        }) { peer in
             ShumPeerCard(runtime: runtime, peer: peer) {
+                pendingConversation = peer
                 selectedPeer = nil
-                select(peer)
             }
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
@@ -122,7 +127,7 @@ struct ShumPeopleScreen: View {
                         Button {
                             toggleSaved(card, peer: peer)
                         } label: {
-                            Label(isSaved ? "Убрать" : "Сохранить", systemImage: isSaved ? "heart.slash" : "heart")
+                            ShumSwipeLabel(title: isSaved ? "Убрать" : "Сохранить", symbol: isSaved ? "heart.slash" : "heart")
                         }
                         .tint(isSaved ? Color(uiColor: .systemGray) : .green)
                     }
@@ -131,13 +136,14 @@ struct ShumPeopleScreen: View {
                     if let card {
                         if isSaved {
                             Button { showsSavedBlockInformation = true } label: {
-                                Label("Сохранён", systemImage: "lock.fill")
+                                ShumSwipeLabel(title: "Сохранён", symbol: "lock.fill")
                             }
                             .tint(Color(uiColor: .systemGray))
                         } else {
                             Button(role: .destructive) { pendingBlock = card } label: {
-                                Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                                ShumSwipeLabel(title: "Заблокировать", symbol: "person.crop.circle.badge.xmark")
                             }
+                            .tint(.red)
                         }
                     }
                 }
@@ -191,8 +197,7 @@ private struct ShumPeopleUnavailable: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.system(size: 42, weight: .light))
+            Image(shumSymbol: systemImage).resizable().scaledToFit().frame(width: 42, height: 42)
                 .foregroundStyle(.secondary)
             Text(title).font(.title2.bold())
             Text(message)
@@ -247,8 +252,7 @@ private struct ShumPeopleRow: View {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 writeAction()
             } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 17, weight: .semibold))
+                Image(shumSymbol: "chevron.right").resizable().scaledToFit().frame(width: 17, height: 17)
                     .foregroundStyle(.primary)
                     .frame(width: 32, height: 44)
                     .contentShape(Rectangle())
@@ -276,8 +280,7 @@ private extension View {
         }
         .overlay(alignment: .bottomTrailing) {
             if isSaved {
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 10, weight: .bold))
+                Image(shumSymbol: "heart.fill").resizable().scaledToFit().frame(width: 10, height: 10)
                     .foregroundStyle(.primary)
                     .frame(width: 18, height: 18)
                     .offset(x: 2, y: 2)
@@ -295,7 +298,7 @@ private struct ShumProfileAvatar: View {
             if let imageData, let image = UIImage(data: imageData) {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
-                Image(systemName: "person.crop.circle.fill")
+                Image(shumSymbol: "person.crop.circle.fill")
                     .resizable()
                     .scaledToFit()
                     .foregroundStyle(.gray)
@@ -403,8 +406,7 @@ struct ShumPeerCard: View {
                         Spacer()
                         if let card {
                             Button { toggleSaved(card) } label: {
-                                Image(systemName: isSaved ? "heart.fill" : "heart")
-                                    .font(.system(size: 19, weight: .semibold))
+                                Image(shumSymbol: isSaved ? "heart.fill" : "heart").resizable().scaledToFit().frame(width: 19, height: 19)
                                     .foregroundStyle(.primary)
                                     .frame(width: 56, height: 44)
                                     .contentShape(Capsule())
@@ -488,14 +490,14 @@ private struct ShumPersonContextMenuModifier: ViewModifier {
     @ViewBuilder
     private var menu: some View {
         Button(action: writeAction) {
-            Label("Написать", systemImage: "paperplane")
+            Label("Написать", shumSymbol: "paperplane")
         }
 
         if let card {
             Button { toggleSaved(card) } label: {
                 Label(
                     isSaved ? "Убрать из сохранённых" : "Сохранить",
-                    systemImage: isSaved ? "heart.slash" : "heart"
+                    shumSymbol: isSaved ? "heart.slash" : "heart"
                 )
             }
         }
@@ -503,7 +505,7 @@ private struct ShumPersonContextMenuModifier: ViewModifier {
         if let deleteAction {
             Divider()
             Button(role: .destructive, action: deleteAction) {
-                Label("Удалить", systemImage: "trash")
+                Label("Удалить", shumSymbol: "trash")
             }
         }
 
@@ -511,11 +513,11 @@ private struct ShumPersonContextMenuModifier: ViewModifier {
 
         if isSaved {
             Button(action: blockAction) {
-                Label("Сначала удалите из сохранённых", systemImage: "lock.fill")
+                Label("Сначала удалите из сохранённых", shumSymbol: "lock.fill")
             }
         } else {
             Button(role: .destructive, action: blockAction) {
-                Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                Label("Заблокировать", shumSymbol: "person.crop.circle.badge.xmark")
             }
         }
     }
@@ -586,8 +588,7 @@ private struct ShumPersonContextPreview: View {
                 ShumDistanceLabel(runtime: runtime, peer: peer)
             }
 
-            Image(systemName: "chevron.right")
-                .font(.system(size: 17, weight: .semibold))
+            Image(shumSymbol: "chevron.right").resizable().scaledToFit().frame(width: 17, height: 17)
                 .frame(width: 32, height: 44)
         }
         .padding(.horizontal, 16)
@@ -616,6 +617,7 @@ struct ShumEncounterHistoryView: View {
     @ObservedObject var runtime: SpotchatRuntime
 
     @State private var selectedEncounter: SpotchatEncounter?
+    @State private var pendingConversation: SpotchatPeer?
     @State private var conversationPeer: SpotchatPeer?
     @State private var pendingDelete: SpotchatEncounter?
     @State private var pendingBlock: SpotchatContactCard?
@@ -645,12 +647,16 @@ struct ShumEncounterHistoryView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showsClearConfirmation = true } label: {
-                    Image(systemName: "trash")
+                    Image(shumSymbol: "trash")
                 }
                 .accessibilityLabel("Очистить историю")
             }
         }
-        .sheet(item: $selectedEncounter) { encounter in
+        .sheet(item: $selectedEncounter, onDismiss: {
+            guard let peer = pendingConversation else { return }
+            pendingConversation = nil
+            withAnimation { conversationPeer = peer }
+        }) { encounter in
             let peer = encounter.peer
             ShumPeerCard(
                 runtime: runtime,
@@ -658,8 +664,8 @@ struct ShumEncounterHistoryView: View {
                 card: encounter.card,
                 lastMetAt: encounter.lastSeen
             ) {
+                pendingConversation = peer
                 selectedEncounter = nil
-                conversationPeer = peer
             }
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
@@ -762,25 +768,26 @@ struct ShumEncounterHistoryView: View {
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
                     Button { toggleSaved(encounter) } label: {
-                        Label(isSaved ? "Убрать" : "Сохранить", systemImage: isSaved ? "heart.slash" : "heart")
+                        ShumSwipeLabel(title: isSaved ? "Убрать" : "Сохранить", symbol: isSaved ? "heart.slash" : "heart")
                     }
                     .tint(isSaved ? Color(uiColor: .systemGray) : .green)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: !isSaved) {
                     Button { pendingDelete = encounter } label: {
-                        Label("Удалить", systemImage: "trash")
+                        ShumSwipeLabel(title: "Удалить", symbol: "trash")
                     }
-                    .tint(Color(uiColor: .systemGray))
+                    .tint(.red)
 
                     if isSaved {
                         Button { showsSavedBlockInformation = true } label: {
-                            Label("Сохранён", systemImage: "lock.fill")
+                            ShumSwipeLabel(title: "Сохранён", symbol: "lock.fill")
                         }
                         .tint(Color(uiColor: .systemGray2))
                     } else {
                         Button(role: .destructive) { pendingBlock = encounter.card } label: {
-                            Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                            ShumSwipeLabel(title: "Заблокировать", symbol: "person.crop.circle.badge.xmark")
                         }
+                        .tint(.red)
                     }
                 }
             }
@@ -806,6 +813,7 @@ struct ShumSavedProfilesView: View {
     @ObservedObject var runtime: SpotchatRuntime
 
     @State private var selectedProfile: SpotchatSavedProfile?
+    @State private var pendingConversation: SpotchatPeer?
     @State private var conversationPeer: SpotchatPeer?
     @State private var showsSavedBlockInformation = false
 
@@ -829,11 +837,15 @@ struct ShumSavedProfilesView: View {
         }
         .navigationTitle("Сохранённые")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $selectedProfile) { profile in
+        .sheet(item: $selectedProfile, onDismiss: {
+            guard let peer = pendingConversation else { return }
+            pendingConversation = nil
+            withAnimation { conversationPeer = peer }
+        }) { profile in
             let peer = profile.peer
             ShumPeerCard(runtime: runtime, peer: peer, card: profile.card) {
+                pendingConversation = peer
                 selectedProfile = nil
-                conversationPeer = peer
             }
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
@@ -886,7 +898,7 @@ struct ShumSavedProfilesView: View {
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button(role: .destructive) { remove(profile) } label: {
-                        Label("Убрать", systemImage: "heart.slash")
+                        ShumSwipeLabel(title: "Убрать", symbol: "heart.slash")
                     }
                     .tint(Color(uiColor: .systemGray))
                 }
@@ -954,8 +966,7 @@ private struct ShumStoredPersonRow: View {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 writeAction()
             } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 17, weight: .semibold))
+                Image(shumSymbol: "chevron.right").resizable().scaledToFit().frame(width: 17, height: 17)
                     .foregroundStyle(.primary)
                     .frame(width: 32, height: 44)
             }

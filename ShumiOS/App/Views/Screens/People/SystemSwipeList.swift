@@ -633,16 +633,16 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
                 Button(role: .destructive) {
                     perform(descriptor, for: item)
                 } label: {
-                    Label(title, systemImage: systemImage)
+                    ShumSwipeLabel(title: title, symbol: systemImage)
                 }
-                .tint(Color(uiColor: color))
+                .tint(.red)
             } else {
                 Button {
                     perform(descriptor, for: item)
                 } label: {
-                    Label(title, systemImage: systemImage)
+                    ShumSwipeLabel(title: title, symbol: systemImage)
                 }
-                .tint(Color(uiColor: color))
+                .tint(systemImage.hasPrefix("trash") ? .red : Color(uiColor: color))
             }
         }
     }
@@ -1128,12 +1128,11 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
                     descriptor.handler()
                     completion(true)
                 }
-                action.image = UIImage(
-                    systemName: presentation?.systemImage
-                        ?? descriptor.systemImage
-                )
-                action.backgroundColor = presentation?.backgroundColor
-                    ?? descriptor.backgroundColor
+                action.image = ShumPixelSymbols.image(named: presentation?.systemImage ?? descriptor.systemImage)?
+                    .withTintColor(.black, renderingMode: .alwaysOriginal)
+                action.backgroundColor = descriptor.style == .destructive || descriptor.systemImage.hasPrefix("trash")
+                    ? .systemRed
+                    : (presentation?.backgroundColor ?? descriptor.backgroundColor)
                 return action
             }
 

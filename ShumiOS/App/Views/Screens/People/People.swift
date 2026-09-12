@@ -18,7 +18,7 @@ struct People: View {
         .tabItem {
             Label(
                 peopleInc,
-                systemImage: coordinator.isScaning
+                shumSymbol: coordinator.isScaning
                     ? IncLogos.shareplay
                     : "shareplay.slash"
             )

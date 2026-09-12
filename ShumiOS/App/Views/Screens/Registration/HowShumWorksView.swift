@@ -27,7 +27,7 @@ struct HowShumWorksView: View {
         scale: CGFloat
     ) -> some View {
         HStack(alignment: .top, spacing: 15 * scale) {
-            Image(systemName: icon)
+            Image(shumSymbol: icon)
                 .font(.system(size: 20 * scale, weight: .medium))
                 .foregroundStyle(accentColor)
                 .frame(width: 42 * scale, height: 42 * scale)

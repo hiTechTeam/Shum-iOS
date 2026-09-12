@@ -91,8 +91,7 @@ private struct ProfileInformationRow: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
 
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
+                Image(shumSymbol: "chevron.right").resizable().scaledToFit().frame(width: 13, height: 13)
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 20)

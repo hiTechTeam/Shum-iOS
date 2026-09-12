@@ -98,10 +98,10 @@ struct SpotchatContactActionsMenu: View {
     private var blocked: Bool { runtime.permanent?.isBlocked(card) == true }
     var body: some View {
         Menu {
-            Button { action = "block" } label: { Label(blocked ? "Разблокировать" : "Заблокировать", systemImage: "hand.raised") }
-            Button(role: .destructive) { action = "chat" } label: { Label("Удалить чат", systemImage: "trash") }
-            Button(role: .destructive) { action = "contact" } label: { Label("Удалить контакт", systemImage: "person.crop.circle.badge.minus") }
-        } label: { Image(systemName: "ellipsis.circle").font(.title3).frame(width: 44, height: 44).contentShape(Circle()) }
+            Button { action = "block" } label: { Label(blocked ? "Разблокировать" : "Заблокировать", shumSymbol: "hand.raised") }
+            Button(role: .destructive) { action = "chat" } label: { Label("Удалить чат", shumSymbol: "trash") }
+            Button(role: .destructive) { action = "contact" } label: { Label("Удалить контакт", shumSymbol: "person.crop.circle.badge.minus") }
+        } label: { Image(shumSymbol: "ellipsis.circle").font(.title3).frame(width: 44, height: 44).contentShape(Circle()) }
         .accessibilityLabel("Действия с контактом")
         .confirmationDialog(title, isPresented: Binding(get: { action != nil }, set: { if !$0 { action = nil } }), titleVisibility: .visible) {
             if let action {

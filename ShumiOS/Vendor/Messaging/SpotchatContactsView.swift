@@ -24,9 +24,9 @@ struct SpotchatContactsView: View {
         NavigationStack {
             List {
                 Section {
-                    Button { showScanner = true } label: { Label("Сканировать код", systemImage: "qrcode.viewfinder") }
-                    Button { showQR = true } label: { Label("Мой QR-код", systemImage: "qrcode") }
-                    Button { showPhoneBook = true } label: { Label("Пригласить", systemImage: "person.badge.plus") }
+                    Button { showScanner = true } label: { Label("Сканировать код", shumSymbol: "qrcode.viewfinder") }
+                    Button { showQR = true } label: { Label("Мой QR-код", shumSymbol: "qrcode") }
+                    Button { showPhoneBook = true } label: { Label("Пригласить", shumSymbol: "person.badge.plus") }
                 }
             }
             .listStyle(.insetGrouped)
@@ -34,7 +34,7 @@ struct SpotchatContactsView: View {
             .navigationTitle("Новый контакт").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                    Button { dismiss() } label: { Image(shumSymbol: "xmark") }
                         .accessibilityLabel("Закрыть")
                         .tint(.primary)
                 }
@@ -82,13 +82,14 @@ struct SpotchatContactRequestsView: View {
                             Text("Хочет добавить вас").font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
+                        Image(shumSymbol: "plus.circle.fill").foregroundStyle(Color.accentColor)
                     }
                     .padding(.vertical, 3)
                 }
                 .buttonStyle(.plain)
                 .swipeActions {
-                    Button("Отклонить", role: .destructive) { runtime.permanent?.dismissRequest(card) }
+                    Button(role: .destructive) { runtime.permanent?.dismissRequest(card) } label: { ShumSwipeLabel(title: "Отклонить", symbol: "trash") }
+                        .tint(.red)
                 }
             }
         }
@@ -133,7 +134,7 @@ struct SpotchatQRView: View {
                         .frame(maxWidth: 300).accessibilityLabel("QR-код контакта Shum")
                     Text("Покажите этот код другому человеку.\nДля добавления интернет не нужен.")
                         .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    ShareLink(item: url) { Label("Пригласить в Shum", systemImage: "square.and.arrow.up") }
+                    ShareLink(item: url) { Label("Пригласить в Shum", shumSymbol: "square.and.arrow.up") }
                 }
             }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(.systemBackground))
@@ -211,7 +212,7 @@ struct SpotchatScanView: View {
                 } label: {
                     Label(
                         torchEnabled ? "Выключить фонарик" : "Включить фонарик",
-                        systemImage: torchEnabled ? "flashlight.on.fill" : "flashlight.off.fill"
+                        shumSymbol: torchEnabled ? "flashlight.on.fill" : "flashlight.off.fill"
                     )
                     .labelStyle(.iconOnly)
                 }
@@ -221,7 +222,7 @@ struct SpotchatScanView: View {
                 .tint(.white)
 
                 PhotosPicker(selection: $photoSelection, matching: .images) {
-                    Label("Выбрать из Фото", systemImage: "photo.on.rectangle")
+                    Label("Выбрать из Фото", shumSymbol: "photo.on.rectangle")
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.bordered)
