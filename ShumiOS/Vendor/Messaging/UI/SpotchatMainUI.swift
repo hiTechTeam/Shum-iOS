@@ -61,10 +61,11 @@ struct SpotchatChatsUI: View {
                                 Button("Удалить", role: .destructive) { deleteChatPeer = peer }
                             }
                         }
-                        .listRowInsets(EdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 18))
+                        .listRowInsets(EdgeInsets(top: 11, leading: 0, bottom: 11, trailing: 0))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.visible)
                         .alignmentGuide(.listRowSeparatorLeading) { _ in 72 }
+                        .alignmentGuide(.listRowSeparatorTrailing) { dimensions in dimensions.width }
                     }
                 }
             }
