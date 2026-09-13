@@ -63,10 +63,6 @@ struct AppCoordinatorView: View {
                 isActive: scenePhase == .active
             )
 
-            if coordinator.isRegistered, scenePhase == .active {
-                _ = await appLock.unlock()
-            }
-
             guard coordinator.showSplash else { return }
 
             try? await Task.sleep(
@@ -152,13 +148,19 @@ struct AppCoordinatorView: View {
 private struct ShumLockedView: View {
     @ObservedObject var appLock: ShumAppLock
     @State private var showingPasscode: Bool
+    @State private var isWaitingForAutomaticBiometrics: Bool
     @State private var code = ""
     @State private var isCheckingCode = false
 
     init(appLock: ShumAppLock) {
         self.appLock = appLock
+        let usesAutomaticBiometrics = appLock.preferredMethod == .biometrics
+            && appLock.isBiometricsEnabled
         _showingPasscode = State(
             initialValue: appLock.preferredMethod == .passcode
+        )
+        _isWaitingForAutomaticBiometrics = State(
+            initialValue: usesAutomaticBiometrics
         )
     }
 
@@ -166,7 +168,9 @@ private struct ShumLockedView: View {
         ZStack {
             Color("ls-Background").ignoresSafeArea()
 
-            if showingPasscode, appLock.hasPasscode {
+            if isWaitingForAutomaticBiometrics {
+                ShumPrivacyCover()
+            } else if showingPasscode, appLock.hasPasscode {
                 passcodeContent
             } else {
                 biometricContent
@@ -179,7 +183,14 @@ private struct ShumLockedView: View {
                 return
             }
 
-            _ = await appLock.unlock()
+            let unlocked = await appLock.unlock()
+            guard !unlocked else { return }
+
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isWaitingForAutomaticBiometrics = false
+            }
         }
     }
 
