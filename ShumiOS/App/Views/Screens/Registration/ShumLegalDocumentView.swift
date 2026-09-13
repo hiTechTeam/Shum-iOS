@@ -75,10 +75,11 @@ struct ShumLegalDocumentView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text(content.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                ViewThatFits(in: .horizontal) {
+                    legalTitle(size: 15)
+                    legalTitle(size: 13)
+                    legalTitle(size: 11)
+                }
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button(Inc.Common.close.localized) {
@@ -86,6 +87,13 @@ struct ShumLegalDocumentView: View {
                 }
             }
         }
+    }
+
+    private func legalTitle(size: CGFloat) -> some View {
+        Text(content.title)
+            .font(.system(size: size, weight: .semibold))
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
     }
 }
 
