@@ -70,7 +70,18 @@ enum ShumChatDirectory {
                 $0.isInvitation = true
             }
         }
-        for peer in peers { include(peer) { $0.isNearby = isNearby(peer.id) } }
+        for peer in peers {
+            if let permanent {
+                // Transport peers use a short, connection-level identifier.
+                // After a disconnect that identifier remains in the radio cache
+                // briefly, while its verified card is removed immediately. Do
+                // not turn that stale session into a second directory person.
+                guard let card = permanent.card(for: peer.id) else { continue }
+                include(peer, card: card) { $0.isNearby = isNearby(peer.id) }
+            } else {
+                include(peer) { $0.isNearby = isNearby(peer.id) }
+            }
+        }
         for encounter in permanent?.encounterHistory ?? [] {
             include(SpotchatPeer(id: encounter.card.peerID, name: encounter.card.name, lastConnected: encounter.lastSeen), card: encounter.card) {
                 $0.lastSeen = encounter.lastSeen

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct AppCoordinatorView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -56,6 +57,13 @@ struct AppCoordinatorView: View {
         .alert("Контакт Shum", isPresented: Binding(get: { coordinator.invitationError != nil }, set: { if !$0 { coordinator.invitationError = nil } })) {
             Button("Понятно") { coordinator.invitationError = nil }
         } message: { Text(coordinator.invitationError ?? "") }
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIApplication.userDidTakeScreenshotNotification
+        )) { _ in
+            if coordinator.isRegistered {
+                appLock.lock()
+            }
+        }
         .environmentObject(coordinator)
         .task {
             coordinator.updateApplicationState(

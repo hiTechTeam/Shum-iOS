@@ -36,6 +36,34 @@ struct ShumChatDirectoryTests {
         #expect(owner.store.state.conversations.count == 1)
     }
 
+    @Test func staleConnectionIdentityDoesNotDuplicateKnownPerson() throws {
+        let clock = Clock(), owner = try Node("Owner", clock: clock), person = try Node("Person", clock: clock)
+        try owner.service.add(person.card, source: "test")
+        let connectionPeer = SpotchatPeer(
+            id: PeerID(publicKey: person.card.noiseKey),
+            name: person.card.name,
+            lastConnected: Date()
+        )
+
+        let result = rows(owner, chats: [peer(person)], nearby: [connectionPeer])
+
+        #expect(result.count == 1)
+        #expect(result.first?.id == person.card.peerID)
+        #expect(result.first?.hasChat == true)
+        #expect(result.first?.isNearby == false)
+    }
+
+    @Test func unverifiedConnectionIdentityIsNotShownAsAPerson() throws {
+        let clock = Clock(), owner = try Node("Owner", clock: clock)
+        let connectionPeer = SpotchatPeer(
+            id: PeerID(str: "temporary-session"),
+            name: "Ожидание проверки",
+            lastConnected: Date()
+        )
+
+        #expect(rows(owner, nearby: [connectionPeer]).isEmpty)
+    }
+
     @Test func pendingInvitationIsUnreadUntilAcceptedOrDeclined() throws {
         let clock = Clock(), owner = try Node("Owner", clock: clock), person = try Node("Person", clock: clock)
         try owner.store.transaction { $0.requests = [person.card] }
