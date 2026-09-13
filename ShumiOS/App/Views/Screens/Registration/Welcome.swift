@@ -2,9 +2,10 @@ import SwiftUI
 
 struct Welcome: View {
     @EnvironmentObject private var coordinator: AppCoordinator
+    @State private var legalDocument: ShumLegalDocument?
 
-    private var privacyPolicyURL: URL { URL(string: Links.privacyPolicy)! }
-    private var termsOfServiceURL: URL { URL(string: Links.termsOfService)! }
+    private let privacyPolicyURL = URL(string: "shum-legal://privacy")!
+    private let termsOfServiceURL = URL(string: "shum-legal://terms")!
 
     private var legalText: AttributedString {
         let privacyTitle = Inc.Onboarding.privacyPolicy.localized
@@ -45,7 +46,7 @@ struct Welcome: View {
                 NavigationLink {
                     HowShumWorksView()
                 } label: {
-                    Text("Создать профиль")
+                    Text(Inc.Onboarding.start.localized)
                         .font(.system(size: 17, weight: .regular))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
@@ -56,6 +57,24 @@ struct Welcome: View {
                 Text("Профиль создаётся на этом устройстве. Номер телефона и внешний аккаунт не нужны.")
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.bottom, 18)
             }.padding(.horizontal, 28).background(Color("ls-Background").ignoresSafeArea())
-        }.tint(.accentColor)
+        }
+        .tint(.accentColor)
+        .environment(\.openURL, OpenURLAction { url in
+            switch (url.host ?? url.path).lowercased() {
+            case "privacy":
+                legalDocument = .privacy
+                return .handled
+            case "terms":
+                legalDocument = .terms
+                return .handled
+            default:
+                return .discarded
+            }
+        })
+        .sheet(item: $legalDocument) { document in
+            NavigationStack {
+                ShumLegalDocumentView(document: document)
+            }
+        }
     }
 }
