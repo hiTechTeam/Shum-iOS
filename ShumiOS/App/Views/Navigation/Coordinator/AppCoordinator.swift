@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     @Published var isRegistered = false
+    @Published private(set) var needsSecuritySetup = false
     @Published var authenticationFlowID = UUID()
     @Published var hasCompletedInitialSessionRefresh = true
     @Published var nearbyNotificationNavigationRequest = UUID()
@@ -38,12 +39,21 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         #else
         let previewsOnboarding = false
         #endif
-        isRegistered = store.ownManifest != nil && !previewsOnboarding
+        let hasProfile = store.ownManifest != nil
+        let registrationCompleted = UserDefaults.standard.bool(
+            forKey: Keys.isReg.rawValue
+        )
+        isRegistered = hasProfile && registrationCompleted && !previewsOnboarding
+        needsSecuritySetup = hasProfile && !registrationCompleted && !previewsOnboarding
         isScaning = isRegistered && UserDefaults.standard.bool(forKey: Keys.isScaning.rawValue)
         if deletion.hasDeletion {
             deletingProfile = true
             finishDeletion()
-        } else if isRegistered { prepareMessaging() }
+        } else if isRegistered {
+            prepareMessaging()
+        } else if needsSecuritySetup {
+            _ = prepareRegistrationSecurity()
+        }
         photoObserver = NotificationCenter.default.addObserver(forName: .localCardChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 self?.authCodeViewModel.restoreLocalProfile()
@@ -108,13 +118,27 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
     func completedRegistration() {
         guard LocalCardStore.shared.ownManifest != nil else { return }
-        authCodeViewModel.restoreLocalProfile(); isRegistered = true
+        authCodeViewModel.restoreLocalProfile()
+        needsSecuritySetup = false
+        isRegistered = true
         UserDefaults.standard.set(true, forKey: Keys.isReg.rawValue)
         isScaning = true
         UserDefaults.standard.set(true, forKey: Keys.isScaning.rawValue)
         if chat == nil { prepareMessaging() }
         chat?.setBluetoothEnabled(true)
         updateApplicationState(isActive: true)
+    }
+
+    @discardableResult
+    func prepareRestoredProfileForSecurity() -> Bool {
+        guard !isRegistered, !deletingProfile else { return false }
+        LocalCardStore.shared.reloadFromDisk()
+        guard LocalCardStore.shared.ownManifest != nil else { return false }
+        UserDefaults.standard.set(false, forKey: Keys.isReg.rawValue)
+        authCodeViewModel.restoreLocalProfile()
+        profilePhotoViewModel.loadPhotoIfNeeded()
+        needsSecuritySetup = true
+        return prepareRegistrationSecurity()
     }
     func setScanning(_ enabled: Bool) {
         isScaning = enabled && isRegistered
@@ -142,7 +166,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             SavedPeopleStateStore.shared.removeAll(); QuickActionsSettingsStore.shared.reset()
             ShumAppLock.shared.reset()
             try deletion.allowNewProfile()
-            isRegistered = false; isScaning = false; authenticationFlowID = UUID()
+            isRegistered = false; needsSecuritySetup = false
+            isScaning = false; authenticationFlowID = UUID()
             deletionError = nil; deletingProfile = false
         } catch { deletionError = "Удаление не завершено. Разблокируйте iPhone и повторите. Обмен сообщениями остановлен." }
     }

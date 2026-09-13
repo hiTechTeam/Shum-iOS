@@ -6,6 +6,12 @@ struct ShumSecuritySettingsView: View {
 
     @State private var isWorking = false
     @State private var showChangeCode = false
+    @State private var lastBackupDate: Date? = {
+        let value = UserDefaults.standard.double(
+            forKey: ShumBackupService.lastBackupDateKey
+        )
+        return value > 0 ? Date(timeIntervalSince1970: value) : nil
+    }()
 
     var body: some View {
         List {
@@ -62,16 +68,28 @@ struct ShumSecuritySettingsView: View {
             }
 
             Section {
-                VStack(alignment: .leading, spacing: 7) {
-                    Label("Резервная копия не создана", systemImage: "key.horizontal")
-                        .foregroundStyle(.primary)
-                    Text("Ключи существуют только на этом устройстве. При его потере прежний профиль и переписку восстановить нельзя.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                NavigationLink {
+                    ShumBackupCreateView { date in
+                        lastBackupDate = date
+                    }
+                } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Создать резервную копию")
+                                .foregroundStyle(.primary)
+                            Text(backupStatus)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "externaldrive.badge.plus")
+                            .foregroundStyle(.primary)
+                    }
                 }
-                .padding(.vertical, 4)
             } header: {
                 Text("Восстановление")
+            } footer: {
+                Text("Копия хранится только там, куда вы её сохраните. Для восстановления понадобятся файл и его пароль.")
             }
 
             if let message = appLock.errorMessage {
@@ -87,6 +105,17 @@ struct ShumSecuritySettingsView: View {
         .navigationDestination(isPresented: $showChangeCode) {
             ShumChangePasscodeView()
         }
+        .onAppear {
+            let value = UserDefaults.standard.double(
+                forKey: ShumBackupService.lastBackupDateKey
+            )
+            lastBackupDate = value > 0 ? Date(timeIntervalSince1970: value) : nil
+        }
+    }
+
+    private var backupStatus: String {
+        guard let lastBackupDate else { return "Копия ещё не создана" }
+        return "Последняя: \(lastBackupDate.formatted(date: .abbreviated, time: .shortened))"
     }
 
     private func securityMethodRow(

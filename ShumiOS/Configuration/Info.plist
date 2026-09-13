@@ -16,6 +16,28 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Резервная копия Shum</string>
+			<key>UTTypeIdentifier</key>
+			<string>hiTeam.ShumiOS.backup</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>shumbackup</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/vnd.shum.backup</string>
+			</dict>
+		</dict>
+	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Bluetooth нужен для поиска людей рядом и зашифрованной переписки без интернета.</string>
 	<key>NSCameraUsageDescription</key>

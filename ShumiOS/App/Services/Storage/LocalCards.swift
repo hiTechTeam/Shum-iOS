@@ -116,6 +116,16 @@ final class LocalCardStore: @unchecked Sendable {
         self.directory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LocalCards-v1", isDirectory: true)
         self.defaults = defaults
         self.secureStore = secureStore
+        loadFromDisk()
+    }
+
+    func reloadFromDisk() {
+        lock.withLock { loadFromDisk() }
+    }
+
+    private func loadFromDisk() {
+        own = nil
+        peers.removeAll()
         if let data = try? Data(contentsOf: self.directory.appendingPathComponent("own.json")),
            let value = try? JSONDecoder().decode(LocalCardManifest.self, from: data),
            (try? value.validate()) != nil { own = value }
