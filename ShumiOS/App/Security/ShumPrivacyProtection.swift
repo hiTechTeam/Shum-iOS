@@ -36,7 +36,6 @@ struct ShumCaptureProtectedContainer<Content: View>: View {
     var body: some View {
         ZStack {
             ShumPrivacyCover()
-                .blur(radius: 18, opaque: true)
 
             ZStack {
                 Color("ls-Background").ignoresSafeArea()
