@@ -172,6 +172,15 @@ private struct ShumLockedView: View {
                 biometricContent
             }
         }
+        .task {
+            guard appLock.preferredMethod == .biometrics,
+                  appLock.isBiometricsEnabled,
+                  !showingPasscode else {
+                return
+            }
+
+            _ = await appLock.unlock()
+        }
     }
 
     private var passcodeContent: some View {
