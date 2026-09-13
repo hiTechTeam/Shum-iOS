@@ -52,7 +52,7 @@ struct ShumContactsUI: View {
             if contacts.isEmpty {
                 VStack(spacing: 0) {
                     ShumPixelEmptyIcon(kind: .contacts)
-                        .foregroundStyle(Color(uiColor: .systemGreen))
+                        .foregroundStyle(.white)
                         .frame(width: 88, height: 68)
                         .accessibilityHidden(true)
 

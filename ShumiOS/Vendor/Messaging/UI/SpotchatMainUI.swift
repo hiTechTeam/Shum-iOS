@@ -100,7 +100,7 @@ private struct ShumChatEmptyState: View {
     var body: some View {
         VStack(spacing: 0) {
             ShumPixelEmptyIcon(kind: iconKind)
-                .foregroundStyle(accent)
+                .foregroundStyle(.white)
                 .frame(width: 88, height: 68)
                 .accessibilityHidden(true)
 
