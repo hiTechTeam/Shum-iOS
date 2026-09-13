@@ -32,6 +32,7 @@ final class ShumAppLock: ObservableObject {
     private let failedAttemptsKey = "shum.security.appLock.failedAttempts"
     private let lockoutUntilKey = "shum.security.appLock.lockoutUntil"
     private var latestBiometryDomainState: Data?
+    private var automaticUnlockAttempted = false
 
     private init(defaults: UserDefaults = .standard) {
         let biometricsEnabled = defaults.bool(forKey: biometricsEnabledKey)
@@ -196,6 +197,9 @@ final class ShumAppLock: ObservableObject {
 
     func lock() {
         guard isBiometricsEnabled || hasPasscode else { return }
+        if !isLocked {
+            automaticUnlockAttempted = false
+        }
         isLocked = true
     }
 
@@ -209,6 +213,8 @@ final class ShumAppLock: ObservableObject {
         guard preferredMethod == .biometrics, isBiometricsEnabled else {
             return false
         }
+        guard !automaticUnlockAttempted else { return false }
+        automaticUnlockAttempted = true
         return await unlockWithBiometrics()
     }
 
@@ -241,6 +247,7 @@ final class ShumAppLock: ObservableObject {
         preferredMethod = .passcode
         isLocked = false
         isAuthenticating = false
+        automaticUnlockAttempted = false
         errorMessage = nil
     }
 
