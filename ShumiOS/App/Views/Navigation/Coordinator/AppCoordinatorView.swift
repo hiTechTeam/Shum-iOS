@@ -6,6 +6,7 @@ struct AppCoordinatorView: View {
     @StateObject private var appLock = ShumAppLock.shared
 
     @State private var hasReachedMinimumSplashDuration = false
+    @State private var showsAppSwitcherPrivacyCover = false
 
     private let minimumSplashDuration: UInt64 = 600_000_000
     private let remainingFallbackDuration: UInt64 = 1_400_000_000
@@ -44,7 +45,7 @@ struct AppCoordinatorView: View {
             ShumCapturePrivacyOverlay()
                 .zIndex(10)
 
-            if scenePhase != .active {
+            if showsAppSwitcherPrivacyCover {
                 ShumPrivacyCover()
                     .zIndex(11)
             }
@@ -90,17 +91,18 @@ struct AppCoordinatorView: View {
             guard isComplete else { return }
             hideSplashIfReady()
         }
-        .shumOnChange(of: scenePhase) { _, phase in
+        .shumOnChange(of: scenePhase) { previousPhase, phase in
             coordinator.updateApplicationState(isActive: phase == .active)
+
+            updateAppSwitcherPrivacyCover(
+                from: previousPhase,
+                to: phase
+            )
+
             if phase == .active {
                 Task {
-                    if coordinator.isRegistered {
-                        _ = await appLock.unlock()
-                    }
                     await coordinator.refreshSession()
                 }
-            } else if phase == .background {
-                appLock.lock()
             }
         }
     }
@@ -119,6 +121,30 @@ struct AppCoordinatorView: View {
 
         withAnimation(.easeOut(duration: 0.18)) {
             coordinator.showSplash = false
+        }
+    }
+
+    private func updateAppSwitcherPrivacyCover(
+        from previousPhase: ScenePhase,
+        to phase: ScenePhase
+    ) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+
+        withTransaction(transaction) {
+            switch phase {
+            case .background:
+                showsAppSwitcherPrivacyCover = true
+            case .inactive:
+                // Cover the outgoing app before iOS takes its app-switcher
+                // snapshot. On the return path, remove the cover while the
+                // scene is still inactive so it cannot flash on screen.
+                showsAppSwitcherPrivacyCover = previousPhase == .active
+            case .active:
+                showsAppSwitcherPrivacyCover = false
+            @unknown default:
+                showsAppSwitcherPrivacyCover = true
+            }
         }
     }
 }
