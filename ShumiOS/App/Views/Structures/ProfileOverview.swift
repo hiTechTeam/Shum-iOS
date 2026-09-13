@@ -93,28 +93,8 @@ struct ProfileOverviewView: View {
             peopleViewModel.refreshEncounterHistory()
         }
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(action: openPhotoPreview) {
-                    Group {
-                        if let image = photoVM.uiImage {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                        } else {
-                            Image(systemName: "person.crop.circle.fill")
-                                .resizable()
-                                .scaledToFit()
-                                .symbolRenderingMode(.hierarchical)
-                                .padding(2)
-                        }
-                    }
-                    .frame(width: 40, height: 40)
-                    .clipShape(Circle())
-                    .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-                .accessibilityLabel(Inc.Profile.openPhoto.localized)
+            ProfileAvatarToolbarItem {
+                profileAvatarButton
             }
 
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -189,6 +169,31 @@ struct ProfileOverviewView: View {
         }
     }
 
+    private var profileAvatarButton: some View {
+        Button(action: openPhotoPreview) {
+            Group {
+                if let image = photoVM.uiImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .background(Color(uiColor: .secondarySystemBackground))
+                } else {
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .symbolRenderingMode(.hierarchical)
+                        .padding(2)
+                }
+            }
+            .frame(width: 34, height: 34)
+            .clipShape(Circle())
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .accessibilityLabel(Inc.Profile.openPhoto.localized)
+    }
+
     private var settingsCard: some View {
         VStack(spacing: 0) {
             ProfileOverviewRow(title: "Конфиденциальность", systemImage: "lock.shield",
@@ -257,6 +262,35 @@ struct ProfileOverviewView: View {
             } catch {
                 isWorking = false
                 showDeleteError = true
+            }
+        }
+    }
+}
+
+private struct ProfileAvatarToolbarItem<Content: View>: ToolbarContent {
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some ToolbarContent {
+        if #available(iOS 26.0, *) {
+            ToolbarItem(placement: .topBarLeading) {
+                content
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular, in: Circle())
+            }
+            .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarLeading) {
+                content
+                    .frame(width: 40, height: 40)
+                    .background(
+                        Color(uiColor: .secondarySystemBackground),
+                        in: Circle()
+                    )
+                    .contentShape(Circle())
             }
         }
     }

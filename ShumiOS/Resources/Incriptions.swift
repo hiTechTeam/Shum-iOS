@@ -436,8 +436,8 @@ struct IncLogos {
 struct Links {
     
     
-    static let privacyPolicy = "shum://about/privacy"
-    static let termsOfService = "shum://about/terms"
+    static let privacyPolicy = "https://github.com/hiTechTeam/Shum-iOS/blob/main/PRIVACY.md"
+    static let termsOfService = "https://github.com/hiTechTeam/Shum-iOS/blob/main/TERMS.md"
 }
 
 enum SelectedTab: Int {

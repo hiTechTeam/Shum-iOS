@@ -99,7 +99,7 @@
 "start" = "Continue";
 "legalAgreement" = "By continuing, you accept %@ and %@";
 "privacyPolicy" = "Privacy Policy";
-"termsOfService" = "Terms of Service";
+"termsOfService" = "Terms of Use";
 "continueHint" = "Opens the identity verification screen";
 "goNext" = "Got it";
 "go" = "Go";

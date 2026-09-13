@@ -12,7 +12,8 @@ struct MainContentView: View {
         TabView(selection: $selectedTab) {
             NavigationStack(path: $contactsPath) {
                 ShumContactsUI(runtime: chat) { route in
-                    contactsPath.append(route)
+                    if case .newChat = route { showContacts = true }
+                    else { contactsPath.append(route) }
                 }
                 .navigationDestination(for: SpotchatUIRoute.self) { route in
                     SpotchatDestinationUI(runtime: chat, route: route) { contactsPath.append($0) }

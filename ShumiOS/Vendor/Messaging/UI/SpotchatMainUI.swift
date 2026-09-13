@@ -65,11 +65,6 @@ struct SpotchatChatsUI: View {
         }
         .navigationTitle("Чаты")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                newContactButton
-            }
-        }
         .shumOnChange(of: folder) { _, folder in
             if folder == .encounters { runtime.permanent?.markEncountersViewed() }
         }
@@ -78,29 +73,6 @@ struct SpotchatChatsUI: View {
             if ProcessInfo.processInfo.arguments.contains("-ShumPreviewPeople") { folder = .nearby }
         }
         #endif
-    }
-
-    @ViewBuilder
-    private var newContactButton: some View {
-        if #available(iOS 26.0, *) {
-            Button { open(.newChat) } label: {
-                Label("Новый контакт", systemImage: "plus")
-            }
-            .foregroundStyle(.primary)
-            .tint(.primary)
-            .accessibilityIdentifier("spotchat.addContact")
-        } else {
-            Button { open(.newChat) } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(Color(uiColor: .systemBackground))
-                    .frame(width: 36, height: 36)
-                    .background(Color.primary, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Новый контакт")
-            .accessibilityIdentifier("spotchat.addContact")
-        }
     }
 
     private var emptyState: some View {
@@ -213,8 +185,8 @@ private struct ShumChatEmptyState: View {
 
 /// Small bitmap drawings keep the empty states in Shum's pixel language without
 /// introducing a second illustration palette.
-private struct ShumPixelEmptyIcon: View {
-    enum Kind { case chats, nearby, read, invitation, encounters, saved }
+struct ShumPixelEmptyIcon: View {
+    enum Kind { case chats, contacts, nearby, read, invitation, encounters, saved }
     let kind: Kind
 
     private let unit: CGFloat = 4
@@ -248,6 +220,8 @@ private struct ShumPixelEmptyIcon: View {
             outline(x: 1, y: 2, width: 11, height: 8, tail: .left)
             + outline(x: 11, y: 7, width: 10, height: 7, tail: .right)
             + [Pixel(4, 6), Pixel(6, 6), Pixel(8, 6), Pixel(14, 10), Pixel(16, 10), Pixel(18, 10)]
+        case .contacts:
+            person(x: 3, y: 5) + person(x: 11, y: 5)
         case .nearby:
             person(x: 1, y: 5) + person(x: 16, y: 5)
             + [Pixel(10, 7), Pixel(12, 7), Pixel(13, 6), Pixel(13, 8), Pixel(14, 5), Pixel(14, 9)]

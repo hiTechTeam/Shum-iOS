@@ -1,14 +1,9 @@
 #if os(iOS)
-import Contacts
 import SwiftUI
 
 struct ShumContactsUI: View {
     @ObservedObject var runtime: SpotchatRuntime
     let open: (SpotchatUIRoute) -> Void
-    @State private var showPhoneBook = false
-    @State private var share: SpotchatShareItem?
-
-    private var service: SpotchatMessageStore? { runtime.permanent }
 
     private var contacts: [SpotchatContact] {
         guard let permanent = runtime.permanent else { return [] }
@@ -35,8 +30,6 @@ struct ShumContactsUI: View {
 
     var body: some View {
         List {
-            inviteRow
-
             ForEach(sections) { section in
                 Section {
                     ForEach(section.contacts) { contact in
@@ -55,37 +48,60 @@ struct ShumContactsUI: View {
         .background(Color.peopleListBackground)
         .navigationTitle("Контакты")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showPhoneBook) {
-            SpotchatPhoneBook { contact in
-                showPhoneBook = false
-                shareInvitation(for: contact)
+        .overlay {
+            if contacts.isEmpty {
+                VStack(spacing: 0) {
+                    ShumPixelEmptyIcon(kind: .contacts)
+                        .foregroundStyle(Color(uiColor: .systemGreen))
+                        .frame(width: 88, height: 68)
+                        .accessibilityHidden(true)
+
+                    Text("Контактов пока нет")
+                        .font(.system(size: 23, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 26)
+
+                    Text("Добавленные контакты появятся здесь.")
+                        .font(.system(size: 16, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 10)
+                }
+                .frame(maxWidth: 330)
+                .padding(.horizontal, 24)
+                .accessibilityElement(children: .contain)
             }
         }
-        .sheet(item: $share) { item in
-            SpotchatShareSheet(items: [item.text])
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                newContactButton
+            }
         }
     }
 
-    private var inviteRow: some View {
-        Button { showPhoneBook = true } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "person.badge.plus")
-                    .font(.system(size: 22, weight: .regular))
-                    .frame(width: 42, height: 42)
-                Text("Пригласить")
-                    .font(.system(size: 17, weight: .regular))
-                Spacer(minLength: 0)
+    @ViewBuilder
+    private var newContactButton: some View {
+        if #available(iOS 26.0, *) {
+            Button { open(.newChat) } label: {
+                Label("Новый контакт", systemImage: "plus")
             }
-            .foregroundStyle(Color(uiColor: .systemGreen))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 7)
-            .contentShape(Rectangle())
+            .foregroundStyle(.primary)
+            .tint(.primary)
+            .accessibilityIdentifier("spotchat.addContact")
+        } else {
+            Button { open(.newChat) } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(Color(uiColor: .systemBackground))
+                    .frame(width: 36, height: 36)
+                    .background(Color.primary, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Новый контакт")
+            .accessibilityIdentifier("spotchat.addContact")
         }
-        .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets())
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.peopleListBackground)
-        .accessibilityHint("Выбрать человека из контактов iPhone")
     }
 
     private func contactRow(_ contact: SpotchatContact) -> some View {
@@ -120,12 +136,6 @@ struct ShumContactsUI: View {
         .accessibilityHint("Открыть чат")
     }
 
-    private func shareInvitation(for contact: CNContact) {
-        let name = CNContactFormatter.string(from: contact, style: .fullName) ?? ""
-        let greeting = name.isEmpty ? "Привет!" : "\(name), привет!"
-        guard let url = try? service?.ownCard.invitation() else { return }
-        share = SpotchatShareItem(text: "\(greeting) Добавь меня в Shum:\n\(url.absoluteString)")
-    }
 }
 
 private struct ContactSection: Identifiable {

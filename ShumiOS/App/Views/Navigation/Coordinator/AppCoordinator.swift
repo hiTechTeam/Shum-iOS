@@ -33,7 +33,12 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         #if DEBUG
         if TestEnvironment.isRunningTests { return }
         #endif
-        isRegistered = store.ownManifest != nil
+        #if DEBUG && targetEnvironment(simulator)
+        let previewsOnboarding = ProcessInfo.processInfo.arguments.contains("-ShumPreviewOnboarding")
+        #else
+        let previewsOnboarding = false
+        #endif
+        isRegistered = store.ownManifest != nil && !previewsOnboarding
         isScaning = isRegistered && UserDefaults.standard.bool(forKey: Keys.isScaning.rawValue)
         if deletion.hasDeletion {
             deletingProfile = true
