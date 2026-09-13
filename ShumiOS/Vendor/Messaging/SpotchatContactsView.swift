@@ -39,8 +39,16 @@ struct SpotchatContactsView: View {
                         .tint(.primary)
                 }
             }
-            .fullScreenCover(isPresented: $showQR) { if let card = service?.ownCard { SpotchatQRView(card: card) } }
-            .sheet(isPresented: $showScanner) { SpotchatScanView { card in showScanner = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { invitation = card } } }
+            .fullScreenCover(isPresented: $showQR) {
+                if let card = service?.ownCard {
+                    SpotchatQRView(card: card) { scannedCard in
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            invitation = scannedCard
+                        }
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showScanner) { SpotchatScanView { card in showScanner = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { invitation = card } } }
             .sheet(isPresented: $showPhoneBook) {
                 SpotchatPhoneBook { contact in
                     showPhoneBook = false
@@ -124,7 +132,14 @@ struct SpotchatContactConfirmation: View {
 }
 struct SpotchatQRView: View {
     let card: SpotchatContactCard
+    var scanned: ((SpotchatContactCard) -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @State private var showScanner = false
+
+    init(card: SpotchatContactCard, scanned: ((SpotchatContactCard) -> Void)? = nil) {
+        self.card = card
+        self.scanned = scanned
+    }
 
     private var invitationURL: URL? {
         try? card.invitation()
@@ -159,6 +174,17 @@ struct SpotchatQRView: View {
                             }
 
                             Spacer(minLength: 28)
+
+                            Button {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                showScanner = true
+                            } label: {
+                                Text("Сканировать")
+                            }
+                            .buttonStyle(ShumPrimaryButtonStyle())
+                            .frame(maxWidth: 342)
+                            .padding(.horizontal, 30)
+                            .padding(.bottom, 22)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: geometry.size.height)
@@ -184,6 +210,17 @@ struct SpotchatQRView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Поделиться контактом Shum")
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showScanner) {
+                SpotchatScanView { scannedCard in
+                    showScanner = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        dismiss()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            scanned?(scannedCard)
+                        }
                     }
                 }
             }
@@ -225,9 +262,11 @@ struct SpotchatQRView: View {
                     .frame(width: 42, height: 42)
 
                 Image.shumLogo
+                    .renderingMode(.template)
                     .resizable()
                     .interpolation(.none)
                     .scaledToFit()
+                    .foregroundStyle(.black)
                     .frame(width: 30, height: 30)
             }
             .frame(width: 252, height: 252)
@@ -247,7 +286,7 @@ struct SpotchatQRView: View {
     }
 
     private func qr(_ text: String) -> UIImage? {
-        let filter = CIFilter.qrCodeGenerator(); filter.message = Data(text.utf8); filter.correctionLevel = "Q"
+        let filter = CIFilter.qrCodeGenerator(); filter.message = Data(text.utf8); filter.correctionLevel = "M"
         guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 6, y: 6)), let image = CIContext().createCGImage(output, from: output.extent) else { return nil }
         return UIImage(cgImage: image)
     }
@@ -287,82 +326,154 @@ struct SpotchatScanView: View {
     @State private var photoSelection: PhotosPickerItem?
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
-                if unavailable {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            #if targetEnvironment(simulator)
+            LinearGradient(
+                colors: [Color(white: 0.22), Color(white: 0.06)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            scannerOverlay
+            #else
+            if unavailable {
+                ZStack {
                     VStack(spacing: 16) {
-                        Text("Разрешите доступ к камере в настройках iPhone.").multilineTextAlignment(.center)
-                        Button("Открыть настройки") { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
-                    }.foregroundStyle(.white).padding()
-                } else {
-                    CameraScannerView(
-                        isActive: !done,
-                        torchEnabled: torchEnabled,
-                        onUnavailable: { unavailable = true }
-                    ) { text in
-                        handle(text)
+                        Text("Разрешите доступ к камере в настройках устройства.")
+                            .multilineTextAlignment(.center)
+                        Button("Открыть настройки") {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                        .foregroundStyle(Color.accentColor)
                     }
+                    .foregroundStyle(.white)
+                    .padding(32)
 
-                    scannerOverlay
+                    VStack {
+                        HStack {
+                            scannerButton(systemName: "xmark", label: "Закрыть") {
+                                done = true
+                                dismiss()
+                            }
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .padding(.top, 16)
+                    .padding(.horizontal, 24)
                 }
-            }.navigationTitle("Сканировать QR-код").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Отмена") { done = true; dismiss() } } }
-                .alert("QR-код", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil; done = false } })) { Button("Повторить") { error = nil; done = false } } message: { Text(error ?? "") }
-                .task(id: photoSelection) {
-                    guard let photoSelection else { return }
-                    await scanPhoto(photoSelection)
-                    self.photoSelection = nil
+            } else {
+                CameraScannerView(
+                    isActive: !done,
+                    torchEnabled: torchEnabled,
+                    onUnavailable: { unavailable = true }
+                ) { text in
+                    handle(text)
                 }
-                .onDisappear { done = true }
+                .ignoresSafeArea()
+
+                scannerOverlay
+            }
+            #endif
         }
+        .statusBarHidden(true)
+        .alert("QR-код", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil; done = false } })) {
+            Button("Повторить") { error = nil; done = false }
+        } message: {
+            Text(error ?? "")
+        }
+        .task(id: photoSelection) {
+            guard let photoSelection else { return }
+            await scanPhoto(photoSelection)
+            self.photoSelection = nil
+        }
+        .onDisappear { done = true }
     }
 
     private var scannerOverlay: some View {
-        VStack(spacing: 0) {
-            Spacer()
+        GeometryReader { geometry in
+            let side = min(geometry.size.width - 64, 316)
+            let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height * 0.44)
+            let scanRect = CGRect(
+                x: center.x - side / 2,
+                y: center.y - side / 2,
+                width: side,
+                height: side
+            )
 
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white, lineWidth: 3)
-                .frame(width: 264, height: 264)
-                .shadow(color: .black.opacity(0.35), radius: 8)
+            ZStack {
+                ShumScannerShade(cutout: scanRect)
+                    .fill(.black.opacity(0.52), style: FillStyle(eoFill: true))
 
-            Text("Наведите камеру на QR-код Shum")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.white)
-                .padding(.top, 20)
-                .shadow(color: .black, radius: 4)
-
-            Spacer()
-
-            HStack(spacing: 24) {
-                Button {
-                    torchEnabled.toggle()
-                } label: {
-                    Label(
-                        torchEnabled ? "Выключить фонарик" : "Включить фонарик",
-                        systemImage: torchEnabled ? "flashlight.on.fill" : "flashlight.off.fill"
+                ShumScannerCorners()
+                    .stroke(
+                        Color.accentColor,
+                        style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round)
                     )
-                    .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
-                .tint(.white)
+                    .frame(width: side, height: side)
+                    .position(center)
 
-                PhotosPicker(selection: $photoSelection, matching: .images) {
-                    Label("Выбрать из Фото", systemImage: "photo.on.rectangle")
-                        .labelStyle(.iconOnly)
+                Text("Наведите камеру на QR-код Shum")
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.8), radius: 3)
+                    .position(x: center.x, y: scanRect.maxY + 32)
+
+                VStack {
+                    HStack {
+                        scannerButton(systemName: "xmark", label: "Закрыть") {
+                            done = true
+                            dismiss()
+                        }
+                        Spacer()
+                        scannerButton(
+                            systemName: torchEnabled ? "flashlight.on.fill" : "flashlight.off.fill",
+                            label: torchEnabled ? "Выключить фонарик" : "Включить фонарик"
+                        ) {
+                            torchEnabled.toggle()
+                        }
+                    }
+                    .padding(.top, max(geometry.safeAreaInsets.top, 16))
+                    .padding(.horizontal, 24)
+
+                    Spacer()
+
+                    PhotosPicker(selection: $photoSelection, matching: .images) {
+                        VStack(spacing: 8) {
+                            Image(systemName: "photo.on.rectangle")
+                                .font(.system(size: 22, weight: .regular))
+                                .frame(width: 50, height: 50)
+                                .background(.ultraThinMaterial, in: Circle())
+                            Text("Медиатека")
+                                .font(.caption)
+                        }
+                        .foregroundStyle(.white)
+                    }
+                    .accessibilityLabel("Выбрать QR-код из медиатеки")
+                    .padding(.bottom, max(geometry.safeAreaInsets.bottom, 22))
                 }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
-                .tint(.white)
             }
-            .font(.title3)
-            .padding(.bottom, 30)
         }
-        .padding(.horizontal, 24)
+        .ignoresSafeArea()
+    }
+
+    private func scannerButton(
+        systemName: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 22, weight: .regular))
+                .foregroundStyle(.white)
+                .frame(width: 50, height: 50)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     private func handle(_ text: String) {
@@ -404,6 +515,62 @@ struct SpotchatScanView: View {
         }
     }
 }
+
+private struct ShumScannerShade: Shape {
+    let cutout: CGRect
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addRect(rect)
+        path.addRoundedRect(
+            in: cutout,
+            cornerSize: CGSize(width: 22, height: 22)
+        )
+        return path
+    }
+}
+
+private struct ShumScannerCorners: Shape {
+    func path(in rect: CGRect) -> Path {
+        let length: CGFloat = 38
+        let radius: CGFloat = 18
+        var path = Path()
+
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + length))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + radius, y: rect.minY),
+            control: CGPoint(x: rect.minX, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX + length, y: rect.minY))
+
+        path.move(to: CGPoint(x: rect.maxX - length, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY + radius),
+            control: CGPoint(x: rect.maxX, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + length))
+
+        path.move(to: CGPoint(x: rect.maxX, y: rect.maxY - length))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX - length, y: rect.maxY))
+
+        path.move(to: CGPoint(x: rect.minX + length, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - radius),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - length))
+        return path
+    }
+}
+
 struct SpotchatPhoneBook: UIViewControllerRepresentable {
     var selected: (CNContact) -> Void
     func makeCoordinator() -> Coordinator { Coordinator(selected: selected) }

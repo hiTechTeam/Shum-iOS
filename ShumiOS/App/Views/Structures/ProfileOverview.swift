@@ -119,7 +119,11 @@ struct ProfileOverviewView: View {
             }
         }
         .fullScreenCover(isPresented: $showQR) {
-            if let card = coordinator.chat?.permanent?.ownCard { SpotchatQRView(card: card) }
+            if let card = coordinator.chat?.permanent?.ownCard {
+                SpotchatQRView(card: card) { scannedCard in
+                    coordinator.invitation = scannedCard
+                }
+            }
         }
         .sheet(isPresented: $showPrivacy) {
             if let chat = coordinator.chat {

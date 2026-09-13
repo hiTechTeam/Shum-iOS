@@ -28,17 +28,105 @@ struct SpotchatContactCard: Codable, Equatable {
                 .isValidSignature(signature, for: signedBytes()) else { throw SpotchatFailure.invalidContact }
     }
     func invitation() throws -> URL {
-        let data = try SpotchatCoding.encode(self).base64EncodedString()
-        var url = URLComponents(); url.scheme = "shum"; url.host = "contact"
-        url.queryItems = [URLQueryItem(name: "data", value: data)]
-        guard let result = url.url else { throw SpotchatFailure.invalidContact }
+        try validate()
+        guard let nostrKey = Data(hexString: nostrKey), nostrKey.count == 32,
+              signature.count == 64,
+              name.utf8.count <= Int(UInt8.max),
+              bio.utf8.count <= Int(UInt16.max) else {
+            throw SpotchatFailure.invalidContact
+        }
+
+        var payload = Data([1, UInt8(version)])
+        payload.append(noiseKey)
+        payload.append(signingKey)
+        payload.append(nostrKey)
+        payload.append(UInt8(name.utf8.count))
+        payload.append(contentsOf: name.utf8)
+        payload.append(UInt8((bio.utf8.count >> 8) & 0xff))
+        payload.append(UInt8(bio.utf8.count & 0xff))
+        payload.append(contentsOf: bio.utf8)
+        payload.append(signature)
+
+        let encoded = payload.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        guard let result = URL(string: "shum://c/\(encoded)") else {
+            throw SpotchatFailure.invalidContact
+        }
         return result
     }
     static func parse(_ url: URL) throws -> Self {
-        guard url.absoluteString.utf8.count <= 4096, url.scheme == "shum", url.host == "contact",
+        guard url.absoluteString.utf8.count <= 4096, url.scheme == "shum" else {
+            throw SpotchatFailure.invalidContact
+        }
+        if url.host == "c" {
+            return try parseCompact(url)
+        }
+        guard url.host == "contact",
               let encoded = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "data" })?.value,
-              let bytes = Data(base64Encoded: encoded), bytes.count <= 2048 else { throw SpotchatFailure.invalidContact }
-        let card = try JSONDecoder().decode(Self.self, from: bytes); try card.validate(); return card
+              let bytes = Data(base64Encoded: encoded), bytes.count <= 2048 else {
+            throw SpotchatFailure.invalidContact
+        }
+        let card = try JSONDecoder().decode(Self.self, from: bytes)
+        try card.validate()
+        return card
+    }
+
+    private static func parseCompact(_ url: URL) throws -> Self {
+        let encoded = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !encoded.isEmpty, encoded.utf8.count <= 1024 else {
+            throw SpotchatFailure.invalidContact
+        }
+        var base64 = encoded
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
+        guard let bytes = Data(base64Encoded: base64), bytes.count <= 768 else {
+            throw SpotchatFailure.invalidContact
+        }
+
+        var cursor = bytes.startIndex
+        func read(_ count: Int) throws -> Data {
+            guard count >= 0, cursor + count <= bytes.endIndex else {
+                throw SpotchatFailure.invalidContact
+            }
+            defer { cursor += count }
+            return Data(bytes[cursor ..< cursor + count])
+        }
+        func readByte() throws -> UInt8 {
+            guard cursor < bytes.endIndex else { throw SpotchatFailure.invalidContact }
+            defer { cursor += 1 }
+            return bytes[cursor]
+        }
+
+        guard try readByte() == 1 else { throw SpotchatFailure.invalidContact }
+        let cardVersion = Int(try readByte())
+        let noiseKey = try read(32)
+        let signingKey = try read(32)
+        let nostrKey = try read(32).hexEncodedString()
+        let nameLength = Int(try readByte())
+        let nameData = try read(nameLength)
+        let bioLength = (Int(try readByte()) << 8) | Int(try readByte())
+        let bioData = try read(bioLength)
+        let signature = try read(64)
+        guard cursor == bytes.endIndex,
+              let name = String(data: nameData, encoding: .utf8),
+              let bio = String(data: bioData, encoding: .utf8) else {
+            throw SpotchatFailure.invalidContact
+        }
+
+        let card = Self(
+            version: cardVersion,
+            noiseKey: noiseKey,
+            signingKey: signingKey,
+            nostrKey: nostrKey,
+            name: name,
+            bio: bio,
+            signature: signature
+        )
+        try card.validate()
+        return card
     }
 }
 

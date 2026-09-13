@@ -1,2 +1,2 @@
 "NSBluetoothAlwaysUsageDescription" = "Bluetooth lets Shum discover nearby users and make your profile discoverable while scanning is enabled.";
-"NSCameraUsageDescription" = "Camera access lets you take a profile photo.";
+"NSCameraUsageDescription" = "Camera access lets you scan Shum QR codes and take a profile photo.";
