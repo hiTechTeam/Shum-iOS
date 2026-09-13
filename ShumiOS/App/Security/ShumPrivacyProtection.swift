@@ -22,6 +22,55 @@ struct ShumPrivacyCover: View {
     }
 }
 
+/// Keeps the live hierarchy unchanged on screen while replacing it with a
+/// neutral blurred surface in screenshots and recordings. Unlike the former
+/// secure-text-field container, this does not re-parent SwiftUI/UIKit views, so
+/// symbols, Canvas drawings, links and presentation controllers render normally.
+struct ShumCaptureProtectedContainer<Content: View>: View {
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        ZStack {
+            ShumPrivacyCover()
+                .blur(radius: 18, opaque: true)
+
+            ZStack {
+                Color("ls-Background").ignoresSafeArea()
+                content
+            }
+            .shumHiddenFromSystemCapture()
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func shumHiddenFromSystemCapture() -> some View {
+        if #available(iOS 18.0, *) {
+            modifier(ShumCaptureRedactionModifier())
+        } else {
+            self
+        }
+    }
+}
+
+@available(iOS 18.0, *)
+private struct ShumCaptureRedactionModifier: ViewModifier {
+    private static let captureProhibited = RedactionReasons(rawValue: 1 << 3)
+
+    func body(content: Content) -> some View {
+        content
+            .privacySensitive(false)
+            .transformEnvironment(\.redactionReasons) { reasons in
+                reasons.insert(Self.captureProhibited)
+            }
+    }
+}
+
 /// Covers the app during recording, mirroring, AirPlay, or remote screen sharing.
 /// iOS 17 and newer expose capture state directly to SwiftUI.
 struct ShumCapturePrivacyOverlay: View {
