@@ -52,9 +52,12 @@ struct ShumBackupCreateView: View {
             }
 
             Section {
-                Label("Ключи профиля и Nostr", systemImage: "key.horizontal")
-                Label("Контакты и настройки", systemImage: "person.2")
-                Label("Зашифрованная история чатов", systemImage: "bubble.left.and.bubble.right")
+                backupItem("Ключи профиля и Nostr", systemImage: "key.horizontal")
+                backupItem("Контакты и настройки", systemImage: "person.2")
+                backupItem(
+                    "Зашифрованная история чатов",
+                    systemImage: "bubble.left.and.bubble.right"
+                )
             } header: {
                 Text("В резервной копии")
             } footer: {
@@ -113,6 +116,17 @@ struct ShumBackupCreateView: View {
             Button("Готово", role: .cancel) { }
         } message: {
             Text("Храните файл и пароль отдельно. Shum не сможет восстановить забытый пароль.")
+        }
+    }
+
+    private func backupItem(_ title: String, systemImage: String) -> some View {
+        Label {
+            Text(title)
+                .foregroundStyle(.primary)
+        } icon: {
+            Image(systemName: systemImage)
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(.white)
         }
     }
 
