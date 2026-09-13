@@ -39,7 +39,7 @@ struct SpotchatContactsView: View {
                         .tint(.primary)
                 }
             }
-            .sheet(isPresented: $showQR) { if let card = service?.ownCard { SpotchatQRView(card: card) } }
+            .fullScreenCover(isPresented: $showQR) { if let card = service?.ownCard { SpotchatQRView(card: card) } }
             .sheet(isPresented: $showScanner) { SpotchatScanView { card in showScanner = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { invitation = card } } }
             .sheet(isPresented: $showPhoneBook) {
                 SpotchatPhoneBook { contact in
@@ -125,28 +125,156 @@ struct SpotchatContactConfirmation: View {
 struct SpotchatQRView: View {
     let card: SpotchatContactCard
     @Environment(\.dismiss) private var dismiss
+
+    private var invitationURL: URL? {
+        try? card.invitation()
+    }
+
+    private var avatarData: Data? {
+        guard let manifest = LocalCardStore.shared.ownManifest else { return nil }
+        return LocalCardStore.shared.photo(manifest.body.photoHash)
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 22) {
-                Text(card.name).font(.title2.bold())
-                if let url = try? card.invitation(), let image = qr(url.absoluteString) {
-                    Image(uiImage: image).interpolation(.none).resizable().scaledToFit()
-                        .padding(18).background(.white, in: RoundedRectangle(cornerRadius: 20))
-                        .frame(maxWidth: 300).accessibilityLabel("QR-код контакта Shum")
-                    Text("Покажите этот код другому человеку.\nДля добавления интернет не нужен.")
-                        .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    ShareLink(item: url) { Label("Пригласить в Shum", systemImage: "square.and.arrow.up") }
+            ZStack {
+                Color(.systemBackground).ignoresSafeArea()
+
+                GeometryReader { geometry in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            if let invitationURL,
+                               let image = qr(invitationURL.absoluteString) {
+                                profileCard(qrImage: image)
+                                    .padding(.top, 54)
+
+                                Text("Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытые данные профиля.")
+                                    .font(.system(size: 15, weight: .regular))
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .lineSpacing(3)
+                                    .frame(maxWidth: 330)
+                                    .padding(.top, 22)
+                                    .padding(.horizontal, 24)
+                            }
+
+                            Spacer(minLength: 28)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: geometry.size.height)
+                    }
+                    .scrollIndicators(.hidden)
                 }
-            }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(.systemBackground))
-                .navigationTitle("Мой QR-код").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } } }
+            }
+            .navigationTitle("QR-код")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        ShumQRToolbarIcon(systemName: "chevron.left")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Назад")
+                }
+
+                if let invitationURL {
+                    ToolbarItem(placement: .confirmationAction) {
+                        ShareLink(item: invitationURL) {
+                            ShumQRToolbarIcon(systemName: "square.and.arrow.up")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Поделиться контактом Shum")
+                    }
+                }
+            }
         }
     }
+
+    private func profileCard(qrImage: UIImage) -> some View {
+        VStack(spacing: 0) {
+            SpotchatAvatar(
+                name: card.name,
+                size: 62,
+                imageData: avatarData
+            )
+            .overlay {
+                Circle()
+                    .stroke(Color(.secondarySystemBackground), lineWidth: 4)
+            }
+
+            Text(card.name)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .padding(.top, 14)
+
+            Text("Контакт Shum")
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(.secondary)
+                .padding(.top, 5)
+
+            ZStack {
+                Image(uiImage: qrImage)
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(20)
+
+                Circle()
+                    .fill(.white)
+                    .frame(width: 42, height: 42)
+
+                Image.shumLogo
+                    .resizable()
+                    .interpolation(.none)
+                    .scaledToFit()
+                    .frame(width: 30, height: 30)
+            }
+            .frame(width: 252, height: 252)
+            .background(.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .padding(.top, 28)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("QR-код контакта Shum")
+        }
+        .padding(.bottom, 30)
+        .frame(maxWidth: 342)
+        .background(alignment: .bottom) {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+                .padding(.top, 31)
+        }
+        .padding(.horizontal, 30)
+    }
+
     private func qr(_ text: String) -> UIImage? {
-        let filter = CIFilter.qrCodeGenerator(); filter.message = Data(text.utf8); filter.correctionLevel = "M"
+        let filter = CIFilter.qrCodeGenerator(); filter.message = Data(text.utf8); filter.correctionLevel = "Q"
         guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 6, y: 6)), let image = CIContext().createCGImage(output, from: output.extent) else { return nil }
         return UIImage(cgImage: image)
+    }
+}
+
+private struct ShumQRToolbarIcon: View {
+    let systemName: String
+
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            icon
+                .glassEffect(.regular, in: Circle())
+        } else {
+            icon
+                .background(Color(.secondarySystemBackground), in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(Color.primary.opacity(0.14), lineWidth: 1)
+                }
+        }
+    }
+
+    private var icon: some View {
+        Image(systemName: systemName)
+            .font(.system(size: 19, weight: .medium))
+            .foregroundStyle(.primary)
+            .frame(width: 44, height: 44)
     }
 }
 struct SpotchatScanView: View {
