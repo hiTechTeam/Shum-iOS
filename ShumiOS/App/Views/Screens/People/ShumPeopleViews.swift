@@ -121,7 +121,7 @@ struct ShumPeopleScreen: View {
                         Button {
                             toggleSaved(card, peer: peer)
                         } label: {
-                            ShumSwipeLabel(isSaved ? "Убрать" : "Сохранить", systemImage: isSaved ? "heart.slash" : "heart")
+                            Label(isSaved ? "Убрать" : "Сохранить", systemImage: isSaved ? "heart.slash" : "heart")
                         }
                         .tint(isSaved ? Color(uiColor: .systemGray) : .green)
                     }
@@ -130,7 +130,7 @@ struct ShumPeopleScreen: View {
                     if let card {
                         if isSaved {
                             Button { showsSavedBlockInformation = true } label: {
-                                ShumSwipeLabel("Сохранён", systemImage: "lock.fill")
+                                Label("Сохранён", systemImage: "lock.fill")
                             }
                             .tint(Color(uiColor: .systemGray))
                         } else {
@@ -142,7 +142,7 @@ struct ShumPeopleScreen: View {
                                     waitsForTransientUI: true
                                 )
                             } label: {
-                                ShumSwipeLabel("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                                Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
                             }
                             .tint(.red)
                         }
@@ -768,19 +768,19 @@ struct ShumEncounterHistoryView: View {
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
                     Button { toggleSaved(encounter) } label: {
-                        ShumSwipeLabel(isSaved ? "Убрать" : "Сохранить", systemImage: isSaved ? "heart.slash" : "heart")
+                        Label(isSaved ? "Убрать" : "Сохранить", systemImage: isSaved ? "heart.slash" : "heart")
                     }
                     .tint(isSaved ? Color(uiColor: .systemGray) : .green)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: !isSaved) {
                     Button { pendingDelete = encounter } label: {
-                        ShumSwipeLabel("Очистить", systemImage: "trash")
+                        Label("Очистить", systemImage: "trash")
                     }
                     .tint(Color(uiColor: .systemGray))
 
                     if isSaved {
                         Button { showsSavedBlockInformation = true } label: {
-                            ShumSwipeLabel("Сохранён", systemImage: "lock.fill")
+                            Label("Сохранён", systemImage: "lock.fill")
                         }
                         .tint(Color(uiColor: .systemGray2))
                     } else {
@@ -791,7 +791,7 @@ struct ShumEncounterHistoryView: View {
                                 waitsForTransientUI: true
                             )
                         } label: {
-                            ShumSwipeLabel("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                            Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
                         }
                         .tint(.red)
                     }
@@ -1027,7 +1027,7 @@ struct ShumSavedProfilesView: View {
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { remove(profile) } label: {
-                        ShumSwipeLabel("Убрать", systemImage: "heart.slash")
+                        Label("Убрать", systemImage: "heart.slash")
                     }
                     .tint(Color(uiColor: .systemGray))
                 }

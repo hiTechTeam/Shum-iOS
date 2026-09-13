@@ -139,7 +139,10 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     #if DEBUG && targetEnvironment(simulator)
     private func seedPermanentPreview() throws {
         guard let permanent else { return }
-        for name in ["Аня", "Максим", "Соня", "Дима"] {
+        let names = ["Аня", "Максим", "Соня", "Дима"]
+            + (ProcessInfo.processInfo.arguments.contains("-ShumPreviewLongList")
+               ? (1...24).map { "Контакт \($0)" } : [])
+        for name in names {
             let noise = Curve25519.KeyAgreement.PrivateKey()
             let signing = Curve25519.Signing.PrivateKey()
             var card = SpotchatContactCard(noiseKey: noise.publicKey.rawRepresentation, signingKey: signing.publicKey.rawRepresentation,

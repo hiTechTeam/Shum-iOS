@@ -15,8 +15,14 @@ struct Welcome: View {
                 NavigationLink {
                     LocalCardRegistration(photoViewModel: coordinator.profilePhotoViewModel)
                 } label: {
-                    Text("Создать профиль").font(.headline).foregroundStyle(.black).frame(maxWidth: .infinity).padding(17).background(Color.accentColor, in: RoundedRectangle(cornerRadius: 8))
+                    Text("Создать профиль")
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Color.accentColor, in: Capsule())
                 }
+                .buttonStyle(.plain)
                 Text("Профиль создаётся на этом iPhone. Номер телефона и внешний аккаунт не нужны.")
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.bottom, 18)
             }.padding(.horizontal, 28).background(Color("ls-Background").ignoresSafeArea())

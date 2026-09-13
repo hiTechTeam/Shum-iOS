@@ -633,14 +633,14 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
                 Button(role: .destructive) {
                     perform(descriptor, for: item)
                 } label: {
-                    ShumSwipeLabel(title, systemImage: systemImage)
+                    Label(title, systemImage: systemImage)
                 }
                 .tint(Color(uiColor: color))
             } else {
                 Button {
                     perform(descriptor, for: item)
                 } label: {
-                    ShumSwipeLabel(title, systemImage: systemImage)
+                    Label(title, systemImage: systemImage)
                 }
                 .tint(Color(uiColor: color))
             }
@@ -1131,7 +1131,7 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
                 action.image = UIImage(
                     systemName: presentation?.systemImage
                         ?? descriptor.systemImage
-                )?.withTintColor(.black, renderingMode: .alwaysOriginal)
+                )
                 action.backgroundColor = presentation?.backgroundColor
                     ?? descriptor.backgroundColor
                 return action

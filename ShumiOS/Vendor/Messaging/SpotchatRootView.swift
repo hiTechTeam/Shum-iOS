@@ -162,12 +162,11 @@ struct SpotchatConversationView: View {
                 Text("История сохранена. Добавьте этого человека по QR-коду или найдите рядом, чтобы продолжить переписку.")
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(12)
             } else if runtime.isBlocked(peer.id) { Text("Контакт заблокирован").font(.caption).foregroundStyle(.secondary) }
-            HStack(alignment: .bottom, spacing: 8) {
-                HStack(alignment: .bottom, spacing: 0) {
+            HStack(alignment: .bottom, spacing: 4) {
                 TextField("Сообщение", text: $draft, prompt: Text("Сообщение").foregroundColor(Color(.secondaryLabel)), axis: .vertical)
                     .font(.body).lineLimit(1...5).focused($inputFocused)
                     .textFieldStyle(.plain).disabled(runtime.isBlocked(peer.id))
-                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .padding(.leading, 16).padding(.vertical, 12)
                     .accessibilityIdentifier("spotchat.messageInput")
                     #if DEBUG && targetEnvironment(simulator)
                     .task {
@@ -177,25 +176,31 @@ struct SpotchatConversationView: View {
                         }
                     }
                     #endif
-
-                }
-                .frame(minHeight: 46)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
                 Button {
                     guard canSend else { return }
                     if runtime.send(draft, to: peer.id) { draft = "" }
                 } label: {
-                    Image(systemName: "paperplane.fill").font(.system(size: 21))
-                        .rotationEffect(.degrees(45))
-                        .foregroundStyle(.black).frame(width: 46, height: 46)
-                        .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 8))
-                        .contentShape(Rectangle())
-                }.buttonStyle(.plain).disabled(!canSend)
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(canSend ? Color.black : Color.secondary)
+                        .frame(width: 36, height: 36)
+                        .background(canSend ? Color.accentColor : Color(.tertiarySystemFill), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSend)
+                .padding(.trailing, 5).padding(.vertical, 5)
                     .accessibilityLabel("Отправить сообщение").accessibilityIdentifier("spotchat.sendMessage")
             }
+            .frame(maxWidth: 520, minHeight: 46)
+            .background(Color(.secondarySystemBackground), in: Capsule())
+            .overlay {
+                Capsule().stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
+            }
+            .animation(.easeOut(duration: 0.15), value: canSend)
         }
-        .padding(.horizontal, 14).padding(.vertical, 8)
-        .background(Color(.systemBackground))
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20).padding(.vertical, 8)
     }
     private var canSend: Bool { !runtime.isLegacyOnly(peer.id) && !runtime.isBlocked(peer.id) && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (runtime.permanent != nil || runtime.isNearby(peer.id)) }
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
@@ -343,7 +348,7 @@ struct SpotchatBubbleShape: Shape {
     }
 }
 
-private struct SpotchatDoubleCheck: Shape {
+struct SpotchatDoubleCheck: Shape {
     func path(in rect: CGRect) -> Path {
         var p = Path()
         p.move(to: CGPoint(x: 0, y: 5)); p.addLine(to: CGPoint(x: 4, y: 9)); p.addLine(to: CGPoint(x: 12, y: 1))

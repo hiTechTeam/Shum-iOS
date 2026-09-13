@@ -5,27 +5,22 @@ struct MainContentView: View {
     @ObservedObject var chat: SpotchatRuntime
     @ObservedObject var profilePhotoViewModel: ProfilePhotoViewModel
     @State private var selectedTab = 1
+    @State private var contactsPath: [SpotchatUIRoute] = []
     @State private var chatsPath: [SpotchatUIRoute] = []
     @State private var showContacts = false
-    @State private var showMultichat = false
-
-    private var tabSelection: Binding<Int> {
-        Binding(get: { selectedTab }, set: { value in
-            if value == 0 { openMultichat() } else { selectedTab = value }
-        })
-    }
-
-    private func openMultichat() {
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        showMultichat = true
-    }
-
     var body: some View {
-        TabView(selection: tabSelection) {
-            Color.clear
-                .tabItem { Label { Text("Мультичат") } icon: { Image(uiImage: ShumMultichatIcon.image).renderingMode(.original) } }
-                .badge(0)
-                .tag(0)
+        TabView(selection: $selectedTab) {
+            NavigationStack(path: $contactsPath) {
+                ShumContactsUI(runtime: chat) { route in
+                    contactsPath.append(route)
+                }
+                .navigationDestination(for: SpotchatUIRoute.self) { route in
+                    SpotchatDestinationUI(runtime: chat, route: route) { contactsPath.append($0) }
+                }
+            }
+            .toolbar(contactsPath.isEmpty ? .visible : .hidden, for: .tabBar)
+            .tabItem { Label("Контакты", image: "PixelPeople") }.tag(0)
+
             NavigationStack(path: $chatsPath) {
                 SpotchatChatsUI(runtime: chat) { route in
                     if case .newChat = route { showContacts = true }
@@ -34,7 +29,9 @@ struct MainContentView: View {
                 .navigationDestination(for: SpotchatUIRoute.self) { route in
                     SpotchatDestinationUI(runtime: chat, route: route) { chatsPath.append($0) }
                 }
-            }.tabItem { Label("Чаты", image: "PixelChats") }
+            }
+            .toolbar(chatsPath.isEmpty ? .visible : .hidden, for: .tabBar)
+            .tabItem { Label("Чаты", image: "PixelChats") }
                 .badge(chat.directoryEntries.reduce(0) { $0 + max($1.unread, $1.isInvitation ? 1 : 0) }).tag(1)
             NavigationStack {
                 ProfileOverviewView(
@@ -46,8 +43,6 @@ struct MainContentView: View {
             }.tabItem { Label("Профиль", image: "PixelProfile") }.tag(2)
         }
         .tint(.accentColor)
-        .background(ShumMultichatTabAction(action: openMultichat))
-        .sheet(isPresented: $showMultichat) { ShumMultichatPlaceholder() }
         .safeAreaInset(edge: .top, spacing: 0) {
             if !chat.isReady {
                 Button { coordinator.retryMessaging() } label: {
@@ -83,4 +78,5 @@ struct MainContentView: View {
         }
         #endif
     }
+
 }

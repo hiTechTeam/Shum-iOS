@@ -49,7 +49,8 @@ struct LocalCardDetailsView: View {
                     TextField("Имя пользователя", text: $name)
                         .textContentType(.nickname).textInputAutocapitalization(.never)
                         .focused($focused).submitLabel(.done).onSubmit { save() }
-                        .padding(16).background(Color.tField, in: RoundedRectangle(cornerRadius: 8))
+                        .padding(16)
+                        .background(Color.tField, in: Capsule())
                         .accessibilityIdentifier("local.name")
                     Text("Так вас увидят собеседники.")
                         .font(.footnote).foregroundStyle(.secondary)

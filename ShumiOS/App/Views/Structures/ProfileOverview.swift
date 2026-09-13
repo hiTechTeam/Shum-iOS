@@ -12,7 +12,6 @@ struct ProfileOverviewView: View {
     @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
     @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
 
-    @State private var showScanningSettings = false
     @State private var showQR = false
     @State private var showPrivacy = false
     @State private var showInfoSheet = false
@@ -121,13 +120,6 @@ struct ProfileOverviewView: View {
                 NavigationStack { SpotchatPrivacySettings(runtime: chat) }
             }
         }
-        .sheet(isPresented: $showScanningSettings) {
-            ScanningSettingsSheet()
-                .environmentObject(coordinator)
-                .environmentObject(coordinator.peopleViewModel)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
         .sheet(isPresented: $showInfoSheet) {
             InfoSheetView()
                 .presentationDetents([.large])
@@ -210,11 +202,8 @@ struct ProfileOverviewView: View {
 
     private var settingsCard: some View {
         VStack(spacing: 0) {
-            ProfileOverviewRow(title: "Видимость рядом", systemImage: "dot.radiowaves.left.and.right",
-                value: scanningStatusTitle, position: .top) { showScanningSettings = true }
-            Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(title: "Конфиденциальность", systemImage: "lock.shield",
-                value: "", position: .middle) { showPrivacy = true }
+                value: "", position: .top) { showPrivacy = true }
             Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(title: "О приложении", systemImage: "info.circle",
                 value: "Shum", position: .bottom) { showInfoSheet = true }
@@ -237,12 +226,6 @@ struct ProfileOverviewView: View {
         @unknown default:
             Inc.Settings.statusOff.localized
         }
-    }
-
-    private var scanningStatusTitle: String {
-        coordinator.isScaning
-            ? Inc.Settings.statusOn.localized
-            : Inc.Settings.statusOff.localized
     }
 
     private var quickActionsStatusTitle: String {
