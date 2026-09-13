@@ -34,12 +34,15 @@ enum LocalCardDetailsMode: String, Identifiable {
 
 struct LocalCardDetailsView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var coordinator: AppCoordinator
     @ObservedObject var profile: LocalProfileViewModel
     @ObservedObject var photo: ProfilePhotoViewModel
     var mode: LocalCardDetailsMode = .registration
     let onSave: () -> Void
     @State private var name = ""
     @State private var showSecurity = false
+    @State private var isPreparingSecurity = false
+    @State private var showSecurityError = false
     @FocusState private var focused: Bool
     private var valid: Bool { ShumProfileValidation.name(name) != nil }
     var body: some View {
@@ -62,7 +65,11 @@ struct LocalCardDetailsView: View {
                     }
                 }
                 if let error = profile.saveError { Text(error).foregroundStyle(.red).font(.footnote) }
-                RegistrationPrimaryButton(title: NSLocalizedString("local.profile.save", comment: ""), isEnabled: valid, action: save)
+                RegistrationPrimaryButton(
+                    title: NSLocalizedString("local.profile.save", comment: ""),
+                    isEnabled: valid && !isPreparingSecurity,
+                    action: save
+                )
                     .padding(.top, 12).accessibilityIdentifier("local.save")
             }.padding(24)
         }
@@ -76,6 +83,11 @@ struct LocalCardDetailsView: View {
         .navigationDestination(isPresented: $showSecurity) {
             RegistrationSecurityReadyView()
         }
+        .alert("Не удалось создать защиту", isPresented: $showSecurityError) {
+            Button("Повторить") { prepareSecurityAndContinue() }
+        } message: {
+            Text("Разблокируйте устройство и попробуйте ещё раз.")
+        }
         .onAppear { name = profile.localName ?? ""; profile.saveError = nil }
     }
     private func save() {
@@ -84,9 +96,24 @@ struct LocalCardDetailsView: View {
         if saved {
             focused = false
             if mode == .registration {
-                showSecurity = true
+                prepareSecurityAndContinue()
             } else {
                 onSave()
+            }
+        }
+    }
+
+    private func prepareSecurityAndContinue() {
+        guard !isPreparingSecurity else { return }
+        isPreparingSecurity = true
+        Task {
+            await Task.yield()
+            let prepared = coordinator.prepareRegistrationSecurity()
+            isPreparingSecurity = false
+            if prepared {
+                showSecurity = true
+            } else {
+                showSecurityError = true
             }
         }
     }

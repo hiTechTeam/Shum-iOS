@@ -39,14 +39,7 @@ private struct ShumProfileOwnershipOnboardingView: View {
 
 struct RegistrationSecurityReadyView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
-    @State private var state: ProvisioningState = .creating
     @State private var showFaceID = false
-
-    private enum ProvisioningState {
-        case creating
-        case ready
-        case failed
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -57,12 +50,12 @@ struct RegistrationSecurityReadyView: View {
                 .frame(width: 112, height: 92)
                 .accessibilityHidden(true)
 
-            Text(state == .ready ? "Защита готова" : "Создаём защиту")
+            Text("Защита готова")
                 .font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .padding(.top, 34)
 
-            Text(description)
+            Text("Уникальные ключи защищают ваш профиль и сообщения. Закрытые ключи не передаются Shum и не покидают устройство.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -76,10 +69,8 @@ struct RegistrationSecurityReadyView: View {
                 securityStatus("Ключи сохранены на устройстве")
             }
             .padding(.top, 30)
-            .opacity(state == .ready ? 1 : 0.45)
 
-            if let fingerprint = coordinator.identityFingerprint,
-               state == .ready {
+            if let fingerprint = coordinator.identityFingerprint {
                 Text("Отпечаток \(fingerprint)")
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
@@ -89,15 +80,11 @@ struct RegistrationSecurityReadyView: View {
             Spacer()
 
             RegistrationPrimaryButton(
-                title: state == .failed ? "Повторить" : "Продолжить",
-                isEnabled: state != .creating,
+                title: "Продолжить",
+                isEnabled: true,
                 accentColor: Color(uiColor: .systemGreen)
             ) {
-                if state == .failed {
-                    provisionKeys()
-                } else {
-                    showFaceID = true
-                }
+                showFaceID = true
             }
             .padding(.bottom, 20)
         }
@@ -107,41 +94,17 @@ struct RegistrationSecurityReadyView: View {
         .navigationDestination(isPresented: $showFaceID) {
             RegistrationFaceIDView()
         }
-        .task {
-            guard state == .creating else { return }
-            await Task.yield()
-            provisionKeys()
-        }
-    }
-
-    private var description: String {
-        switch state {
-        case .creating:
-            return "Shum создаёт уникальные ключи для вашего профиля и сообщений."
-        case .ready:
-            return "Уникальные ключи защищают ваш профиль и сообщения. Закрытые ключи не передаются Shum и не покидают устройство."
-        case .failed:
-            return "Не удалось надёжно сохранить ключи. Разблокируйте устройство и попробуйте ещё раз."
-        }
     }
 
     private func securityStatus(_ title: String) -> some View {
         HStack(spacing: 11) {
-            Image(systemName: state == .ready ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(state == .ready ? Color(uiColor: .systemGreen) : .secondary)
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Color(uiColor: .systemGreen))
             Text(title)
                 .font(.subheadline)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: 310)
-    }
-
-    private func provisionKeys() {
-        state = .creating
-        let succeeded = coordinator.prepareRegistrationSecurity()
-        withAnimation(.easeOut(duration: 0.2)) {
-            state = succeeded ? .ready : .failed
-        }
     }
 }
 
