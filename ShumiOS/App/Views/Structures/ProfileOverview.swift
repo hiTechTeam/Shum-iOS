@@ -11,6 +11,7 @@ struct ProfileOverviewView: View {
     @ObservedObject private var photoVM: ProfilePhotoViewModel
     @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
     @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
+    @ObservedObject private var appLock = ShumAppLock.shared
 
     @State private var showQR = false
     @State private var showPrivacy = false
@@ -18,6 +19,7 @@ struct ProfileOverviewView: View {
     @State private var showLogoutOptions = false
     @State private var showBlockedProfiles = false
     @State private var showQuickActions = false
+    @State private var showSecurity = false
     @State private var showLogoutConfirmation = false
     @State private var showLogoutError = false
     @State private var showDeleteConfirmation = false
@@ -140,6 +142,9 @@ struct ProfileOverviewView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+        .navigationDestination(isPresented: $showSecurity) {
+            ShumSecuritySettingsView(fingerprint: coordinator.identityFingerprint)
+        }
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let image = photoVM.uiImage {
                 FullScreenPhotoView(isPresented: $showPhotoPreview) {
@@ -196,8 +201,13 @@ struct ProfileOverviewView: View {
 
     private var settingsCard: some View {
         VStack(spacing: 0) {
+            ProfileOverviewRow(title: "Безопасность", systemImage: "checkmark.shield",
+                value: appLock.isEnabled ? appLock.biometricTitle : nil, position: .top) {
+                    showSecurity = true
+                }
+            Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(title: "Конфиденциальность", systemImage: "lock.shield",
-                value: "", position: .top) { showPrivacy = true }
+                value: "", position: .middle) { showPrivacy = true }
             Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(title: "О приложении", systemImage: "info.circle",
                 value: "Shum", position: .bottom) { showInfoSheet = true }

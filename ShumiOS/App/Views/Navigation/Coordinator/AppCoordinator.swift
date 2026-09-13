@@ -58,14 +58,41 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
     private func prepareMessaging() {
         guard !deletingProfile, isRegistered else { return }
+        createMessaging(bluetoothEnabled: isScaning)
+    }
+    private func createMessaging(bluetoothEnabled: Bool) {
+        guard chat == nil else {
+            chat?.setBluetoothEnabled(bluetoothEnabled)
+            return
+        }
         let model = SpotchatRuntime.live()
         model.deleteProfileHandler = { [weak self] in
             Task { @MainActor in try? await self?.deleteAccount() }
         }
-        model.setBluetoothEnabled(isScaning)
+        model.setBluetoothEnabled(bluetoothEnabled)
         model.setAppActive(false)
         chat = model
         synchronizeProfile()
+    }
+    @discardableResult
+    func prepareRegistrationSecurity() -> Bool {
+        guard !deletingProfile, LocalCardStore.shared.ownManifest != nil else {
+            return false
+        }
+        createMessaging(bluetoothEnabled: false)
+        synchronizeProfile()
+        return chat?.isReady == true && chat?.permanent?.ownCard.id.isEmpty == false
+    }
+    var identityFingerprint: String? {
+        guard let value = chat?.permanent?.ownCard.id, !value.isEmpty else {
+            return nil
+        }
+        let characters = Array(value.uppercased().prefix(12))
+        return stride(from: 0, to: characters.count, by: 4)
+            .map { start in
+                String(characters[start..<min(start + 4, characters.count)])
+            }
+            .joined(separator: " ")
     }
     func retryMessaging() {
         chat?.retireForDeletion()
@@ -86,6 +113,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         isScaning = true
         UserDefaults.standard.set(true, forKey: Keys.isScaning.rawValue)
         if chat == nil { prepareMessaging() }
+        chat?.setBluetoothEnabled(true)
         updateApplicationState(isActive: true)
     }
     func setScanning(_ enabled: Bool) {
@@ -112,6 +140,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             peopleViewModel.resetAccountScopedState()
             authCodeViewModel.clearProfile(); profilePhotoViewModel.resetAccountScopedState()
             SavedPeopleStateStore.shared.removeAll(); QuickActionsSettingsStore.shared.reset()
+            ShumAppLock.shared.reset()
             try deletion.allowNewProfile()
             isRegistered = false; isScaning = false; authenticationFlowID = UUID()
             deletionError = nil; deletingProfile = false

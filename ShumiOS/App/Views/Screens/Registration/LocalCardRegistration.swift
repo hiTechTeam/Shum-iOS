@@ -18,9 +18,10 @@ struct LocalCardRegistration: View {
         .padding(.horizontal, 24).background(Color("ls-Background").ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showDetails) {
-            LocalCardDetailsView(profile: coordinator.authCodeViewModel, photo: photoViewModel) {
-                coordinator.completedRegistration()
-            }
+            LocalCardDetailsView(
+                profile: coordinator.authCodeViewModel,
+                photo: photoViewModel
+            ) { }
         }
     }
 }
@@ -38,6 +39,7 @@ struct LocalCardDetailsView: View {
     var mode: LocalCardDetailsMode = .registration
     let onSave: () -> Void
     @State private var name = ""
+    @State private var showSecurity = false
     @FocusState private var focused: Bool
     private var valid: Bool { ShumProfileValidation.name(name) != nil }
     var body: some View {
@@ -71,12 +73,22 @@ struct LocalCardDetailsView: View {
                 ToolbarItem(placement: .cancellationAction) { Button(Inc.Common.close.localized) { dismiss() } }
             }
         }
+        .navigationDestination(isPresented: $showSecurity) {
+            RegistrationSecurityReadyView()
+        }
         .onAppear { name = profile.localName ?? ""; profile.saveError = nil }
     }
     private func save() {
         guard let value = ShumProfileValidation.name(name) else { return }
         let saved = mode == .registration ? profile.save(name: value, photo: photo.preparedPhoto) : profile.updateName(value)
-        if saved { focused = false; onSave() }
+        if saved {
+            focused = false
+            if mode == .registration {
+                showSecurity = true
+            } else {
+                onSave()
+            }
+        }
     }
 }
 

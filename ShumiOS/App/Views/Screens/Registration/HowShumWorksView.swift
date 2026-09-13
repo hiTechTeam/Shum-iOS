@@ -37,6 +37,187 @@ private struct ShumProfileOwnershipOnboardingView: View {
     }
 }
 
+struct RegistrationSecurityReadyView: View {
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @State private var state: ProvisioningState = .creating
+    @State private var showFaceID = false
+
+    private enum ProvisioningState {
+        case creating
+        case ready
+        case failed
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            ShumOnboardingPixelIllustration(kind: .security)
+                .foregroundStyle(Color(uiColor: .systemGreen))
+                .frame(width: 112, height: 92)
+                .accessibilityHidden(true)
+
+            Text(state == .ready ? "Защита готова" : "Создаём защиту")
+                .font(.title2.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .padding(.top, 34)
+
+            Text(description)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+                .padding(.top, 12)
+                .frame(maxWidth: 350)
+
+            VStack(spacing: 14) {
+                securityStatus("Ключ профиля создан")
+                securityStatus("Сквозное шифрование включено")
+                securityStatus("Ключи сохранены на устройстве")
+            }
+            .padding(.top, 30)
+            .opacity(state == .ready ? 1 : 0.45)
+
+            if let fingerprint = coordinator.identityFingerprint,
+               state == .ready {
+                Text("Отпечаток \(fingerprint)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 20)
+            }
+
+            Spacer()
+
+            RegistrationPrimaryButton(
+                title: state == .failed ? "Повторить" : "Продолжить",
+                isEnabled: state != .creating,
+                accentColor: Color(uiColor: .systemGreen)
+            ) {
+                if state == .failed {
+                    provisionKeys()
+                } else {
+                    showFaceID = true
+                }
+            }
+            .padding(.bottom, 20)
+        }
+        .padding(.horizontal, 24)
+        .background(Color("ls-Background").ignoresSafeArea())
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $showFaceID) {
+            RegistrationFaceIDView()
+        }
+        .task {
+            guard state == .creating else { return }
+            await Task.yield()
+            provisionKeys()
+        }
+    }
+
+    private var description: String {
+        switch state {
+        case .creating:
+            return "Shum создаёт уникальные ключи для вашего профиля и сообщений."
+        case .ready:
+            return "Уникальные ключи защищают ваш профиль и сообщения. Закрытые ключи не передаются Shum и не покидают устройство."
+        case .failed:
+            return "Не удалось надёжно сохранить ключи. Разблокируйте устройство и попробуйте ещё раз."
+        }
+    }
+
+    private func securityStatus(_ title: String) -> some View {
+        HStack(spacing: 11) {
+            Image(systemName: state == .ready ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(state == .ready ? Color(uiColor: .systemGreen) : .secondary)
+            Text(title)
+                .font(.subheadline)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: 310)
+    }
+
+    private func provisionKeys() {
+        state = .creating
+        let succeeded = coordinator.prepareRegistrationSecurity()
+        withAnimation(.easeOut(duration: 0.2)) {
+            state = succeeded ? .ready : .failed
+        }
+    }
+}
+
+private struct RegistrationFaceIDView: View {
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @ObservedObject private var appLock = ShumAppLock.shared
+    @State private var isWorking = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            ShumOnboardingPixelIllustration(kind: .faceID)
+                .foregroundStyle(Color(uiColor: .systemGreen))
+                .frame(width: 112, height: 92)
+                .accessibilityHidden(true)
+
+            Text("Открывать Shum с \(appLock.biometricTitle)")
+                .font(.title2.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .padding(.top, 34)
+
+            Text("Защитите доступ к переписке, если устройство окажется у другого человека.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+                .padding(.top, 12)
+                .frame(maxWidth: 340)
+
+            if let message = appLock.errorMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 20)
+            }
+
+            Spacer()
+
+            VStack(spacing: 10) {
+                RegistrationPrimaryButton(
+                    title: "Включить \(appLock.biometricTitle)",
+                    isEnabled: !isWorking,
+                    accentColor: Color(uiColor: .systemGreen)
+                ) {
+                    enableProtection()
+                }
+
+                Button("Не сейчас") {
+                    coordinator.completedRegistration()
+                }
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(.secondary)
+                .frame(height: 44)
+            }
+            .padding(.bottom, 20)
+        }
+        .padding(.horizontal, 24)
+        .background(Color("ls-Background").ignoresSafeArea())
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func enableProtection() {
+        guard !isWorking else { return }
+        isWorking = true
+        Task {
+            let enabled = await appLock.enable()
+            isWorking = false
+            if enabled {
+                coordinator.completedRegistration()
+            }
+        }
+    }
+}
+
 private struct ShumOnboardingPage: View {
     let illustration: ShumOnboardingPixelIllustration.Kind
     let title: String
@@ -83,7 +264,7 @@ private struct ShumOnboardingPage: View {
 }
 
 private struct ShumOnboardingPixelIllustration: View {
-    enum Kind { case network, identity }
+    enum Kind { case network, identity, security, faceID }
 
     let kind: Kind
     private let unit: CGFloat = 4
@@ -129,7 +310,45 @@ private struct ShumOnboardingPixelIllustration: View {
                 + person(x: 8, y: 4)
                 + key(x: 10, y: 14)
             )
+        case .security:
+            return Set(
+                shield(x: 5, y: 0)
+                + key(x: 9, y: 8)
+            )
+        case .faceID:
+            return Set(
+                faceFrame(x: 4, y: 1)
+                + [Pixel(9, 7), Pixel(15, 7)]
+                + line(from: Pixel(12, 8), to: Pixel(12, 12))
+                + line(from: Pixel(9, 15), to: Pixel(15, 15))
+            )
         }
+    }
+
+    private func shield(x: Int, y: Int) -> [Pixel] {
+        var result = line(from: Pixel(x + 2, y), to: Pixel(x + 12, y))
+        result += [Pixel(x + 1, y + 1), Pixel(x + 13, y + 1)]
+        result += line(from: Pixel(x, y + 2), to: Pixel(x, y + 9))
+        result += line(from: Pixel(x + 14, y + 2), to: Pixel(x + 14, y + 9))
+        result += [Pixel(x + 1, y + 10), Pixel(x + 13, y + 10)]
+        result += [Pixel(x + 2, y + 11), Pixel(x + 12, y + 11)]
+        result += [Pixel(x + 3, y + 12), Pixel(x + 11, y + 12)]
+        result += [Pixel(x + 4, y + 13), Pixel(x + 10, y + 13)]
+        result += [Pixel(x + 5, y + 14), Pixel(x + 9, y + 14)]
+        result += [Pixel(x + 6, y + 15), Pixel(x + 8, y + 15), Pixel(x + 7, y + 16)]
+        return result
+    }
+
+    private func faceFrame(x: Int, y: Int) -> [Pixel] {
+        var result = line(from: Pixel(x, y), to: Pixel(x + 5, y))
+        result += line(from: Pixel(x, y), to: Pixel(x, y + 5))
+        result += line(from: Pixel(x + 11, y), to: Pixel(x + 16, y))
+        result += line(from: Pixel(x + 16, y), to: Pixel(x + 16, y + 5))
+        result += line(from: Pixel(x, y + 14), to: Pixel(x, y + 19))
+        result += line(from: Pixel(x, y + 19), to: Pixel(x + 5, y + 19))
+        result += line(from: Pixel(x + 16, y + 14), to: Pixel(x + 16, y + 19))
+        result += line(from: Pixel(x + 11, y + 19), to: Pixel(x + 16, y + 19))
+        return result
     }
 
     private func bubble(x: Int, y: Int, tail: Tail) -> [Pixel] {

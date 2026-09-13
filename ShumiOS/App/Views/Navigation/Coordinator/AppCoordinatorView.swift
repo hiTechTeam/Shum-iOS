@@ -3,6 +3,7 @@ import SwiftUI
 struct AppCoordinatorView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var coordinator: AppCoordinator
+    @StateObject private var appLock = ShumAppLock.shared
 
     @State private var hasReachedMinimumSplashDuration = false
 
@@ -33,6 +34,12 @@ struct AppCoordinatorView: View {
                     .transition(.opacity)
                     .zIndex(1)
             }
+
+            if coordinator.isRegistered && appLock.isLocked {
+                ShumLockedView(appLock: appLock)
+                    .transition(.opacity)
+                    .zIndex(2)
+            }
         }
         .onOpenURL { url in
             do { coordinator.invitation = try SpotchatContactCard.parse(url) }
@@ -46,6 +53,10 @@ struct AppCoordinatorView: View {
             coordinator.updateApplicationState(
                 isActive: scenePhase == .active
             )
+
+            if coordinator.isRegistered, scenePhase == .active {
+                _ = await appLock.unlock()
+            }
 
             guard coordinator.showSplash else { return }
 
@@ -75,8 +86,13 @@ struct AppCoordinatorView: View {
             coordinator.updateApplicationState(isActive: phase == .active)
             if phase == .active {
                 Task {
+                    if coordinator.isRegistered {
+                        _ = await appLock.unlock()
+                    }
                     await coordinator.refreshSession()
                 }
+            } else if phase == .background {
+                appLock.lock()
             }
         }
     }
@@ -95,6 +111,54 @@ struct AppCoordinatorView: View {
 
         withAnimation(.easeOut(duration: 0.18)) {
             coordinator.showSplash = false
+        }
+    }
+}
+
+private struct ShumLockedView: View {
+    @ObservedObject var appLock: ShumAppLock
+
+    var body: some View {
+        ZStack {
+            Color("ls-Background").ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                Image.shumLogo
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 76, height: 76)
+
+                Text("Shum заблокирован")
+                    .font(.title2.weight(.semibold))
+
+                Text("Подтвердите владельца устройства, чтобы открыть переписку.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 320)
+
+                Button {
+                    Task { _ = await appLock.unlock() }
+                } label: {
+                    Text("Открыть с \(appLock.biometricTitle)")
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: 300)
+                        .frame(height: 50)
+                        .background(Color.accentColor, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(appLock.isAuthenticating)
+
+                if let message = appLock.errorMessage {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 320)
+                }
+            }
+            .padding(24)
         }
     }
 }
