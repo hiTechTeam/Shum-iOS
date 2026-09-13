@@ -39,7 +39,7 @@ private struct ShumProfileOwnershipOnboardingView: View {
 
 struct RegistrationSecurityReadyView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
-    @State private var showFaceID = false
+    @State private var showPasscode = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -84,15 +84,15 @@ struct RegistrationSecurityReadyView: View {
                 isEnabled: true,
                 accentColor: Color(uiColor: .systemGreen)
             ) {
-                showFaceID = true
+                showPasscode = true
             }
             .padding(.bottom, 20)
         }
         .padding(.horizontal, 24)
         .background(Color("ls-Background").ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(isPresented: $showFaceID) {
-            RegistrationFaceIDView()
+        .navigationDestination(isPresented: $showPasscode) {
+            RegistrationPasscodeSetupView()
         }
     }
 
@@ -105,6 +105,101 @@ struct RegistrationSecurityReadyView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: 310)
+    }
+}
+
+private struct RegistrationPasscodeSetupView: View {
+    private enum Phase {
+        case create
+        case confirm
+    }
+
+    @ObservedObject private var appLock = ShumAppLock.shared
+    @State private var phase: Phase = .create
+    @State private var firstCode = ""
+    @State private var code = ""
+    @State private var message: String?
+    @State private var isSaving = false
+    @State private var showFaceID = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            ShumOnboardingPixelIllustration(kind: .passcode)
+                .foregroundStyle(Color(uiColor: .systemGreen))
+                .frame(width: 112, height: 92)
+                .accessibilityHidden(true)
+
+            Text(phase == .create ? "Создайте код Shum" : "Повторите код")
+                .font(.title2.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .padding(.top, 34)
+
+            Text("Пять цифр защитят переписку, если Face ID недоступен.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+                .padding(.top, 12)
+                .frame(maxWidth: 340)
+
+            ShumPasscodeInput(code: $code)
+                .padding(.top, 30)
+
+            if let message {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 16)
+            }
+
+            Spacer()
+
+            RegistrationPrimaryButton(
+                title: phase == .create ? "Продолжить" : "Сохранить код",
+                isEnabled: code.count == 5 && !isSaving,
+                accentColor: Color(uiColor: .systemGreen),
+                action: continueFlow
+            )
+            .padding(.bottom, 20)
+        }
+        .padding(.horizontal, 24)
+        .background(Color("ls-Background").ignoresSafeArea())
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $showFaceID) {
+            RegistrationFaceIDView()
+        }
+    }
+
+    private func continueFlow() {
+        guard code.count == 5, !isSaving else { return }
+        message = nil
+
+        if phase == .create {
+            firstCode = code
+            code = ""
+            phase = .confirm
+            return
+        }
+
+        guard code == firstCode else {
+            code = ""
+            message = "Коды не совпадают. Попробуйте ещё раз."
+            return
+        }
+
+        isSaving = true
+        Task {
+            let saved = await appLock.setPasscode(code)
+            isSaving = false
+            if saved {
+                showFaceID = true
+            } else {
+                message = appLock.errorMessage
+            }
+        }
     }
 }
 
@@ -154,7 +249,8 @@ private struct RegistrationFaceIDView: View {
                     enableProtection()
                 }
 
-                Button("Не сейчас") {
+                Button("Использовать код") {
+                    appLock.usePasscodeByDefault()
                     coordinator.completedRegistration()
                 }
                 .font(.system(size: 16, weight: .regular))
@@ -227,7 +323,7 @@ private struct ShumOnboardingPage: View {
 }
 
 private struct ShumOnboardingPixelIllustration: View {
-    enum Kind { case network, identity, security, faceID }
+    enum Kind { case network, identity, security, passcode, faceID }
 
     let kind: Kind
     private let unit: CGFloat = 4
@@ -277,6 +373,14 @@ private struct ShumOnboardingPixelIllustration: View {
             return Set(
                 shield(x: 5, y: 0)
                 + key(x: 9, y: 8)
+            )
+        case .passcode:
+            return Set(
+                outline(x: 5, y: 5, width: 14, height: 12)
+                + line(from: Pixel(8, 5), to: Pixel(8, 3))
+                + line(from: Pixel(16, 5), to: Pixel(16, 3))
+                + line(from: Pixel(9, 2), to: Pixel(15, 2))
+                + [Pixel(9, 10), Pixel(12, 10), Pixel(15, 10)]
             )
         case .faceID:
             return Set(

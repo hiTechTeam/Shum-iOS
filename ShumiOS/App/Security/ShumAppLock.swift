@@ -1,23 +1,52 @@
+import Combine
+import CryptoKit
 import Foundation
 import LocalAuthentication
-import Combine
+import Security
 
 @MainActor
 final class ShumAppLock: ObservableObject {
+    enum PreferredMethod: String {
+        case biometrics
+        case passcode
+    }
+
     static let shared = ShumAppLock()
 
-    @Published private(set) var isEnabled: Bool
+    @Published private(set) var isBiometricsEnabled: Bool
+    @Published private(set) var hasPasscode: Bool
+    @Published private(set) var preferredMethod: PreferredMethod
     @Published private(set) var isLocked: Bool
     @Published private(set) var isAuthenticating = false
     @Published var errorMessage: String?
 
-    private let enabledKey = "shum.security.appLock.enabled"
+    private struct PasscodeRecord: Codable {
+        let salt: Data
+        let digest: Data
+    }
+
+    private let biometricsEnabledKey = "shum.security.appLock.enabled"
+    private let preferredMethodKey = "shum.security.appLock.preferredMethod"
+    private let passcodeKey = "shum.security.appLock.passcode"
+    private let biometryDomainStateKey = "shum.security.appLock.biometryDomainState"
+    private let failedAttemptsKey = "shum.security.appLock.failedAttempts"
+    private let lockoutUntilKey = "shum.security.appLock.lockoutUntil"
+    private var latestBiometryDomainState: Data?
 
     private init(defaults: UserDefaults = .standard) {
-        let enabled = defaults.bool(forKey: enabledKey)
-        isEnabled = enabled
-        isLocked = enabled
+        let biometricsEnabled = defaults.bool(forKey: biometricsEnabledKey)
+        let passcodeExists = (try? KeychainStore.shared.data(for: passcodeKey)) != nil
+        let storedMethod = defaults.string(forKey: preferredMethodKey)
+            .flatMap(PreferredMethod.init(rawValue:))
+
+        isBiometricsEnabled = biometricsEnabled
+        hasPasscode = passcodeExists
+        preferredMethod = storedMethod
+            ?? (biometricsEnabled ? .biometrics : .passcode)
+        isLocked = biometricsEnabled || passcodeExists
     }
+
+    var isEnabled: Bool { isBiometricsEnabled }
 
     var biometricTitle: String {
         let context = LAContext()
@@ -32,6 +61,12 @@ final class ShumAppLock: ObservableObject {
         }
     }
 
+    var preferredMethodTitle: String {
+        preferredMethod == .biometrics && isBiometricsEnabled
+            ? biometricTitle
+            : "Код Shum"
+    }
+
     var isBiometryAvailable: Bool {
         let context = LAContext()
         var error: NSError?
@@ -41,50 +76,154 @@ final class ShumAppLock: ObservableObject {
         )
     }
 
+    func setPasscode(_ passcode: String) async -> Bool {
+        guard Self.isValid(passcode) else {
+            errorMessage = "Код должен состоять из пяти цифр."
+            return false
+        }
+
+        var saltBytes = [UInt8](repeating: 0, count: 16)
+        guard SecRandomCopyBytes(kSecRandomDefault, saltBytes.count, &saltBytes) == errSecSuccess else {
+            errorMessage = "Не удалось создать защищённый код. Попробуйте ещё раз."
+            return false
+        }
+
+        let salt = Data(saltBytes)
+        let digest = await Task.detached(priority: .userInitiated) {
+            Self.deriveDigest(passcode: passcode, salt: salt)
+        }.value
+        let record = PasscodeRecord(salt: salt, digest: digest)
+
+        do {
+            let encoded = try JSONEncoder().encode(record)
+            try KeychainStore.shared.set(encoded, for: passcodeKey)
+            hasPasscode = true
+            clearFailedAttempts()
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = "Не удалось сохранить код в защищённом хранилище."
+            return false
+        }
+    }
+
+    func verifyPasscode(_ passcode: String) async -> Bool {
+        guard Self.isValid(passcode) else { return false }
+        guard !isPasscodeTemporarilyLocked else {
+            errorMessage = lockoutMessage
+            return false
+        }
+
+        do {
+            guard let encoded = try KeychainStore.shared.data(for: passcodeKey) else {
+                hasPasscode = false
+                errorMessage = "Код Shum не найден."
+                return false
+            }
+            let record = try JSONDecoder().decode(PasscodeRecord.self, from: encoded)
+            let candidate = await Task.detached(priority: .userInitiated) {
+                Self.deriveDigest(passcode: passcode, salt: record.salt)
+            }.value
+
+            guard Self.constantTimeEqual(candidate, record.digest) else {
+                registerFailedAttempt()
+                errorMessage = isPasscodeTemporarilyLocked
+                    ? lockoutMessage
+                    : "Неверный код."
+                return false
+            }
+
+            clearFailedAttempts()
+            isLocked = false
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = "Не удалось проверить код Shum."
+            return false
+        }
+    }
+
+    func usePasscodeByDefault() {
+        guard hasPasscode else { return }
+        preferredMethod = .passcode
+        UserDefaults.standard.set(preferredMethod.rawValue, forKey: preferredMethodKey)
+        errorMessage = nil
+    }
+
+    func useBiometricsByDefault() {
+        guard isBiometricsEnabled else { return }
+        preferredMethod = .biometrics
+        UserDefaults.standard.set(preferredMethod.rawValue, forKey: preferredMethodKey)
+        errorMessage = nil
+    }
+
     func enable() async -> Bool {
+        errorMessage = nil
         guard await authenticate(
-            policy: .deviceOwnerAuthenticationWithBiometrics,
-            reason: "Подтвердите, что хотите защитить доступ к Shum."
+            reason: "Подтвердите, что хотите открывать Shum с \(biometricTitle).",
+            validateEnrollment: false
         ) else { return false }
 
-        UserDefaults.standard.set(true, forKey: enabledKey)
-        isEnabled = true
+        guard let domainState = latestBiometryDomainState else {
+            errorMessage = "Не удалось проверить настройки биометрии устройства."
+            return false
+        }
+
+        do {
+            try KeychainStore.shared.set(domainState, for: biometryDomainStateKey)
+        } catch {
+            errorMessage = "Не удалось защитить настройку Face ID."
+            return false
+        }
+
+        UserDefaults.standard.set(true, forKey: biometricsEnabledKey)
+        preferredMethod = .biometrics
+        UserDefaults.standard.set(preferredMethod.rawValue, forKey: preferredMethodKey)
+        isBiometricsEnabled = true
         isLocked = false
         errorMessage = nil
         return true
     }
 
-    func disable() async -> Bool {
-        guard await authenticate(
-            policy: .deviceOwnerAuthentication,
-            reason: "Подтвердите отключение защиты Shum."
-        ) else { return false }
-
-        UserDefaults.standard.set(false, forKey: enabledKey)
-        isEnabled = false
-        isLocked = false
+    func disable() {
+        UserDefaults.standard.set(false, forKey: biometricsEnabledKey)
+        preferredMethod = .passcode
+        UserDefaults.standard.set(preferredMethod.rawValue, forKey: preferredMethodKey)
+        try? KeychainStore.shared.remove(biometryDomainStateKey)
+        isBiometricsEnabled = false
         errorMessage = nil
-        return true
     }
 
     func lock() {
-        guard isEnabled else { return }
+        guard isBiometricsEnabled || hasPasscode else { return }
         isLocked = true
     }
 
     @discardableResult
     func unlock() async -> Bool {
-        guard isEnabled else {
+        guard isBiometricsEnabled || hasPasscode else {
             isLocked = false
             return true
         }
         guard isLocked else { return true }
+        guard preferredMethod == .biometrics, isBiometricsEnabled else {
+            return false
+        }
+        return await unlockWithBiometrics()
+    }
 
+    @discardableResult
+    func unlockWithBiometrics() async -> Bool {
+        guard isBiometricsEnabled, isLocked else { return !isLocked }
+        errorMessage = nil
         let unlocked = await authenticate(
-            policy: .deviceOwnerAuthentication,
-            reason: "Откройте Shum, чтобы прочитать сообщения."
+            reason: "Откройте Shum, чтобы прочитать сообщения.",
+            validateEnrollment: true
         )
         if unlocked {
+            if let domainState = latestBiometryDomainState {
+                try? KeychainStore.shared.set(domainState, for: biometryDomainStateKey)
+            }
             isLocked = false
             errorMessage = nil
         }
@@ -92,25 +231,70 @@ final class ShumAppLock: ObservableObject {
     }
 
     func reset() {
-        UserDefaults.standard.removeObject(forKey: enabledKey)
-        isEnabled = false
+        UserDefaults.standard.removeObject(forKey: biometricsEnabledKey)
+        UserDefaults.standard.removeObject(forKey: preferredMethodKey)
+        clearFailedAttempts()
+        try? KeychainStore.shared.remove(passcodeKey)
+        try? KeychainStore.shared.remove(biometryDomainStateKey)
+        isBiometricsEnabled = false
+        hasPasscode = false
+        preferredMethod = .passcode
         isLocked = false
         isAuthenticating = false
         errorMessage = nil
     }
 
+    private var isPasscodeTemporarilyLocked: Bool {
+        UserDefaults.standard.double(forKey: lockoutUntilKey) > Date().timeIntervalSince1970
+    }
+
+    private var lockoutMessage: String {
+        let until = UserDefaults.standard.double(forKey: lockoutUntilKey)
+        let seconds = max(1, Int(ceil(until - Date().timeIntervalSince1970)))
+        return "Слишком много попыток. Повторите через \(seconds) сек."
+    }
+
+    private func registerFailedAttempt() {
+        let attempts = UserDefaults.standard.integer(forKey: failedAttemptsKey) + 1
+        UserDefaults.standard.set(attempts, forKey: failedAttemptsKey)
+        guard attempts >= 5 else { return }
+        let delay: TimeInterval = attempts >= 10 ? 300 : 30
+        UserDefaults.standard.set(
+            Date().addingTimeInterval(delay).timeIntervalSince1970,
+            forKey: lockoutUntilKey
+        )
+    }
+
+    private func clearFailedAttempts() {
+        UserDefaults.standard.removeObject(forKey: failedAttemptsKey)
+        UserDefaults.standard.removeObject(forKey: lockoutUntilKey)
+    }
+
     private func authenticate(
-        policy: LAPolicy,
-        reason: String
+        reason: String,
+        validateEnrollment: Bool
     ) async -> Bool {
         guard !isAuthenticating else { return false }
 
         let context = LAContext()
         context.localizedCancelTitle = Inc.Common.cancel.localized
+        context.localizedFallbackTitle = ""
         var availabilityError: NSError?
-        guard context.canEvaluatePolicy(policy, error: &availabilityError) else {
+        guard context.canEvaluatePolicy(
+            .deviceOwnerAuthenticationWithBiometrics,
+            error: &availabilityError
+        ) else {
             errorMessage = availabilityError?.localizedDescription
                 ?? "Биометрическая защита недоступна на этом устройстве."
+            return false
+        }
+
+        let currentDomainState = context.evaluatedPolicyDomainState
+        if validateEnrollment,
+           let expectedDomainState = try? KeychainStore.shared.data(for: biometryDomainStateKey),
+           expectedDomainState != currentDomainState {
+            disable()
+            errorMessage = "Настройки Face ID изменились. Войдите по коду Shum и включите Face ID заново."
             return false
         }
 
@@ -119,16 +303,18 @@ final class ShumAppLock: ObservableObject {
 
         do {
             let success = try await context.evaluatePolicy(
-                policy,
+                .deviceOwnerAuthenticationWithBiometrics,
                 localizedReason: reason
             )
             if !success {
                 errorMessage = "Не удалось подтвердить владельца устройства."
+            } else {
+                latestBiometryDomainState = context.evaluatedPolicyDomainState
             }
             return success
         } catch let error as LAError {
             if error.code != .userCancel && error.code != .appCancel
-                && error.code != .systemCancel {
+                && error.code != .systemCancel && error.code != .userFallback {
                 errorMessage = error.localizedDescription
             }
             return false
@@ -136,5 +322,28 @@ final class ShumAppLock: ObservableObject {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    nonisolated private static func isValid(_ passcode: String) -> Bool {
+        passcode.count == 5 && passcode.unicodeScalars.allSatisfy {
+            (48...57).contains(Int($0.value))
+        }
+    }
+
+    nonisolated private static func deriveDigest(passcode: String, salt: Data) -> Data {
+        var value = salt + Data(passcode.utf8)
+        for _ in 0..<60_000 {
+            value = Data(SHA256.hash(data: value + salt))
+        }
+        return value
+    }
+
+    nonisolated private static func constantTimeEqual(_ lhs: Data, _ rhs: Data) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+        var difference: UInt8 = 0
+        for index in lhs.indices {
+            difference |= lhs[index] ^ rhs[index]
+        }
+        return difference == 0
     }
 }

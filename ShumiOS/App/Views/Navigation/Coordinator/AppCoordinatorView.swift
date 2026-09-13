@@ -117,28 +117,93 @@ struct AppCoordinatorView: View {
 
 private struct ShumLockedView: View {
     @ObservedObject var appLock: ShumAppLock
+    @State private var showingPasscode: Bool
+    @State private var code = ""
+    @State private var isCheckingCode = false
+
+    init(appLock: ShumAppLock) {
+        self.appLock = appLock
+        _showingPasscode = State(
+            initialValue: appLock.preferredMethod == .passcode
+        )
+    }
 
     var body: some View {
         ZStack {
             Color("ls-Background").ignoresSafeArea()
 
-            VStack(spacing: 18) {
-                Image.shumLogo
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 76, height: 76)
+            if showingPasscode, appLock.hasPasscode {
+                passcodeContent
+            } else {
+                biometricContent
+            }
+        }
+    }
 
-                Text("Shum заблокирован")
-                    .font(.title2.weight(.semibold))
+    private var passcodeContent: some View {
+        VStack(spacing: 18) {
+            Image.shumLogo
+                .resizable()
+                .scaledToFit()
+                .frame(width: 70, height: 70)
 
-                Text("Подтвердите владельца устройства, чтобы открыть переписку.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 320)
+            Text("Введите код Shum")
+                .font(.title2.weight(.semibold))
 
+            Text("Введите пять цифр, чтобы открыть переписку.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            ShumPasscodeInput(code: $code)
+                .padding(.vertical, 12)
+
+            if let message = appLock.errorMessage {
+                errorText(message)
+            }
+
+            if appLock.isBiometricsEnabled {
+                Button("Открыть с \(appLock.biometricTitle)") {
+                    code = ""
+                    showingPasscode = false
+                    Task { _ = await appLock.unlockWithBiometrics() }
+                }
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(Color.accentColor)
+                .frame(height: 44)
+            }
+        }
+        .padding(24)
+        .onChange(of: code) { value in
+            guard value.count == 5, !isCheckingCode else { return }
+            isCheckingCode = true
+            Task {
+                let unlocked = await appLock.verifyPasscode(value)
+                isCheckingCode = false
+                if !unlocked { code = "" }
+            }
+        }
+    }
+
+    private var biometricContent: some View {
+        VStack(spacing: 18) {
+            Image.shumLogo
+                .resizable()
+                .scaledToFit()
+                .frame(width: 76, height: 76)
+
+            Text("Shum заблокирован")
+                .font(.title2.weight(.semibold))
+
+            Text("Подтвердите владельца устройства, чтобы открыть переписку.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+
+            if appLock.isBiometricsEnabled {
                 Button {
-                    Task { _ = await appLock.unlock() }
+                    Task { _ = await appLock.unlockWithBiometrics() }
                 } label: {
                     Text("Открыть с \(appLock.biometricTitle)")
                         .font(.system(size: 17, weight: .regular))
@@ -149,17 +214,31 @@ private struct ShumLockedView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(appLock.isAuthenticating)
-
-                if let message = appLock.errorMessage {
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 320)
-                }
             }
-            .padding(24)
+
+            if appLock.hasPasscode {
+                Button("Ввести код") {
+                    appLock.errorMessage = nil
+                    showingPasscode = true
+                }
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(.secondary)
+                .frame(height: 44)
+            }
+
+            if let message = appLock.errorMessage {
+                errorText(message)
+            }
         }
+        .padding(24)
+    }
+
+    private func errorText(_ message: String) -> some View {
+        Text(message)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 320)
     }
 }
 

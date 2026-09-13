@@ -202,7 +202,8 @@ struct ProfileOverviewView: View {
     private var settingsCard: some View {
         VStack(spacing: 0) {
             ProfileOverviewRow(title: "Безопасность", systemImage: "checkmark.shield",
-                value: appLock.isEnabled ? appLock.biometricTitle : nil, position: .top) {
+                value: (appLock.hasPasscode || appLock.isEnabled) ? appLock.preferredMethodTitle : nil,
+                position: .top) {
                     showSecurity = true
                 }
             Divider().padding(.leading, 60).padding(.trailing, 20)
