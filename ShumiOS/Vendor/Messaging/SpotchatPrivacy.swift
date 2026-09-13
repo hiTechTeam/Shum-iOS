@@ -81,10 +81,20 @@ struct SpotchatPrivacySettings: View {
             }
         }
         .navigationTitle("Настройки").navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("Удалить профиль навсегда?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Удалить профиль и данные", role: .destructive) { runtime.deleteProfileHandler?() }
-            Button("Отмена", role: .cancel) {}
-        } message: { Text("Все данные и ключи на этом iPhone будут удалены. Отправленные сообщения могут остаться у собеседников и на устройствах-посредниках.") }
+        .alert(
+            NSLocalizedString("local.delete.title", comment: ""),
+            isPresented: $confirmDelete
+        ) {
+            Button(Inc.Common.cancel.localized, role: .cancel) { }
+            Button(
+                NSLocalizedString("local.delete.action", comment: ""),
+                role: .destructive
+            ) {
+                runtime.deleteProfileHandler?()
+            }
+        } message: {
+            Text(NSLocalizedString("local.delete.message", comment: ""))
+        }
         .alert("Shum", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("Понятно") {} } message: { Text(error ?? "") }
     }
 }

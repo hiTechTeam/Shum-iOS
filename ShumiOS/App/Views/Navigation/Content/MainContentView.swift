@@ -39,7 +39,6 @@ struct MainContentView: View {
                     authCodeViewModel: coordinator.authCodeViewModel,
                     photoViewModel: profilePhotoViewModel
                 )
-                    .navigationTitle("").navigationBarTitleDisplayMode(.inline)
             }.tabItem { Label("Профиль", image: "PixelProfile") }.tag(2)
         }
         .tint(.accentColor)

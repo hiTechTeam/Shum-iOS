@@ -64,7 +64,7 @@ struct SpotchatChatsUI: View {
             .padding(8)
         }
         .navigationTitle("Чаты")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 newContactButton

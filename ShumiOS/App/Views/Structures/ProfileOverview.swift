@@ -63,8 +63,6 @@ struct ProfileOverviewView: View {
 
             ScrollView {
                 VStack(spacing: 30) {
-                    profileHeader
-
                     VStack(spacing: 20) {
                         settingsCard
                     }
@@ -76,6 +74,8 @@ struct ProfileOverviewView: View {
             .shumAlwaysBounce()
             .refreshable { await coordinator.refreshSession() }
         }
+        .navigationTitle(displayName)
+        .navigationBarTitleDisplayMode(.inline)
         .shumOnChange(of: authCodeViewModel.localPhotoURL) { _, value in
             photoVM.loadPhotoFromURL(value)
         }
@@ -93,6 +93,30 @@ struct ProfileOverviewView: View {
             peopleViewModel.refreshEncounterHistory()
         }
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(action: openPhotoPreview) {
+                    Group {
+                        if let image = photoVM.uiImage {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Image(systemName: "person.crop.circle.fill")
+                                .resizable()
+                                .scaledToFit()
+                                .symbolRenderingMode(.hierarchical)
+                                .padding(2)
+                        }
+                    }
+                    .frame(width: 40, height: 40)
+                    .clipShape(Circle())
+                    .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+                .accessibilityLabel(Inc.Profile.openPhoto.localized)
+            }
+
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button { showQR = true } label: { Image(systemName: "qrcode") }
                     .accessibilityLabel("Мой QR-код")
@@ -163,41 +187,6 @@ struct ProfileOverviewView: View {
         } message: {
             Text(Inc.Profile.deleteAccountFailedMessage.localized)
         }
-    }
-
-    private var profileHeader: some View {
-        VStack(spacing: 8) {
-            Button(action: openPhotoPreview) {
-                Group {
-                    if let image = photoVM.uiImage {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        photoVM.profileImage
-                            .resizable()
-                            .scaledToFit()
-                            .foregroundStyle(.secondary)
-                            .padding(20)
-                    }
-                }
-                .frame(width: 144, height: 144)
-                .background(
-                    Color(uiColor: .secondarySystemBackground),
-                    in: Circle()
-                )
-                .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Inc.Profile.openPhoto.localized)
-
-            Text(displayName)
-                .font(.system(size: 28, weight: .semibold))
-                .multilineTextAlignment(.center)
-
-
-        }
-        .frame(maxWidth: .infinity)
     }
 
     private var settingsCard: some View {

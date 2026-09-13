@@ -48,11 +48,12 @@ struct ProfilePhotoView: View {
                 if let uiImage = viewModel.uiImage {
                     profilePhoto(uiImage)
                 } else {
-                    viewModel.profileImage
+                    Image(systemName: "person.crop.circle.fill")
                         .resizable()
                         .scaledToFit()
+                        .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(.secondary)
-                        .padding(18)
+                        .padding(6)
                         .frame(width: imageSize, height: imageSize)
                         .background(
                             Color(uiColor: .secondarySystemBackground),
