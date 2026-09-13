@@ -9,82 +9,16 @@ struct ShumPrivacyCover: View {
         ZStack {
             Color("ls-Background")
 
-            ShumPixelPrivacyGesture()
-                .foregroundStyle(.white)
-                .frame(width: 126, height: 168)
+            Image.shumLogo
+                .resizable()
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(width: 92, height: 92)
                 .accessibilityHidden(true)
         }
         .ignoresSafeArea()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Содержимое Shum скрыто")
-    }
-}
-
-/// A deliberately low-resolution hand used only on privacy covers. Drawing the
-/// silhouette in SwiftUI keeps it crisp at every scale and avoids affecting the
-/// app's asset rendering, which must remain outside secure UIKit containers.
-private struct ShumPixelPrivacyGesture: View {
-    private let rows = [
-        "........####........",
-        ".......######.......",
-        ".......######.......",
-        ".......######.......",
-        ".......######.......",
-        ".......######.......",
-        ".......######.......",
-        ".......######.......",
-        ".......######.......",
-        "...####.######.####..",
-        "..#####.######.#####.",
-        "..##################.",
-        "..##################.",
-        "..##################.",
-        "...################..",
-        "....###############..",
-        "....##############...",
-        ".....#############...",
-        ".....############....",
-        "......###########....",
-        "......###########....",
-        "......###########....",
-        "......###########....",
-        "......###########....",
-        ".....#############...",
-        ".....#############..."
-    ]
-
-    var body: some View {
-        GeometryReader { proxy in
-            let columns = rows.map(\.count).max() ?? 1
-            let unit = floor(min(
-                proxy.size.width / CGFloat(columns),
-                proxy.size.height / CGFloat(rows.count)
-            ))
-            let drawingSize = CGSize(
-                width: CGFloat(columns) * unit,
-                height: CGFloat(rows.count) * unit
-            )
-            let origin = CGPoint(
-                x: (proxy.size.width - drawingSize.width) / 2,
-                y: (proxy.size.height - drawingSize.height) / 2
-            )
-
-            Canvas(rendersAsynchronously: false) { context, _ in
-                for (y, row) in rows.enumerated() {
-                    for (x, character) in row.enumerated() where character == "#" {
-                        context.fill(
-                            Path(CGRect(
-                                x: origin.x + CGFloat(x) * unit,
-                                y: origin.y + CGFloat(y) * unit,
-                                width: unit,
-                                height: unit
-                            )),
-                            with: .foreground
-                        )
-                    }
-                }
-            }
-        }
     }
 }
 

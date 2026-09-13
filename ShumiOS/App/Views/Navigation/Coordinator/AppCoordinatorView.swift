@@ -7,8 +7,6 @@ struct AppCoordinatorView: View {
     @StateObject private var appLock = ShumAppLock.shared
 
     @State private var hasReachedMinimumSplashDuration = false
-    @State private var showsScreenshotPrivacyGesture = false
-    @State private var screenshotPrivacyEventID = UUID()
 
     private let minimumSplashDuration: UInt64 = 600_000_000
     private let remainingFallbackDuration: UInt64 = 1_400_000_000
@@ -51,13 +49,6 @@ struct AppCoordinatorView: View {
                 ShumPrivacyCover()
                     .zIndex(11)
             }
-
-            if showsScreenshotPrivacyGesture {
-                ShumPrivacyCover()
-                    .transition(.opacity)
-                    .zIndex(12)
-                    .allowsHitTesting(false)
-            }
         }
         .onOpenURL { url in
             do { coordinator.invitation = try SpotchatContactCard.parse(url) }
@@ -69,19 +60,8 @@ struct AppCoordinatorView: View {
         .onReceive(NotificationCenter.default.publisher(
             for: UIApplication.userDidTakeScreenshotNotification
         )) { _ in
-            guard coordinator.isRegistered else { return }
-
-            let eventID = UUID()
-            screenshotPrivacyEventID = eventID
-            withAnimation(.easeOut(duration: 0.08)) {
-                showsScreenshotPrivacyGesture = true
-            }
-
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 1_800_000_000)
-                guard screenshotPrivacyEventID == eventID else { return }
+            if coordinator.isRegistered {
                 appLock.lock()
-                showsScreenshotPrivacyGesture = false
             }
         }
         .environmentObject(coordinator)
