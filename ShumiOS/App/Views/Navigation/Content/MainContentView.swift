@@ -52,7 +52,17 @@ struct MainContentView: View {
             }
         }
         .sheet(isPresented: $showContacts) {
-            SpotchatContactsView(runtime: chat) { peer in
+            SpotchatContactsView(runtime: chat, showOwnQR: {
+                let sourceTab = selectedTab
+                showContacts = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    if sourceTab == 0 {
+                        contactsPath.append(.ownQR)
+                    } else {
+                        chatsPath.append(.ownQR)
+                    }
+                }
+            }) { peer in
                 showContacts = false; selectedTab = 1
                 chatsPath.append(.conversation(peer))
             }

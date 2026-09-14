@@ -5,7 +5,7 @@ import BitFoundation
 
 // Current Spotchat chat list, adapted to Shum's navigation and palette.
 enum SpotchatUIRoute: Hashable {
-    case conversation(SpotchatPeer), newChat, requests
+    case conversation(SpotchatPeer), newChat, requests, ownQR
 }
 
 private struct ShumDirectoryRowID: Hashable {
@@ -14,6 +14,7 @@ private struct ShumDirectoryRowID: Hashable {
 }
 
 struct SpotchatDestinationUI: View {
+    @EnvironmentObject private var coordinator: AppCoordinator
     @ObservedObject var runtime: SpotchatRuntime
     let route: SpotchatUIRoute
     let open: (SpotchatUIRoute) -> Void
@@ -24,6 +25,17 @@ struct SpotchatDestinationUI: View {
                 SpotchatConversationView(runtime: runtime, peer: peer)
             case .newChat: SpotchatContactsView(runtime: runtime) { open(.conversation($0)) }
             case .requests: SpotchatContactRequestsView(runtime: runtime) { open(.conversation($0)) }
+            case .ownQR:
+                if let card = runtime.permanent?.ownCard {
+                    SpotchatQRView(
+                        card: card,
+                        resolve: { locator, completion in
+                            runtime.resolveContact(locator, completion: completion)
+                        }
+                    ) { scannedCard in
+                        coordinator.invitation = scannedCard
+                    }
+                }
             }
         }
     }

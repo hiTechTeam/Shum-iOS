@@ -16,6 +16,7 @@ typealias SpotchatContactResolving = (
 
 struct SpotchatContactsView: View {
     @ObservedObject var runtime: SpotchatRuntime
+    var showOwnQR: (() -> Void)? = nil
     var select: (SpotchatPeer) -> Void
     @Environment(\.dismiss) private var dismiss
     @ScaledMetric(relativeTo: .body) private var sheetHeight = 280
@@ -30,7 +31,15 @@ struct SpotchatContactsView: View {
             List {
                 Section {
                     Button { showScanner = true } label: { Label("Сканировать код", systemImage: "qrcode.viewfinder") }
-                    Button { showQR = true } label: { Label("Мой QR-код", systemImage: "qrcode") }
+                    Button {
+                        if let showOwnQR {
+                            showOwnQR()
+                        } else {
+                            showQR = true
+                        }
+                    } label: {
+                        Label("Мой QR-код", systemImage: "qrcode")
+                    }
                     Button { showPhoneBook = true } label: { Label("Пригласить", systemImage: "person.badge.plus") }
                 }
             }
