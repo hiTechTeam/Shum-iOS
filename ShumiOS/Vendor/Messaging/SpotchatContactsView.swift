@@ -61,14 +61,12 @@ struct SpotchatContactsView: View {
                 }
             }
             .fullScreenCover(isPresented: $showScanner) {
-                NavigationStack {
-                    SpotchatScanView(resolve: { locator, completion in
-                        runtime.resolveContact(locator, completion: completion)
-                    }) { card in
-                        showScanner = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                            invitation = card
-                        }
+                SpotchatScanView(resolve: { locator, completion in
+                    runtime.resolveContact(locator, completion: completion)
+                }) { card in
+                    showScanner = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        invitation = card
                     }
                 }
             }
@@ -235,14 +233,12 @@ struct SpotchatQRView: View {
             }
         }
         .fullScreenCover(isPresented: $showScanner) {
-            NavigationStack {
-                SpotchatScanView(resolve: resolve) { scannedCard in
-                    showScanner = false
+            SpotchatScanView(resolve: resolve) { scannedCard in
+                showScanner = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        dismiss()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                            scanned?(scannedCard)
-                        }
+                        scanned?(scannedCard)
                     }
                 }
             }
@@ -279,8 +275,12 @@ struct SpotchatQRView: View {
                     .scaledToFit()
                     .padding(20)
 
-                Circle()
-                    .fill(.white)
+                Image.shumLogo
+                    .renderingMode(.template)
+                    .resizable()
+                    .interpolation(.none)
+                    .scaledToFit()
+                    .foregroundStyle(.white)
                     .frame(width: 42, height: 42)
 
                 Image.shumLogo
@@ -408,18 +408,33 @@ struct SpotchatScanView: View {
                 .padding(.vertical, 20)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
-        }
-        .navigationTitle("Сканировать QR-код")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Отмена") {
-                    done = true
-                    dismiss()
+
+            VStack {
+                HStack {
+                    Button {
+                        done = true
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 26, weight: .regular))
+                            .foregroundStyle(.white)
+                            .frame(width: 52, height: 52)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Закрыть")
+
+                    Spacer()
                 }
+                .padding(.horizontal, 18)
+                .padding(.top, 14)
+
+                Spacer()
             }
         }
+        .ignoresSafeArea()
+        .statusBarHidden(true)
+        .toolbar(.hidden, for: .tabBar)
         .alert("QR-код", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil; done = false } })) {
             Button("Повторить") { error = nil; done = false }
         } message: {
