@@ -169,7 +169,7 @@ private struct ShumLockedView: View {
             Color("ls-Background").ignoresSafeArea()
 
             if isWaitingForAutomaticBiometrics {
-                ShumPrivacyCover()
+                AppSplashView()
             } else if showingPasscode, appLock.hasPasscode {
                 passcodeContent
             } else {
