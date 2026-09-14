@@ -64,8 +64,9 @@ struct SpotchatProfilePacket: Codable {
     static let maxWireBytes = 6144
 }
 
-/// Own profile is persistent; remote identity-to-profile bindings are only accepted
-/// in the current encrypted session. Only content-addressed images survive a restart.
+/// Own profile is persistent; remote identity-to-profile bindings are accepted from
+/// an encrypted BLE session or a cryptographically authenticated Nostr lookup.
+/// Only content-addressed images survive a restart.
 final class SpotchatProfileStore {
     private let directory: URL?
     init(directory: URL? = nil) { self.directory = directory }
@@ -159,6 +160,15 @@ final class SpotchatProfiles: ObservableObject {
     func refresh(_ peer: PeerID) {
         checked[peer] = nil; pending[peer] = nil; failed.remove(peer)
         tick()
+    }
+    func acceptResolved(_ profile: SpotchatProfile, for peer: PeerID) {
+        guard !retired, profile.valid else { return }
+        remote[peer] = profile
+        if let avatar = profile.avatar {
+            store.cache(avatar, hash: SpotchatProfile.digest(avatar))
+        }
+        loading.remove(peer)
+        failed.remove(peer)
     }
     func setAppActive(_ active: Bool) {
         guard appActive != active else { return }

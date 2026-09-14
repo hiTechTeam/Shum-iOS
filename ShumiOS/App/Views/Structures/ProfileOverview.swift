@@ -120,7 +120,16 @@ struct ProfileOverviewView: View {
         }
         .navigationDestination(isPresented: $showQR) {
             if let card = coordinator.chat?.permanent?.ownCard {
-                SpotchatQRView(card: card) { scannedCard in
+                SpotchatQRView(
+                    card: card,
+                    resolve: { locator, completion in
+                        guard let chat = coordinator.chat else {
+                            completion(.failure(SpotchatFailure.unavailableIdentity))
+                            return
+                        }
+                        chat.resolveContact(locator, completion: completion)
+                    }
+                ) { scannedCard in
                     coordinator.invitation = scannedCard
                 }
             }

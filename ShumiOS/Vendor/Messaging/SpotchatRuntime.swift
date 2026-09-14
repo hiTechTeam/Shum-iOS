@@ -85,6 +85,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
                 let internet = preview ? nil : SpotchatNostrService(identity: identity.nostr, manager: .spotchat())
                 let permanent = SpotchatMessageStore(identity: identity, store: store, transport: ble, wire: ble, card: card, internet: internet)
                 model.permanent = permanent
+                permanent.configureContactLookup { [weak model] in model?.profiles.own }
                 permanent.onError = { [weak model] in model?.error = $0 }
                 model.permanentChanges = permanent.$revision.sink { [weak model] _ in model?.syncPermanentMessages() }
                 #if DEBUG && targetEnvironment(simulator)
@@ -319,9 +320,33 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     func addContact(_ card: SpotchatContactCard, source: String) -> SpotchatPeer? {
         do {
             guard let permanent else { throw SpotchatFailure.unavailableIdentity }
-            try permanent.add(card, source: source, avatar: permanent.session(for: card).flatMap { profiles.remote[$0]?.avatar })
+            let avatar = permanent.session(for: card).flatMap { profiles.remote[$0]?.avatar }
+                ?? profiles.remote[card.peerID]?.avatar
+            try permanent.add(card, source: source, avatar: avatar)
             return SpotchatPeer(id: card.peerID, name: card.name, lastConnected: Date())
         } catch { self.error = error.localizedDescription; return nil }
+    }
+    func resolveContact(
+        _ locator: SpotchatContactLocator,
+        completion: @escaping (Result<SpotchatContactCard, Error>) -> Void
+    ) {
+        guard let permanent else {
+            completion(.failure(SpotchatFailure.unavailableIdentity))
+            return
+        }
+        if let card = permanent.nearby.values.first(where: { $0.nostrKey == locator.nostrKey }) {
+            completion(.success(card))
+            return
+        }
+        permanent.resolve(locator) { [weak self] result in
+            switch result {
+            case .success(let resolved):
+                self?.profiles.acceptResolved(resolved.profile, for: resolved.card.peerID)
+                completion(.success(resolved.card))
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
     }
     private func syncPermanentMessages() {
         guard let permanent else { return }

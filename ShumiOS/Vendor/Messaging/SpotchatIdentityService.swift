@@ -29,6 +29,23 @@ struct SpotchatContactCard: Codable, Equatable {
     }
     func invitation() throws -> URL {
         try validate()
+        guard let nostrKey = Data(hexString: nostrKey), nostrKey.count == 32 else {
+            throw SpotchatFailure.invalidContact
+        }
+        let encoded = nostrKey.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        guard let result = URL(string: "shum://c2/\(encoded)") else {
+            throw SpotchatFailure.invalidContact
+        }
+        return result
+    }
+
+    /// Legacy self-contained invitation retained so QR codes created by older
+    /// Shum builds continue to scan after the compact locator format ships.
+    func legacyInvitation() throws -> URL {
+        try validate()
         guard let nostrKey = Data(hexString: nostrKey), nostrKey.count == 32,
               signature.count == 64,
               name.utf8.count <= Int(UInt8.max),
@@ -130,6 +147,47 @@ struct SpotchatContactCard: Codable, Equatable {
     }
 }
 
+struct SpotchatContactLocator: Equatable {
+    let nostrKey: String
+
+    init(nostrKey: String) throws {
+        guard nostrKey.count == 64,
+              nostrKey.allSatisfy({ $0.isHexDigit && !$0.isUppercase }),
+              Data(hexString: nostrKey)?.count == 32 else {
+            throw SpotchatFailure.invalidContact
+        }
+        self.nostrKey = nostrKey
+    }
+
+    fileprivate static func parse(_ url: URL) throws -> Self {
+        guard url.scheme == "shum", url.host == "c2" else {
+            throw SpotchatFailure.invalidContact
+        }
+        let encoded = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard encoded.utf8.count == 43 else { throw SpotchatFailure.invalidContact }
+        var base64 = encoded
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        base64 += "="
+        guard let key = Data(base64Encoded: base64), key.count == 32 else {
+            throw SpotchatFailure.invalidContact
+        }
+        return try Self(nostrKey: key.hexEncodedString())
+    }
+}
+
+enum SpotchatInvitationPayload {
+    case card(SpotchatContactCard)
+    case locator(SpotchatContactLocator)
+
+    static func parse(_ url: URL) throws -> Self {
+        if url.scheme == "shum", url.host == "c2" {
+            return .locator(try SpotchatContactLocator.parse(url))
+        }
+        return .card(try SpotchatContactCard.parse(url))
+    }
+}
+
 enum SpotchatCoding {
     static func encode<T: Encodable>(_ value: T) throws -> Data {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -137,10 +195,11 @@ enum SpotchatCoding {
     }
 }
 enum SpotchatFailure: LocalizedError {
-    case invalidContact, unavailableIdentity, invalidMessage, storage, quota, blocked
+    case invalidContact, contactUnavailable, unavailableIdentity, invalidMessage, storage, quota, blocked
     var errorDescription: String? {
         switch self {
         case .invalidContact: return "Не удалось проверить контакт Shum. Попробуйте обменяться QR-кодами ещё раз."
+        case .contactUnavailable: return "Не удалось получить контакт. Убедитесь, что второе устройство находится рядом или подключено к Nostr."
         case .unavailableIdentity: return "Ключи профиля недоступны. Разблокируйте iPhone и снова откройте Shum."
         case .invalidMessage: return "Не удалось проверить сообщение."
         case .storage: return "Не удалось сохранить данные. Проверьте свободное место на iPhone."

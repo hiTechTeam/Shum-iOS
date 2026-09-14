@@ -9,6 +9,11 @@ import Vision
 
 extension SpotchatContactCard: Identifiable {}
 
+typealias SpotchatContactResolving = (
+    SpotchatContactLocator,
+    @escaping (Result<SpotchatContactCard, Error>) -> Void
+) -> Void
+
 struct SpotchatContactsView: View {
     @ObservedObject var runtime: SpotchatRuntime
     var select: (SpotchatPeer) -> Void
@@ -42,7 +47,12 @@ struct SpotchatContactsView: View {
             .fullScreenCover(isPresented: $showQR) {
                 if let card = service?.ownCard {
                     NavigationStack {
-                        SpotchatQRView(card: card) { scannedCard in
+                        SpotchatQRView(
+                            card: card,
+                            resolve: { locator, completion in
+                                runtime.resolveContact(locator, completion: completion)
+                            }
+                        ) { scannedCard in
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                                 invitation = scannedCard
                             }
@@ -52,7 +62,9 @@ struct SpotchatContactsView: View {
             }
             .fullScreenCover(isPresented: $showScanner) {
                 NavigationStack {
-                    SpotchatScanView { card in
+                    SpotchatScanView(resolve: { locator, completion in
+                        runtime.resolveContact(locator, completion: completion)
+                    }) { card in
                         showScanner = false
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                             invitation = card
@@ -143,12 +155,18 @@ struct SpotchatContactConfirmation: View {
 }
 struct SpotchatQRView: View {
     let card: SpotchatContactCard
+    var resolve: SpotchatContactResolving?
     var scanned: ((SpotchatContactCard) -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var showScanner = false
 
-    init(card: SpotchatContactCard, scanned: ((SpotchatContactCard) -> Void)? = nil) {
+    init(
+        card: SpotchatContactCard,
+        resolve: SpotchatContactResolving? = nil,
+        scanned: ((SpotchatContactCard) -> Void)? = nil
+    ) {
         self.card = card
+        self.resolve = resolve
         self.scanned = scanned
     }
 
@@ -173,7 +191,7 @@ struct SpotchatQRView: View {
                             profileCard(qrImage: image)
                                 .padding(.top, 54)
 
-                            Text("Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытые данные профиля.")
+                            Text("Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытый идентификатор.")
                                 .font(.system(size: 15, weight: .regular))
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -218,7 +236,7 @@ struct SpotchatQRView: View {
         }
         .fullScreenCover(isPresented: $showScanner) {
             NavigationStack {
-                SpotchatScanView { scannedCard in
+                SpotchatScanView(resolve: resolve) { scannedCard in
                     showScanner = false
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                         dismiss()
@@ -290,7 +308,7 @@ struct SpotchatQRView: View {
     }
 
     private func qr(_ text: String) -> UIImage? {
-        let filter = CIFilter.qrCodeGenerator(); filter.message = Data(text.utf8); filter.correctionLevel = "M"
+        let filter = CIFilter.qrCodeGenerator(); filter.message = Data(text.utf8); filter.correctionLevel = "H"
         guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 6, y: 6)), let image = CIContext().createCGImage(output, from: output.extent) else { return nil }
         return UIImage(cgImage: image)
     }
@@ -321,6 +339,7 @@ private struct ShumQRToolbarIcon: View {
     }
 }
 struct SpotchatScanView: View {
+    var resolve: SpotchatContactResolving?
     var scanned: (SpotchatContactCard) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var done = false
@@ -328,6 +347,15 @@ struct SpotchatScanView: View {
     @State private var error: String?
     @State private var torchEnabled = false
     @State private var photoSelection: PhotosPickerItem?
+    @State private var resolving = false
+
+    init(
+        resolve: SpotchatContactResolving? = nil,
+        scanned: @escaping (SpotchatContactCard) -> Void
+    ) {
+        self.resolve = resolve
+        self.scanned = scanned
+    }
 
     var body: some View {
         ZStack {
@@ -366,6 +394,20 @@ struct SpotchatScanView: View {
                 scannerOverlay
             }
             #endif
+
+            if resolving {
+                Color.black.opacity(0.52).ignoresSafeArea()
+                VStack(spacing: 14) {
+                    ProgressView()
+                        .tint(.white)
+                    Text("Получаем контакт…")
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
         }
         .navigationTitle("Сканировать QR-код")
         .navigationBarTitleDisplayMode(.inline)
@@ -460,9 +502,25 @@ struct SpotchatScanView: View {
         torchEnabled = false
         do {
             guard let url = URL(string: text) else { throw SpotchatFailure.invalidContact }
-            scanned(try SpotchatContactCard.parse(url))
+            switch try SpotchatInvitationPayload.parse(url) {
+            case .card(let card):
+                scanned(card)
+            case .locator(let locator):
+                guard let resolve else { throw SpotchatFailure.contactUnavailable }
+                resolving = true
+                resolve(locator) { result in
+                    resolving = false
+                    switch result {
+                    case .success(let card): scanned(card)
+                    case .failure(let error):
+                        self.error = error.localizedDescription
+                        done = false
+                    }
+                }
+            }
         } catch {
             self.error = error.localizedDescription
+            done = false
         }
     }
 

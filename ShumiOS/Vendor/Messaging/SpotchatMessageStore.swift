@@ -36,6 +36,22 @@ final class SpotchatMessageStore: ObservableObject {
     }
     var internetConnected: Bool { internet?.connected == true }
     var state: SpotchatDatabase { store.state }
+
+    func configureContactLookup(profile: @escaping () -> SpotchatProfile?) {
+        internet?.configureContactLookup(
+            card: { [weak self] in self?.ownCard },
+            profile: profile
+        )
+    }
+
+    func resolve(_ locator: SpotchatContactLocator, completion: @escaping (Result<SpotchatResolvedContact, Error>) -> Void) {
+        guard let internet else {
+            completion(.failure(SpotchatFailure.contactUnavailable))
+            return
+        }
+        internet.resolve(locator, completion: completion)
+    }
+
     var encounterHistory: [SpotchatEncounter] {
         (state.encounters ?? [])
             .filter { !isBlocked($0.card) }
