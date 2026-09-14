@@ -326,19 +326,19 @@ struct SpotchatScanView: View {
     @State private var photoSelection: PhotosPickerItem?
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            #if targetEnvironment(simulator)
-            LinearGradient(
-                colors: [Color(white: 0.22), Color(white: 0.06)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-            scannerOverlay
-            #else
-            if unavailable {
-                ZStack {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                #if targetEnvironment(simulator)
+                LinearGradient(
+                    colors: [Color(white: 0.22), Color(white: 0.06)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                scannerOverlay
+                #else
+                if unavailable {
                     VStack(spacing: 16) {
                         Text("Разрешите доступ к камере в настройках устройства.")
                             .multilineTextAlignment(.center)
@@ -351,35 +351,30 @@ struct SpotchatScanView: View {
                     }
                     .foregroundStyle(.white)
                     .padding(32)
-
-                    VStack {
-                        HStack {
-                            scannerButton(systemName: "xmark", label: "Закрыть") {
-                                done = true
-                                dismiss()
-                            }
-                            Spacer()
-                        }
-                        Spacer()
+                } else {
+                    CameraScannerView(
+                        isActive: !done,
+                        torchEnabled: torchEnabled,
+                        onUnavailable: { unavailable = true }
+                    ) { text in
+                        handle(text)
                     }
-                    .padding(.top, 16)
-                    .padding(.horizontal, 24)
-                }
-            } else {
-                CameraScannerView(
-                    isActive: !done,
-                    torchEnabled: torchEnabled,
-                    onUnavailable: { unavailable = true }
-                ) { text in
-                    handle(text)
-                }
-                .ignoresSafeArea()
 
-                scannerOverlay
+                    scannerOverlay
+                }
+                #endif
             }
-            #endif
+            .navigationTitle("Сканировать QR-код")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") {
+                        done = true
+                        dismiss()
+                    }
+                }
+            }
         }
-        .statusBarHidden(true)
         .alert("QR-код", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil; done = false } })) {
             Button("Повторить") { error = nil; done = false }
         } message: {
@@ -395,8 +390,8 @@ struct SpotchatScanView: View {
 
     private var scannerOverlay: some View {
         GeometryReader { geometry in
-            let side = min(geometry.size.width - 64, 316)
-            let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height * 0.44)
+            let side = min(geometry.size.width - 96, 264)
+            let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height * 0.43)
             let scanRect = CGRect(
                 x: center.x - side / 2,
                 y: center.y - side / 2,
@@ -417,63 +412,43 @@ struct SpotchatScanView: View {
                     .position(center)
 
                 Text("Наведите камеру на QR-код Shum")
-                    .font(.system(size: 15, weight: .regular))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.8), radius: 3)
-                    .position(x: center.x, y: scanRect.maxY + 32)
+                    .shadow(color: .black, radius: 4)
+                    .position(x: center.x, y: scanRect.maxY + 34)
 
                 VStack {
-                    HStack {
-                        scannerButton(systemName: "xmark", label: "Закрыть") {
-                            done = true
-                            dismiss()
-                        }
-                        Spacer()
-                        scannerButton(
-                            systemName: torchEnabled ? "flashlight.on.fill" : "flashlight.off.fill",
-                            label: torchEnabled ? "Выключить фонарик" : "Включить фонарик"
-                        ) {
-                            torchEnabled.toggle()
-                        }
-                    }
-                    .padding(.top, max(geometry.safeAreaInsets.top, 16))
-                    .padding(.horizontal, 24)
-
                     Spacer()
 
-                    PhotosPicker(selection: $photoSelection, matching: .images) {
-                        VStack(spacing: 8) {
-                            Image(systemName: "photo.on.rectangle")
-                                .font(.system(size: 22, weight: .regular))
-                                .frame(width: 50, height: 50)
-                                .background(.ultraThinMaterial, in: Circle())
-                            Text("Медиатека")
-                                .font(.caption)
+                    HStack(spacing: 24) {
+                        Button {
+                            torchEnabled.toggle()
+                        } label: {
+                            Label(
+                                torchEnabled ? "Выключить фонарик" : "Включить фонарик",
+                                systemImage: torchEnabled ? "flashlight.on.fill" : "flashlight.off.fill"
+                            )
+                            .labelStyle(.iconOnly)
                         }
-                        .foregroundStyle(.white)
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                        .tint(.white)
+
+                        PhotosPicker(selection: $photoSelection, matching: .images) {
+                            Label("Выбрать из Фото", systemImage: "photo.on.rectangle")
+                                .labelStyle(.iconOnly)
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                        .tint(.white)
                     }
-                    .accessibilityLabel("Выбрать QR-код из медиатеки")
-                    .padding(.bottom, max(geometry.safeAreaInsets.bottom, 22))
+                    .font(.title3)
+                    .padding(.bottom, 30)
                 }
             }
         }
-        .ignoresSafeArea()
-    }
-
-    private func scannerButton(
-        systemName: String,
-        label: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 22, weight: .regular))
-                .foregroundStyle(.white)
-                .frame(width: 50, height: 50)
-                .background(.ultraThinMaterial, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
     }
 
     private func handle(_ text: String) {
