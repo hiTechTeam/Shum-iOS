@@ -118,7 +118,7 @@ struct ProfileOverviewView: View {
                 .accessibilityLabel(Inc.Profile.editProfile.localized)
             }
         }
-        .fullScreenCover(isPresented: $showQR) {
+        .navigationDestination(isPresented: $showQR) {
             if let card = coordinator.chat?.permanent?.ownCard {
                 SpotchatQRView(card: card) { scannedCard in
                     coordinator.invitation = scannedCard

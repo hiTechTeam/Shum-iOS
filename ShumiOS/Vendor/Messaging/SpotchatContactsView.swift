@@ -41,14 +41,25 @@ struct SpotchatContactsView: View {
             }
             .fullScreenCover(isPresented: $showQR) {
                 if let card = service?.ownCard {
-                    SpotchatQRView(card: card) { scannedCard in
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                            invitation = scannedCard
+                    NavigationStack {
+                        SpotchatQRView(card: card) { scannedCard in
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                                invitation = scannedCard
+                            }
                         }
                     }
                 }
             }
-            .fullScreenCover(isPresented: $showScanner) { SpotchatScanView { card in showScanner = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { invitation = card } } }
+            .fullScreenCover(isPresented: $showScanner) {
+                NavigationStack {
+                    SpotchatScanView { card in
+                        showScanner = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            invitation = card
+                        }
+                    }
+                }
+            }
             .sheet(isPresented: $showPhoneBook) {
                 SpotchatPhoneBook { contact in
                     showPhoneBook = false
@@ -151,69 +162,62 @@ struct SpotchatQRView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color(.systemBackground).ignoresSafeArea()
+        ZStack {
+            Color(.systemBackground).ignoresSafeArea()
 
-                GeometryReader { geometry in
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            if let invitationURL,
-                               let image = qr(invitationURL.absoluteString) {
-                                profileCard(qrImage: image)
-                                    .padding(.top, 54)
+            GeometryReader { geometry in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        if let invitationURL,
+                           let image = qr(invitationURL.absoluteString) {
+                            profileCard(qrImage: image)
+                                .padding(.top, 54)
 
-                                Text("Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытые данные профиля.")
-                                    .font(.system(size: 15, weight: .regular))
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .lineSpacing(3)
-                                    .frame(maxWidth: 330)
-                                    .padding(.top, 22)
-                                    .padding(.horizontal, 24)
-                            }
-
-                            Spacer(minLength: 28)
-
-                            Button {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                showScanner = true
-                            } label: {
-                                Text("Сканировать")
-                            }
-                            .buttonStyle(ShumPrimaryButtonStyle())
-                            .frame(maxWidth: 342)
-                            .padding(.horizontal, 30)
-                            .padding(.bottom, 22)
+                            Text("Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытые данные профиля.")
+                                .font(.system(size: 15, weight: .regular))
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .lineSpacing(3)
+                                .frame(maxWidth: 330)
+                                .padding(.top, 22)
+                                .padding(.horizontal, 24)
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: geometry.size.height)
+
+                        Spacer(minLength: 28)
+
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            showScanner = true
+                        } label: {
+                            Text("Сканировать")
+                        }
+                        .buttonStyle(ShumPrimaryButtonStyle())
+                        .frame(maxWidth: 342)
+                        .padding(.horizontal, 30)
+                        .padding(.bottom, 22)
                     }
-                    .scrollIndicators(.hidden)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: geometry.size.height)
                 }
+                .scrollIndicators(.hidden)
             }
-            .navigationTitle("QR-код")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        ShumQRToolbarIcon(systemName: "chevron.left")
+        }
+        .navigationTitle("QR-код")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            if let invitationURL {
+                ToolbarItem(placement: .confirmationAction) {
+                    ShareLink(item: invitationURL) {
+                        ShumQRToolbarIcon(systemName: "square.and.arrow.up")
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Назад")
-                }
-
-                if let invitationURL {
-                    ToolbarItem(placement: .confirmationAction) {
-                        ShareLink(item: invitationURL) {
-                            ShumQRToolbarIcon(systemName: "square.and.arrow.up")
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Поделиться контактом Shum")
-                    }
+                    .accessibilityLabel("Поделиться контактом Shum")
                 }
             }
-            .fullScreenCover(isPresented: $showScanner) {
+        }
+        .fullScreenCover(isPresented: $showScanner) {
+            NavigationStack {
                 SpotchatScanView { scannedCard in
                     showScanner = false
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -326,52 +330,51 @@ struct SpotchatScanView: View {
     @State private var photoSelection: PhotosPickerItem?
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
-                #if targetEnvironment(simulator)
-                LinearGradient(
-                    colors: [Color(white: 0.22), Color(white: 0.06)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-                scannerOverlay
-                #else
-                if unavailable {
-                    VStack(spacing: 16) {
-                        Text("Разрешите доступ к камере в настройках устройства.")
-                            .multilineTextAlignment(.center)
-                        Button("Открыть настройки") {
-                            if let url = URL(string: UIApplication.openSettingsURLString) {
-                                UIApplication.shared.open(url)
-                            }
+        ZStack {
+            Color.black.ignoresSafeArea()
+            #if targetEnvironment(simulator)
+            LinearGradient(
+                colors: [Color(white: 0.22), Color(white: 0.06)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            scannerOverlay
+            #else
+            if unavailable {
+                VStack(spacing: 16) {
+                    Text("Разрешите доступ к камере в настройках устройства.")
+                        .multilineTextAlignment(.center)
+                    Button("Открыть настройки") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
                         }
-                        .foregroundStyle(Color.accentColor)
                     }
-                    .foregroundStyle(.white)
-                    .padding(32)
-                } else {
-                    CameraScannerView(
-                        isActive: !done,
-                        torchEnabled: torchEnabled,
-                        onUnavailable: { unavailable = true }
-                    ) { text in
-                        handle(text)
-                    }
-
-                    scannerOverlay
+                    .foregroundStyle(Color.accentColor)
                 }
-                #endif
+                .foregroundStyle(.white)
+                .padding(32)
+            } else {
+                CameraScannerView(
+                    isActive: !done,
+                    torchEnabled: torchEnabled,
+                    onUnavailable: { unavailable = true }
+                ) { text in
+                    handle(text)
+                }
+
+                scannerOverlay
             }
-            .navigationTitle("Сканировать QR-код")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Отмена") {
-                        done = true
-                        dismiss()
-                    }
+            #endif
+        }
+        .navigationTitle("Сканировать QR-код")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Отмена") {
+                    done = true
+                    dismiss()
                 }
             }
         }
