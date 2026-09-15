@@ -57,6 +57,9 @@ struct SpotchatConversationView: View {
     @State private var atBottom = true
     private var messages: [SpotchatMessage] { runtime.conversation(peer.id) }
     private var name: String { runtime.displayName(peer) }
+    private var invitationPhase: SpotchatInvitationPhase {
+        runtime.invitationPhase(for: peer.id)
+    }
 
     var body: some View {
         let conversation = messages
@@ -67,9 +70,13 @@ struct SpotchatConversationView: View {
                         if conversation.isEmpty {
                             VStack(spacing: 12) {
                                 SpotchatAvatar(name: name, size: 70, imageData: runtime.profile(for: peer.id)?.avatar)
-                                Text("Скажите привет").font(.headline)
-                                Text(runtime.isNearby(peer.id) ? "\(name) рядом.\nДля разговора достаточно Bluetooth." : "Напишите первое сообщение.\nОно дождётся возможности доставки.")
-                                    .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                                Text(emptyTitle).font(.headline)
+                                if let emptyMessage {
+                                    Text(emptyMessage)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.center)
+                                }
                             }
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 24)
@@ -156,53 +163,168 @@ struct SpotchatConversationView: View {
         return runtime.isNearby(peer.id) ? "Рядом" : "Не рядом"
     }
 
+    @ViewBuilder
     private var composer: some View {
         VStack(spacing: 8) {
             if runtime.isLegacyOnly(peer.id) {
-                Text("История сохранена. Добавьте этого человека по QR-коду или найдите рядом, чтобы продолжить переписку.")
-                    .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(12)
-            } else if runtime.isBlocked(peer.id) { Text("Контакт заблокирован").font(.caption).foregroundStyle(.secondary) }
-            HStack(alignment: .bottom, spacing: 4) {
-                TextField("Сообщение", text: $draft, prompt: Text("Сообщение").foregroundColor(Color(.secondaryLabel)), axis: .vertical)
-                    .font(.body).lineLimit(1...5).focused($inputFocused)
-                    .textFieldStyle(.plain).disabled(runtime.isBlocked(peer.id))
-                    .padding(.leading, 16).padding(.vertical, 12)
-                    .accessibilityIdentifier("spotchat.messageInput")
-                    #if DEBUG && targetEnvironment(simulator)
-                    .task {
-                        if ProcessInfo.processInfo.arguments.contains("-ShumPreviewKeyboard") {
-                            draft = "Да, всё отлично"
-                            inputFocused = true
-                        }
+                lockedCapsule(
+                    title: "История сохранена",
+                    icon: "lock.fill"
+                )
+            } else if runtime.isBlocked(peer.id) {
+                lockedCapsule(title: "Контакт заблокирован", icon: "lock.fill")
+            } else {
+                switch invitationPhase {
+                case .ready:
+                    actionCapsule(
+                        title: "Отправить приглашение",
+                        color: Color(uiColor: .systemGreen)
+                    ) {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        _ = runtime.sendInvitation(to: peer.id)
                     }
-                    #endif
-                Button {
-                    guard canSend else { return }
-                    if runtime.send(draft, to: peer.id) { draft = "" }
-                } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(canSend ? Color.black : Color.secondary)
-                        .frame(width: 36, height: 36)
-                        .background(canSend ? Color.accentColor : Color(.tertiarySystemFill), in: Circle())
-                        .contentShape(Circle())
+                case .outgoingPending:
+                    lockedCapsule(title: "Дождитесь подтверждения, после чего начинайте общение")
+                case .incomingPending:
+                    invitationDecisionControls
+                case .accepted:
+                    messageComposer
+                case .declinedByPeer:
+                    lockedCapsule(title: "Общение недоступно", icon: "lock.fill")
+                case .declinedLocally:
+                    ShumInvitationRecoverySlider {
+                        runtime.acceptInvitation(from: peer.id)
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(!canSend)
-                .padding(.trailing, 5).padding(.vertical, 5)
-                    .accessibilityLabel("Отправить сообщение").accessibilityIdentifier("spotchat.sendMessage")
             }
-            .frame(maxWidth: 520, minHeight: 46)
-            .background(Color(.secondarySystemBackground), in: Capsule())
-            .overlay {
-                Capsule().stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
-            }
-            .animation(.easeOut(duration: 0.15), value: canSend)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 20).padding(.vertical, 8)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+        .animation(.easeOut(duration: 0.2), value: invitationPhase)
     }
-    private var canSend: Bool { !runtime.isLegacyOnly(peer.id) && !runtime.isBlocked(peer.id) && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (runtime.permanent != nil || runtime.isNearby(peer.id)) }
+
+    private var messageComposer: some View {
+        HStack(alignment: .bottom, spacing: 4) {
+            TextField("Сообщение", text: $draft, prompt: Text("Сообщение").foregroundColor(Color(.secondaryLabel)), axis: .vertical)
+                .font(.body).lineLimit(1...5).focused($inputFocused)
+                .textFieldStyle(.plain)
+                .padding(.leading, 16).padding(.vertical, 12)
+                .accessibilityIdentifier("spotchat.messageInput")
+                #if DEBUG && targetEnvironment(simulator)
+                .task {
+                    if ProcessInfo.processInfo.arguments.contains("-ShumPreviewKeyboard") {
+                        draft = "Да, всё отлично"
+                        inputFocused = true
+                    }
+                }
+                #endif
+            Button {
+                guard canSend else { return }
+                if runtime.send(draft, to: peer.id) { draft = "" }
+            } label: {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(canSend ? Color.black : Color.secondary)
+                    .frame(width: 36, height: 36)
+                    .background(canSend ? Color.accentColor : Color(.tertiarySystemFill), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSend)
+            .padding(.trailing, 5).padding(.vertical, 5)
+            .accessibilityLabel("Отправить сообщение")
+            .accessibilityIdentifier("spotchat.sendMessage")
+        }
+        .frame(maxWidth: 520, minHeight: 46)
+        .background(Color(.secondarySystemBackground), in: Capsule())
+        .overlay {
+            Capsule().stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
+        }
+        .animation(.easeOut(duration: 0.15), value: canSend)
+    }
+
+    private var invitationDecisionControls: some View {
+        HStack(spacing: 10) {
+            actionCapsule(title: "Отклонить", color: Color(uiColor: .systemRed)) {
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                _ = runtime.declineInvitation(from: peer.id)
+            }
+            actionCapsule(title: "Принять", color: Color(uiColor: .systemGreen)) {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                _ = runtime.acceptInvitation(from: peer.id)
+            }
+        }
+        .frame(maxWidth: 520)
+    }
+
+    private func actionCapsule(
+        title: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Color.black)
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .background(color, in: Capsule())
+    }
+
+    private func lockedCapsule(title: String, icon: String? = nil) -> some View {
+        HStack(spacing: 7) {
+            if let icon { Image(systemName: icon) }
+            Text(title)
+                .lineLimit(2)
+                .minimumScaleFactor(0.9)
+                .multilineTextAlignment(.center)
+        }
+        .font(.system(size: 15, weight: .regular))
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: 520, minHeight: 46)
+        .background(Color(.secondarySystemBackground), in: Capsule())
+        .overlay {
+            Capsule().stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var canSend: Bool {
+        invitationPhase == .accepted
+            && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (runtime.permanent != nil || runtime.isNearby(peer.id))
+    }
+
+    private var emptyTitle: String {
+        switch invitationPhase {
+        case .ready: "Начните общение"
+        case .outgoingPending: "Приглашение отправлено"
+        case .incomingPending: "Приглашение в чат"
+        case .accepted: "Можете начинать общение"
+        case .declinedByPeer: "Пользователь \(name) отклонил ваш запрос"
+        case .declinedLocally: "Приглашение отклонено"
+        }
+    }
+
+    private var emptyMessage: String? {
+        switch invitationPhase {
+        case .ready:
+            "Сначала отправьте приглашение."
+        case .outgoingPending:
+            "Ожидаем подтверждения."
+        case .incomingPending:
+            "\(name) хочет начать с вами общение."
+        case .accepted:
+            "Чат доступен."
+        case .declinedByPeer:
+            "Общение пока недоступно."
+        case .declinedLocally:
+            "Проведите стрелку вправо, если передумаете."
+        }
+    }
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         withAnimation(.easeOut(duration: 0.22)) { proxy.scrollTo("conversation-bottom", anchor: .bottom) }
     }
@@ -210,6 +332,95 @@ struct SpotchatConversationView: View {
         if Calendar.current.isDateInToday(date) { return "Сегодня" }
         if Calendar.current.isDateInYesterday(date) { return "Вчера" }
         return date.formatted(.dateTime.day().month(.wide))
+    }
+}
+
+private struct ShumInvitationRecoverySlider: View {
+    let accept: () -> Bool
+    @State private var offset: CGFloat = 0
+    @State private var crossedFeedbackPoint = false
+    @State private var completing = false
+
+    private let controlSize: CGFloat = 38
+    private let inset: CGFloat = 4
+
+    var body: some View {
+        GeometryReader { geometry in
+            let travel = max(0, geometry.size.width - controlSize - inset * 2)
+            let progress = travel > 0 ? min(1, offset / travel) : 0
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color(uiColor: .systemRed).opacity(0.16))
+
+                Capsule()
+                    .fill(Color(uiColor: .systemGreen).opacity(0.14 * progress))
+                    .frame(width: controlSize + inset * 2 + offset)
+                    .clipped()
+
+                Text("Проведите, чтобы принять")
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .opacity(1 - Double(progress) * 0.72)
+
+                Image(systemName: completing ? "checkmark" : "arrow.right")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: controlSize, height: controlSize)
+                    .background(
+                        completing ? Color(uiColor: .systemGreen) : Color(uiColor: .systemRed),
+                        in: Circle()
+                    )
+                    .offset(x: inset + offset)
+                    .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
+            }
+            .overlay {
+                Capsule()
+                    .stroke(Color(uiColor: .systemRed).opacity(0.3), lineWidth: 0.5)
+            }
+            .contentShape(Capsule())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        guard !completing else { return }
+                        offset = min(max(0, value.translation.width), travel)
+                        let crossed = progress >= 0.72
+                        if crossed && !crossedFeedbackPoint {
+                            UISelectionFeedbackGenerator().selectionChanged()
+                        }
+                        crossedFeedbackPoint = crossed
+                    }
+                    .onEnded { _ in
+                        guard !completing else { return }
+                        if progress >= 0.88 {
+                            completing = true
+                            withAnimation(.easeOut(duration: 0.16)) { offset = travel }
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+                                if !accept() {
+                                    completing = false
+                                    crossedFeedbackPoint = false
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                        offset = 0
+                                    }
+                                }
+                            }
+                        } else {
+                            crossedFeedbackPoint = false
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                                offset = 0
+                            }
+                        }
+                    }
+            )
+        }
+        .frame(maxWidth: 520)
+        .frame(height: 46)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Принять приглашение")
+        .accessibilityHint("Проведите вправо до конца")
+        .accessibilityAddTraits(.isButton)
     }
 }
 

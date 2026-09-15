@@ -17,6 +17,8 @@ struct ShumDirectoryEntry: Identifiable {
     var card: SpotchatContactCard?
     var hasChat = false
     var isInvitation = false
+    var invitationPhase: SpotchatInvitationPhase?
+    var invitationAwaitingResponse = false
     var isNearby = false
     var isSaved = false
     var lastSeen: Date?
@@ -26,7 +28,7 @@ struct ShumDirectoryEntry: Identifiable {
     func belongs(to folder: ShumChatFolder) -> Bool {
         switch folder {
         case .all: return hasChat || isInvitation || isNearby
-        case .unread: return unread > 0 || isInvitation
+        case .unread: return unread > 0 || invitationAwaitingResponse
         case .invitations: return isInvitation
         case .nearby: return isNearby
         case .encounters:
@@ -68,6 +70,8 @@ enum ShumChatDirectory {
         for card in permanent?.state.requests ?? [] {
             include(SpotchatPeer(id: card.peerID, name: card.name, lastConnected: .distantPast), card: card) {
                 $0.isInvitation = true
+                $0.invitationPhase = permanent?.invitationPhase(for: card)
+                $0.invitationAwaitingResponse = permanent?.invitationPhase(for: card) == .incomingPending
             }
         }
         for peer in peers {

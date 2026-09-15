@@ -45,6 +45,21 @@ struct SpotchatPermanentTests {
         }
         #expect(iterations < 100)
     }
+    func allow(_ owner: Node, to contact: Node, clock: Clock) throws {
+        try owner.service.add(contact.card, source: "test")
+        try owner.store.transaction { state in
+            if state.invitationStates == nil { state.invitationStates = [:] }
+            state.invitationStates?[contact.card.id] = SpotchatInvitationState(
+                phase: .accepted,
+                updatedAt: Int64(clock.date.timeIntervalSince1970 * 1000),
+                eventID: "test-\(UUID().uuidString)"
+            )
+        }
+    }
+    func allowBoth(_ a: Node, _ b: Node, clock: Clock) throws {
+        try allow(a, to: b, clock: clock)
+        try allow(b, to: a, clock: clock)
+    }
     @Test func identityAndQRStayStableAndRejectTampering() throws {
         let a = try Node("Аня", clock: Clock())
         let restored = try SpotchatIdentityService(transport: a.wire, keychain: a.wire.mockKeychain, bridge: NostrIdentityBridge(keychain: a.wire.mockKeychain))
@@ -55,17 +70,79 @@ struct SpotchatPermanentTests {
         #expect(restoredCard.nostrKey == a.card.nostrKey)
         #expect(try restoredCard.signedBytes() == a.card.signedBytes())
         try restoredCard.validate()
-        #expect(try SpotchatContactCard.parse(a.card.invitation()) == a.card)
+        let compactInvitation = try SpotchatInvitationPayload.parse(a.card.invitation())
+        guard case let .locator(locator) = compactInvitation else {
+            Issue.record("The compact invitation must contain a Nostr locator")
+            return
+        }
+        #expect(locator.nostrKey == a.card.nostrKey)
+        #expect(try SpotchatContactCard.parse(a.card.legacyInvitation()) == a.card)
         var tampered = a.card; tampered.nostrKey = String(repeating: "0", count: 64)
         #expect(throws: (any Error).self) { try tampered.validate() }
         a.wire.mockKeychain.simulatedReadError = .deviceLocked
         #expect(throws: (any Error).self) { _ = try SpotchatIdentityService(transport: a.wire, keychain: a.wire.mockKeychain, bridge: NostrIdentityBridge(keychain: a.wire.mockKeychain)) }
     }
+    @Test func invitationCanBeDeclinedAndAcceptedLater() throws {
+        let clock = Clock()
+        let a = try Node("Аня", clock: clock)
+        let b = try Node("Борис", clock: clock)
+        try a.service.add(b.card, source: "QR")
+        try b.service.add(a.card, source: "QR")
+        connect(a, b, clock: clock)
+
+        #expect(a.service.invitationPhase(for: b.card) == .ready)
+        #expect(!a.service.send("Рано", to: b.card))
+        #expect(a.service.sendInvitation(b.card))
+        drain([a, b])
+        #expect(a.service.invitationPhase(for: b.card) == .outgoingPending)
+        #expect(b.service.invitationPhase(for: a.card) == .incomingPending)
+
+        #expect(b.service.declineInvitation(a.card))
+        drain([a, b])
+        #expect(a.service.invitationPhase(for: b.card) == .declinedByPeer)
+        #expect(b.service.invitationPhase(for: a.card) == .declinedLocally)
+        #expect(!a.service.send("Всё ещё рано", to: b.card))
+
+        #expect(b.service.acceptInvitation(a.card))
+        drain([a, b])
+        #expect(a.service.invitationPhase(for: b.card) == .accepted)
+        #expect(b.service.invitationPhase(for: a.card) == .accepted)
+        #expect(a.service.send("Теперь можно", to: b.card))
+        drain([a, b])
+        #expect(b.store.state.messages.last?.text == "Теперь можно")
+    }
+
+    @Test func unsolicitedAcceptanceCannotUnlockAChat() throws {
+        let clock = Clock()
+        let a = try Node("Аня", clock: clock)
+        let b = try Node("Борис", clock: clock)
+        try a.service.add(b.card, source: "QR")
+        connect(a, b, clock: clock)
+
+        let timestamp = Int64(clock.date.timeIntervalSince1970 * 1000)
+        var control = SpotchatInvitationControl(
+            id: UUID().uuidString,
+            sender: b.card,
+            recipient: a.card,
+            action: .accept,
+            timestamp: timestamp,
+            expiresAt: timestamp + SpotchatMessageStore.invitationLifetimeMilliseconds
+        )
+        control.signature = try #require(b.wire.noiseSignData(control.signingBytes()))
+        a.service.receive(
+            SpotchatPacket(invitation: control),
+            from: b.wire.myPeerID,
+            nostrSender: nil
+        )
+
+        #expect(a.service.invitationPhase(for: b.card) == .ready)
+        #expect(!a.service.send("Нельзя", to: b.card))
+    }
     @Test func durableOutboxAndHistoryAreEncryptedAndFailClosed() throws {
         let clock = Clock(), url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".enc")
         defer { try? FileManager.default.removeItem(at: url) }
         let a = try Node("Аня", clock: clock, url: url), b = try Node("Борис", clock: clock)
-        try a.service.add(b.card, source: "QR")
+        try allow(a, to: b, clock: clock)
         #expect(a.service.send("Секретная история 🌍", to: b.card))
         #expect(a.store.state.messages[0].status == .queued)
         let raw = try Data(contentsOf: url)
@@ -116,7 +193,7 @@ struct SpotchatPermanentTests {
     }
     @Test func directDeliveryReadAndSessionChange() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
-        try a.service.add(b.card, source: "QR"); try b.service.add(a.card, source: "QR")
+        try allowBoth(a, b, clock: clock)
         connect(a,b,clock:clock)
         #expect(a.service.send(String(repeating: "Привет 👋 ", count: 50), to: b.card))
         drain([a,b]); b.service.tick(connected: [a.wire.myPeerID], active: true); drain([a,b])
@@ -135,7 +212,7 @@ struct SpotchatPermanentTests {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".enc")
         defer { try? FileManager.default.removeItem(at: url) }
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock), c = try Node("Курьер", clock: clock, url: url)
-        try a.service.add(b.card, source: "QR"); try b.service.add(a.card, source: "QR")
+        try allowBoth(a, b, clock: clock)
         connect(a,c,clock:clock)
         #expect(a.service.send("Через курьера", to: b.card)); drain([a,c])
         #expect(c.store.state.messages.isEmpty)
@@ -157,7 +234,7 @@ struct SpotchatPermanentTests {
     }
     @Test func nostrAndBLEUseSameMessageDedupAndWrongACKCannotDeliver() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock), mallory = try Node("Другой", clock: clock)
-        try a.service.add(b.card, source: "QR"); try b.service.add(a.card, source: "QR")
+        try allowBoth(a, b, clock: clock)
         #expect(a.service.send("Один диалог", to: b.card))
         let envelope = try #require(a.store.state.messages.first?.envelope)
         let packet = SpotchatPacket(envelope: envelope, hopCount: 1)
@@ -179,7 +256,7 @@ struct SpotchatPermanentTests {
     }
     @Test func expiryHopLimitTamperAndUnknownContactAreBounded() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock), c = try Node("Курьер", clock: clock)
-        try a.service.add(b.card, source: "QR"); connect(a,c,clock:clock)
+        try allow(a, to: b, clock: clock); connect(a,c,clock:clock)
         #expect(a.service.send("Запрос контакта", to: b.card)); drain([a,c])
         let message = try #require(a.store.state.messages.first)
         b.service.receive(SpotchatPacket(envelope: message.envelope, hopCount: 1), from: nil, nostrSender: a.card.nostrKey)
@@ -194,7 +271,7 @@ struct SpotchatPermanentTests {
     }
     @Test func backgroundDeliveryDoesNotClaimReadAndHopLimitRejectsDeposit() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock), c = try Node("Курьер", clock: clock)
-        try a.service.add(b.card, source: "QR"); try b.service.add(a.card, source: "QR")
+        try allowBoth(a, b, clock: clock)
         connect(a,b,clock:clock)
         b.service.open(a.card); b.service.setActive(false)
         #expect(a.service.send("В фоне", to: b.card)); drain([a,b])
@@ -215,7 +292,7 @@ struct SpotchatPermanentTests {
         let url = directory.appendingPathComponent("state.enc")
         defer { try? FileManager.default.removeItem(at: directory) }
         let a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock, url: url)
-        try a.service.add(b.card, source: "QR"); try b.service.add(a.card, source: "QR")
+        try allowBoth(a, b, clock: clock)
         connect(a,b,clock:clock)
         try FileManager.default.removeItem(at: directory)
         try Data([1]).write(to: directory) // Parent is now a file: force an actual failed atomic write.
@@ -227,7 +304,7 @@ struct SpotchatPermanentTests {
 
     @Test func blockingPersistsAndRejectsDirectNostrAndCourierMessages() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock), c = try Node("Курьер", clock: clock)
-        try a.service.add(b.card, source: "QR"); try b.service.add(a.card, source: "QR")
+        try allowBoth(a, b, clock: clock)
         #expect(a.service.send("Не отправлять после блокировки", to: b.card))
         try a.service.setBlocked(b.card, blocked: true)
         #expect(a.store.state.messages.first?.status == .cancelled)
@@ -251,7 +328,7 @@ struct SpotchatPermanentTests {
     }
     @Test func deletingHistoryStopsOutboxAndPreventsReplayButAllowsNewMessages() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
-        try a.service.add(b.card, source: "QR"); try b.service.add(a.card, source: "QR")
+        try allowBoth(a, b, clock: clock)
         #expect(b.service.send("Старая история", to: a.card))
         let packet = SpotchatPacket(envelope: b.store.state.messages[0].envelope, hopCount: 1)
         a.service.receive(packet, from: nil, nostrSender: b.card.nostrKey)

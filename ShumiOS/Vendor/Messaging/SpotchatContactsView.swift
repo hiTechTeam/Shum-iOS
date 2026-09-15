@@ -169,7 +169,7 @@ struct SpotchatContactConfirmation: View {
             VStack(spacing: 0) {
                 Spacer(minLength: 28)
 
-                SpotchatAvatar(name: card.name, size: 176, imageData: imageData)
+                SpotchatAvatar(name: card.name, size: 202, imageData: imageData)
                     .contentShape(Circle())
                     .onTapGesture(perform: openPhoto)
                     .accessibilityLabel(imageData == nil ? card.name : "Посмотреть фото")
@@ -318,7 +318,6 @@ struct SpotchatQRView: View {
         }
         .navigationTitle("QR-код")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             if let invitationURL {
                 SpotchatQRShareToolbar(invitationURL: invitationURL)

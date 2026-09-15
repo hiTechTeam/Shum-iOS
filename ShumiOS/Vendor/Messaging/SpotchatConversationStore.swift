@@ -31,6 +31,65 @@ struct SpotchatConversation: Codable, Identifiable {
         SpotchatContactCard.userID(Data([first, second].sorted().joined(separator: ":").utf8))
     }
 }
+enum SpotchatInvitationPhase: String, Codable {
+    case ready
+    case outgoingPending
+    case incomingPending
+    case accepted
+    case declinedByPeer
+    case declinedLocally
+}
+struct SpotchatInvitationState: Codable, Equatable {
+    var phase: SpotchatInvitationPhase
+    var updatedAt: Int64
+    var eventID: String
+}
+enum SpotchatInvitationAction: String, Codable {
+    case request
+    case accept
+    case decline
+}
+struct SpotchatInvitationControl: Codable, Equatable, Identifiable {
+    var version = 1
+    var id: String
+    var sender: SpotchatContactCard
+    var recipient: SpotchatContactCard
+    var action: SpotchatInvitationAction
+    var timestamp: Int64
+    var expiresAt: Int64
+    var signature = Data()
+
+    func signingBytes() throws -> Data {
+        var value = self
+        value.signature = Data()
+        return try SpotchatCoding.encode(value)
+    }
+
+    func validate(at now: Date) throws {
+        try sender.validate()
+        try recipient.validate()
+        let milliseconds = Int64(now.timeIntervalSince1970 * 1000)
+        guard version == 1,
+              UUID(uuidString: id) != nil,
+              sender.id != recipient.id,
+              timestamp >= 0,
+              timestamp <= milliseconds + 300_000,
+              expiresAt > milliseconds,
+              expiresAt > timestamp,
+              expiresAt - timestamp <= 30 * 86_400_000,
+              try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey)
+                .isValidSignature(signature, for: signingBytes()) else {
+            throw SpotchatFailure.invalidMessage
+        }
+    }
+}
+struct SpotchatStoredInvitationControl: Codable, Equatable, Identifiable {
+    var control: SpotchatInvitationControl
+    var lastAttempt: Date = .distantPast
+    var attempts = 0
+    var nostrAccepted = false
+    var id: String { control.id }
+}
 enum SpotchatDelivery: String, Codable {
     case queued, forwarding, delivered, read, expired, cancelled
     var label: String {
@@ -137,6 +196,7 @@ struct SpotchatPacket: Codable {
     var envelope: SpotchatEnvelope?
     var hopCount: Int?
     var receipt: SpotchatReceipt?
+    var invitation: SpotchatInvitationControl?
 }
 struct SpotchatDatabase: Codable {
     var version = 1
@@ -155,6 +215,8 @@ struct SpotchatDatabase: Codable {
     var encounters: [SpotchatEncounter]?
     var savedProfiles: [SpotchatSavedProfile]?
     var unviewedEncounterIDs: Set<String>?
+    var invitationStates: [String: SpotchatInvitationState]?
+    var invitationOutbox: [SpotchatStoredInvitationControl]?
 }
 
 @MainActor
@@ -168,10 +230,29 @@ final class SpotchatConversationStore {
             let encrypted = try Data(contentsOf: url)
             guard encrypted.count <= 100_000_000 else { throw SpotchatFailure.storage }
             let plain = try ChaChaPoly.open(ChaChaPoly.SealedBox(combined: encrypted), using: key)
-            let restored = try JSONDecoder().decode(SpotchatDatabase.self, from: plain)
+            var restored = try JSONDecoder().decode(SpotchatDatabase.self, from: plain)
             guard restored.version == 1, restored.ownerID == ownerID else { throw SpotchatFailure.unavailableIdentity }
+            // Builds before chat invitations allowed every saved contact to
+            // message immediately. Preserve that access during migration.
+            if restored.invitationStates == nil {
+                restored.invitationStates = Dictionary(uniqueKeysWithValues: restored.contacts.map { contact in
+                    let timestamp = Int64(contact.addedAt.timeIntervalSince1970 * 1000)
+                    return (contact.id, SpotchatInvitationState(
+                        phase: .accepted,
+                        updatedAt: timestamp,
+                        eventID: "legacy-\(contact.id)"
+                    ))
+                })
+            }
+            if restored.invitationOutbox == nil { restored.invitationOutbox = [] }
             state = restored
-        } else { state = SpotchatDatabase(ownerID: ownerID) }
+        } else {
+            state = SpotchatDatabase(
+                ownerID: ownerID,
+                invitationStates: [:],
+                invitationOutbox: []
+            )
+        }
     }
     // Commit disk first, publish memory second: a failed save never ACKs or loses durable history.
     func transaction(_ update: (inout SpotchatDatabase) throws -> Void) throws {

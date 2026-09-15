@@ -80,6 +80,7 @@ struct ProfileOverviewView: View {
         }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(showQR ? .hidden : .visible, for: .tabBar)
         .shumOnChange(of: authCodeViewModel.localPhotoURL) { _, value in
             photoVM.loadPhotoFromURL(value)
         }
@@ -193,6 +194,20 @@ struct ProfileOverviewView: View {
     }
 
     private var profileAvatarButton: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                avatarButton
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+            } else {
+                avatarButton
+                    .buttonStyle(.plain)
+            }
+        }
+        .accessibilityLabel(Inc.Profile.openPhoto.localized)
+    }
+
+    private var avatarButton: some View {
         Button(action: openPhotoPreview) {
             Group {
                 if let image = photoVM.uiImage {
@@ -212,9 +227,7 @@ struct ProfileOverviewView: View {
             .clipShape(Circle())
             .contentShape(Circle())
         }
-        .buttonStyle(.plain)
         .foregroundStyle(.primary)
-        .accessibilityLabel(Inc.Profile.openPhoto.localized)
     }
 
     private var settingsCard: some View {
@@ -326,8 +339,6 @@ private struct ProfileAvatarToolbarItem<Content: View>: ToolbarContent {
         if #available(iOS 26.0, *) {
             ToolbarItem(placement: .topBarLeading) {
                 content
-                    .frame(width: 44, height: 44)
-                    .glassEffect(.regular, in: Circle())
             }
             .sharedBackgroundVisibility(.hidden)
         } else {

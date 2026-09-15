@@ -7,6 +7,7 @@ import Foundation
 @MainActor
 final class SpotchatMessageStore: ObservableObject {
     static let encounterRetention: TimeInterval = 24 * 60 * 60
+    static let invitationLifetimeMilliseconds: Int64 = 30 * 86_400_000
     @Published private(set) var revision = 0
     let store: SpotchatConversationStore
     let contacts: SpotchatContactsService
@@ -98,15 +99,198 @@ final class SpotchatMessageStore: ObservableObject {
     func add(_ card: SpotchatContactCard, source: String, avatar: Data? = nil) throws {
         guard !retired else { throw SpotchatFailure.unavailableIdentity }
         guard !isBlocked(card) else { throw SpotchatFailure.blocked }
+        let acceptsIncomingInvitation = state.requests.contains { $0.id == card.id }
         try contacts.add(card, source: source, avatar: avatar, now: now())
-        try store.transaction { $0.requests.removeAll { $0.id == card.id } }
-        try contacts.conversation(with: card, now: now()); changed()
-        // Exchange the reciprocal invitation; no phone number becomes an identity.
-        if let peer = session(for: card) { sendPacket(SpotchatPacket(card: ownCard), to: peer) }
-        internet?.send(SpotchatPacket(card: ownCard), to: card) { _ in }
+        try contacts.conversation(with: card, now: now())
+        if acceptsIncomingInvitation {
+            try transitionInvitation(with: card, action: .accept, phase: .accepted, removesRequest: true)
+        } else {
+            try store.transaction { state in
+                if state.invitationStates == nil { state.invitationStates = [:] }
+                if state.invitationStates?[card.id] == nil {
+                    state.invitationStates?[card.id] = SpotchatInvitationState(
+                        phase: source == "preview" ? .accepted : .ready,
+                        updatedAt: Int64(now().timeIntervalSince1970 * 1000),
+                        eventID: UUID().uuidString
+                    )
+                }
+            }
+            changed()
+        }
     }
     func dismissRequest(_ card: SpotchatContactCard) {
-        do { try store.transaction { $0.requests.removeAll { $0.id == card.id } }; changed() } catch { fail(error) }
+        _ = declineInvitation(card)
+    }
+    func invitationPhase(for card: SpotchatContactCard) -> SpotchatInvitationPhase {
+        if let phase = state.invitationStates?[card.id]?.phase { return phase }
+        if state.requests.contains(where: { $0.id == card.id }) { return .incomingPending }
+        return .ready
+    }
+    func canMessage(_ card: SpotchatContactCard) -> Bool {
+        invitationPhase(for: card) == .accepted
+    }
+    @discardableResult
+    func sendInvitation(_ card: SpotchatContactCard) -> Bool {
+        guard !retired, !isBlocked(card), invitationPhase(for: card) == .ready else { return false }
+        do {
+            try contacts.add(card, source: "chat-invitation", now: now())
+            try contacts.conversation(with: card, now: now())
+            try transitionInvitation(with: card, action: .request, phase: .outgoingPending)
+            return true
+        } catch { fail(error); return false }
+    }
+    @discardableResult
+    func acceptInvitation(_ card: SpotchatContactCard) -> Bool {
+        let phase = invitationPhase(for: card)
+        guard !retired, !isBlocked(card), phase == .incomingPending || phase == .declinedLocally else { return false }
+        do {
+            try contacts.add(card, source: "accepted-invitation", now: now())
+            try contacts.conversation(with: card, now: now())
+            try transitionInvitation(with: card, action: .accept, phase: .accepted, removesRequest: true)
+            return true
+        } catch { fail(error); return false }
+    }
+    @discardableResult
+    func declineInvitation(_ card: SpotchatContactCard) -> Bool {
+        guard !retired, !isBlocked(card), invitationPhase(for: card) == .incomingPending else { return false }
+        do {
+            try transitionInvitation(with: card, action: .decline, phase: .declinedLocally)
+            return true
+        } catch { fail(error); return false }
+    }
+
+    private func transitionInvitation(
+        with card: SpotchatContactCard,
+        action: SpotchatInvitationAction,
+        phase: SpotchatInvitationPhase,
+        removesRequest: Bool = false
+    ) throws {
+        let previousTimestamp = state.invitationStates?[card.id]?.updatedAt ?? 0
+        let timestamp = max(
+            Int64(now().timeIntervalSince1970 * 1000),
+            previousTimestamp + 1
+        )
+        var control = SpotchatInvitationControl(
+            id: UUID().uuidString,
+            sender: ownCard,
+            recipient: card,
+            action: action,
+            timestamp: timestamp,
+            expiresAt: timestamp + Self.invitationLifetimeMilliseconds
+        )
+        guard let signature = transport.noiseSignData(try control.signingBytes()) else {
+            throw SpotchatFailure.unavailableIdentity
+        }
+        control.signature = signature
+        try store.transaction { state in
+            if state.invitationStates == nil { state.invitationStates = [:] }
+            if state.invitationOutbox == nil { state.invitationOutbox = [] }
+            state.invitationStates?[card.id] = SpotchatInvitationState(
+                phase: phase,
+                updatedAt: timestamp,
+                eventID: control.id
+            )
+            state.invitationOutbox?.removeAll {
+                $0.control.recipient.id == card.id
+            }
+            state.invitationOutbox?.append(
+                SpotchatStoredInvitationControl(control: control)
+            )
+            if removesRequest {
+                state.requests.removeAll { $0.id == card.id }
+            }
+        }
+        changed()
+        routeInvitationControls()
+
+        // Older Shum builds use a signed card as their request/acceptance
+        // signal. Keep that Nostr compatibility while the new signed control
+        // is the source of truth for current builds.
+        if action == .request {
+            internet?.send(SpotchatPacket(card: ownCard), to: card) { _ in }
+        } else if action == .accept {
+            if let peer = session(for: card) {
+                sendPacket(SpotchatPacket(card: ownCard), to: peer)
+            }
+            internet?.send(SpotchatPacket(card: ownCard), to: card) { _ in }
+        }
+    }
+
+    private func receiveInvitation(_ control: SpotchatInvitationControl) throws {
+        try control.validate(at: now())
+        guard control.recipient.noiseKey == ownCard.noiseKey,
+              control.recipient.signingKey == ownCard.signingKey,
+              control.recipient.nostrKey == ownCard.nostrKey,
+              control.sender.id != ownCard.id else {
+            throw SpotchatFailure.invalidMessage
+        }
+
+        if state.invitationStates?[control.sender.id]?.eventID == control.id {
+            return
+        }
+        let currentPhase = invitationPhase(for: control.sender)
+        let hasOutgoingRequest = (state.invitationOutbox ?? []).contains {
+            $0.control.recipient.id == control.sender.id
+                && $0.control.action == .request
+        }
+        switch control.action {
+        case .request:
+            guard currentPhase == .ready
+                    || currentPhase == .outgoingPending
+                    || currentPhase == .declinedByPeer else { return }
+            try store.transaction { state in
+                if let index = state.requests.firstIndex(where: { $0.id == control.sender.id }) {
+                    state.requests[index] = control.sender
+                } else {
+                    guard state.requests.count < 20 else { throw SpotchatFailure.quota }
+                    state.requests.append(control.sender)
+                }
+                if state.invitationStates == nil { state.invitationStates = [:] }
+                state.invitationStates?[control.sender.id] = SpotchatInvitationState(
+                    phase: .incomingPending,
+                    updatedAt: control.timestamp,
+                    eventID: control.id
+                )
+            }
+        case .accept:
+            guard currentPhase == .outgoingPending
+                    || currentPhase == .declinedByPeer
+                    || currentPhase == .accepted
+                    || (currentPhase == .incomingPending && hasOutgoingRequest) else { return }
+            try contacts.add(control.sender, source: "invitation-accepted", now: now())
+            try contacts.conversation(with: control.sender, now: now())
+            try store.transaction { state in
+                if state.invitationStates == nil { state.invitationStates = [:] }
+                state.invitationStates?[control.sender.id] = SpotchatInvitationState(
+                    phase: .accepted,
+                    updatedAt: control.timestamp,
+                    eventID: control.id
+                )
+                state.requests.removeAll { $0.id == control.sender.id }
+                state.invitationOutbox?.removeAll {
+                    $0.control.recipient.id == control.sender.id
+                        && $0.control.action == .request
+                }
+            }
+        case .decline:
+            guard currentPhase == .outgoingPending
+                    || currentPhase == .declinedByPeer
+                    || (currentPhase == .incomingPending && hasOutgoingRequest) else { return }
+            try store.transaction { state in
+                if state.invitationStates == nil { state.invitationStates = [:] }
+                state.invitationStates?[control.sender.id] = SpotchatInvitationState(
+                    phase: .declinedByPeer,
+                    updatedAt: control.timestamp,
+                    eventID: control.id
+                )
+                state.requests.removeAll { $0.id == control.sender.id }
+                state.invitationOutbox?.removeAll {
+                    $0.control.recipient.id == control.sender.id
+                        && $0.control.action == .request
+                }
+            }
+        }
+        changed()
     }
     func open(_ card: SpotchatContactCard?) {
         guard !retired else { return }
@@ -270,10 +454,13 @@ final class SpotchatMessageStore: ObservableObject {
     func send(_ text: String, to card: SpotchatContactCard) -> Bool {
         guard !retired else { return false }
         guard !isBlocked(card) else { fail(SpotchatFailure.blocked); return false }
+        guard canMessage(card) else { return false }
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf8.count <= 4096 else { onError?("Сообщение должно быть не длиннее 4096 байт."); return false }
         do {
-            if !state.contacts.contains(where: { $0.id == card.id }) { try add(card, source: "nearby") }
+            if !state.contacts.contains(where: { $0.id == card.id }) {
+                throw SpotchatFailure.invalidContact
+            }
             guard state.messages.filter({ $0.outgoing && [.queued, .forwarding].contains($0.status) }).count < 200 else { throw SpotchatFailure.quota }
             let id = UUID().uuidString, timestamp = Int64(now().timeIntervalSince1970 * 1000)
             let conversation = SpotchatConversation.identifier(ownCard.id, card.id)
@@ -304,17 +491,22 @@ final class SpotchatMessageStore: ObservableObject {
         }
         do {
             let ms = Int64(now().timeIntervalSince1970 * 1000)
-            if state.relay.contains(where: { $0.envelope.expiresAt <= ms }) || state.receipts.contains(where: { $0.receipt.expiresAt <= ms }) || state.messages.contains(where: { $0.outgoing && [.queued, .forwarding].contains($0.status) && $0.envelope.expiresAt <= ms }) || (tickNumber % 30 == 0 && (!state.seenRelay.isEmpty || !(state.deletedMessageIDs ?? [:]).isEmpty)) {
+            if state.relay.contains(where: { $0.envelope.expiresAt <= ms }) || state.receipts.contains(where: { $0.receipt.expiresAt <= ms }) || state.messages.contains(where: { $0.outgoing && [.queued, .forwarding].contains($0.status) && $0.envelope.expiresAt <= ms }) || (state.invitationOutbox ?? []).contains(where: { $0.control.expiresAt <= ms || $0.nostrAccepted || ($0.control.action != .request && $0.attempts >= 6) }) || (tickNumber % 30 == 0 && (!state.seenRelay.isEmpty || !(state.deletedMessageIDs ?? [:]).isEmpty)) {
                 try store.transaction { state in
                     state.relay.removeAll { $0.envelope.expiresAt <= ms }
                     state.receipts.removeAll { $0.receipt.expiresAt <= ms }
+                    state.invitationOutbox?.removeAll {
+                        $0.control.expiresAt <= ms
+                            || $0.nostrAccepted
+                            || ($0.control.action != .request && $0.attempts >= 6)
+                    }
                     state.seenRelay = state.seenRelay.filter { $0.value > now() }
                     state.deletedMessageIDs = state.deletedMessageIDs?.filter { $0.value > now() }
                     for i in state.messages.indices where state.messages[i].outgoing && [.queued, .forwarding].contains(state.messages[i].status) && state.messages[i].envelope.expiresAt <= ms { state.messages[i].status = .expired }
                 }; changed()
             }
         } catch { fail(error); return }
-        routeOutbox(); routeRelay(); routeReceipts(); markRead()
+        routeInvitationControls(); routeOutbox(); routeRelay(); routeReceipts(); markRead()
     }
     func receiveBytes(_ data: Data, from peer: PeerID) {
         guard data.count <= 24_000, let packet = try? JSONDecoder().decode(SpotchatPacket.self, from: data) else { return }
@@ -327,12 +519,15 @@ final class SpotchatMessageStore: ObservableObject {
         if let card = packet.card, isBlocked(card) { return }
         if let envelope = packet.envelope, isBlocked(envelope.sender) || isBlocked(envelope.recipient) { return }
         if let receipt = packet.receipt, isBlocked(receipt.sender) || isBlocked(receipt.destination) { return }
+        if let invitation = packet.invitation,
+           isBlocked(invitation.sender) || isBlocked(invitation.recipient) { return }
         let source = peer?.id ?? nostrSender ?? "unknown"
         let old = ingressRate[source] ?? (now(), 0)
         let progress = now().timeIntervalSince(old.0) >= 60 ? (now(), 0) : old
         guard progress.1 < 80, ingressRate.count < 1000 || ingressRate[source] != nil,
               packet.version == 1,
-              [packet.card != nil, packet.envelope != nil, packet.receipt != nil].filter({ $0 }).count == 1 else { return }
+              [packet.card != nil, packet.envelope != nil, packet.receipt != nil, packet.invitation != nil]
+                .filter({ $0 }).count == 1 else { return }
         ingressRate[source] = (progress.0, progress.1 + 1)
         do {
             if let card = packet.card {
@@ -358,12 +553,30 @@ final class SpotchatMessageStore: ObservableObject {
             } else if let receipt = packet.receipt {
                 if let nostrSender, nostrSender != receipt.sender.nostrKey { return }
                 try acceptReceipt(receipt)
+            } else if let invitation = packet.invitation {
+                if let peer {
+                    guard transport.noiseSessionPublicKeyData(for: peer) == invitation.sender.noiseKey else { return }
+                }
+                if let nostrSender, nostrSender != invitation.sender.nostrKey { return }
+                try receiveInvitation(invitation)
             }
         } catch { /* Untrusted invalid packets do not produce modal alerts. */ }
     }
     private func request(_ card: SpotchatContactCard) throws {
-        guard !state.contacts.contains(where: { $0.id == card.id }), !state.requests.contains(where: { $0.id == card.id }), state.requests.count < 20 else { return }
-        try store.transaction { $0.requests.append(card) }; changed()
+        guard invitationPhase(for: card) != .accepted,
+              invitationPhase(for: card) != .declinedLocally else { return }
+        guard !state.requests.contains(where: { $0.id == card.id }), state.requests.count < 20 else { return }
+        let timestamp = Int64(now().timeIntervalSince1970 * 1000)
+        try store.transaction { state in
+            state.requests.append(card)
+            if state.invitationStates == nil { state.invitationStates = [:] }
+            state.invitationStates?[card.id] = SpotchatInvitationState(
+                phase: .incomingPending,
+                updatedAt: timestamp,
+                eventID: "legacy-\(UUID().uuidString)"
+            )
+        }
+        changed()
     }
     private func accept(_ envelope: SpotchatEnvelope, via peer: PeerID?, hop: Int, internet: Bool) throws {
         guard internet || (1...envelope.hopLimit).contains(hop) else { throw SpotchatFailure.invalidMessage }
@@ -382,6 +595,7 @@ final class SpotchatMessageStore: ObservableObject {
             try request(envelope.sender); return
         }
         guard contact.card.signingKey == envelope.sender.signingKey, contact.card.nostrKey == envelope.sender.nostrKey else { throw SpotchatFailure.invalidContact }
+        guard canMessage(contact.card) else { return }
         if let existing = state.messages.first(where: { $0.id == envelope.id }) {
             guard !existing.outgoing, existing.envelope.digest == envelope.digest else { throw SpotchatFailure.invalidMessage }
             try makeReceipt(for: existing, read: !existing.unread, force: true); return
@@ -465,6 +679,44 @@ final class SpotchatMessageStore: ObservableObject {
             do {
                 try store.transaction { state in if let i = state.messages.firstIndex(where: { $0.id == message.id }) { state.messages[i].unread = false } }
                 try makeReceipt(for: message, read: true); changed()
+            } catch { fail(error); return }
+        }
+    }
+    private func routeInvitationControls() {
+        guard foreground, !retired else { return }
+        for stored in (state.invitationOutbox ?? []).prefix(4) {
+            let control = stored.control
+            let direct = session(for: control.recipient)
+            let canSendDirect = direct != nil
+                && (control.action == .request || stored.attempts < 6)
+            let canSendInternet = !stored.nostrAccepted && internet?.connected == true
+            guard canSendDirect || canSendInternet else { continue }
+
+            let exponent = min(stored.attempts, 5)
+            let retryDelay = min(300.0, 10.0 * pow(2.0, Double(exponent)))
+            guard now().timeIntervalSince(stored.lastAttempt) >= retryDelay else { continue }
+
+            do {
+                try store.transaction { state in
+                    guard let index = state.invitationOutbox?.firstIndex(where: { $0.id == stored.id }) else { return }
+                    state.invitationOutbox?[index].lastAttempt = now()
+                    state.invitationOutbox?[index].attempts += 1
+                }
+                let packet = SpotchatPacket(invitation: control)
+                if let direct, canSendDirect { sendPacket(packet, to: direct) }
+                if canSendInternet {
+                    internet?.send(packet, to: control.recipient) { [weak self] accepted in
+                        guard let self, accepted, !self.retired else { return }
+                        do {
+                            try self.store.transaction { state in
+                                guard let index = state.invitationOutbox?.firstIndex(where: { $0.id == stored.id }) else { return }
+                                state.invitationOutbox?[index].nostrAccepted = true
+                            }
+                            self.changed()
+                        } catch { self.fail(error) }
+                    }
+                }
+                changed()
             } catch { fail(error); return }
         }
     }
@@ -571,6 +823,8 @@ final class SpotchatMessageStore: ObservableObject {
             if removeContact {
                 state.contacts.removeAll { $0.id == card.id }
                 state.requests.removeAll { $0.id == card.id }
+                state.invitationStates?.removeValue(forKey: card.id)
+                state.invitationOutbox?.removeAll { $0.control.recipient.id == card.id }
             }
         }
         if activeContact == card.id { activeContact = nil }
@@ -600,6 +854,8 @@ final class SpotchatMessageStore: ObservableObject {
             state.requests.removeAll { $0.id == card.id }
             state.encounters?.removeAll { $0.id == card.id }
             state.unviewedEncounterIDs?.remove(card.id)
+            state.invitationStates?.removeValue(forKey: card.id)
+            state.invitationOutbox?.removeAll { $0.control.recipient.id == card.id }
         }
         if activeContact == card.id { activeContact = nil }
         nearby = nearby.filter { $0.value.id != card.id }
@@ -614,6 +870,7 @@ final class SpotchatMessageStore: ObservableObject {
                 guard state.blocked!.count < 2000 || state.blocked?[card.id] != nil else { throw SpotchatFailure.quota }
                 state.blocked?[card.id] = card
                 state.requests.removeAll { $0.id == card.id }
+                state.invitationOutbox?.removeAll { $0.control.recipient.id == card.id }
                 state.relay.removeAll { $0.envelope.sender.id == card.id || $0.envelope.recipient.id == card.id || $0.depositor == card.id }
                 state.receipts.removeAll { $0.receipt.sender.id == card.id || $0.receipt.destination.id == card.id }
                 for i in state.messages.indices where state.messages[i].outgoing && state.messages[i].envelope.recipient.id == card.id && [.queued, .forwarding].contains(state.messages[i].status) {

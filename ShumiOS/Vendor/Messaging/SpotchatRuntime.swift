@@ -407,6 +407,37 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         guard let permanent, let card = permanent.card(for: peer) else { return false }
         return permanent.isBlocked(card)
     }
+    func invitationPhase(for peer: PeerID) -> SpotchatInvitationPhase {
+        #if DEBUG && targetEnvironment(simulator)
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("-ShumPreviewInvitationReady") { return .ready }
+        if arguments.contains("-ShumPreviewInvitationSent") { return .outgoingPending }
+        if arguments.contains("-ShumPreviewInvitationReceived") { return .incomingPending }
+        if arguments.contains("-ShumPreviewInvitationDeclined") { return .declinedByPeer }
+        if arguments.contains("-ShumPreviewInvitationRecover") { return .declinedLocally }
+        #endif
+        guard let permanent else { return .accepted }
+        guard let card = permanent.card(for: peer) else { return .ready }
+        return permanent.invitationPhase(for: card)
+    }
+    @discardableResult
+    func sendInvitation(to peer: PeerID) -> Bool {
+        guard let permanent, let card = permanent.card(for: peer) else {
+            error = "Дождитесь проверки профиля собеседника."
+            return false
+        }
+        return permanent.sendInvitation(card)
+    }
+    @discardableResult
+    func acceptInvitation(from peer: PeerID) -> Bool {
+        guard let permanent, let card = permanent.card(for: peer) else { return false }
+        return permanent.acceptInvitation(card)
+    }
+    @discardableResult
+    func declineInvitation(from peer: PeerID) -> Bool {
+        guard let permanent, let card = permanent.card(for: peer) else { return false }
+        return permanent.declineInvitation(card)
+    }
     private func isBlockedSession(_ peer: PeerID) -> Bool {
         guard let key = transport.noiseSessionPublicKeyData(for: peer) else { return false }
         return permanent?.state.blocked?[SpotchatContactCard.userID(key)] != nil

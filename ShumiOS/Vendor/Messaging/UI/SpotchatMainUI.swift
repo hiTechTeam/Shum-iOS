@@ -306,7 +306,6 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     @ViewBuilder let header: () -> Header
     @ViewBuilder let empty: () -> Empty
     @State private var selectedPeer: SpotchatPeer?
-    @State private var invitation: SpotchatContactCard?
     @State private var pendingAction: DirectoryConfirmation?
     @State private var blockRequest: ShumProfileBlockRequest?
     @State private var savedBlockInformation = false
@@ -333,17 +332,6 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
                 open(.conversation(peer))
             }
             .presentationDetents([.medium]).presentationDragIndicator(.visible)
-        }
-        .sheet(item: $invitation) { card in
-            SpotchatContactConfirmation(
-                card: card,
-                imageData: runtime.profile(for: card.peerID)?.avatar
-            ) {
-                if let peer = runtime.addContact(card, source: "invitation") {
-                    invitation = nil
-                    open(.conversation(peer))
-                }
-            }
         }
         .shumProfileBlockSheet(runtime: runtime, request: $blockRequest)
         .alert(pendingAction?.title ?? "", isPresented: Binding(
@@ -393,7 +381,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
                     Label("Недоступно", systemImage: "lock.fill")
                 }
                 .tint(Color(uiColor: .systemGray))
-            } else if entry.isInvitation {
+            } else if entry.isInvitation && entry.invitationPhase == .incomingPending {
                 Button { pendingAction = .decline(card) } label: {
                     Label("Отклонить", systemImage: "xmark")
                 }
@@ -424,13 +412,13 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
             Label("Посмотреть профиль", systemImage: "person.crop.circle").foregroundStyle(.primary)
         }.tint(.primary)
         Button { activate(entry) } label: {
-            Label(entry.isInvitation ? "Посмотреть приглашение" : "Написать", systemImage: "paperplane").foregroundStyle(.primary)
+            Label(entry.isInvitation ? "Открыть приглашение" : "Написать", systemImage: "paperplane").foregroundStyle(.primary)
         }.tint(.primary)
         if let card = entry.card {
             Button { toggleSaved(entry) } label: {
                 Label(entry.isSaved ? "Убрать из сохранённых" : "Сохранить", systemImage: entry.isSaved ? "heart.slash" : "heart").foregroundStyle(.primary)
             }.tint(.primary)
-            if entry.isInvitation, !entry.isSaved {
+            if entry.isInvitation, entry.invitationPhase == .incomingPending, !entry.isSaved {
                 Button(role: .destructive) { pendingAction = .decline(card) } label: {
                     Label("Отклонить приглашение", systemImage: "xmark").foregroundStyle(.red)
                 }
@@ -455,8 +443,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     }
 
     private func activate(_ entry: ShumDirectoryEntry) {
-        if entry.isInvitation, let card = entry.card { invitation = card }
-        else { open(.conversation(entry.peer)) }
+        open(.conversation(entry.peer))
     }
     private func toggleSaved(_ entry: ShumDirectoryEntry) {
         guard let card = entry.card else { return }
@@ -478,7 +465,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
             do { try runtime.permanent?.clearDirectoryEntry(card) }
             catch { runtime.error = error.localizedDescription }
         case .decline(let card):
-            runtime.permanent?.dismissRequest(card)
+            _ = runtime.declineInvitation(from: card.peerID)
         }
     }
 
@@ -503,7 +490,7 @@ private enum DirectoryConfirmation {
         case .clear:
             "Чат, контакт и локальные записи будут удалены со всех папок на этом устройстве. Копии у собеседника сохранятся."
         case .decline:
-            "Приглашение будет удалено. Пользователь не будет заблокирован."
+            "Запрос будет отклонён. Вы сможете принять его позднее в этом чате."
         }
     }
 }
@@ -535,11 +522,11 @@ struct ShumDirectoryRow: View {
                     if let last, last.outgoing, !entry.isInvitation {
                         ShumChatReceipt(status: last.status)
                     }
-                    Text(entry.isInvitation ? "Приглашение в чат" : last?.text ?? "Начать чат")
+                    Text(invitationSummary ?? last?.text ?? "Начать чат")
                         .font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
                     Spacer(minLength: 4)
-                    if entry.unread > 0 || entry.isInvitation {
-                        Text(entry.unread > 99 ? "99+" : String(max(entry.unread, entry.isInvitation ? 1 : 0)))
+                    if entry.unread > 0 || entry.invitationAwaitingResponse {
+                        Text(entry.unread > 99 ? "99+" : String(max(entry.unread, entry.invitationAwaitingResponse ? 1 : 0)))
                             .font(.system(size: 11, weight: .semibold)).foregroundStyle(.black)
                             .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
                             .background(Color.accentColor, in: Capsule())
@@ -552,6 +539,13 @@ struct ShumDirectoryRow: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(entry.isInvitation ? "Открыть приглашение" : "Открыть чат")
+    }
+
+    private var invitationSummary: String? {
+        guard entry.isInvitation else { return nil }
+        return entry.invitationPhase == .declinedLocally
+            ? "Приглашение отклонено"
+            : "Приглашение в чат"
     }
 }
 

@@ -33,7 +33,9 @@ struct MainContentView: View {
             }
             .toolbar(chatsPath.isEmpty ? .visible : .hidden, for: .tabBar)
             .tabItem { Label("Чаты", image: "PixelChats") }
-                .badge(chat.directoryEntries.reduce(0) { $0 + max($1.unread, $1.isInvitation ? 1 : 0) }).tag(1)
+                .badge(chat.directoryEntries.reduce(0) {
+                    $0 + max($1.unread, $1.invitationAwaitingResponse ? 1 : 0)
+                }).tag(1)
             NavigationStack {
                 ProfileOverviewView(
                     chat: chat,
