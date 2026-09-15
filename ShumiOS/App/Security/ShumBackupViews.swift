@@ -87,6 +87,7 @@ struct ShumBackupCreateView: View {
                 }
             }
         }
+        .fontWeight(.regular)
         .navigationTitle("Резервная копия")
         .navigationBarTitleDisplayMode(.inline)
         .fileExporter(
@@ -219,6 +220,7 @@ struct ShumBackupRestoreView: View {
                     }
                 }
             }
+            .fontWeight(.regular)
             .navigationTitle("Восстановление")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -92,7 +92,14 @@ struct SpotchatContactsView: View {
                 }
             }
             .sheet(item: $share) { SpotchatShareSheet(items: [$0.text]) }
-            .sheet(item: $invitation) { card in SpotchatContactConfirmation(card: card) { open(card, source: "invitation") } }
+            .sheet(item: $invitation) { card in
+                SpotchatContactConfirmation(
+                    card: card,
+                    imageData: runtime.profile(for: card.peerID)?.avatar
+                ) {
+                    open(card, source: "invitation")
+                }
+            }
         }
         .tint(.accentColor)
         .presentationDetents([.height(sheetHeight)])
@@ -135,7 +142,10 @@ struct SpotchatContactRequestsView: View {
         .navigationTitle("Приглашения")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $invitation) { card in
-            SpotchatContactConfirmation(card: card) {
+            SpotchatContactConfirmation(
+                card: card,
+                imageData: runtime.profile(for: card.peerID)?.avatar
+            ) {
                 if let peer = runtime.addContact(card, source: "invitation") {
                     invitation = nil
                     select(peer)
@@ -147,19 +157,98 @@ struct SpotchatContactRequestsView: View {
 
 struct SpotchatContactConfirmation: View {
     let card: SpotchatContactCard
+    var imageData: Data? = nil
     var accept: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var showPhoto = false
+
     var body: some View {
-        VStack(spacing: 18) {
-            SpotchatAvatar(name: card.name, size: 110)
-            Text(card.name).font(.title2.bold())
-            if !card.bio.isEmpty { Text(card.bio).font(.subheadline).multilineTextAlignment(.center) }
-            Text("Сохранить контакт Shum?").foregroundStyle(.secondary)
-            Button("Добавить контакт") { dismiss(); accept() }.buttonStyle(ShumPrimaryButtonStyle()).controlSize(.large)
-            Button("Отмена") { dismiss() }
-        }.padding(24).presentationDetents([.medium]).presentationDragIndicator(.visible)
+        GeometryReader { geometry in
+            let contentWidth = min(360, max(0, geometry.size.width - 48))
+
+            VStack(spacing: 0) {
+                Spacer(minLength: 28)
+
+                SpotchatAvatar(name: card.name, size: 176, imageData: imageData)
+                    .contentShape(Circle())
+                    .onTapGesture(perform: openPhoto)
+                    .accessibilityLabel(imageData == nil ? card.name : "Посмотреть фото")
+
+                Text(card.name)
+                    .font(.title2.bold())
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .frame(width: contentWidth)
+                    .padding(.top, 12)
+
+                if !card.bio.isEmpty {
+                    Text(card.bio)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .frame(width: contentWidth)
+                        .padding(.top, 4)
+                }
+
+                Text("Сохранить контакт Shum?")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, card.bio.isEmpty ? 6 : 4)
+
+                Button("Добавить контакт") {
+                    dismiss()
+                    accept()
+                }
+                .buttonStyle(ShumPrimaryButtonStyle())
+                .controlSize(.large)
+                .frame(width: contentWidth)
+                .padding(.top, 14)
+
+                Button("Отмена") { dismiss() }
+                    .font(.system(size: 16))
+                    .frame(minHeight: 36)
+                    .padding(.top, 4)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .padding(.bottom, 8)
+        }
+        .fullScreenCover(isPresented: $showPhoto) {
+            if let imageData, let image = UIImage(data: imageData) {
+                FullScreenPhotoView(isPresented: $showPhoto) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func openPhoto() {
+        guard imageData.flatMap(UIImage.init(data:)) != nil else { return }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            showPhoto = true
+        }
     }
 }
+
+private struct SpotchatQRShareToolbar: ToolbarContent {
+    let invitationURL: URL
+
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            ShareLink(item: invitationURL)
+                .tint(.primary)
+                .accessibilityLabel("Поделиться контактом Shum")
+        }
+    }
+}
+
 struct SpotchatQRView: View {
     let card: SpotchatContactCard
     var resolve: SpotchatContactResolving?
@@ -232,13 +321,7 @@ struct SpotchatQRView: View {
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             if let invitationURL {
-                ToolbarItem(placement: .confirmationAction) {
-                    ShareLink(item: invitationURL) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 17, weight: .regular))
-                    }
-                    .accessibilityLabel("Поделиться контактом Shum")
-                }
+                SpotchatQRShareToolbar(invitationURL: invitationURL)
             }
         }
         .fullScreenCover(isPresented: $showScanner) {

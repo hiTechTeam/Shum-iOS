@@ -50,7 +50,8 @@ struct LocalCardDetailsView: View {
             VStack(alignment: .leading, spacing: 24) {
                 if mode == .registration { Text(mode.title).font(.largeTitle.bold()) }
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("local.profile.name").font(.headline)
+                    Text("Имя")
+                        .font(.system(size: 17, weight: .regular))
                     TextField("Имя пользователя", text: $name)
                         .textContentType(.nickname).textInputAutocapitalization(.never)
                         .focused($focused).submitLabel(.done).onSubmit { save() }

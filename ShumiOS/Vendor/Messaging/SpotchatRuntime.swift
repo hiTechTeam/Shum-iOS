@@ -69,7 +69,8 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         let keychain = KeychainManager.makeDefault()
         let ble = BLEService(keychain: keychain,
                              idBridge: NostrIdentityBridge(keychain: keychain),
-                             identityManager: SecureIdentityStateManager(keychain))
+                             identityManager: SecureIdentityStateManager(keychain),
+                             deferBluetoothStartup: true)
         let model = SpotchatRuntime(transport: ble, profileStore: .live())
         // Legacy synthetic radio diagnostics remain isolated from real history.
         if UserDefaults.standard.string(forKey: "ShumSelfTestRun") == nil {
@@ -334,8 +335,12 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
             completion(.failure(SpotchatFailure.unavailableIdentity))
             return
         }
-        if let card = permanent.nearby.values.first(where: { $0.nostrKey == locator.nostrKey }) {
-            completion(.success(card))
+        let nearbyCard = permanent.nearby.values.first {
+            $0.nostrKey == locator.nostrKey
+        }
+        if let nearbyCard,
+           profile(for: nearbyCard.peerID)?.avatar != nil {
+            completion(.success(nearbyCard))
             return
         }
         permanent.resolve(locator) { [weak self] result in
@@ -344,7 +349,11 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
                 self?.profiles.acceptResolved(resolved.profile, for: resolved.card.peerID)
                 completion(.success(resolved.card))
             case .failure(let error):
-                completion(.failure(error))
+                if let nearbyCard {
+                    completion(.success(nearbyCard))
+                } else {
+                    completion(.failure(error))
+                }
             }
         }
     }

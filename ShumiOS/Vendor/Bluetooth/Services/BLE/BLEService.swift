@@ -504,6 +504,7 @@ final class BLEService: NSObject {
         idBridge: NostrIdentityBridge,
         identityManager: SecureIdentityStateManagerProtocol,
         initializeBluetoothManagers: Bool = true,
+        deferBluetoothStartup: Bool = false,
         incomingFileStore: BLEIncomingFileStore = BLEIncomingFileStore(),
         startSuspendedForPanicRecovery: Bool = false,
         noiseResponderHandshakeTimeout: TimeInterval =
@@ -575,14 +576,14 @@ final class BLEService: NSObject {
         // any access from another queue (cross-queue reads use readLinkState).
         linkStateStore.assumeOwnership(of: bleQueue)
 
-        if !startSuspendedForPanicRecovery {
+        if !startSuspendedForPanicRecovery && !deferBluetoothStartup {
             initializeBluetoothManagersIfNeeded()
         }
         
         // Single maintenance timer for all periodic tasks (dispatch-based for
         // determinism). Only run it when real Bluetooth managers exist.
-        meshBackgroundEnabled = initializeBluetoothManagers
-        if !startSuspendedForPanicRecovery {
+        meshBackgroundEnabled = initializeBluetoothManagers && !deferBluetoothStartup
+        if !startSuspendedForPanicRecovery && !deferBluetoothStartup {
             startMaintenanceTimer()
         }
 
@@ -590,7 +591,7 @@ final class BLEService: NSObject {
         requestPeerDataPublish()
 
         // Initialize gossip sync manager
-        if !startSuspendedForPanicRecovery {
+        if !startSuspendedForPanicRecovery && !deferBluetoothStartup {
             restartGossipManager()
         }
     }
@@ -950,6 +951,9 @@ final class BLEService: NSObject {
     func startServices() {
         guard let lifecycleGeneration =
                 capturePanicLifecycleGeneration() else { return }
+        if shouldInitializeBluetoothManagers {
+            meshBackgroundEnabled = true
+        }
         initializeBluetoothManagersIfNeeded()
         if gossipSyncManager == nil {
             restartGossipManager()

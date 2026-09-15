@@ -51,8 +51,7 @@ struct AppCoordinatorView: View {
             }
         }
         .onOpenURL { url in
-            do { coordinator.invitation = try SpotchatContactCard.parse(url) }
-            catch { coordinator.invitationError = error.localizedDescription }
+            coordinator.handleInvitationURL(url)
         }
         .alert("Контакт Shum", isPresented: Binding(get: { coordinator.invitationError != nil }, set: { if !$0 { coordinator.invitationError = nil } })) {
             Button("Понятно") { coordinator.invitationError = nil }

@@ -124,9 +124,15 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         UserDefaults.standard.set(true, forKey: Keys.isReg.rawValue)
         isScaning = true
         UserDefaults.standard.set(true, forKey: Keys.isScaning.rawValue)
-        if chat == nil { prepareMessaging() }
-        chat?.setBluetoothEnabled(true)
-        updateApplicationState(isActive: true)
+
+        // The security screens use a runtime whose Bluetooth managers are
+        // deliberately never created. Rebuild it after registration so the
+        // first live session follows the same clean startup path as a normal
+        // app launch instead of depending on a background/foreground cycle.
+        chat = nil
+        prepareMessaging()
+        synchronizeProfile()
+        updateApplicationState(isActive: active)
     }
 
     @discardableResult
@@ -148,6 +154,36 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     func refreshSession() async {
         authCodeViewModel.restoreLocalProfile(); profilePhotoViewModel.loadPhotoIfNeeded()
         synchronizeProfile()
+    }
+    func handleInvitationURL(_ url: URL) {
+        guard isRegistered,
+              LocalCardStore.shared.ownManifest != nil,
+              chat?.isReady == true else {
+            invitation = nil
+            invitationError = "Сначала завершите регистрацию в Shum: получите ключи и создайте свой профиль. Затем откройте контакт ещё раз."
+            return
+        }
+
+        do {
+            switch try SpotchatInvitationPayload.parse(url) {
+            case .card(let card):
+                invitationError = nil
+                invitation = card
+            case .locator(let locator):
+                guard let chat else { throw SpotchatFailure.unavailableIdentity }
+                invitationError = nil
+                chat.resolveContact(locator) { [weak self] result in
+                    switch result {
+                    case .success(let card):
+                        self?.invitation = card
+                    case .failure(let error):
+                        self?.invitationError = error.localizedDescription
+                    }
+                }
+            }
+        } catch {
+            invitationError = error.localizedDescription
+        }
     }
     func deleteAccount() async throws {
         try deletion.begin()

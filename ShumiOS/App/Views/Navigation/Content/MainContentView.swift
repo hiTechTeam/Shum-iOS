@@ -68,7 +68,10 @@ struct MainContentView: View {
             }
         }
         .sheet(item: $coordinator.invitation) { card in
-            SpotchatContactConfirmation(card: card) {
+            SpotchatContactConfirmation(
+                card: card,
+                imageData: chat.profile(for: card.peerID)?.avatar
+            ) {
                 if let peer = chat.addContact(card, source: "link") {
                     coordinator.invitation = nil; selectedTab = 1; chatsPath.append(.conversation(peer))
                 }

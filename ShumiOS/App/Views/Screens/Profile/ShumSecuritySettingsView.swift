@@ -100,6 +100,7 @@ struct ShumSecuritySettingsView: View {
                 }
             }
         }
+        .fontWeight(.regular)
         .navigationTitle("Безопасность")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showChangeCode) {

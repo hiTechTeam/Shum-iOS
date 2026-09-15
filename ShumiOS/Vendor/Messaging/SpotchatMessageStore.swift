@@ -6,6 +6,7 @@ import Foundation
 /// All message crypto and link writes delegate to the existing bitchat stack.
 @MainActor
 final class SpotchatMessageStore: ObservableObject {
+    static let encounterRetention: TimeInterval = 24 * 60 * 60
     @Published private(set) var revision = 0
     let store: SpotchatConversationStore
     let contacts: SpotchatContactsService
@@ -54,7 +55,10 @@ final class SpotchatMessageStore: ObservableObject {
 
     var encounterHistory: [SpotchatEncounter] {
         (state.encounters ?? [])
-            .filter { !isBlocked($0.card) }
+            .filter {
+                !isBlocked($0.card)
+                    && $0.lastSeen >= now().addingTimeInterval(-Self.encounterRetention)
+            }
             .sorted { $0.lastSeen > $1.lastSeen }
     }
     var savedProfiles: [SpotchatSavedProfile] {
@@ -65,6 +69,10 @@ final class SpotchatMessageStore: ObservableObject {
     var unviewedEncounterCount: Int {
         let visibleIDs = Set(encounterHistory.map(\.id))
         return (state.unviewedEncounterIDs ?? []).intersection(visibleIDs).count
+    }
+    var unviewedEncounterIDs: Set<String> {
+        let visibleIDs = Set(encounterHistory.map(\.id))
+        return (state.unviewedEncounterIDs ?? []).intersection(visibleIDs)
     }
     func start() { if !retired && foreground { internet?.start() } }
     func setActive(_ active: Bool) {
@@ -149,12 +157,17 @@ final class SpotchatMessageStore: ObservableObject {
                     throw SpotchatFailure.invalidContact
                 }
                 let previous = state.encounters?[index].lastSeen ?? timestamp
+                let isNewForCurrentHistory = timestamp.timeIntervalSince(previous)
+                    >= Self.encounterRetention
                 state.encounters?[index].card = card
                 state.encounters?[index].lastSeen = timestamp
                 if timestamp.timeIntervalSince(previous) >= 60 {
                     state.encounters?[index].seenCount += 1
                 }
                 if let avatar { state.encounters?[index].avatar = avatar }
+                if isNewForCurrentHistory {
+                    state.unviewedEncounterIDs?.insert(card.id)
+                }
             } else {
                 state.encounters?.append(
                     SpotchatEncounter(
@@ -219,6 +232,15 @@ final class SpotchatMessageStore: ObservableObject {
         guard !retired, !(state.unviewedEncounterIDs ?? []).isEmpty else { return }
         do {
             try store.transaction { $0.unviewedEncounterIDs = [] }
+            changed()
+        } catch { fail(error) }
+    }
+
+    func markEncounterViewed(_ id: String) {
+        guard !retired,
+              state.unviewedEncounterIDs?.contains(id) == true else { return }
+        do {
+            try store.transaction { $0.unviewedEncounterIDs?.remove(id) }
             changed()
         } catch { fail(error) }
     }
@@ -552,6 +574,35 @@ final class SpotchatMessageStore: ObservableObject {
             }
         }
         if activeContact == card.id { activeContact = nil }
+        changed()
+    }
+    func clearDirectoryEntry(_ card: SpotchatContactCard) throws {
+        guard !retired else { throw SpotchatFailure.unavailableIdentity }
+        guard !isSaved(card) else { return }
+        let conversationID = SpotchatConversation.identifier(ownCard.id, card.id)
+        try store.transaction { state in
+            if state.deletedMessageIDs == nil { state.deletedMessageIDs = [:] }
+            for message in state.messages where message.envelope.conversationID == conversationID {
+                let expiry = Date(
+                    timeIntervalSince1970: Double(message.envelope.expiresAt) / 1000
+                )
+                if expiry > now() { state.deletedMessageIDs?[message.id] = expiry }
+            }
+            state.messages.removeAll { $0.envelope.conversationID == conversationID }
+            state.legacyHistory?.messages.removeAll { $0.contactID == card.id }
+            state.legacyHistory?.contacts.removeAll { $0.id == card.id }
+            state.conversations.removeAll { $0.id == conversationID }
+            state.receipts.removeAll {
+                $0.receipt.sender.id == card.id
+                    || $0.receipt.destination.id == card.id
+            }
+            state.contacts.removeAll { $0.id == card.id }
+            state.requests.removeAll { $0.id == card.id }
+            state.encounters?.removeAll { $0.id == card.id }
+            state.unviewedEncounterIDs?.remove(card.id)
+        }
+        if activeContact == card.id { activeContact = nil }
+        nearby = nearby.filter { $0.value.id != card.id }
         changed()
     }
     func setBlocked(_ card: SpotchatContactCard, blocked: Bool) throws {

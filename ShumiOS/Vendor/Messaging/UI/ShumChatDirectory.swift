@@ -8,7 +8,7 @@ enum ShumChatFolder: String, CaseIterable, Hashable, Identifiable {
     case nearby = "Рядом", encounters = "Виделись", saved = "Сохранённые"
     var id: String { rawValue }
     static let visibleFolders: [ShumChatFolder] = [
-        .all, .invitations, .nearby, .encounters, .saved, .unread
+        .all, .invitations, .nearby, .saved, .unread
     ]
 }
 

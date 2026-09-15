@@ -20,6 +20,7 @@ struct ProfileOverviewView: View {
     @State private var showBlockedProfiles = false
     @State private var showQuickActions = false
     @State private var showSecurity = false
+    @State private var showEncounterHistory = false
     @State private var showLogoutConfirmation = false
     @State private var showLogoutError = false
     @State private var showDeleteConfirmation = false
@@ -67,6 +68,7 @@ struct ProfileOverviewView: View {
                 VStack(spacing: 30) {
                     VStack(spacing: 20) {
                         settingsCard
+                        encounterCard
                     }
                 }
                 .padding(.horizontal, 20)
@@ -158,6 +160,9 @@ struct ProfileOverviewView: View {
         .navigationDestination(isPresented: $showSecurity) {
             ShumSecuritySettingsView(fingerprint: coordinator.identityFingerprint)
         }
+        .navigationDestination(isPresented: $showEncounterHistory) {
+            ShumEncounterHistoryView(runtime: chat)
+        }
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let image = photoVM.uiImage {
                 FullScreenPhotoView(isPresented: $showPhotoPreview) {
@@ -227,6 +232,25 @@ struct ProfileOverviewView: View {
                 value: "Shum", position: .bottom) { showInfoSheet = true }
         }
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
+    }
+
+    private var encounterCard: some View {
+        ProfileOverviewRow(
+            title: Inc.Tabs.metTitle.localized,
+            systemImage: "clock.arrow.circlepath",
+            accentValue: (chat.permanent?.unviewedEncounterCount ?? 0) > 0
+                ? "+\(chat.permanent?.unviewedEncounterCount ?? 0)"
+                : nil,
+            value: String(chat.permanent?.encounterHistory.count ?? 0),
+            position: .single
+        ) {
+            showEncounterHistory = true
+        }
+        .background(
+            Color(uiColor: .secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private func normalized(_ value: String?) -> String? {
@@ -364,20 +388,20 @@ private struct ProfileOverviewRow: View {
                 .frame(width: 24)
 
             Text(title)
-                .font(.system(size: 17))
+                .font(.system(size: 17, weight: .regular))
 
             Spacer()
 
             if let accentValue {
                 Text(accentValue)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(.orange)
                     .lineLimit(1)
             }
 
             if let value {
                 Text(value)
-                    .font(.system(size: 15))
+                    .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }

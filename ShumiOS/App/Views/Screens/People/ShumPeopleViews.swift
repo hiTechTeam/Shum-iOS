@@ -634,6 +634,7 @@ struct ShumEncounterHistoryView: View {
     @State private var blockRequest: ShumProfileBlockRequest?
     @State private var showsClearConfirmation = false
     @State private var showsSavedBlockInformation = false
+    @State private var highlightedEncounterIDs: Set<String> = []
 
     private var encounters: [SpotchatEncounter] {
         runtime.permanent?.encounterHistory ?? []
@@ -644,11 +645,7 @@ struct ShumEncounterHistoryView: View {
             Color.peopleListBackground.ignoresSafeArea()
 
             if encounters.isEmpty {
-                ShumPeopleUnavailable(
-                    title: "Пока никого",
-                    message: "Здесь появятся люди, которых Shum заметил рядом.",
-                    systemImage: "clock.arrow.circlepath"
-                )
+                ShumEncounterHistoryEmptyState()
             } else {
                 encounterList
             }
@@ -659,7 +656,13 @@ struct ShumEncounterHistoryView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showsClearConfirmation = true } label: {
                     Image(systemName: "trash")
+                        .foregroundStyle(
+                            encounters.isEmpty
+                                ? Color(uiColor: .systemGray2)
+                                : Color.primary
+                        )
                 }
+                .disabled(encounters.isEmpty)
                 .accessibilityLabel("Очистить историю")
             }
         }
@@ -715,12 +718,11 @@ struct ShumEncounterHistoryView: View {
         } message: {
             Text("Сохранённый профиль нельзя заблокировать. Удалите его из сохранённых и повторите.")
         }
-        .task { runtime.permanent?.markEncountersViewed() }
     }
 
     private var encounterList: some View {
         List {
-            Text("История хранится только на этом iPhone в зашифрованном виде.")
+            Text("История хранится только на этом устройстве в зашифрованном виде.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)
@@ -733,7 +735,11 @@ struct ShumEncounterHistoryView: View {
                 let peer = encounter.peer
                 let isSaved = runtime.permanent?.isSaved(encounter.card) == true
 
-                NativeSwipeInteractionRow {
+                NativeSwipeInteractionRow(
+                    persistentSurfaceColor: highlightedEncounterIDs.contains(encounter.id)
+                        ? Color.orange.opacity(0.16)
+                        : nil
+                ) {
                     ShumStoredPersonRow(
                         runtime: runtime,
                         peer: peer,
@@ -761,6 +767,9 @@ struct ShumEncounterHistoryView: View {
                             }
                         }
                     )
+                }
+                .onAppear {
+                    revealEncounterIfNeeded(encounter)
                 }
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color(uiColor: .systemBackground))
@@ -812,6 +821,54 @@ struct ShumEncounterHistoryView: View {
     private func toggleSaved(_ encounter: SpotchatEncounter) {
         do { _ = try runtime.permanent?.toggleSaved(encounter.card, avatar: encounter.avatar) }
         catch { runtime.error = error.localizedDescription }
+    }
+
+    private func revealEncounterIfNeeded(_ encounter: SpotchatEncounter) {
+        guard runtime.permanent?.unviewedEncounterIDs.contains(encounter.id) == true,
+              highlightedEncounterIDs.insert(encounter.id).inserted else {
+            return
+        }
+
+        runtime.permanent?.markEncounterViewed(encounter.id)
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.5))
+            withAnimation(.easeOut(duration: 0.8)) {
+                highlightedEncounterIDs.remove(encounter.id)
+            }
+        }
+    }
+}
+
+private struct ShumEncounterHistoryEmptyState: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            ShumPixelEmptyIcon(kind: .encounters)
+                .foregroundStyle(.white)
+                .frame(width: 88, height: 68)
+                .accessibilityHidden(true)
+
+            Text("Пока не встречались")
+                .font(.system(size: 23, weight: .semibold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .padding(.top, 26)
+
+            Text("Встречи поблизости сохранятся здесь.")
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
+
+            Text("Все встречи за 24 часа")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.secondary)
+                .padding(.top, 18)
+        }
+        .frame(maxWidth: 330)
+        .padding(.horizontal, 24)
+        .accessibilityElement(children: .contain)
     }
 }
 

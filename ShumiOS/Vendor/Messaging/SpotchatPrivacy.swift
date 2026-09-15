@@ -80,6 +80,7 @@ struct SpotchatPrivacySettings: View {
                 Text("Удаляет профиль, ключи, контакты, историю и очередь на этом iPhone. Восстановить прежний профиль будет нельзя. Копии у других людей не удаляются.")
             }
         }
+        .fontWeight(.regular)
         .navigationTitle("Настройки").navigationBarTitleDisplayMode(.inline)
         .alert(
             NSLocalizedString("local.delete.title", comment: ""),

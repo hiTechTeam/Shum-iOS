@@ -85,10 +85,12 @@ struct ShumContactsUI: View {
     private var newContactButton: some View {
         if #available(iOS 26.0, *) {
             Button { open(.newChat) } label: {
-                Label("Новый контакт", systemImage: "plus")
+                Image(systemName: "plus")
             }
-            .foregroundStyle(.primary)
-            .tint(.primary)
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.circle)
+            .tint(Color(uiColor: .systemGreen))
+            .accessibilityLabel("Новый контакт")
             .accessibilityIdentifier("spotchat.addContact")
         } else {
             Button { open(.newChat) } label: {
@@ -96,7 +98,7 @@ struct ShumContactsUI: View {
                     .font(.system(size: 17, weight: .regular))
                     .foregroundStyle(Color(uiColor: .systemBackground))
                     .frame(width: 36, height: 36)
-                    .background(Color.primary, in: Circle())
+                    .background(Color(uiColor: .systemGreen), in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Новый контакт")
