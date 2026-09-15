@@ -234,9 +234,9 @@ struct SpotchatQRView: View {
             if let invitationURL {
                 ToolbarItem(placement: .confirmationAction) {
                     ShareLink(item: invitationURL) {
-                        ShumQRToolbarIcon(systemName: "square.and.arrow.up")
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 17, weight: .regular))
                     }
-                    .buttonStyle(.plain)
                     .accessibilityLabel("Поделиться контактом Shum")
                 }
             }
@@ -323,30 +323,6 @@ struct SpotchatQRView: View {
     }
 }
 
-private struct ShumQRToolbarIcon: View {
-    let systemName: String
-
-    var body: some View {
-        if #available(iOS 26.0, *) {
-            icon
-                .glassEffect(.regular, in: Circle())
-        } else {
-            icon
-                .background(Color(.secondarySystemBackground), in: Circle())
-                .overlay {
-                    Circle()
-                        .stroke(Color.primary.opacity(0.14), lineWidth: 1)
-                }
-        }
-    }
-
-    private var icon: some View {
-        Image(systemName: systemName)
-            .font(.system(size: 19, weight: .medium))
-            .foregroundStyle(.primary)
-            .frame(width: 44, height: 44)
-    }
-}
 struct SpotchatScanView: View {
     var resolve: SpotchatContactResolving?
     var scanned: (SpotchatContactCard) -> Void
@@ -377,6 +353,7 @@ struct SpotchatScanView: View {
             )
             .ignoresSafeArea()
             scannerOverlay
+                .ignoresSafeArea()
             #else
             if unavailable {
                 VStack(spacing: 16) {
@@ -399,8 +376,10 @@ struct SpotchatScanView: View {
                 ) { text in
                     handle(text)
                 }
+                .ignoresSafeArea()
 
                 scannerOverlay
+                    .ignoresSafeArea()
             }
             #endif
 
@@ -436,12 +415,11 @@ struct SpotchatScanView: View {
                     Spacer()
                 }
                 .padding(.horizontal, 18)
-                .padding(.top, 14)
+                .padding(.top, 8)
 
                 Spacer()
             }
         }
-        .ignoresSafeArea()
         .statusBarHidden(true)
         .toolbar(.hidden, for: .tabBar)
         .alert("QR-код", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil; done = false } })) {
@@ -460,7 +438,7 @@ struct SpotchatScanView: View {
     private var scannerOverlay: some View {
         GeometryReader { geometry in
             let side = min(geometry.size.width - 96, 264)
-            let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height * 0.43)
+            let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
             let scanRect = CGRect(
                 x: center.x - side / 2,
                 y: center.y - side / 2,
