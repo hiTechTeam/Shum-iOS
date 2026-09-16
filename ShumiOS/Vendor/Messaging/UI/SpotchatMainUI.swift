@@ -309,6 +309,8 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     @State private var selectedPeer: SpotchatPeer?
     @State private var pendingAction: DirectoryConfirmation?
     @State private var blockRequest: ShumProfileBlockRequest?
+    @State private var elevatedPeerIDs: Set<PeerID> = []
+    @State private var pinTransitionPeerIDs: Set<PeerID> = []
 
     var body: some View {
         List {
@@ -326,6 +328,10 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         .scrollContentBackground(.hidden)
         .background(Color.peopleListBackground)
         .scrollDismissesKeyboard(.interactively)
+        .animation(
+            .spring(response: 0.48, dampingFraction: 0.84),
+            value: entries.map(\.id)
+        )
         .sheet(item: $selectedPeer) { peer in
             ShumPeerCard(runtime: runtime, peer: peer) {
                 selectedPeer = nil
@@ -358,6 +364,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.peopleListBackground)
         .listRowSeparator(.hidden)
+        .zIndex(elevatedPeerIDs.contains(entry.id) ? 1_000 : (pinned ? 1 : 0))
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             if entry.card != nil {
                 Button { togglePinned(entry) } label: {
@@ -433,9 +440,32 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     }
     private func togglePinned(_ entry: ShumDirectoryEntry) {
         guard let card = entry.card else { return }
+        guard pinTransitionPeerIDs.insert(entry.id).inserted else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        do { _ = try runtime.permanent?.togglePinned(card, in: folder.pinKey) }
-        catch { runtime.error = error.localizedDescription }
+
+        let peerID = entry.id
+        let pinKey = folder.pinKey
+        Task { @MainActor in
+            // Let the system swipe/context menu close before the row changes position.
+            try? await Task.sleep(for: .milliseconds(300))
+            elevatedPeerIDs.insert(peerID)
+
+            // Commit the elevated stacking order before starting the list move.
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(35))
+
+            do {
+                try withAnimation(.spring(response: 0.52, dampingFraction: 0.86)) {
+                    _ = try runtime.permanent?.togglePinned(card, in: pinKey)
+                }
+            } catch {
+                runtime.error = error.localizedDescription
+            }
+
+            try? await Task.sleep(for: .milliseconds(650))
+            elevatedPeerIDs.remove(peerID)
+            pinTransitionPeerIDs.remove(peerID)
+        }
     }
     private func isPinned(_ entry: ShumDirectoryEntry) -> Bool {
         guard let card = entry.card else { return false }
@@ -525,14 +555,15 @@ struct ShumDirectoryRow: View {
         }
         .frame(maxWidth: .infinity, minHeight: 52)
         .padding(.horizontal, 16).padding(.vertical, 10)
-        .overlay(alignment: .bottom) {
+        .background {
             if isPinned {
-                Capsule()
-                    .fill(Color(uiColor: .systemGreen).opacity(0.28))
-                    .frame(height: 3)
-                    .padding(.horizontal, 18)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(uiColor: .systemGreen).opacity(0.15))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
             }
         }
+        .animation(.easeOut(duration: 0.22), value: isPinned)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(entry.isInvitation ? "Открыть приглашение" : "Открыть чат")

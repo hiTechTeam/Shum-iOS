@@ -105,14 +105,15 @@ struct ShumPeopleScreen: View {
                             )
                         }
                     )
-                    .overlay(alignment: .bottom) {
+                    .background {
                         if pinned {
-                            Capsule()
-                                .fill(Color(uiColor: .systemGreen).opacity(0.28))
-                                .frame(height: 3)
-                                .padding(.horizontal, 18)
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(Color(uiColor: .systemGreen).opacity(0.15))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
                         }
                     }
+                    .animation(.easeOut(duration: 0.22), value: pinned)
                 }
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color(uiColor: .systemBackground))
@@ -530,14 +531,15 @@ extension Date {
 
 struct ShumEncounterHistoryView: View {
     @ObservedObject var runtime: SpotchatRuntime
-    @Binding var hidesTabBar: Bool
+    let openChat: (SpotchatPeer) -> Void
 
     @State private var selectedEncounter: SpotchatEncounter?
-    @State private var conversationPeer: SpotchatPeer?
     @State private var pendingDelete: SpotchatEncounter?
     @State private var blockRequest: ShumProfileBlockRequest?
     @State private var showsClearConfirmation = false
     @State private var highlightedEncounterIDs: Set<String> = []
+    @State private var elevatedEncounterIDs: Set<String> = []
+    @State private var pinTransitionEncounterIDs: Set<String> = []
 
     private var encounters: [SpotchatEncounter] {
         let values = runtime.permanent?.encounterHistory ?? []
@@ -579,21 +581,11 @@ struct ShumEncounterHistoryView: View {
                 lastMetAt: encounter.lastSeen
             ) {
                 selectedEncounter = nil
-                conversationPeer = peer
+                openChat(peer)
             }
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
-        .navigationDestination(isPresented: conversationBinding) {
-            if let conversationPeer {
-                SpotchatConversationView(runtime: runtime, peer: conversationPeer)
-                    .toolbar(.hidden, for: .tabBar)
-            }
-        }
-        .shumOnChange(of: conversationPeer?.id) { _, peerID in
-            hidesTabBar = peerID != nil
-        }
-        .onDisappear { hidesTabBar = false }
         .alert(
             "Удалить из «Виделись»?",
             isPresented: Binding(
@@ -648,21 +640,22 @@ struct ShumEncounterHistoryView: View {
                         peer: peer,
                         lastMetAt: encounter.lastSeen,
                         cardAction: { selectedEncounter = encounter },
-                        writeAction: { conversationPeer = peer }
+                        writeAction: { openChat(peer) }
                     )
-                    .overlay(alignment: .bottom) {
+                    .background {
                         if pinned {
-                            Capsule()
-                                .fill(Color(uiColor: .systemGreen).opacity(0.28))
-                                .frame(height: 3)
-                                .padding(.horizontal, 18)
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(Color(uiColor: .systemGreen).opacity(0.15))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
                         }
                     }
+                    .animation(.easeOut(duration: 0.22), value: pinned)
                     .contextMenu {
                         Button { selectedEncounter = encounter } label: {
                             Label("Посмотреть профиль", systemImage: "person.crop.circle")
                         }
-                        Button { conversationPeer = peer } label: {
+                        Button { openChat(peer) } label: {
                             Label("Написать", systemImage: "paperplane")
                         }
                         Button { togglePinned(encounter) } label: {
@@ -690,6 +683,7 @@ struct ShumEncounterHistoryView: View {
                 .listRowBackground(Color(uiColor: .systemBackground))
                 .listRowSeparator(.hidden)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
+                .zIndex(elevatedEncounterIDs.contains(encounter.id) ? 1_000 : (pinned ? 1 : 0))
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
                     Button { togglePinned(encounter) } label: {
                         Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill")
@@ -717,12 +711,9 @@ struct ShumEncounterHistoryView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-    }
-
-    private var conversationBinding: Binding<Bool> {
-        Binding(
-            get: { conversationPeer != nil },
-            set: { if !$0 { conversationPeer = nil } }
+        .animation(
+            .spring(response: 0.48, dampingFraction: 0.84),
+            value: encounters.map(\.id)
         )
     }
 
@@ -731,9 +722,34 @@ struct ShumEncounterHistoryView: View {
     }
 
     private func togglePinned(_ encounter: SpotchatEncounter) {
+        guard pinTransitionEncounterIDs.insert(encounter.id).inserted else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        do { _ = try runtime.permanent?.togglePinned(encounter.card, in: ShumChatFolder.encounters.pinKey) }
-        catch { runtime.error = error.localizedDescription }
+
+        let encounterID = encounter.id
+        Task { @MainActor in
+            // First return the native swipe/context menu to its resting position.
+            try? await Task.sleep(for: .milliseconds(300))
+            elevatedEncounterIDs.insert(encounterID)
+
+            // Apply zIndex before the data reorder so the moving row stays on top.
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(35))
+
+            do {
+                try withAnimation(.spring(response: 0.52, dampingFraction: 0.86)) {
+                    _ = try runtime.permanent?.togglePinned(
+                        encounter.card,
+                        in: ShumChatFolder.encounters.pinKey
+                    )
+                }
+            } catch {
+                runtime.error = error.localizedDescription
+            }
+
+            try? await Task.sleep(for: .milliseconds(650))
+            elevatedEncounterIDs.remove(encounterID)
+            pinTransitionEncounterIDs.remove(encounterID)
+        }
     }
 
     private func revealEncounterIfNeeded(_ encounter: SpotchatEncounter) {

@@ -1,6 +1,19 @@
 import SwiftUI
 import UserNotifications
 
+enum ShumProfileRoute: Hashable {
+    case encounters
+    case conversation(SpotchatPeer)
+    case ownQR
+
+    var hidesTabBar: Bool {
+        switch self {
+        case .conversation, .ownQR: true
+        case .encounters: false
+        }
+    }
+}
+
 struct ProfileOverviewView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var coordinator: AppCoordinator
@@ -9,18 +22,16 @@ struct ProfileOverviewView: View {
     @ObservedObject var chat: SpotchatRuntime
     @ObservedObject var authCodeViewModel: LocalProfileViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
+    let open: (ShumProfileRoute) -> Void
     @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
     @ObservedObject private var appLock = ShumAppLock.shared
 
-    @State private var showQR = false
     @State private var showPrivacy = false
     @State private var showInfoSheet = false
     @State private var showLogoutOptions = false
     @State private var showBlockedProfiles = false
     @State private var showQuickActions = false
     @State private var showSecurity = false
-    @State private var showEncounterHistory = false
-    @State private var encounterChatHidesTabBar = false
     @State private var showLogoutConfirmation = false
     @State private var showLogoutError = false
     @State private var showDeleteConfirmation = false
@@ -33,11 +44,13 @@ struct ProfileOverviewView: View {
     init(
         chat: SpotchatRuntime,
         authCodeViewModel: LocalProfileViewModel,
-        photoViewModel: ProfilePhotoViewModel
+        photoViewModel: ProfilePhotoViewModel,
+        open: @escaping (ShumProfileRoute) -> Void
     ) {
         self.chat = chat
         self.authCodeViewModel = authCodeViewModel
         self.photoVM = photoViewModel
+        self.open = open
     }
 
     private var displayName: String {
@@ -80,7 +93,6 @@ struct ProfileOverviewView: View {
         }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(showQR || encounterChatHidesTabBar ? .hidden : .visible, for: .tabBar)
         .shumOnChange(of: authCodeViewModel.localPhotoURL) { _, value in
             photoVM.loadPhotoFromURL(value)
         }
@@ -103,7 +115,7 @@ struct ProfileOverviewView: View {
             }
 
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { showQR = true } label: { Image(systemName: "qrcode") }
+                Button { open(.ownQR) } label: { Image(systemName: "qrcode") }
                     .accessibilityLabel("Мой QR-код")
 
                 NavigationLink {
@@ -119,22 +131,6 @@ struct ProfileOverviewView: View {
                 }
                 .tint(.primary)
                 .accessibilityLabel(Inc.Profile.editProfile.localized)
-            }
-        }
-        .navigationDestination(isPresented: $showQR) {
-            if let card = coordinator.chat?.permanent?.ownCard {
-                SpotchatQRView(
-                    card: card,
-                    resolve: { locator, completion in
-                        guard let chat = coordinator.chat else {
-                            completion(.failure(SpotchatFailure.unavailableIdentity))
-                            return
-                        }
-                        chat.resolveContact(locator, completion: completion)
-                    }
-                ) { scannedCard in
-                    coordinator.invitation = scannedCard
-                }
             }
         }
         .sheet(isPresented: $showPrivacy) {
@@ -160,12 +156,6 @@ struct ProfileOverviewView: View {
         }
         .navigationDestination(isPresented: $showSecurity) {
             ShumSecuritySettingsView(fingerprint: coordinator.identityFingerprint)
-        }
-        .navigationDestination(isPresented: $showEncounterHistory) {
-            ShumEncounterHistoryView(
-                runtime: chat,
-                hidesTabBar: $encounterChatHidesTabBar
-            )
         }
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let image = photoVM.uiImage {
@@ -260,7 +250,7 @@ struct ProfileOverviewView: View {
             value: String(chat.permanent?.encounterHistory.count ?? 0),
             position: .single
         ) {
-            showEncounterHistory = true
+            open(.encounters)
         }
         .background(
             Color(uiColor: .secondarySystemGroupedBackground),
