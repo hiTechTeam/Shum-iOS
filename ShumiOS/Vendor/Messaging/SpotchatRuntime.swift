@@ -152,7 +152,6 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
             card.signature = try signing.signature(for: card.signedBytes())
             try permanent.add(card, source: "preview")
             try permanent.recordEncounter(card)
-            if name == "Соня" { _ = try permanent.toggleSaved(card) }
             _ = permanent.send(name == "Максим" ? "Буду через десять минут" : "До встречи!", to: card)
         }
         let noise = Curve25519.KeyAgreement.PrivateKey()
@@ -280,7 +279,6 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
 
     func displayName(_ peer: SpotchatPeer) -> String {
         permanent?.card(for: peer.id)?.name
-            ?? permanent?.state.savedProfiles?.first(where: { $0.card.peerID == peer.id })?.card.name
             ?? permanent?.state.encounters?.first(where: { $0.card.peerID == peer.id })?.card.name
             ?? profiles.remote[peer.id]?.name
             ?? peers.first(where: { $0.id == peer.id })?.name
@@ -306,12 +304,8 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         if let permanent, let card = permanent.card(for: peer) {
             let avatar = permanent.session(for: card).flatMap { profiles.remote[$0]?.avatar }
                 ?? permanent.state.contacts.first(where: { $0.id == card.id })?.avatar
-                ?? permanent.state.savedProfiles?.first(where: { $0.id == card.id })?.avatar
                 ?? permanent.state.encounters?.first(where: { $0.id == card.id })?.avatar
             return SpotchatProfile(name: card.name, bio: card.bio, avatar: avatar)
-        }
-        if let saved = permanent?.state.savedProfiles?.first(where: { $0.card.peerID == peer }) {
-            return SpotchatProfile(name: saved.card.name, bio: saved.card.bio, avatar: saved.avatar)
         }
         if let encounter = permanent?.state.encounters?.first(where: { $0.card.peerID == peer }) {
             return SpotchatProfile(name: encounter.card.name, bio: encounter.card.bio, avatar: encounter.avatar)

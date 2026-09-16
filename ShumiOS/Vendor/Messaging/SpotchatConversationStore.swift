@@ -215,6 +215,7 @@ struct SpotchatDatabase: Codable {
     var encounters: [SpotchatEncounter]?
     var savedProfiles: [SpotchatSavedProfile]?
     var unviewedEncounterIDs: Set<String>?
+    var pinnedDirectoryEntries: [String: Set<String>]?
     var invitationStates: [String: SpotchatInvitationState]?
     var invitationOutbox: [SpotchatStoredInvitationControl]?
 }
@@ -245,6 +246,9 @@ final class SpotchatConversationStore {
                 })
             }
             if restored.invitationOutbox == nil { restored.invitationOutbox = [] }
+            // Saved profiles were replaced by per-folder pinning. Keep the
+            // optional field only so older encrypted snapshots still decode.
+            restored.savedProfiles = nil
             state = restored
         } else {
             state = SpotchatDatabase(

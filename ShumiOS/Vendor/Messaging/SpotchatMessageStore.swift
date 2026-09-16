@@ -62,11 +62,6 @@ final class SpotchatMessageStore: ObservableObject {
             }
             .sorted { $0.lastSeen > $1.lastSeen }
     }
-    var savedProfiles: [SpotchatSavedProfile] {
-        (state.savedProfiles ?? [])
-            .filter { !isBlocked($0.card) }
-            .sorted { $0.savedAt > $1.savedAt }
-    }
     var unviewedEncounterCount: Int {
         let visibleIDs = Set(encounterHistory.map(\.id))
         return (state.unviewedEncounterIDs ?? []).intersection(visibleIDs).count
@@ -88,7 +83,6 @@ final class SpotchatMessageStore: ObservableObject {
     func card(for peer: PeerID) -> SpotchatContactCard? {
         state.contacts.first(where: { $0.card.peerID == peer })?.card
             ?? nearby[peer]
-            ?? state.savedProfiles?.first(where: { $0.card.peerID == peer })?.card
             ?? state.encounters?.first(where: { $0.card.peerID == peer })?.card
             ?? state.requests.first(where: { $0.peerID == peer })
             ?? state.blocked?.values.first(where: { $0.peerID == peer })
@@ -303,8 +297,7 @@ final class SpotchatMessageStore: ObservableObject {
         guard (avatar?.count ?? 0) <= 40_960, let card = nearby[peer] else { return }
         let contactNeedsUpdate = state.contacts.first(where: { $0.id == card.id })?.avatar != avatar
         let encounterNeedsUpdate = state.encounters?.first(where: { $0.id == card.id })?.avatar != avatar
-        let savedNeedsUpdate = state.savedProfiles?.first(where: { $0.id == card.id })?.avatar != avatar
-        guard contactNeedsUpdate || encounterNeedsUpdate || savedNeedsUpdate else { return }
+        guard contactNeedsUpdate || encounterNeedsUpdate else { return }
         do {
             try store.transaction { state in
                 if let index = state.contacts.firstIndex(where: { $0.id == card.id }) {
@@ -312,9 +305,6 @@ final class SpotchatMessageStore: ObservableObject {
                 }
                 if let index = state.encounters?.firstIndex(where: { $0.id == card.id }) {
                     state.encounters?[index].avatar = avatar
-                }
-                if let index = state.savedProfiles?.firstIndex(where: { $0.id == card.id }) {
-                    state.savedProfiles?[index].avatar = avatar
                 }
             }
             changed()
@@ -364,52 +354,14 @@ final class SpotchatMessageStore: ObservableObject {
                 )
                 state.unviewedEncounterIDs?.insert(card.id)
                 if let count = state.encounters?.count, count > 1_000 {
-                    let savedIDs = Set((state.savedProfiles ?? []).map(\.id))
                     state.encounters = state.encounters?
                         .sorted { $0.lastSeen > $1.lastSeen }
-                        .enumerated()
-                        .filter { $0.offset < 1_000 || savedIDs.contains($0.element.id) }
-                        .map(\.element)
+                        .prefix(1_000)
+                        .map { $0 }
                 }
-            }
-            if let index = state.savedProfiles?.firstIndex(where: { $0.id == card.id }) {
-                guard state.savedProfiles?[index].card.signingKey == card.signingKey,
-                      state.savedProfiles?[index].card.nostrKey == card.nostrKey else {
-                    throw SpotchatFailure.invalidContact
-                }
-                state.savedProfiles?[index].card = card
-                if let avatar { state.savedProfiles?[index].avatar = avatar }
             }
         }
         changed()
-    }
-
-    @discardableResult
-    func toggleSaved(_ card: SpotchatContactCard, avatar: Data? = nil) throws -> Bool {
-        guard !retired else { throw SpotchatFailure.unavailableIdentity }
-        try card.validate()
-        guard card.id != ownCard.id, !isBlocked(card), (avatar?.count ?? 0) <= 40_960 else {
-            throw SpotchatFailure.invalidContact
-        }
-        var isSaved = false
-        try store.transaction { state in
-            if state.savedProfiles == nil { state.savedProfiles = [] }
-            if let index = state.savedProfiles?.firstIndex(where: { $0.id == card.id }) {
-                state.savedProfiles?.remove(at: index)
-            } else {
-                guard (state.savedProfiles?.count ?? 0) < 2_000 else { throw SpotchatFailure.quota }
-                state.savedProfiles?.append(
-                    SpotchatSavedProfile(card: card, savedAt: now(), avatar: avatar)
-                )
-                isSaved = true
-            }
-        }
-        changed()
-        return isSaved
-    }
-
-    func isSaved(_ card: SpotchatContactCard) -> Bool {
-        state.savedProfiles?.contains(where: { $0.id == card.id }) == true
     }
 
     func markEncountersViewed() {
@@ -429,12 +381,42 @@ final class SpotchatMessageStore: ObservableObject {
         } catch { fail(error) }
     }
 
+    func isPinned(_ card: SpotchatContactCard, in directory: String) -> Bool {
+        state.pinnedDirectoryEntries?[directory]?.contains(card.id) == true
+    }
+
+    @discardableResult
+    func togglePinned(_ card: SpotchatContactCard, in directory: String) throws -> Bool {
+        guard !retired else { throw SpotchatFailure.unavailableIdentity }
+        try card.validate()
+        guard card.id != ownCard.id, !isBlocked(card), !directory.isEmpty else {
+            throw SpotchatFailure.invalidContact
+        }
+        var pinned = false
+        try store.transaction { state in
+            if state.pinnedDirectoryEntries == nil { state.pinnedDirectoryEntries = [:] }
+            if state.pinnedDirectoryEntries?[directory]?.remove(card.id) != nil {
+                if state.pinnedDirectoryEntries?[directory]?.isEmpty == true {
+                    state.pinnedDirectoryEntries?.removeValue(forKey: directory)
+                }
+            } else {
+                var entries = state.pinnedDirectoryEntries?[directory] ?? []
+                entries.insert(card.id)
+                state.pinnedDirectoryEntries?[directory] = entries
+                pinned = true
+            }
+        }
+        changed()
+        return pinned
+    }
+
     func deleteEncounter(_ card: SpotchatContactCard) {
         guard !retired, state.encounters?.contains(where: { $0.id == card.id }) == true else { return }
         do {
             try store.transaction { state in
                 state.encounters?.removeAll { $0.id == card.id }
                 state.unviewedEncounterIDs?.remove(card.id)
+                state.pinnedDirectoryEntries?["encounters"]?.remove(card.id)
             }
             changed()
         } catch { fail(error) }
@@ -446,6 +428,7 @@ final class SpotchatMessageStore: ObservableObject {
             try store.transaction { state in
                 state.encounters = []
                 state.unviewedEncounterIDs = []
+                state.pinnedDirectoryEntries?.removeValue(forKey: "encounters")
             }
             changed()
         } catch { fail(error) }
@@ -825,6 +808,9 @@ final class SpotchatMessageStore: ObservableObject {
                 state.requests.removeAll { $0.id == card.id }
                 state.invitationStates?.removeValue(forKey: card.id)
                 state.invitationOutbox?.removeAll { $0.control.recipient.id == card.id }
+                for directory in state.pinnedDirectoryEntries?.keys.map({ $0 }) ?? [] {
+                    state.pinnedDirectoryEntries?[directory]?.remove(card.id)
+                }
             }
         }
         if activeContact == card.id { activeContact = nil }
@@ -832,7 +818,6 @@ final class SpotchatMessageStore: ObservableObject {
     }
     func clearDirectoryEntry(_ card: SpotchatContactCard) throws {
         guard !retired else { throw SpotchatFailure.unavailableIdentity }
-        guard !isSaved(card) else { return }
         let conversationID = SpotchatConversation.identifier(ownCard.id, card.id)
         try store.transaction { state in
             if state.deletedMessageIDs == nil { state.deletedMessageIDs = [:] }
@@ -856,6 +841,9 @@ final class SpotchatMessageStore: ObservableObject {
             state.unviewedEncounterIDs?.remove(card.id)
             state.invitationStates?.removeValue(forKey: card.id)
             state.invitationOutbox?.removeAll { $0.control.recipient.id == card.id }
+            for directory in state.pinnedDirectoryEntries?.keys.map({ $0 }) ?? [] {
+                state.pinnedDirectoryEntries?[directory]?.remove(card.id)
+            }
         }
         if activeContact == card.id { activeContact = nil }
         nearby = nearby.filter { $0.value.id != card.id }
@@ -873,6 +861,9 @@ final class SpotchatMessageStore: ObservableObject {
                 state.invitationOutbox?.removeAll { $0.control.recipient.id == card.id }
                 state.relay.removeAll { $0.envelope.sender.id == card.id || $0.envelope.recipient.id == card.id || $0.depositor == card.id }
                 state.receipts.removeAll { $0.receipt.sender.id == card.id || $0.receipt.destination.id == card.id }
+                for directory in state.pinnedDirectoryEntries?.keys.map({ $0 }) ?? [] {
+                    state.pinnedDirectoryEntries?[directory]?.remove(card.id)
+                }
                 for i in state.messages.indices where state.messages[i].outgoing && state.messages[i].envelope.recipient.id == card.id && [.queued, .forwarding].contains(state.messages[i].status) {
                     state.messages[i].status = .cancelled
                 }

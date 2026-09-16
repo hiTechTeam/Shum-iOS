@@ -157,7 +157,7 @@ struct SpotchatPermanentTests {
         #expect(try Data(contentsOf: url) == Data([1,2,3]))
     }
 
-    @Test func encounterHistoryAndSavedProfilesAreDurableAndIndependent() throws {
+    @Test func encounterHistoryAndFolderPinsAreDurable() throws {
         let clock = Clock()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".enc")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -174,22 +174,23 @@ struct SpotchatPermanentTests {
         try a.service.recordEncounter(b.card, avatar: avatar)
         #expect(a.service.encounterHistory[0].seenCount == 2)
 
-        #expect(try a.service.toggleSaved(b.card, avatar: avatar))
-        #expect(a.service.savedProfiles.count == 1)
+        #expect(try a.service.togglePinned(b.card, in: "encounters"))
+        #expect(a.service.isPinned(b.card, in: "encounters"))
         a.service.markEncountersViewed()
         #expect(a.service.unviewedEncounterCount == 0)
-        a.service.deleteEncounter(b.card)
-        #expect(a.service.encounterHistory.isEmpty)
-        #expect(a.service.savedProfiles.count == 1)
 
         let restored = try SpotchatConversationStore(
             ownerID: a.card.id,
             key: a.identity.storageKey,
             url: url
         )
-        #expect(restored.state.encounters?.isEmpty == true)
-        #expect(restored.state.savedProfiles?.first?.card == b.card)
-        #expect(restored.state.savedProfiles?.first?.avatar == avatar)
+        #expect(restored.state.encounters?.first?.card == b.card)
+        #expect(restored.state.encounters?.first?.avatar == avatar)
+        #expect(restored.state.pinnedDirectoryEntries?["encounters"]?.contains(b.card.id) == true)
+
+        a.service.deleteEncounter(b.card)
+        #expect(a.service.encounterHistory.isEmpty)
+        #expect(!a.service.isPinned(b.card, in: "encounters"))
     }
     @Test func directDeliveryReadAndSessionChange() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)

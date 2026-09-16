@@ -50,7 +50,13 @@ struct SpotchatChatsUI: View {
 
     private var entries: [ShumDirectoryEntry] { runtime.directoryEntries }
     private var visible: [ShumDirectoryEntry] {
-        entries.filter { $0.belongs(to: folder) }
+        let matching = entries.filter { $0.belongs(to: folder) }
+        return matching.filter(isPinned) + matching.filter { !isPinned($0) }
+    }
+
+    private func isPinned(_ entry: ShumDirectoryEntry) -> Bool {
+        guard let card = entry.card else { return false }
+        return runtime.permanent?.isPinned(card, in: folder.pinKey) == true
     }
 
     var body: some View {
@@ -92,7 +98,7 @@ struct SpotchatChatsUI: View {
             switch folder {
             case .all, .invitations:
                 open(.newChat)
-            case .unread, .saved:
+            case .unread:
                 withAnimation(.easeInOut(duration: 0.2)) { folder = .all }
             case .nearby, .encounters:
                 break
@@ -153,7 +159,6 @@ private struct ShumChatEmptyState: View {
         case .unread: .read
         case .invitations: .invitation
         case .encounters: .encounters
-        case .saved: .saved
         }
     }
 
@@ -164,7 +169,6 @@ private struct ShumChatEmptyState: View {
         case .unread: "Всё прочитано"
         case .invitations: "Нет приглашений"
         case .encounters: "Пока не встречались"
-        case .saved: "Ничего не сохранено"
         }
     }
 
@@ -175,14 +179,13 @@ private struct ShumChatEmptyState: View {
         case .unread: "Новых сообщений пока нет."
         case .invitations: "Новые приглашения появятся здесь."
         case .encounters: "Встречи поблизости сохранятся здесь."
-        case .saved: "Нужные профили можно оставить\nздесь."
         }
     }
 
     private var actionTitle: String? {
         switch folder {
         case .all, .invitations: "Добавить контакт"
-        case .unread, .saved: "Все чаты"
+        case .unread: "Все чаты"
         case .nearby, .encounters: nil
         }
     }
@@ -198,7 +201,7 @@ private struct ShumChatEmptyState: View {
 /// Small bitmap drawings keep the empty states in Shum's pixel language without
 /// introducing a second illustration palette.
 struct ShumPixelEmptyIcon: View {
-    enum Kind { case chats, contacts, nearby, read, invitation, encounters, saved }
+    enum Kind { case chats, contacts, nearby, read, invitation, encounters }
     let kind: Kind
 
     private let unit: CGFloat = 4
@@ -250,8 +253,6 @@ struct ShumPixelEmptyIcon: View {
         case .encounters:
             person(x: 1, y: 5) + person(x: 16, y: 5)
             + [Pixel(10, 8), Pixel(12, 8), Pixel(11, 9), Pixel(10, 10), Pixel(12, 10)]
-        case .saved:
-            person(x: 2, y: 4) + heart(x: 13, y: 7)
         }
     }
 
@@ -308,7 +309,6 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     @State private var selectedPeer: SpotchatPeer?
     @State private var pendingAction: DirectoryConfirmation?
     @State private var blockRequest: ShumProfileBlockRequest?
-    @State private var savedBlockInformation = false
 
     var body: some View {
         List {
@@ -340,21 +340,17 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
             Button("Отмена", role: .cancel) { pendingAction = nil }
             Button(action.buttonTitle, role: .destructive) { confirm(action); pendingAction = nil }
         } message: { action in Text(action.message) }
-        .alert("Действие недоступно", isPresented: $savedBlockInformation) {
-            Button("Понятно", role: .cancel) { }
-        } message: {
-            Text("Сохранённый чат нельзя очистить или заблокировать. Сначала уберите его из сохранённых.")
-        }
     }
 
     private func directoryRow(_ entry: ShumDirectoryEntry) -> some View {
-        NativeSwipeInteractionRow {
+        let pinned = isPinned(entry)
+        return NativeSwipeInteractionRow {
             Button { activate(entry) } label: {
-                ShumDirectoryRow(runtime: runtime, entry: entry)
+                ShumDirectoryRow(runtime: runtime, entry: entry, isPinned: pinned)
             }
             .buttonStyle(.plain)
             .contextMenu { menu(entry) } preview: {
-                ShumDirectoryRow(runtime: runtime, entry: entry)
+                ShumDirectoryRow(runtime: runtime, entry: entry, isPinned: pinned)
                     .frame(width: max(280, UIScreen.main.bounds.width - 32))
                     .background(Color.profileRowSwipeSurface, in: RoundedRectangle(cornerRadius: 26))
             }
@@ -364,24 +360,19 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         .listRowSeparator(.hidden)
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             if entry.card != nil {
-                Button { toggleSaved(entry) } label: {
-                    Label(entry.isSaved ? "Убрать" : "Сохранить", systemImage: entry.isSaved ? "heart.slash" : "heart")
-                }.tint(entry.isSaved ? Color(uiColor: .systemGray) : .green)
+                Button { togglePinned(entry) } label: {
+                    Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill")
+                }.tint(pinned ? Color(uiColor: .systemGray) : .green)
             }
         }
-        .swipeActions(edge: .trailing, allowsFullSwipe: !entry.isSaved) {
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             trailingActions(entry)
         }
     }
 
     @ViewBuilder private func trailingActions(_ entry: ShumDirectoryEntry) -> some View {
         if let card = entry.card {
-            if entry.isSaved {
-                Button { savedBlockInformation = true } label: {
-                    Label("Недоступно", systemImage: "lock.fill")
-                }
-                .tint(Color(uiColor: .systemGray))
-            } else if entry.isInvitation && entry.invitationPhase == .incomingPending {
+            if entry.isInvitation && entry.invitationPhase == .incomingPending {
                 Button { pendingAction = .decline(card) } label: {
                     Label("Отклонить", systemImage: "xmark")
                 }
@@ -415,46 +406,44 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
             Label(entry.isInvitation ? "Открыть приглашение" : "Написать", systemImage: "paperplane").foregroundStyle(.primary)
         }.tint(.primary)
         if let card = entry.card {
-            Button { toggleSaved(entry) } label: {
-                Label(entry.isSaved ? "Убрать из сохранённых" : "Сохранить", systemImage: entry.isSaved ? "heart.slash" : "heart").foregroundStyle(.primary)
+            let pinned = isPinned(entry)
+            Button { togglePinned(entry) } label: {
+                Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill").foregroundStyle(.primary)
             }.tint(.primary)
-            if entry.isInvitation, entry.invitationPhase == .incomingPending, !entry.isSaved {
+            if entry.isInvitation, entry.invitationPhase == .incomingPending {
                 Button(role: .destructive) { pendingAction = .decline(card) } label: {
                     Label("Отклонить приглашение", systemImage: "xmark").foregroundStyle(.red)
                 }
                 .tint(.red)
-            } else if !entry.isSaved, canClear(entry) {
+            } else if canClear(entry) {
                 Button(role: .destructive) { pendingAction = .clear(card) } label: {
                     Label("Очистить", systemImage: "trash").foregroundStyle(.red)
                 }
                 .tint(.red)
             }
             Divider()
-            if entry.isSaved {
-                Button { savedBlockInformation = true } label: {
-                    Label("Недоступно", systemImage: "lock.fill").foregroundStyle(.secondary)
-                }.tint(.secondary)
-            } else {
-                Button(role: .destructive) { requestBlock(entry, afterSwipe: false) } label: {
-                    Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark").foregroundStyle(.red)
-                }.tint(.red)
-            }
+            Button(role: .destructive) { requestBlock(entry, afterSwipe: false) } label: {
+                Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark").foregroundStyle(.red)
+            }.tint(.red)
         }
     }
 
     private func activate(_ entry: ShumDirectoryEntry) {
         open(.conversation(entry.peer))
     }
-    private func toggleSaved(_ entry: ShumDirectoryEntry) {
+    private func togglePinned(_ entry: ShumDirectoryEntry) {
         guard let card = entry.card else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        do { _ = try runtime.permanent?.toggleSaved(card, avatar: runtime.profile(for: entry.peer.id)?.avatar) }
+        do { _ = try runtime.permanent?.togglePinned(card, in: folder.pinKey) }
         catch { runtime.error = error.localizedDescription }
+    }
+    private func isPinned(_ entry: ShumDirectoryEntry) -> Bool {
+        guard let card = entry.card else { return false }
+        return runtime.permanent?.isPinned(card, in: folder.pinKey) == true
     }
     private func requestBlock(_ entry: ShumDirectoryEntry, afterSwipe: Bool) {
         guard let card = entry.card else { return }
-        if entry.isSaved { savedBlockInformation = true }
-        else { blockRequest = ShumProfileBlockRequest(peer: entry.peer, card: card, waitsForTransientUI: afterSwipe) }
+        blockRequest = ShumProfileBlockRequest(peer: entry.peer, card: card, waitsForTransientUI: afterSwipe)
     }
     private func canClear(_ entry: ShumDirectoryEntry) -> Bool {
         entry.hasChat && !runtime.conversation(entry.peer.id).isEmpty
@@ -498,11 +487,11 @@ private enum DirectoryConfirmation {
 struct ShumDirectoryRow: View {
     @ObservedObject var runtime: SpotchatRuntime
     let entry: ShumDirectoryEntry
+    let isPinned: Bool
     private var last: SpotchatMessage? { runtime.conversation(entry.peer.id).last }
     var body: some View {
         HStack(spacing: 12) {
             ShumProfileAvatar(size: 52, imageData: runtime.profile(for: entry.peer.id)?.avatar)
-                .shumChatSavedBadge(isSaved: entry.isSaved)
                 .overlay(alignment: .bottomTrailing) {
                     if entry.isNearby {
                         Circle().fill(.green).frame(width: 12, height: 12)
@@ -536,6 +525,14 @@ struct ShumDirectoryRow: View {
         }
         .frame(maxWidth: .infinity, minHeight: 52)
         .padding(.horizontal, 16).padding(.vertical, 10)
+        .overlay(alignment: .bottom) {
+            if isPinned {
+                Capsule()
+                    .fill(Color(uiColor: .systemGreen).opacity(0.28))
+                    .frame(height: 3)
+                    .padding(.horizontal, 18)
+            }
+        }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(entry.isInvitation ? "Открыть приглашение" : "Открыть чат")
@@ -546,32 +543,6 @@ struct ShumDirectoryRow: View {
         return entry.invitationPhase == .declinedLocally
             ? "Приглашение отклонено"
             : "Приглашение в чат"
-    }
-}
-
-private extension View {
-    func shumChatSavedBadge(isSaved: Bool) -> some View {
-        mask {
-            Rectangle()
-                .overlay(alignment: .bottomLeading) {
-                    if isSaved {
-                        Circle()
-                            .frame(width: 18, height: 18)
-                            .offset(x: -2, y: 2)
-                            .blendMode(.destinationOut)
-                    }
-                }
-                .compositingGroup()
-        }
-        .overlay(alignment: .bottomLeading) {
-            if isSaved {
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 18, height: 18)
-                    .offset(x: -2, y: 2)
-            }
-        }
     }
 }
 private struct ShumChatReceipt: View {

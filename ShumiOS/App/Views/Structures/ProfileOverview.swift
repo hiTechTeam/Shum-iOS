@@ -9,7 +9,6 @@ struct ProfileOverviewView: View {
     @ObservedObject var chat: SpotchatRuntime
     @ObservedObject var authCodeViewModel: LocalProfileViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
-    @ObservedObject private var savedPeople = SavedPeopleStateStore.shared
     @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
     @ObservedObject private var appLock = ShumAppLock.shared
 
@@ -21,6 +20,7 @@ struct ProfileOverviewView: View {
     @State private var showQuickActions = false
     @State private var showSecurity = false
     @State private var showEncounterHistory = false
+    @State private var encounterChatHidesTabBar = false
     @State private var showLogoutConfirmation = false
     @State private var showLogoutError = false
     @State private var showDeleteConfirmation = false
@@ -80,7 +80,7 @@ struct ProfileOverviewView: View {
         }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(showQR ? .hidden : .visible, for: .tabBar)
+        .toolbar(showQR || encounterChatHidesTabBar ? .hidden : .visible, for: .tabBar)
         .shumOnChange(of: authCodeViewModel.localPhotoURL) { _, value in
             photoVM.loadPhotoFromURL(value)
         }
@@ -162,7 +162,10 @@ struct ProfileOverviewView: View {
             ShumSecuritySettingsView(fingerprint: coordinator.identityFingerprint)
         }
         .navigationDestination(isPresented: $showEncounterHistory) {
-            ShumEncounterHistoryView(runtime: chat)
+            ShumEncounterHistoryView(
+                runtime: chat,
+                hidesTabBar: $encounterChatHidesTabBar
+            )
         }
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let image = photoVM.uiImage {

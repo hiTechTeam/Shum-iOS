@@ -5,10 +5,19 @@ import UIKit
 /// A person can belong to several folders, but occupies one row in each folder.
 enum ShumChatFolder: String, CaseIterable, Hashable, Identifiable {
     case all = "Все", unread = "Непрочитанное", invitations = "Приглашения"
-    case nearby = "Рядом", encounters = "Виделись", saved = "Сохранённые"
+    case nearby = "Рядом", encounters = "Виделись"
     var id: String { rawValue }
+    var pinKey: String {
+        switch self {
+        case .all: "all"
+        case .unread: "unread"
+        case .invitations: "invitations"
+        case .nearby: "nearby"
+        case .encounters: "encounters"
+        }
+    }
     static let visibleFolders: [ShumChatFolder] = [
-        .all, .invitations, .nearby, .saved, .unread
+        .all, .invitations, .nearby, .unread
     ]
 }
 
@@ -20,7 +29,6 @@ struct ShumDirectoryEntry: Identifiable {
     var invitationPhase: SpotchatInvitationPhase?
     var invitationAwaitingResponse = false
     var isNearby = false
-    var isSaved = false
     var lastSeen: Date?
     var unread = 0
     var id: PeerID { peer.id }
@@ -34,7 +42,6 @@ struct ShumDirectoryEntry: Identifiable {
         case .encounters:
             guard let lastSeen else { return false }
             return lastSeen >= Date().addingTimeInterval(-24 * 60 * 60)
-        case .saved: return isSaved
         }
     }
 }
@@ -89,11 +96,6 @@ enum ShumChatDirectory {
         for encounter in permanent?.encounterHistory ?? [] {
             include(SpotchatPeer(id: encounter.card.peerID, name: encounter.card.name, lastConnected: encounter.lastSeen), card: encounter.card) {
                 $0.lastSeen = encounter.lastSeen
-            }
-        }
-        for profile in permanent?.savedProfiles ?? [] {
-            include(SpotchatPeer(id: profile.card.peerID, name: profile.card.name, lastConnected: profile.savedAt), card: profile.card) {
-                $0.isSaved = true
             }
         }
         // Retain contacts whose local conversation was deleted, without recreating it.

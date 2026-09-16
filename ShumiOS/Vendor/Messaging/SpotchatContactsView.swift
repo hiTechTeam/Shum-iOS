@@ -95,7 +95,8 @@ struct SpotchatContactsView: View {
             .sheet(item: $invitation) { card in
                 SpotchatContactConfirmation(
                     card: card,
-                    imageData: runtime.profile(for: card.peerID)?.avatar
+                    imageData: runtime.profile(for: card.peerID)?.avatar,
+                    isExistingContact: isExistingContact(card)
                 ) {
                     open(card, source: "invitation")
                 }
@@ -106,8 +107,18 @@ struct SpotchatContactsView: View {
         .presentationDragIndicator(.visible)
     }
     private func open(_ card: SpotchatContactCard, source: String) {
-        guard let peer = runtime.addContact(card, source: source) else { return }
+        let peer: SpotchatPeer
+        if isExistingContact(card) {
+            peer = SpotchatPeer(id: card.peerID, name: card.name, lastConnected: Date())
+        } else {
+            guard let added = runtime.addContact(card, source: source) else { return }
+            peer = added
+        }
         dismiss(); select(peer)
+    }
+
+    private func isExistingContact(_ card: SpotchatContactCard) -> Bool {
+        runtime.permanent?.state.contacts.contains { $0.id == card.id } == true
     }
 }
 
@@ -158,6 +169,7 @@ struct SpotchatContactRequestsView: View {
 struct SpotchatContactConfirmation: View {
     let card: SpotchatContactCard
     var imageData: Data? = nil
+    var isExistingContact = false
     var accept: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var showPhoto = false
@@ -191,12 +203,12 @@ struct SpotchatContactConfirmation: View {
                         .padding(.top, 4)
                 }
 
-                Text("Сохранить контакт Shum?")
+                Text(isExistingContact ? "Уже есть в контактах" : "Сохранить контакт Shum?")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .padding(.top, card.bio.isEmpty ? 6 : 4)
 
-                Button("Добавить контакт") {
+                Button(isExistingContact ? "Написать" : "Добавить контакт") {
                     dismiss()
                     accept()
                 }

@@ -348,13 +348,14 @@ private struct ShumInvitationRecoverySlider: View {
         GeometryReader { geometry in
             let travel = max(0, geometry.size.width - controlSize - inset * 2)
             let progress = travel > 0 ? min(1, offset / travel) : 0
+            let greenProgress = Double(progress)
 
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color(uiColor: .systemRed).opacity(0.16))
+                    .fill(Color(uiColor: .systemRed).opacity(0.16 * (1 - greenProgress)))
 
                 Capsule()
-                    .fill(Color(uiColor: .systemGreen).opacity(0.14 * progress))
+                    .fill(Color(uiColor: .systemGreen).opacity(0.22 + 0.78 * greenProgress))
                     .frame(width: controlSize + inset * 2 + offset)
                     .clipped()
 
@@ -368,16 +369,32 @@ private struct ShumInvitationRecoverySlider: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: controlSize, height: controlSize)
-                    .background(
-                        completing ? Color(uiColor: .systemGreen) : Color(uiColor: .systemRed),
-                        in: Circle()
-                    )
+                    .background {
+                        Circle().fill(Color(uiColor: .systemRed))
+                        Circle()
+                            .fill(Color(uiColor: .systemGreen))
+                            .opacity(completing ? 1 : greenProgress)
+                    }
+                    .overlay {
+                        Circle()
+                            .stroke(Color(uiColor: .systemGreen).opacity(greenProgress), lineWidth: 1.5)
+                    }
                     .offset(x: inset + offset)
                     .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
             }
             .overlay {
-                Capsule()
-                    .stroke(Color(uiColor: .systemRed).opacity(0.3), lineWidth: 0.5)
+                ZStack {
+                    Capsule()
+                        .stroke(
+                            Color(uiColor: .systemRed).opacity(0.3 * (1 - greenProgress)),
+                            lineWidth: 0.5
+                        )
+                    Capsule()
+                        .stroke(
+                            Color(uiColor: .systemGreen).opacity(greenProgress),
+                            lineWidth: 0.75 + progress * 0.75
+                        )
+                }
             }
             .contentShape(Capsule())
             .gesture(
@@ -385,7 +402,8 @@ private struct ShumInvitationRecoverySlider: View {
                     .onChanged { value in
                         guard !completing else { return }
                         offset = min(max(0, value.translation.width), travel)
-                        let crossed = progress >= 0.72
+                        let currentProgress = travel > 0 ? offset / travel : 0
+                        let crossed = currentProgress >= 0.72
                         if crossed && !crossedFeedbackPoint {
                             UISelectionFeedbackGenerator().selectionChanged()
                         }
@@ -393,7 +411,8 @@ private struct ShumInvitationRecoverySlider: View {
                     }
                     .onEnded { _ in
                         guard !completing else { return }
-                        if progress >= 0.88 {
+                        let currentProgress = travel > 0 ? offset / travel : 0
+                        if currentProgress >= 0.88 {
                             completing = true
                             withAnimation(.easeOut(duration: 0.16)) { offset = travel }
                             UINotificationFeedbackGenerator().notificationOccurred(.success)

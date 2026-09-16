@@ -21,18 +21,17 @@ struct ShumChatDirectoryTests {
         let clock = Clock(), owner = try Node("Owner", clock: clock), person = try Node("Person", clock: clock)
         try owner.service.add(person.card, source: "test")
         try owner.service.recordEncounter(person.card)
-        _ = try owner.service.toggleSaved(person.card)
         let result = rows(owner, chats: [peer(person)], nearby: [peer(person)], unread: 2)
         #expect(result.count == 1)
         let row = try #require(result.first)
-        for folder in [ShumChatFolder.all, .unread, .nearby, .encounters, .saved] {
+        for folder in [ShumChatFolder.all, .unread, .nearby, .encounters] {
             #expect(row.belongs(to: folder))
         }
         #expect(!row.belongs(to: .invitations))
         owner.service.deleteEncounter(person.card)
         let cleared = try #require(rows(owner, chats: [peer(person)]).first)
         #expect(!cleared.belongs(to: .encounters))
-        #expect(cleared.hasChat && cleared.isSaved)
+        #expect(cleared.hasChat)
         #expect(owner.store.state.conversations.count == 1)
     }
 
@@ -84,13 +83,16 @@ struct ShumChatDirectoryTests {
         #expect(rows(owner, chats: [peer(person)], nearby: [peer(person)]).isEmpty)
     }
 
-    @Test func clearingAConversationPreservesSavedContactWithoutRecreatingChat() throws {
+    @Test func pinningIsIndependentForEveryFolder() throws {
         let clock = Clock(), owner = try Node("Owner", clock: clock), person = try Node("Person", clock: clock)
         try owner.service.add(person.card, source: "test")
-        _ = try owner.service.toggleSaved(person.card)
+        #expect(try owner.service.togglePinned(person.card, in: ShumChatFolder.all.pinKey))
+        #expect(owner.service.isPinned(person.card, in: ShumChatFolder.all.pinKey))
+        #expect(!owner.service.isPinned(person.card, in: ShumChatFolder.nearby.pinKey))
         try owner.service.deleteConversation(with: person.card)
         let row = try #require(rows(owner).first)
-        #expect(!row.hasChat && row.isSaved)
+        #expect(!row.hasChat)
+        #expect(owner.service.isPinned(person.card, in: ShumChatFolder.all.pinKey))
         #expect(owner.store.state.conversations.isEmpty)
     }
 }

@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 
 struct ShumContactsUI: View {
     @ObservedObject var runtime: SpotchatRuntime
@@ -84,7 +85,7 @@ struct ShumContactsUI: View {
     @ViewBuilder
     private var newContactButton: some View {
         if #available(iOS 26.0, *) {
-            Button { open(.newChat) } label: {
+            Button { openNewContact() } label: {
                 Image(systemName: "plus")
             }
             .buttonStyle(.glassProminent)
@@ -93,7 +94,7 @@ struct ShumContactsUI: View {
             .accessibilityLabel("Новый контакт")
             .accessibilityIdentifier("spotchat.addContact")
         } else {
-            Button { open(.newChat) } label: {
+            Button { openNewContact() } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 17, weight: .regular))
                     .foregroundStyle(Color(uiColor: .systemBackground))
@@ -104,6 +105,11 @@ struct ShumContactsUI: View {
             .accessibilityLabel("Новый контакт")
             .accessibilityIdentifier("spotchat.addContact")
         }
+    }
+
+    private func openNewContact() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        open(.newChat)
     }
 
     private func contactRow(_ contact: SpotchatContact) -> some View {

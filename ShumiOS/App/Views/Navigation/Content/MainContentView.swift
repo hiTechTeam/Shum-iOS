@@ -72,11 +72,10 @@ struct MainContentView: View {
         .sheet(item: $coordinator.invitation) { card in
             SpotchatContactConfirmation(
                 card: card,
-                imageData: chat.profile(for: card.peerID)?.avatar
+                imageData: chat.profile(for: card.peerID)?.avatar,
+                isExistingContact: isExistingContact(card)
             ) {
-                if let peer = chat.addContact(card, source: "link") {
-                    coordinator.invitation = nil; selectedTab = 1; chatsPath.append(.conversation(peer))
-                }
+                openScannedContact(card)
             }
         }
         .alert("Shum", isPresented: Binding(get: { chat.error != nil }, set: { if !$0 { chat.error = nil } })) {
@@ -92,6 +91,23 @@ struct MainContentView: View {
             }
         }
         #endif
+    }
+
+    private func isExistingContact(_ card: SpotchatContactCard) -> Bool {
+        chat.permanent?.state.contacts.contains { $0.id == card.id } == true
+    }
+
+    private func openScannedContact(_ card: SpotchatContactCard) {
+        let peer: SpotchatPeer
+        if isExistingContact(card) {
+            peer = SpotchatPeer(id: card.peerID, name: card.name, lastConnected: Date())
+        } else {
+            guard let added = chat.addContact(card, source: "link") else { return }
+            peer = added
+        }
+        coordinator.invitation = nil
+        selectedTab = 1
+        chatsPath.append(.conversation(peer))
     }
 
 }
