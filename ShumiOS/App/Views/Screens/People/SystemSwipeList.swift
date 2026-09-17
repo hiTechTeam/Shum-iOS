@@ -227,17 +227,19 @@ where Item: SavedPeopleListItem, RowContent: View {
 
 struct NativeSwipeInteractionRow<Content: View>: View {
     @State private var isSwipeActive = false
-    @State private var didBeginSwipe = false
     @State private var suppressPersistentSurface = false
 
     let persistentSurfaceColor: Color?
+    let hidesPersistentSurfaceAfterSwipe: Bool
     let content: Content
 
     init(
         persistentSurfaceColor: Color? = nil,
+        hidesPersistentSurfaceAfterSwipe: Bool = true,
         @ViewBuilder content: () -> Content
     ) {
         self.persistentSurfaceColor = persistentSurfaceColor
+        self.hidesPersistentSurfaceAfterSwipe = hidesPersistentSurfaceAfterSwipe
         self.content = content()
     }
 
@@ -249,7 +251,7 @@ struct NativeSwipeInteractionRow<Content: View>: View {
                         .opacity(isSurfaceVisible ? 1 : 0)
                         .clipShape(
                             RoundedRectangle(
-                                cornerRadius: didBeginSwipe ? 26 : 0,
+                                cornerRadius: isSwipeActive ? 26 : 0,
                                 style: .continuous
                             )
                         )
@@ -267,9 +269,9 @@ struct NativeSwipeInteractionRow<Content: View>: View {
                 value: isSwipeActive
             )
             .shumOnChange(of: isSwipeActive) { wasActive, isActive in
-                if isActive {
-                    didBeginSwipe = true
-                } else if wasActive, persistentSurfaceColor != nil {
+                if !isActive, wasActive,
+                   persistentSurfaceColor != nil,
+                   hidesPersistentSurfaceAfterSwipe {
                     withAnimation(.easeOut(duration: 0.3)) {
                         suppressPersistentSurface = true
                     }
@@ -277,7 +279,6 @@ struct NativeSwipeInteractionRow<Content: View>: View {
             }
             .shumOnChange(of: hasPersistentSurface) { _, hasSurface in
                 guard hasSurface, !isSwipeActive else { return }
-                didBeginSwipe = false
                 suppressPersistentSurface = false
             }
     }

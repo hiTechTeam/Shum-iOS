@@ -23,6 +23,7 @@ struct SpotchatMessage: Identifiable {
     var disconnectedWait: TimeInterval = 0
     var lastProgress: Date = .distantPast
     var deliveryLabel: String?
+    var reply: SpotchatReplyReference? = nil
 }
 
 /// Spotchat composition. Radio/session management stays inside the transport;
@@ -366,7 +367,9 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
             }
             return SpotchatMessage(id: stored.id, peerID: card.peerID, text: stored.text,
                 date: Date(timeIntervalSince1970: Double(stored.envelope.timestamp) / 1000), outgoing: stored.outgoing,
-                status: status, attempts: stored.attempts, deliveryLabel: stored.status == .forwarding && stored.deliveryTransport == "mesh" ? "Передаётся через mesh" : stored.status.label)
+                status: status, attempts: stored.attempts,
+                deliveryLabel: stored.status == .forwarding && stored.deliveryTransport == "mesh" ? "Передаётся через mesh" : stored.status.label,
+                reply: stored.reply)
         }
         if let history = permanent.state.legacyHistory {
             messages += history.messages.map { old in
@@ -449,11 +452,16 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     }
 
     @discardableResult
-    func send(_ text: String, to peer: PeerID) -> Bool {
+    func send(_ text: String, to peer: PeerID, replyingTo original: SpotchatMessage? = nil) -> Bool {
         guard !setupFailed else { return false }
         if let permanent {
             guard let card = permanent.card(for: peer) else { error = "Дождитесь проверки профиля собеседника."; return false }
-            return permanent.send(text, to: card)
+            let reply = original.map {
+                SpotchatReplyReference(messageID: $0.id,
+                    senderID: $0.outgoing ? permanent.ownCard.id : card.id,
+                    text: $0.text)
+            }
+            return permanent.send(text, to: card, reply: reply)
         }
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return false }
@@ -467,8 +475,14 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
             error = "Собеседник сейчас недоступен. Подойдите ближе и попробуйте снова."
             return false
         }
+        let reply = original.map {
+            SpotchatReplyReference(messageID: $0.id,
+                senderID: $0.outgoing ? "self" : peer.id,
+                text: $0.text)
+        }
         let message = SpotchatMessage(id: UUID().uuidString, peerID: peer,
-                                      text: content, date: now(), outgoing: true, status: .sending)
+                                      text: content, date: now(), outgoing: true,
+                                      status: .sending, reply: reply)
         messages.append(message)
         trimMessages()
         transmit(id: message.id)
@@ -477,7 +491,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
 
     func retry(_ message: SpotchatMessage) {
         if let permanent, let card = permanent.card(for: message.peerID) {
-            if case .failed = message.status { _ = permanent.send(message.text, to: card) }
+            if case .failed = message.status { _ = permanent.send(message.text, to: card, reply: message.reply) }
             return
         }
         guard message.outgoing, isNearby(message.peerID),

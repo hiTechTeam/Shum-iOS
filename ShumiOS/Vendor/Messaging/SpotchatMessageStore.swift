@@ -385,6 +385,10 @@ final class SpotchatMessageStore: ObservableObject {
         state.pinnedDirectoryEntries?[directory]?.contains(card.id) == true
     }
 
+    func pinnedCardIDs(in directory: String) -> [String] {
+        state.pinnedDirectoryEntries?[directory] ?? []
+    }
+
     @discardableResult
     func togglePinned(_ card: SpotchatContactCard, in directory: String) throws -> Bool {
         guard !retired else { throw SpotchatFailure.unavailableIdentity }
@@ -395,13 +399,17 @@ final class SpotchatMessageStore: ObservableObject {
         var pinned = false
         try store.transaction { state in
             if state.pinnedDirectoryEntries == nil { state.pinnedDirectoryEntries = [:] }
-            if state.pinnedDirectoryEntries?[directory]?.remove(card.id) != nil {
-                if state.pinnedDirectoryEntries?[directory]?.isEmpty == true {
+            var entries = state.pinnedDirectoryEntries?[directory] ?? []
+            if let index = entries.firstIndex(of: card.id) {
+                entries.remove(at: index)
+                if entries.isEmpty {
                     state.pinnedDirectoryEntries?.removeValue(forKey: directory)
+                } else {
+                    state.pinnedDirectoryEntries?[directory] = entries
                 }
             } else {
-                var entries = state.pinnedDirectoryEntries?[directory] ?? []
-                entries.insert(card.id)
+                entries.removeAll { $0 == card.id }
+                entries.insert(card.id, at: 0)
                 state.pinnedDirectoryEntries?[directory] = entries
                 pinned = true
             }
@@ -416,7 +424,7 @@ final class SpotchatMessageStore: ObservableObject {
             try store.transaction { state in
                 state.encounters?.removeAll { $0.id == card.id }
                 state.unviewedEncounterIDs?.remove(card.id)
-                state.pinnedDirectoryEntries?["encounters"]?.remove(card.id)
+                state.pinnedDirectoryEntries?["encounters"]?.removeAll { $0 == card.id }
             }
             changed()
         } catch { fail(error) }
@@ -434,7 +442,7 @@ final class SpotchatMessageStore: ObservableObject {
         } catch { fail(error) }
     }
     @discardableResult
-    func send(_ text: String, to card: SpotchatContactCard) -> Bool {
+    func send(_ text: String, to card: SpotchatContactCard, reply: SpotchatReplyReference? = nil) -> Bool {
         guard !retired else { return false }
         guard !isBlocked(card) else { fail(SpotchatFailure.blocked); return false }
         guard canMessage(card) else { return false }
@@ -448,13 +456,17 @@ final class SpotchatMessageStore: ObservableObject {
             let id = UUID().uuidString, timestamp = Int64(now().timeIntervalSince1970 * 1000)
             let conversation = SpotchatConversation.identifier(ownCard.id, card.id)
             let payload = SpotchatPlaintext(id: id, conversationID: conversation, senderID: ownCard.id, recipientID: card.id,
-                                           timestamp: timestamp, expiresAt: timestamp + 86_400_000, text: text)
+                                           timestamp: timestamp, expiresAt: timestamp + 86_400_000, text: text,
+                                           reply: reply)
             var envelope = SpotchatEnvelope(id: id, conversationID: conversation, sender: ownCard, recipient: card,
                 timestamp: timestamp, expiresAt: payload.expiresAt, ciphertext: try crypto.seal(SpotchatCoding.encode(payload), to: card.noiseKey))
             guard let signature = transport.noiseSignData(try envelope.signingBytes()) else { throw SpotchatFailure.unavailableIdentity }
             envelope.signature = signature
             try contacts.conversation(with: card, now: now())
-            try store.transaction { $0.messages.append(SpotchatStoredMessage(envelope: envelope, text: text, outgoing: true, status: .queued)) }
+            try store.transaction {
+                $0.messages.append(SpotchatStoredMessage(envelope: envelope, text: text, outgoing: true,
+                                                         status: .queued, reply: reply))
+            }
             changed(); routeOutbox(); return true
         } catch { fail(error); return false }
     }
@@ -574,6 +586,13 @@ final class SpotchatMessageStore: ObservableObject {
               plain.conversationID == envelope.conversationID, plain.senderID == envelope.sender.id,
               plain.recipientID == ownCard.id, plain.timestamp == envelope.timestamp,
               plain.expiresAt == envelope.expiresAt, !plain.text.isEmpty, plain.text.utf8.count <= 4096 else { throw SpotchatFailure.invalidMessage }
+        if let reply = plain.reply {
+            guard !reply.messageID.isEmpty, reply.messageID.utf8.count <= 255,
+                  !reply.text.isEmpty, reply.text.utf8.count <= 4096,
+                  reply.senderID == ownCard.id || reply.senderID == envelope.sender.id else {
+                throw SpotchatFailure.invalidMessage
+            }
+        }
         guard let contact = state.contacts.first(where: { $0.id == envelope.sender.id }) else {
             try request(envelope.sender); return
         }
@@ -585,7 +604,9 @@ final class SpotchatMessageStore: ObservableObject {
         }
         try contacts.conversation(with: contact.card, now: now())
         let visible = foreground && activeContact == contact.id
-        let message = SpotchatStoredMessage(envelope: envelope, text: plain.text, outgoing: false, status: .delivered, unread: !visible, hopCount: internet ? 0 : hop, deliveryTransport: internet ? "nostr" : (hop > 1 ? "mesh" : "ble"))
+        let message = SpotchatStoredMessage(envelope: envelope, text: plain.text, outgoing: false,
+            status: .delivered, unread: !visible, hopCount: internet ? 0 : hop,
+            deliveryTransport: internet ? "nostr" : (hop > 1 ? "mesh" : "ble"), reply: plain.reply)
         try store.transaction { $0.messages.append(message) }; changed()
         try makeReceipt(for: message, read: visible, force: true)
         // Use an already executing Bluetooth background callback to return the
@@ -809,7 +830,7 @@ final class SpotchatMessageStore: ObservableObject {
                 state.invitationStates?.removeValue(forKey: card.id)
                 state.invitationOutbox?.removeAll { $0.control.recipient.id == card.id }
                 for directory in state.pinnedDirectoryEntries?.keys.map({ $0 }) ?? [] {
-                    state.pinnedDirectoryEntries?[directory]?.remove(card.id)
+                    state.pinnedDirectoryEntries?[directory]?.removeAll { $0 == card.id }
                 }
             }
         }
@@ -842,7 +863,7 @@ final class SpotchatMessageStore: ObservableObject {
             state.invitationStates?.removeValue(forKey: card.id)
             state.invitationOutbox?.removeAll { $0.control.recipient.id == card.id }
             for directory in state.pinnedDirectoryEntries?.keys.map({ $0 }) ?? [] {
-                state.pinnedDirectoryEntries?[directory]?.remove(card.id)
+                state.pinnedDirectoryEntries?[directory]?.removeAll { $0 == card.id }
             }
         }
         if activeContact == card.id { activeContact = nil }
@@ -862,7 +883,7 @@ final class SpotchatMessageStore: ObservableObject {
                 state.relay.removeAll { $0.envelope.sender.id == card.id || $0.envelope.recipient.id == card.id || $0.depositor == card.id }
                 state.receipts.removeAll { $0.receipt.sender.id == card.id || $0.receipt.destination.id == card.id }
                 for directory in state.pinnedDirectoryEntries?.keys.map({ $0 }) ?? [] {
-                    state.pinnedDirectoryEntries?[directory]?.remove(card.id)
+                    state.pinnedDirectoryEntries?[directory]?.removeAll { $0 == card.id }
                 }
                 for i in state.messages.indices where state.messages[i].outgoing && state.messages[i].envelope.recipient.id == card.id && [.queued, .forwarding].contains(state.messages[i].status) {
                     state.messages[i].status = .cancelled

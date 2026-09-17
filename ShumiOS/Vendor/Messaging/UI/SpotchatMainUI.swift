@@ -51,7 +51,24 @@ struct SpotchatChatsUI: View {
     private var entries: [ShumDirectoryEntry] { runtime.directoryEntries }
     private var visible: [ShumDirectoryEntry] {
         let matching = entries.filter { $0.belongs(to: folder) }
-        return matching.filter(isPinned) + matching.filter { !isPinned($0) }
+        let pinnedIDs = runtime.permanent?.pinnedCardIDs(in: folder.pinKey) ?? []
+        let pinnedRanks = Dictionary(
+            uniqueKeysWithValues: pinnedIDs.enumerated().map { ($1, $0) }
+        )
+        return matching.enumerated().sorted { lhs, rhs in
+            let lhsRank = lhs.element.card.flatMap { pinnedRanks[$0.id] }
+            let rhsRank = rhs.element.card.flatMap { pinnedRanks[$0.id] }
+            switch (lhsRank, rhsRank) {
+            case let (.some(left), .some(right)):
+                return left < right
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            case (.none, .none):
+                return lhs.offset < rhs.offset
+            }
+        }.map(\.element)
     }
 
     private func isPinned(_ entry: ShumDirectoryEntry) -> Bool {
@@ -350,13 +367,18 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
 
     private func directoryRow(_ entry: ShumDirectoryEntry) -> some View {
         let pinned = isPinned(entry)
-        return NativeSwipeInteractionRow {
+        return NativeSwipeInteractionRow(
+            persistentSurfaceColor: pinned
+                ? Color(uiColor: .systemGreen).opacity(0.15)
+                : nil,
+            hidesPersistentSurfaceAfterSwipe: false
+        ) {
             Button { activate(entry) } label: {
-                ShumDirectoryRow(runtime: runtime, entry: entry, isPinned: pinned)
+                ShumDirectoryRow(runtime: runtime, entry: entry)
             }
             .buttonStyle(.plain)
             .contextMenu { menu(entry) } preview: {
-                ShumDirectoryRow(runtime: runtime, entry: entry, isPinned: pinned)
+                ShumDirectoryRow(runtime: runtime, entry: entry)
                     .frame(width: max(280, UIScreen.main.bounds.width - 32))
                     .background(Color.profileRowSwipeSurface, in: RoundedRectangle(cornerRadius: 26))
             }
@@ -517,7 +539,6 @@ private enum DirectoryConfirmation {
 struct ShumDirectoryRow: View {
     @ObservedObject var runtime: SpotchatRuntime
     let entry: ShumDirectoryEntry
-    let isPinned: Bool
     private var last: SpotchatMessage? { runtime.conversation(entry.peer.id).last }
     var body: some View {
         HStack(spacing: 12) {
@@ -555,15 +576,6 @@ struct ShumDirectoryRow: View {
         }
         .frame(maxWidth: .infinity, minHeight: 52)
         .padding(.horizontal, 16).padding(.vertical, 10)
-        .background {
-            if isPinned {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(uiColor: .systemGreen).opacity(0.15))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-            }
-        }
-        .animation(.easeOut(duration: 0.22), value: isPinned)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(entry.isInvitation ? "Открыть приглашение" : "Открыть чат")

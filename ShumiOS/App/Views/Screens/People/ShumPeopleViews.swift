@@ -543,7 +543,26 @@ struct ShumEncounterHistoryView: View {
 
     private var encounters: [SpotchatEncounter] {
         let values = runtime.permanent?.encounterHistory ?? []
-        return values.filter(isPinned) + values.filter { !isPinned($0) }
+        let pinnedIDs = runtime.permanent?.pinnedCardIDs(
+            in: ShumChatFolder.encounters.pinKey
+        ) ?? []
+        let pinnedRanks = Dictionary(
+            uniqueKeysWithValues: pinnedIDs.enumerated().map { ($1, $0) }
+        )
+        return values.enumerated().sorted { lhs, rhs in
+            let lhsRank = pinnedRanks[lhs.element.card.id]
+            let rhsRank = pinnedRanks[rhs.element.card.id]
+            switch (lhsRank, rhsRank) {
+            case let (.some(left), .some(right)):
+                return left < right
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            case (.none, .none):
+                return lhs.offset < rhs.offset
+            }
+        }.map(\.element)
     }
 
     var body: some View {
@@ -633,7 +652,10 @@ struct ShumEncounterHistoryView: View {
                 NativeSwipeInteractionRow(
                     persistentSurfaceColor: highlightedEncounterIDs.contains(encounter.id)
                         ? Color.orange.opacity(0.16)
-                        : nil
+                        : pinned
+                            ? Color(uiColor: .systemGreen).opacity(0.15)
+                            : nil,
+                    hidesPersistentSurfaceAfterSwipe: !pinned
                 ) {
                     ShumStoredPersonRow(
                         runtime: runtime,
@@ -642,15 +664,6 @@ struct ShumEncounterHistoryView: View {
                         cardAction: { selectedEncounter = encounter },
                         writeAction: { openChat(peer) }
                     )
-                    .background {
-                        if pinned {
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(Color(uiColor: .systemGreen).opacity(0.15))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                        }
-                    }
-                    .animation(.easeOut(duration: 0.22), value: pinned)
                     .contextMenu {
                         Button { selectedEncounter = encounter } label: {
                             Label("Посмотреть профиль", systemImage: "person.crop.circle")

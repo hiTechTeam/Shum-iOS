@@ -138,7 +138,15 @@ struct SpotchatPlaintext: Codable {
     var timestamp: Int64
     var expiresAt: Int64
     var text: String
+    var reply: SpotchatReplyReference? = nil
 }
+
+struct SpotchatReplyReference: Codable, Hashable {
+    var messageID: String
+    var senderID: String
+    var text: String
+}
+
 struct SpotchatStoredMessage: Codable, Identifiable {
     var envelope: SpotchatEnvelope
     var text: String // Entire snapshot is encrypted at rest; relays never receive this field.
@@ -153,6 +161,7 @@ struct SpotchatStoredMessage: Codable, Identifiable {
     var nostrAccepted = false
     var deliveredAt: Date?
     var readAt: Date?
+    var reply: SpotchatReplyReference? = nil
     var id: String { envelope.id }
 }
 struct SpotchatRelayCopy: Codable {
@@ -215,7 +224,8 @@ struct SpotchatDatabase: Codable {
     var encounters: [SpotchatEncounter]?
     var savedProfiles: [SpotchatSavedProfile]?
     var unviewedEncounterIDs: Set<String>?
-    var pinnedDirectoryEntries: [String: Set<String>]?
+    // Ordered like Telegram's pinned indices: the first identifier is shown first.
+    var pinnedDirectoryEntries: [String: [String]]?
     var invitationStates: [String: SpotchatInvitationState]?
     var invitationOutbox: [SpotchatStoredInvitationControl]?
 }

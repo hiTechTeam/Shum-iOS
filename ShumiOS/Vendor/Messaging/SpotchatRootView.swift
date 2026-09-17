@@ -18,6 +18,23 @@ private struct SpotchatAvatarToolbar<Content: View>: ToolbarContent {
     }
 }
 
+private struct SpotchatComposerSurface: ViewModifier {
+    private let shape = RoundedRectangle(cornerRadius: 23, style: .continuous)
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .overlay {
+                    shape.stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
+                }
+        }
+    }
+}
+
 struct SpotchatAvatar: View {
     let name: String
     let size: CGFloat
@@ -53,6 +70,7 @@ struct SpotchatConversationView: View {
     let peer: SpotchatPeer
     @State private var draft = ""
     @State private var showPeerProfile = false
+    @State private var replyingTo: SpotchatMessage?
     @FocusState private var inputFocused: Bool
     @State private var atBottom = true
     private var messages: [SpotchatMessage] { runtime.conversation(peer.id) }
@@ -96,7 +114,14 @@ struct SpotchatConversationView: View {
                             SpotchatMessageBubble(message: message,
                                 showsTail: !continues,
                                 maximumWidth: min(geometry.size.width * 0.82, 440),
-                                retry: { runtime.retry(message) })
+                                replyAuthor: message.reply.map(replyAuthor),
+                                retry: { runtime.retry(message) },
+                                reply: { beginReply(to: message) },
+                                openReply: { id in
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        proxy.scrollTo(id, anchor: .center)
+                                    }
+                                })
                                 .padding(.top, sameDay && previous?.outgoing != message.outgoing ? 10 : 3)
                                 .id(message.id)
                         }
@@ -205,43 +230,79 @@ struct SpotchatConversationView: View {
     }
 
     private var messageComposer: some View {
-        HStack(alignment: .bottom, spacing: 4) {
-            TextField("Сообщение", text: $draft, prompt: Text("Сообщение").foregroundColor(Color(.secondaryLabel)), axis: .vertical)
-                .font(.body).lineLimit(1...5).focused($inputFocused)
-                .textFieldStyle(.plain)
-                .padding(.leading, 16).padding(.vertical, 12)
-                .accessibilityIdentifier("spotchat.messageInput")
-                #if DEBUG && targetEnvironment(simulator)
-                .task {
-                    if ProcessInfo.processInfo.arguments.contains("-ShumPreviewKeyboard") {
-                        draft = "Да, всё отлично"
-                        inputFocused = true
+        VStack(spacing: 0) {
+            if let replyingTo {
+                HStack(spacing: 10) {
+                    Capsule()
+                        .fill(Color.accentColor)
+                        .frame(width: 3, height: 34)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(replyingTo.outgoing ? "Ответ себе" : "Ответ пользователю \(name)")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                        Text(replyingTo.text)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        withAnimation(.easeOut(duration: 0.16)) { self.replyingTo = nil }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 30, height: 30)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Отменить ответ")
                 }
-                #endif
-            Button {
-                guard canSend else { return }
-                if runtime.send(draft, to: peer.id) { draft = "" }
-            } label: {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(canSend ? Color.black : Color.secondary)
-                    .frame(width: 36, height: 36)
-                    .background(canSend ? Color.accentColor : Color(.tertiarySystemFill), in: Circle())
-                    .contentShape(Circle())
+                .padding(.leading, 14)
+                .padding(.trailing, 8)
+                .padding(.top, 8)
+                .padding(.bottom, 5)
             }
-            .buttonStyle(.plain)
-            .disabled(!canSend)
-            .padding(.trailing, 5).padding(.vertical, 5)
-            .accessibilityLabel("Отправить сообщение")
-            .accessibilityIdentifier("spotchat.sendMessage")
+
+            HStack(alignment: .bottom, spacing: 4) {
+                TextField("Сообщение", text: $draft, prompt: Text("Сообщение").foregroundColor(Color(.secondaryLabel)), axis: .vertical)
+                    .font(.body).lineLimit(1...5).focused($inputFocused)
+                    .textFieldStyle(.plain)
+                    .padding(.leading, 16).padding(.vertical, 12)
+                    .accessibilityIdentifier("spotchat.messageInput")
+                    #if DEBUG && targetEnvironment(simulator)
+                    .task {
+                        if ProcessInfo.processInfo.arguments.contains("-ShumPreviewKeyboard") {
+                            draft = "Да, всё отлично"
+                            inputFocused = true
+                        }
+                    }
+                    #endif
+                Button {
+                    guard canSend else { return }
+                    if runtime.send(draft, to: peer.id, replyingTo: replyingTo) {
+                        draft = ""
+                        withAnimation(.easeOut(duration: 0.16)) { self.replyingTo = nil }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(canSend ? Color.black : Color.secondary)
+                        .frame(width: 36, height: 36)
+                        .background(canSend ? Color.accentColor : Color(.tertiarySystemFill), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSend)
+                .padding(.trailing, 5).padding(.vertical, 5)
+                .accessibilityLabel("Отправить сообщение")
+                .accessibilityIdentifier("spotchat.sendMessage")
+            }
         }
         .frame(maxWidth: 520, minHeight: 46)
-        .background(Color(.secondarySystemBackground), in: Capsule())
-        .overlay {
-            Capsule().stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
-        }
+        .modifier(SpotchatComposerSurface())
         .animation(.easeOut(duration: 0.15), value: canSend)
+        .animation(.easeOut(duration: 0.18), value: replyingTo?.id)
     }
 
     private var invitationDecisionControls: some View {
@@ -296,6 +357,19 @@ struct SpotchatConversationView: View {
         invitationPhase == .accepted
             && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && (runtime.permanent != nil || runtime.isNearby(peer.id))
+    }
+
+    private func beginReply(to message: SpotchatMessage) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) {
+            replyingTo = message
+        }
+        inputFocused = true
+    }
+
+    private func replyAuthor(_ reference: SpotchatReplyReference) -> String {
+        if let ownID = runtime.permanent?.ownCard.id, reference.senderID == ownID { return "Вы" }
+        if reference.senderID == "self" { return "Вы" }
+        return name
     }
 
     private var emptyTitle: String {
@@ -452,32 +526,25 @@ struct SpotchatMessageBubble: View {
     let message: SpotchatMessage
     var showsTail = true
     let maximumWidth: CGFloat
+    var replyAuthor: String?
     var retry: () -> Void = {}
+    var reply: () -> Void = {}
+    var openReply: (String) -> Void = { _ in }
     @Environment(\.colorScheme) private var colorScheme
+    @State private var horizontalOffset: CGFloat = 0
+    @State private var crossedReplyThreshold = false
+
+    private let replyThreshold: CGFloat = 52
 
     var body: some View {
         VStack(alignment: message.outgoing ? .trailing : .leading, spacing: 4) {
-            SpotchatBubbleLayout(inline: !message.text.contains("\n")) {
-                Text(message.text).font(.body).foregroundStyle(.primary)
-                    .textSelection(.enabled)
-                HStack(spacing: 4) {
-                    Text(message.date, style: .time).monospacedDigit()
-                    if message.outgoing { receipt }
-                }.font(.system(size: 11)).foregroundStyle(metadataColor)
+            ZStack(alignment: .trailing) {
+                replyGestureIndicator
+                bubble
+                    .offset(x: horizontalOffset)
+                    .simultaneousGesture(replyDragGesture)
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(bubbleColor, in: SpotchatBubbleShape(outgoing: message.outgoing, tail: showsTail))
-            // The cap lives OUTSIDE the background: a short message keeps its intrinsic bubble width.
             .frame(maxWidth: maximumWidth, alignment: message.outgoing ? .trailing : .leading)
-            .contextMenu {
-                Button {
-                    UIPasteboard.general.string = message.text
-                } label: {
-                    Label("Скопировать", systemImage: "doc.on.doc")
-                        .foregroundStyle(.primary)
-                }
-                .tint(.primary)
-            }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(message.outgoing ? "Вы" : "Собеседник"): \(message.text), \(message.date.formatted(date: .omitted, time: .shortened))\(message.outgoing ? ", " + statusDescription : "")")
             if message.outgoing, let label = message.deliveryLabel, label == "В очереди" || label.hasPrefix("Передаётся") {
@@ -497,6 +564,100 @@ struct SpotchatMessageBubble: View {
                 }.buttonStyle(.plain)
             }
         }.frame(maxWidth: .infinity, alignment: message.outgoing ? .trailing : .leading)
+    }
+
+    private var bubble: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let reference = message.reply {
+                Button {
+                    openReply(reference.messageID)
+                } label: {
+                    HStack(spacing: 8) {
+                        Capsule().fill(Color.accentColor).frame(width: 3, height: 32)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(replyAuthor ?? "Сообщение")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Color.accentColor)
+                            Text(reference.text)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color.black.opacity(colorScheme == .dark ? 0.16 : 0.05),
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+
+            SpotchatBubbleLayout(inline: !message.text.contains("\n")) {
+                Text(message.text).font(.body).foregroundStyle(.primary)
+                HStack(spacing: 4) {
+                    Text(message.date, style: .time).monospacedDigit()
+                    if message.outgoing { receipt }
+                }.font(.system(size: 11)).foregroundStyle(metadataColor)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(bubbleColor, in: bubbleShape)
+        .contentShape(.interaction, bubbleShape)
+        .contentShape(.contextMenuPreview, bubbleShape)
+        .contextMenu {
+            Button(action: reply) {
+                Label("Ответить", systemImage: "arrowshape.turn.up.left")
+                    .foregroundStyle(.white)
+            }
+            .tint(.white)
+            Button {
+                UIPasteboard.general.string = message.text
+            } label: {
+                Label("Скопировать", systemImage: "doc.on.doc")
+                    .foregroundStyle(.white)
+            }
+            .tint(.white)
+        }
+    }
+
+    private var bubbleShape: SpotchatBubbleShape {
+        SpotchatBubbleShape(outgoing: message.outgoing, tail: showsTail)
+    }
+
+    private var replyGestureIndicator: some View {
+        let progress = min(1, abs(horizontalOffset) / replyThreshold)
+        return Image(systemName: "arrowshape.turn.up.left.fill")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(progress >= 1 ? Color.black : Color.accentColor)
+            .frame(width: 32, height: 32)
+            .background(progress >= 1 ? Color.accentColor : Color(.tertiarySystemFill), in: Circle())
+            .scaleEffect(0.72 + 0.28 * progress)
+            .opacity(progress)
+            .padding(.trailing, 4)
+            .accessibilityHidden(true)
+    }
+
+    private var replyDragGesture: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .onChanged { value in
+                guard value.translation.width < 0,
+                      abs(value.translation.width) > abs(value.translation.height) else { return }
+                horizontalOffset = max(-72, value.translation.width)
+                let crossed = abs(horizontalOffset) >= replyThreshold
+                if crossed && !crossedReplyThreshold {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
+                crossedReplyThreshold = crossed
+            }
+            .onEnded { value in
+                let shouldReply = value.translation.width <= -replyThreshold
+                    && abs(value.translation.width) > abs(value.translation.height)
+                if shouldReply { reply() }
+                crossedReplyThreshold = false
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                    horizontalOffset = 0
+                }
+            }
     }
     private var bubbleColor: Color {
         message.outgoing
