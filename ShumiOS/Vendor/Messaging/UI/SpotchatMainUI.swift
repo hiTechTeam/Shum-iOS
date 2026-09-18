@@ -335,8 +335,8 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
             if entries.isEmpty {
                 empty().listRowBackground(Color.clear).listRowSeparator(.hidden)
             } else {
-                ForEach(entries) { entry in
-                    directoryRow(entry)
+                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                    directoryRow(entry, isLast: index == entries.count - 1)
                         .id(ShumDirectoryRowID(folder: folder, peer: entry.id))
                 }
             }
@@ -365,7 +365,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         } message: { action in Text(action.message) }
     }
 
-    private func directoryRow(_ entry: ShumDirectoryEntry) -> some View {
+    private func directoryRow(_ entry: ShumDirectoryEntry, isLast: Bool) -> some View {
         let pinned = isPinned(entry)
         return NativeSwipeInteractionRow(
             persistentSurfaceColor: pinned
@@ -385,7 +385,9 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         }
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.peopleListBackground)
-        .listRowSeparator(.hidden)
+        .listRowSeparator(isLast ? .hidden : .visible, edges: .bottom)
+        .listRowSeparatorTint(Color.secondary.opacity(0.24))
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 86 }
         .zIndex(elevatedPeerIDs.contains(entry.id) ? 1_000 : (pinned ? 1 : 0))
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             if entry.card != nil {
@@ -542,20 +544,20 @@ struct ShumDirectoryRow: View {
     private var last: SpotchatMessage? { runtime.conversation(entry.peer.id).last }
     var body: some View {
         HStack(spacing: 12) {
-            ShumProfileAvatar(size: 52, imageData: runtime.profile(for: entry.peer.id)?.avatar)
+            ShumProfileAvatar(size: 58, imageData: runtime.profile(for: entry.peer.id)?.avatar)
                 .overlay(alignment: .bottomTrailing) {
                     if entry.isNearby {
-                        Circle().fill(.green).frame(width: 12, height: 12)
+                        Circle().fill(.green).frame(width: 13, height: 13)
                             .overlay(Circle().stroke(Color.peopleListBackground, lineWidth: 2.5))
                     }
                 }
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 8) {
                     Text(runtime.displayName(entry.peer))
-                        .font(.system(size: 15, weight: .medium)).foregroundStyle(.primary).lineLimit(1)
+                        .font(.system(size: 17, weight: .semibold)).foregroundStyle(.primary).lineLimit(1)
                     Spacer(minLength: 4)
                     if let last {
-                        Text(last.date, style: .time).font(.system(size: 12)).foregroundStyle(.secondary)
+                        Text(last.date, style: .time).font(.system(size: 13)).foregroundStyle(.secondary)
                     }
                 }
                 HStack(spacing: 8) {
@@ -563,19 +565,21 @@ struct ShumDirectoryRow: View {
                         ShumChatReceipt(status: last.status)
                     }
                     Text(invitationSummary ?? last?.text ?? "Начать чат")
-                        .font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
+                        .font(.system(size: 15)).foregroundStyle(.secondary).lineLimit(1)
                     Spacer(minLength: 4)
                     if entry.unread > 0 || entry.invitationAwaitingResponse {
                         Text(entry.unread > 99 ? "99+" : String(max(entry.unread, entry.invitationAwaitingResponse ? 1 : 0)))
-                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(.black)
-                            .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
+                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                            .padding(.horizontal, 6).frame(minWidth: 21, minHeight: 21)
                             .background(Color.accentColor, in: Capsule())
                     }
                 }
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 52)
-        .padding(.horizontal, 16).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 58)
+        .padding(.leading, 16)
+        .padding(.trailing, 18)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(entry.isInvitation ? "Открыть приглашение" : "Открыть чат")
