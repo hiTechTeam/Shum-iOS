@@ -27,6 +27,7 @@ struct ProfileOverviewView: View {
     @ObservedObject private var appLock = ShumAppLock.shared
 
     @State private var showPrivacy = false
+    @State private var showScanningSettings = false
     @State private var showInfoSheet = false
     @State private var showLogoutOptions = false
     @State private var showBlockedProfiles = false
@@ -138,6 +139,12 @@ struct ProfileOverviewView: View {
                 NavigationStack { SpotchatPrivacySettings(runtime: chat) }
             }
         }
+        .sheet(isPresented: $showScanningSettings) {
+            ScanningSettingsSheet()
+                .environmentObject(coordinator)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showInfoSheet) {
             InfoSheetView()
                 .presentationDetents([.large])
@@ -225,9 +232,18 @@ struct ProfileOverviewView: View {
 
     private var settingsCard: some View {
         VStack(spacing: 0) {
+            ProfileOverviewRow(
+                title: Inc.Scanning.scanning.localized,
+                systemImage: "dot.radiowaves.left.and.right",
+                value: scanningStatusTitle,
+                position: .top
+            ) {
+                showScanningSettings = true
+            }
+            Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(title: "Безопасность", systemImage: "checkmark.shield",
                 value: (appLock.hasPasscode || appLock.isEnabled) ? appLock.preferredMethodTitle : nil,
-                position: .top) {
+                position: .middle) {
                     showSecurity = true
                 }
             Divider().padding(.leading, 60).padding(.trailing, 20)
@@ -278,6 +294,12 @@ struct ProfileOverviewView: View {
 
     private var quickActionsStatusTitle: String {
         quickActions.hasEnabledActions
+            ? Inc.Settings.statusOn.localized
+            : Inc.Settings.statusOff.localized
+    }
+
+    private var scanningStatusTitle: String {
+        coordinator.isScaning
             ? Inc.Settings.statusOn.localized
             : Inc.Settings.statusOff.localized
     }

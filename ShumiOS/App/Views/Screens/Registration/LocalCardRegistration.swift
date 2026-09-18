@@ -40,9 +40,9 @@ struct LocalCardDetailsView: View {
     var mode: LocalCardDetailsMode = .registration
     let onSave: () -> Void
     @State private var name = ""
-    @State private var showSecurity = false
-    @State private var isPreparingSecurity = false
-    @State private var showSecurityError = false
+    @State private var showSecurityCreation = false
+    @State private var pendingRegistrationName = ""
+    @State private var pendingRegistrationPhoto: Data?
     @FocusState private var focused: Bool
     private var valid: Bool { ShumProfileValidation.name(name) != nil }
     var body: some View {
@@ -68,7 +68,7 @@ struct LocalCardDetailsView: View {
                 if let error = profile.saveError { Text(error).foregroundStyle(.red).font(.footnote) }
                 RegistrationPrimaryButton(
                     title: NSLocalizedString("local.profile.save", comment: ""),
-                    isEnabled: valid && !isPreparingSecurity,
+                    isEnabled: valid,
                     action: save
                 )
                     .padding(.top, 12).accessibilityIdentifier("local.save")
@@ -81,41 +81,24 @@ struct LocalCardDetailsView: View {
                 ToolbarItem(placement: .cancellationAction) { Button(Inc.Common.close.localized) { dismiss() } }
             }
         }
-        .navigationDestination(isPresented: $showSecurity) {
-            RegistrationSecurityReadyView()
-        }
-        .alert("Не удалось создать защиту", isPresented: $showSecurityError) {
-            Button("Повторить") { prepareSecurityAndContinue() }
-        } message: {
-            Text("Разблокируйте устройство и попробуйте ещё раз.")
+        .navigationDestination(isPresented: $showSecurityCreation) {
+            RegistrationSecurityCreationView(
+                name: pendingRegistrationName,
+                photo: pendingRegistrationPhoto
+            )
         }
         .onAppear { name = profile.localName ?? ""; profile.saveError = nil }
     }
     private func save() {
         guard let value = ShumProfileValidation.name(name) else { return }
-        let saved = mode == .registration ? profile.save(name: value, photo: photo.preparedPhoto) : profile.updateName(value)
-        if saved {
+        if mode == .registration {
             focused = false
-            if mode == .registration {
-                prepareSecurityAndContinue()
-            } else {
-                onSave()
-            }
-        }
-    }
-
-    private func prepareSecurityAndContinue() {
-        guard !isPreparingSecurity else { return }
-        isPreparingSecurity = true
-        Task {
-            await Task.yield()
-            let prepared = coordinator.prepareRegistrationSecurity()
-            isPreparingSecurity = false
-            if prepared {
-                showSecurity = true
-            } else {
-                showSecurityError = true
-            }
+            pendingRegistrationName = value
+            pendingRegistrationPhoto = photo.preparedPhoto
+            showSecurityCreation = true
+        } else if profile.updateName(value) {
+            focused = false
+            onSave()
         }
     }
 }

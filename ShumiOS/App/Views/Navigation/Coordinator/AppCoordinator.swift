@@ -68,7 +68,9 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
     private func prepareMessaging() {
         guard !deletingProfile, isRegistered else { return }
-        createMessaging(bluetoothEnabled: isScaning)
+        createMessaging(
+            bluetoothEnabled: isScaning && !ShumAppLock.shared.isLocked
+        )
     }
     private func createMessaging(bluetoothEnabled: Bool) {
         guard chat == nil else {
@@ -149,7 +151,9 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     func setScanning(_ enabled: Bool) {
         isScaning = enabled && isRegistered
         UserDefaults.standard.set(isScaning, forKey: Keys.isScaning.rawValue)
-        chat?.setBluetoothEnabled(isScaning)
+        chat?.setBluetoothEnabled(
+            isScaning && !ShumAppLock.shared.isLocked
+        )
     }
     func refreshSession() async {
         authCodeViewModel.restoreLocalProfile(); profilePhotoViewModel.loadPhotoIfNeeded()
@@ -210,7 +214,9 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     func updateApplicationState(isActive: Bool) {
         active = isActive
         guard !deletingProfile, isRegistered, let chat else { return }
-        chat.setAppActive(isActive)
-        if isActive { chat.start() }
+        let hasCompletedLogin = !ShumAppLock.shared.isLocked
+        chat.setBluetoothEnabled(isScaning && hasCompletedLogin)
+        chat.setAppActive(isActive && hasCompletedLogin)
+        if isActive && hasCompletedLogin { chat.start() }
     }
 }

@@ -72,6 +72,8 @@
 "profileNotSpecified" = "Не указано";
 "profileLinkMessenger" = "Привязать";
 "profileChangePhoto" = "Изменить фото";
+"profileAddPhoto" = "Добавить фото";
+"profileChangePhotoShort" = "Изменить";
 "profileChangePhotoTitle" = "Изменить фото профиля";
 "profileSaveName" = "Сохранить";
 "profileNamePlaceholder" = "Ваше имя";
@@ -112,11 +114,11 @@
 /* Scanning */
 "nearbyEmptyTitle" = "Пока никого";
 "nearbyListDescription" = "Люди, которые находятся вокруг вас";
-"scanning" = "Сканирование";
+"scanning" = "Видимость рядом";
 "scanningStatusActive" = "Активно";
 "scanningStatusInactive" = "Неактивно";
 "justTurnScaning" = "Включите сканирование";
-"scanToggleDescription" = "Пока сканирование активно, вы видите пользователей Shum рядом, а они могут увидеть вас.";
+"scanToggleDescription" = "Когда видимость включена, люди поблизости могут найти вас и написать без интернета.";
 "turnedOffScaning" = "Сканирование отключено. Включите сканирование в приложении, чтобы видеть людей, находящихся поблизости. ";
 "noPeopleNearby" = "Сканирование активно. Когда рядом появятся пользователи Shum, они отобразятся на этом экране.";
 "scanAlertText" = "Включите сканирование в настройках, чтобы открыть раздел «Рядом».";

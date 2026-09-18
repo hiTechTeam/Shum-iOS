@@ -86,6 +86,11 @@ struct AppCoordinatorView: View {
             guard isComplete else { return }
             hideSplashIfReady()
         }
+        .shumOnChange(of: appLock.isLocked) { _, _ in
+            coordinator.updateApplicationState(
+                isActive: scenePhase == .active
+            )
+        }
         .shumOnChange(of: scenePhase) { previousPhase, phase in
             coordinator.updateApplicationState(isActive: phase == .active)
 

@@ -350,6 +350,42 @@ struct SpotchatPermanentTests {
         #expect(a.store.state.messages.isEmpty)
         #expect(a.store.state.receipts.isEmpty)
     }
+    @Test func clearingChatPreservesAcceptanceAndRepairsPreviouslyResetPeer() throws {
+        let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
+        try allowBoth(a, b, clock: clock)
+        connect(a, b, clock: clock)
+
+        #expect(a.service.send("Локальная история", to: b.card))
+        drain([a, b])
+        a.wire.spotchatPackets.removeAll()
+        b.wire.spotchatPackets.removeAll()
+
+        try a.service.clearDirectoryEntry(b.card)
+
+        #expect(a.store.state.messages.isEmpty)
+        #expect(a.store.state.conversations.isEmpty)
+        #expect(a.store.state.contacts.contains { $0.id == b.card.id })
+        #expect(a.service.invitationPhase(for: b.card) == .accepted)
+        #expect(a.wire.spotchatPackets.isEmpty)
+        #expect(b.wire.spotchatPackets.isEmpty)
+
+        #expect(b.service.send("Новый разговор", to: a.card))
+        drain([a, b])
+        #expect(a.store.state.messages.last?.text == "Новый разговор")
+
+        // Repair the state left by the old clear implementation: one side
+        // forgot the acceptance while the other side retained it.
+        try a.store.transaction { state in
+            state.invitationStates?.removeValue(forKey: b.card.id)
+        }
+        #expect(a.service.invitationPhase(for: b.card) == .ready)
+        clock.date.addTimeInterval(1)
+        #expect(a.service.sendInvitation(b.card))
+        drain([a, b])
+        #expect(a.service.invitationPhase(for: b.card) == .accepted)
+        #expect(b.service.invitationPhase(for: a.card) == .accepted)
+        #expect(b.store.state.requests.isEmpty)
+    }
     @Test func oldDatabaseMigratesAndRetiredCoordinatorCannotReviveData() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
         try a.service.add(b.card, source: "QR")

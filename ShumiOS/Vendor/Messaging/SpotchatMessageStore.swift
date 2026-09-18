@@ -157,12 +157,14 @@ final class SpotchatMessageStore: ObservableObject {
         with card: SpotchatContactCard,
         action: SpotchatInvitationAction,
         phase: SpotchatInvitationPhase,
-        removesRequest: Bool = false
+        removesRequest: Bool = false,
+        afterTimestamp: Int64? = nil
     ) throws {
         let previousTimestamp = state.invitationStates?[card.id]?.updatedAt ?? 0
         let timestamp = max(
             Int64(now().timeIntervalSince1970 * 1000),
-            previousTimestamp + 1
+            previousTimestamp + 1,
+            (afterTimestamp ?? Int64.min) + 1
         )
         var control = SpotchatInvitationControl(
             id: UUID().uuidString,
@@ -229,6 +231,23 @@ final class SpotchatMessageStore: ObservableObject {
         }
         switch control.action {
         case .request:
+            // A previous build could erase only this device's accepted state
+            // while clearing its local history. The other participant still
+            // correctly considers the conversation accepted. Reaffirm that
+            // acceptance once so the mismatched device repairs itself instead
+            // of leaving a new request stuck forever.
+            if currentPhase == .accepted {
+                let currentTimestamp = state.invitationStates?[control.sender.id]?.updatedAt ?? 0
+                guard control.timestamp > currentTimestamp else { return }
+                try transitionInvitation(
+                    with: control.sender,
+                    action: .accept,
+                    phase: .accepted,
+                    removesRequest: true,
+                    afterTimestamp: control.timestamp
+                )
+                return
+            }
             guard currentPhase == .ready
                     || currentPhase == .outgoingPending
                     || currentPhase == .declinedByPeer else { return }
@@ -838,37 +857,10 @@ final class SpotchatMessageStore: ObservableObject {
         changed()
     }
     func clearDirectoryEntry(_ card: SpotchatContactCard) throws {
-        guard !retired else { throw SpotchatFailure.unavailableIdentity }
-        let conversationID = SpotchatConversation.identifier(ownCard.id, card.id)
-        try store.transaction { state in
-            if state.deletedMessageIDs == nil { state.deletedMessageIDs = [:] }
-            for message in state.messages where message.envelope.conversationID == conversationID {
-                let expiry = Date(
-                    timeIntervalSince1970: Double(message.envelope.expiresAt) / 1000
-                )
-                if expiry > now() { state.deletedMessageIDs?[message.id] = expiry }
-            }
-            state.messages.removeAll { $0.envelope.conversationID == conversationID }
-            state.legacyHistory?.messages.removeAll { $0.contactID == card.id }
-            state.legacyHistory?.contacts.removeAll { $0.id == card.id }
-            state.conversations.removeAll { $0.id == conversationID }
-            state.receipts.removeAll {
-                $0.receipt.sender.id == card.id
-                    || $0.receipt.destination.id == card.id
-            }
-            state.contacts.removeAll { $0.id == card.id }
-            state.requests.removeAll { $0.id == card.id }
-            state.encounters?.removeAll { $0.id == card.id }
-            state.unviewedEncounterIDs?.remove(card.id)
-            state.invitationStates?.removeValue(forKey: card.id)
-            state.invitationOutbox?.removeAll { $0.control.recipient.id == card.id }
-            for directory in state.pinnedDirectoryEntries?.keys.map({ $0 }) ?? [] {
-                state.pinnedDirectoryEntries?[directory]?.removeAll { $0 == card.id }
-            }
-        }
-        if activeContact == card.id { activeContact = nil }
-        nearby = nearby.filter { $0.value.id != card.id }
-        changed()
+        // Clearing is strictly local history removal. Keep the verified
+        // contact, encounter and invitation state so an accepted chat remains
+        // accepted. deleteConversation does not emit a peer control packet.
+        try deleteConversation(with: card)
     }
     func setBlocked(_ card: SpotchatContactCard, blocked: Bool) throws {
         guard !retired else { throw SpotchatFailure.unavailableIdentity }
