@@ -689,16 +689,16 @@ struct SpotchatMessageBubble: View {
         .contextMenu {
             Button(action: reply) {
                 Label("Ответить", systemImage: "arrowshape.turn.up.left")
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
             }
-            .tint(.white)
+            .tint(.primary)
             Button {
                 UIPasteboard.general.string = message.text
             } label: {
                 Label("Скопировать", systemImage: "doc.on.doc")
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
             }
-            .tint(.white)
+            .tint(.primary)
         }
     }
 
