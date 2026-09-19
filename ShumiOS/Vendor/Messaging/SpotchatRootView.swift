@@ -624,7 +624,12 @@ struct SpotchatMessageBubble: View {
                 replyGestureIndicator
                 bubble
                     .offset(x: horizontalOffset)
-                    .simultaneousGesture(replyDragGesture)
+                    .overlay {
+                        SpotchatHorizontalReplyGesture(
+                            changed: updateReplyDrag,
+                            ended: finishReplyDrag
+                        )
+                    }
             }
             .frame(maxWidth: maximumWidth, alignment: message.outgoing ? .trailing : .leading)
             .accessibilityElement(children: .combine)
@@ -719,27 +724,21 @@ struct SpotchatMessageBubble: View {
             .accessibilityHidden(true)
     }
 
-    private var replyDragGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .local)
-            .onChanged { value in
-                guard value.translation.width < 0,
-                      abs(value.translation.width) > abs(value.translation.height) else { return }
-                horizontalOffset = max(-72, value.translation.width)
-                let crossed = abs(horizontalOffset) >= replyThreshold
-                if crossed && !crossedReplyThreshold {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                }
-                crossedReplyThreshold = crossed
-            }
-            .onEnded { value in
-                let shouldReply = value.translation.width <= -replyThreshold
-                    && abs(value.translation.width) > abs(value.translation.height)
-                if shouldReply { reply() }
-                crossedReplyThreshold = false
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
-                    horizontalOffset = 0
-                }
-            }
+    private func updateReplyDrag(_ translation: CGFloat) {
+        horizontalOffset = max(-72, min(0, translation))
+        let crossed = abs(horizontalOffset) >= replyThreshold
+        if crossed && !crossedReplyThreshold {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+        crossedReplyThreshold = crossed
+    }
+
+    private func finishReplyDrag(_ translation: CGFloat, _ completed: Bool) {
+        if completed && translation <= -replyThreshold { reply() }
+        crossedReplyThreshold = false
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+            horizontalOffset = 0
+        }
     }
     private var bubbleColor: Color {
         message.outgoing
@@ -771,6 +770,81 @@ struct SpotchatMessageBubble: View {
         case .delivered: return "Доставлено"
         case .failed: return "Не доставлено"
         default: return "Отправляется"
+        }
+    }
+}
+
+/// A direction-locked UIKit recognizer keeps a message's reply swipe from
+/// entering the gesture arena at all when the user starts scrolling vertically.
+/// SwiftUI's DragGesture recognises both axes before its onChanged filter runs,
+/// which can intermittently stall the parent ScrollView when a drag begins on
+/// a message bubble.
+private struct SpotchatHorizontalReplyGesture: UIViewRepresentable {
+    let changed: (CGFloat) -> Void
+    let ended: (CGFloat, Bool) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(changed: changed, ended: ended)
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .clear
+        let pan = UIPanGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handlePan(_:))
+        )
+        pan.delegate = context.coordinator
+        pan.cancelsTouchesInView = false
+        pan.delaysTouchesBegan = false
+        pan.delaysTouchesEnded = false
+        view.addGestureRecognizer(pan)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.changed = changed
+        context.coordinator.ended = ended
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var changed: (CGFloat) -> Void
+        var ended: (CGFloat, Bool) -> Void
+
+        init(
+            changed: @escaping (CGFloat) -> Void,
+            ended: @escaping (CGFloat, Bool) -> Void
+        ) {
+            self.changed = changed
+            self.ended = ended
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
+                  let view = pan.view else { return false }
+            let velocity = pan.velocity(in: view)
+            return velocity.x < 0 && abs(velocity.x) > abs(velocity.y) * 1.15
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+
+        @objc func handlePan(_ pan: UIPanGestureRecognizer) {
+            let translation = pan.translation(in: pan.view).x
+            switch pan.state {
+            case .changed:
+                changed(translation)
+            case .ended:
+                ended(translation, true)
+            case .cancelled, .failed:
+                ended(translation, false)
+            default:
+                break
+            }
         }
     }
 }
