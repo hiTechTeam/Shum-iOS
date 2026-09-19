@@ -7,10 +7,13 @@ import UIKit
 struct ShumThemePalette {
     let accentUIColor: UIColor
     let canvasUIColor: UIColor
+    let chatDoodleUIColor: UIColor
+    let chatDoodleOpacity: Double
     let colorScheme: ColorScheme
 
     var accent: Color { Color(uiColor: accentUIColor) }
     var canvas: Color { Color(uiColor: canvasUIColor) }
+    var chatDoodle: Color { Color(uiColor: chatDoodleUIColor) }
     var accentForeground: Color { Color(uiColor: accentForegroundUIColor) }
 
     var accentForegroundUIColor: UIColor {
@@ -93,6 +96,8 @@ private struct ShumThemePaletteKey: EnvironmentKey {
     static let defaultValue = ShumThemePalette(
         accentUIColor: .systemGreen,
         canvasUIColor: UIColor(red: 8 / 255, green: 10 / 255, blue: 9 / 255, alpha: 1),
+        chatDoodleUIColor: UIColor(red: 120 / 255, green: 144 / 255, blue: 131 / 255, alpha: 1),
+        chatDoodleOpacity: 0.28,
         colorScheme: .dark
     )
 }
@@ -132,6 +137,23 @@ struct ShumThemeCanvas: View {
 
     var body: some View {
         palette.canvas
+    }
+}
+
+struct ShumChatCanvas: View {
+    @Environment(\.shumThemePalette) private var palette
+
+    var body: some View {
+        ZStack {
+            palette.canvas
+            Image("ChatDoodleWallpaper")
+                .renderingMode(.template)
+                .resizable(resizingMode: .tile)
+                .foregroundStyle(palette.chatDoodle)
+                .opacity(palette.chatDoodleOpacity)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -199,6 +221,13 @@ final class ShumAppearanceStore: ObservableObject {
                         blue: 9 / 255,
                         alpha: 1
                     ),
+                    chatDoodleUIColor: UIColor(
+                        red: 120 / 255,
+                        green: 144 / 255,
+                        blue: 131 / 255,
+                        alpha: 1
+                    ),
+                    chatDoodleOpacity: 0.28,
                     colorScheme: colorScheme
                 )
             case .darkPink:
@@ -215,6 +244,13 @@ final class ShumAppearanceStore: ObservableObject {
                         blue: 9 / 255,
                         alpha: 1
                     ),
+                    chatDoodleUIColor: UIColor(
+                        red: 185 / 255,
+                        green: 129 / 255,
+                        blue: 156 / 255,
+                        alpha: 1
+                    ),
+                    chatDoodleOpacity: 0.26,
                     colorScheme: colorScheme
                 )
             case .lightClassic:
@@ -226,6 +262,13 @@ final class ShumAppearanceStore: ObservableObject {
                         blue: 250 / 255,
                         alpha: 1
                     ),
+                    chatDoodleUIColor: UIColor(
+                        red: 82 / 255,
+                        green: 106 / 255,
+                        blue: 92 / 255,
+                        alpha: 1
+                    ),
+                    chatDoodleOpacity: 0.20,
                     colorScheme: colorScheme
                 )
             case .lightPink:
@@ -242,6 +285,13 @@ final class ShumAppearanceStore: ObservableObject {
                         blue: 251 / 255,
                         alpha: 1
                     ),
+                    chatDoodleUIColor: UIColor(
+                        red: 157 / 255,
+                        green: 100 / 255,
+                        blue: 127 / 255,
+                        alpha: 1
+                    ),
+                    chatDoodleOpacity: 0.19,
                     colorScheme: colorScheme
                 )
             case .monochromeLight:
@@ -258,6 +308,13 @@ final class ShumAppearanceStore: ObservableObject {
                         blue: 250 / 255,
                         alpha: 1
                     ),
+                    chatDoodleUIColor: UIColor(
+                        red: 28 / 255,
+                        green: 29 / 255,
+                        blue: 28 / 255,
+                        alpha: 1
+                    ),
+                    chatDoodleOpacity: 0.14,
                     colorScheme: colorScheme
                 )
             case .monochromeDark:
@@ -274,6 +331,13 @@ final class ShumAppearanceStore: ObservableObject {
                         blue: 9 / 255,
                         alpha: 1
                     ),
+                    chatDoodleUIColor: UIColor(
+                        red: 213 / 255,
+                        green: 215 / 255,
+                        blue: 214 / 255,
+                        alpha: 1
+                    ),
+                    chatDoodleOpacity: 0.15,
                     colorScheme: colorScheme
                 )
             }

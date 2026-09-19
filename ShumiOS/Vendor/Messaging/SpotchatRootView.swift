@@ -158,7 +158,7 @@ struct SpotchatConversationView: View {
                 }
             }
         }
-        .background(ShumThemeCanvas().ignoresSafeArea())
+        .background(ShumChatCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
