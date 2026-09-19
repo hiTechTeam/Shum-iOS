@@ -68,10 +68,10 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         if ProcessInfo.processInfo.arguments.contains("-ShumPreview") { return preview() }
         #endif
         let keychain = KeychainManager.makeDefault()
-        let ble = BLEService(keychain: keychain,
-                             idBridge: NostrIdentityBridge(keychain: keychain),
-                             identityManager: SecureIdentityStateManager(keychain),
-                             deferBluetoothStartup: true)
+        let ble = BitchatTransportFactory.make(
+            keychain: keychain,
+            deferBluetoothStartup: true
+        )
         let model = SpotchatRuntime(transport: ble, profileStore: .live())
         // Legacy synthetic radio diagnostics remain isolated from real history.
         if UserDefaults.standard.string(forKey: "ShumSelfTestRun") == nil {

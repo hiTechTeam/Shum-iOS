@@ -96,7 +96,7 @@ final class ShumChatRuntime: ObservableObject, TransportEventDelegate, Transport
         }
         if transport == nil {
             let keychain = KeychainManager.makeDefault()
-            let ble = BLEService(keychain: keychain, idBridge: NostrIdentityBridge(keychain: keychain), identityManager: SecureIdentityStateManager(keychain))
+            let ble = BitchatTransportFactory.make(keychain: keychain)
             ble.eventDelegate = self; ble.peerEventsDelegate = self
             ble.addPeerAuthenticatedObserver { [weak self] _, _ in
                 Task { @MainActor in

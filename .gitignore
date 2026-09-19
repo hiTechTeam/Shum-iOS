@@ -43,3 +43,6 @@ iOSInjectionProject/
 *.swp
 *.lock
 *~
+
+# Materialized upstream sources used for review and import
+.upstreams/

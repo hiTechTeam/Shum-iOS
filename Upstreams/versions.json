@@ -1,0 +1,16 @@
+{
+  "bitchat": {
+    "remote": "upstream-bitchat",
+    "url": "https://github.com/permissionlesstech/bitchat.git",
+    "branch": "main",
+    "revision": "9b84b361225facd8e623f25d76f889d3dc54a879",
+    "mode": "reviewed-source-import"
+  },
+  "telegram-ios": {
+    "remote": "upstream-telegram-ios",
+    "url": "https://github.com/TelegramMessenger/Telegram-iOS.git",
+    "branch": "master",
+    "revision": "6ad963e5b62d354da79040f388ae2b9132fb17b8",
+    "mode": "reference-only"
+  }
+}
