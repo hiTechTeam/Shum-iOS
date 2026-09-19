@@ -298,13 +298,13 @@ private struct ShumLockedView: View {
 }
 
 private struct AppSplashView: View {
-    @ObservedObject private var appearance = ShumAppearanceStore.shared
+    @Environment(\.shumThemePalette) private var palette
 
     var body: some View {
         ZStack {
-            appearance.palette.canvas
+            palette.canvas
 
-            ShumLogoMark(color: appearance.palette.accent)
+            ShumLogoMark(color: palette.accent)
                 .frame(width: 82, height: 82)
         }
         .ignoresSafeArea()
