@@ -58,7 +58,7 @@ struct SpotchatAvatar: View {
             }
             .overlay(alignment: .bottomTrailing) {
                 if nearby {
-                    Circle().fill(Color.accentColor).frame(width: 12, height: 12)
+                    Circle().fill(Color(uiColor: .systemGreen)).frame(width: 12, height: 12)
                         .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2.5))
                 }
             }.accessibilityHidden(true)
@@ -170,7 +170,7 @@ struct SpotchatConversationView: View {
                     } else {
                         HStack(spacing: 4) {
                             if runtime.isOnline(peer.id) {
-                                Circle().fill(Color.accentColor).frame(width: 5, height: 5)
+                                Circle().fill(Color(uiColor: .systemGreen)).frame(width: 5, height: 5)
                             }
                             Text(presenceText)
                                 .font(.system(size: 11))

@@ -644,7 +644,7 @@ struct ShumDirectoryRow: View {
             ShumProfileAvatar(size: 58, imageData: runtime.profile(for: entry.peer.id)?.avatar)
                 .overlay(alignment: .bottomTrailing) {
                     if runtime.isOnline(entry.peer.id) {
-                        Circle().fill(Color.accentColor).frame(width: 13, height: 13)
+                        Circle().fill(Color(uiColor: .systemGreen)).frame(width: 13, height: 13)
                             .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 2.5))
                     }
                 }
