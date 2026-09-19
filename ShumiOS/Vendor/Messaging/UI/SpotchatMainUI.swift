@@ -625,6 +625,7 @@ struct ShumDirectoryRow: View {
     let entry: ShumDirectoryEntry
     private var last: SpotchatMessage? { runtime.conversation(entry.peer.id).last }
     var body: some View {
+        let typing = runtime.isTyping(entry.peer.id)
         HStack(spacing: 12) {
             ShumProfileAvatar(size: 58, imageData: runtime.profile(for: entry.peer.id)?.avatar)
                 .overlay(alignment: .bottomTrailing) {
@@ -643,11 +644,21 @@ struct ShumDirectoryRow: View {
                     }
                 }
                 HStack(spacing: 8) {
-                    if let last, last.outgoing, !entry.isInvitation {
-                        ShumChatReceipt(status: last.status)
+                    if typing {
+                        ShumChatListTypingIndicator()
+                            .transition(.opacity)
+                    } else {
+                        Group {
+                            if let last, last.outgoing, !entry.isInvitation {
+                                ShumChatReceipt(status: last.status)
+                            }
+                            Text(invitationSummary ?? last?.text ?? "Начать чат")
+                                .font(.system(size: 15))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        .transition(.opacity)
                     }
-                    Text(invitationSummary ?? last?.text ?? "Начать чат")
-                        .font(.system(size: 15)).foregroundStyle(.secondary).lineLimit(1)
                     Spacer(minLength: 4)
                     if entry.unread > 0 || entry.invitationAwaitingResponse {
                         Text(entry.unread > 99 ? "99+" : String(max(entry.unread, entry.invitationAwaitingResponse ? 1 : 0)))
@@ -657,6 +668,7 @@ struct ShumDirectoryRow: View {
                             .background(Color.accentColor, in: Capsule())
                     }
                 }
+                .animation(.easeInOut(duration: 0.18), value: typing)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 58)
@@ -675,6 +687,29 @@ struct ShumDirectoryRow: View {
             : "Приглашение в чат"
     }
 }
+
+/// Mirrors Telegram's chat-list activity treatment: the message preview is
+/// temporarily replaced by accent-colored text while the row keeps its layout.
+private struct ShumChatListTypingIndicator: View {
+    @State private var phase = 0
+    private let timer = Timer.publish(every: 0.34, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text("Печатает")
+            ForEach(0..<3, id: \.self) { index in
+                Text(".")
+                    .opacity(index <= phase ? 1 : 0.22)
+            }
+        }
+        .font(.system(size: 15, weight: .regular))
+        .foregroundStyle(Color.accentColor)
+        .lineLimit(1)
+        .onReceive(timer) { _ in phase = (phase + 1) % 3 }
+        .accessibilityLabel("Печатает")
+    }
+}
+
 private struct ShumChatReceipt: View {
     let status: DeliveryStatus
     private var receiptDescription: String {
