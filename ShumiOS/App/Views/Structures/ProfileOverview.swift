@@ -271,7 +271,7 @@ struct ProfileOverviewView: View {
             ProfileOverviewRow(
                 title: "Оформление",
                 systemImage: "paintpalette",
-                value: appearance.theme.title,
+                theme: appearance.theme,
                 position: .bottom
             ) {
                 showAppearance = true
@@ -591,6 +591,7 @@ private struct ProfileOverviewRow: View {
     let systemImage: String
     let accentValue: String?
     let value: String?
+    let theme: ShumAppearanceStore.Theme?
     let position: ProfileMenuRowPosition
     let action: (() -> Void)?
 
@@ -599,6 +600,7 @@ private struct ProfileOverviewRow: View {
         systemImage: String,
         accentValue: String? = nil,
         value: String? = nil,
+        theme: ShumAppearanceStore.Theme? = nil,
         position: ProfileMenuRowPosition = .single,
         action: (() -> Void)? = nil
     ) {
@@ -606,6 +608,7 @@ private struct ProfileOverviewRow: View {
         self.systemImage = systemImage
         self.accentValue = accentValue
         self.value = value
+        self.theme = theme
         self.position = position
         self.action = action
     }
@@ -646,6 +649,12 @@ private struct ProfileOverviewRow: View {
                     .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+            }
+
+            if let theme {
+                ShumThemeSwatch(theme: theme)
+                    .frame(width: 24, height: 24)
+                    .accessibilityLabel("Выбрана тема \(theme.title)")
             }
 
             if showsDisclosureIndicator {
