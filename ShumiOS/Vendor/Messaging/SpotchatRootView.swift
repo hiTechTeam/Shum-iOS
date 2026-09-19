@@ -72,6 +72,7 @@ struct SpotchatConversationView: View {
     @State private var draft = ""
     @State private var showPeerProfile = false
     @State private var replyingTo: SpotchatMessage?
+    @State private var typingPauseTask: Task<Void, Never>?
     @FocusState private var inputFocused: Bool
     @State private var atBottom = true
     private var messages: [SpotchatMessage] { runtime.conversation(peer.id) }
@@ -150,7 +151,11 @@ struct SpotchatConversationView: View {
                     runtime.openConversation(peer.id)
                     proxy.scrollTo("conversation-bottom", anchor: .bottom)
                 }
-                .onDisappear { runtime.openConversation(nil) }
+                .onDisappear {
+                    typingPauseTask?.cancel()
+                    runtime.setTyping(false, for: peer.id)
+                    runtime.openConversation(nil)
+                }
             }
         }
         .background(ShumThemeCanvas().ignoresSafeArea())
@@ -159,13 +164,20 @@ struct SpotchatConversationView: View {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 2) {
                     Text(name).font(.system(size: 17, weight: .semibold)).lineLimit(1)
-                    HStack(spacing: 4) {
-                        Circle().fill(runtime.isNearby(peer.id) ? Color.accentColor : Color.secondary).frame(width: 5, height: 5)
-                        Text(presenceText)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                    if runtime.isTyping(peer.id) {
+                        SpotchatTypingIndicator()
+                            .transition(.opacity)
+                    } else {
+                        HStack(spacing: 4) {
+                            Circle().fill(runtime.isNearby(peer.id) ? Color.accentColor : Color.secondary).frame(width: 5, height: 5)
+                            Text(presenceText)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+                        .transition(.opacity)
                     }
                 }.accessibilityElement(children: .combine)
+                    .animation(.easeInOut(duration: 0.18), value: runtime.isTyping(peer.id))
             }
             SpotchatAvatarToolbar {
                 Button { inputFocused = false; showPeerProfile = true } label: {
@@ -280,9 +292,12 @@ struct SpotchatConversationView: View {
                         }
                     }
                     #endif
+                    .onChange(of: draft) { value in updateTyping(for: value) }
                 Button {
                     guard canSend else { return }
                     if runtime.send(draft, to: peer.id, replyingTo: replyingTo) {
+                        typingPauseTask?.cancel()
+                        runtime.setTyping(false, for: peer.id)
                         draft = ""
                         withAnimation(.easeOut(duration: 0.16)) { self.replyingTo = nil }
                     }
@@ -377,6 +392,18 @@ struct SpotchatConversationView: View {
         inputFocused = true
     }
 
+    private func updateTyping(for value: String) {
+        typingPauseTask?.cancel()
+        let active = !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        runtime.setTyping(active, for: peer.id)
+        guard active else { return }
+        typingPauseTask = Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { runtime.setTyping(false, for: peer.id) }
+        }
+    }
+
     private func replyAuthor(_ reference: SpotchatReplyReference) -> String {
         if let ownID = runtime.permanent?.ownCard.id, reference.senderID == ownID { return "Вы" }
         if reference.senderID == "self" { return "Вы" }
@@ -417,6 +444,25 @@ struct SpotchatConversationView: View {
         if Calendar.current.isDateInToday(date) { return "Сегодня" }
         if Calendar.current.isDateInYesterday(date) { return "Вчера" }
         return date.formatted(.dateTime.day().month(.wide))
+    }
+}
+
+private struct SpotchatTypingIndicator: View {
+    @State private var phase = 0
+    private let timer = Timer.publish(every: 0.34, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text("Печатает")
+            ForEach(0..<3, id: \.self) { index in
+                Text(".")
+                    .opacity(index <= phase ? 1 : 0.22)
+            }
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+        .onReceive(timer) { _ in phase = (phase + 1) % 3 }
+        .accessibilityLabel("Печатает")
     }
 }
 

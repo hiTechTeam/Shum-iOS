@@ -8,6 +8,7 @@ import Foundation
 final class SpotchatMessageStore: ObservableObject {
     static let encounterRetention: TimeInterval = 24 * 60 * 60
     static let invitationLifetimeMilliseconds: Int64 = 30 * 86_400_000
+    static let typingLifetimeMilliseconds: Int64 = 5_000
     @Published private(set) var revision = 0
     let store: SpotchatConversationStore
     let contacts: SpotchatContactsService
@@ -27,6 +28,9 @@ final class SpotchatMessageStore: ObservableObject {
     private var tickNumber = 0
     private var localSessionID: PeerID?
     private var retired = false
+    private var typingDeadlines: [String: Date] = [:]
+    private var latestTypingEvents: [String: (timestamp: Int64, id: String)] = [:]
+    private var lastTypingSent: [String: (active: Bool, sentAt: Date)] = [:]
 
     init(identity: SpotchatIdentityService, store: SpotchatConversationStore, transport: Transport,
          wire: SpotchatSecureTransport, card: SpotchatContactCard,
@@ -122,6 +126,39 @@ final class SpotchatMessageStore: ObservableObject {
     }
     func canMessage(_ card: SpotchatContactCard) -> Bool {
         invitationPhase(for: card) == .accepted
+    }
+    func isTyping(_ card: SpotchatContactCard) -> Bool {
+        typingDeadlines[card.id].map { $0 > now() } == true
+    }
+
+    func setTyping(_ active: Bool, for card: SpotchatContactCard) {
+        guard !retired, foreground, !isBlocked(card), canMessage(card),
+              state.contacts.contains(where: { $0.id == card.id }) else { return }
+        let timestamp = now()
+        if let last = lastTypingSent[card.id] {
+            if last.active == active {
+                if !active || timestamp.timeIntervalSince(last.sentAt) < 1 { return }
+            }
+        } else if !active {
+            return
+        }
+        do {
+            let milliseconds = Int64(timestamp.timeIntervalSince1970 * 1000)
+            var control = SpotchatTypingControl(
+                id: UUID().uuidString,
+                sender: ownCard,
+                recipient: card,
+                isTyping: active,
+                timestamp: milliseconds,
+                expiresAt: milliseconds + Self.typingLifetimeMilliseconds
+            )
+            guard let signature = transport.noiseSignData(try control.signingBytes()) else { return }
+            control.signature = signature
+            let packet = SpotchatPacket(typing: control)
+            if let peer = session(for: card) { sendPacket(packet, to: peer) }
+            internet?.send(packet, to: card) { _ in }
+            lastTypingSent[card.id] = (active, timestamp)
+        } catch { /* Typing is ephemeral and must never interrupt the chat. */ }
     }
     @discardableResult
     func sendInvitation(_ card: SpotchatContactCard) -> Bool {
@@ -492,6 +529,11 @@ final class SpotchatMessageStore: ObservableObject {
     func tick(connected: Set<PeerID>, active: Bool) {
         guard !retired else { return }
         tickNumber += 1
+        let expiredTyping = typingDeadlines.filter { $0.value <= now() }.map(\.key)
+        if !expiredTyping.isEmpty {
+            for id in expiredTyping { typingDeadlines.removeValue(forKey: id) }
+            changed()
+        }
         if localSessionID != transport.myPeerID {
             localSessionID = transport.myPeerID
             helloTimes.removeAll()
@@ -535,12 +577,15 @@ final class SpotchatMessageStore: ObservableObject {
         if let receipt = packet.receipt, isBlocked(receipt.sender) || isBlocked(receipt.destination) { return }
         if let invitation = packet.invitation,
            isBlocked(invitation.sender) || isBlocked(invitation.recipient) { return }
+        if let typing = packet.typing,
+           isBlocked(typing.sender) || isBlocked(typing.recipient) { return }
         let source = peer?.id ?? nostrSender ?? "unknown"
         let old = ingressRate[source] ?? (now(), 0)
         let progress = now().timeIntervalSince(old.0) >= 60 ? (now(), 0) : old
         guard progress.1 < 80, ingressRate.count < 1000 || ingressRate[source] != nil,
               packet.version == 1,
-              [packet.card != nil, packet.envelope != nil, packet.receipt != nil, packet.invitation != nil]
+              [packet.card != nil, packet.envelope != nil, packet.receipt != nil,
+               packet.invitation != nil, packet.typing != nil]
                 .filter({ $0 }).count == 1 else { return }
         ingressRate[source] = (progress.0, progress.1 + 1)
         do {
@@ -573,8 +618,39 @@ final class SpotchatMessageStore: ObservableObject {
                 }
                 if let nostrSender, nostrSender != invitation.sender.nostrKey { return }
                 try receiveInvitation(invitation)
+            } else if let typing = packet.typing {
+                try receiveTyping(typing, from: peer, nostrSender: nostrSender)
             }
         } catch { /* Untrusted invalid packets do not produce modal alerts. */ }
+    }
+    private func receiveTyping(_ control: SpotchatTypingControl, from peer: PeerID?, nostrSender: String?) throws {
+        try control.validate(at: now())
+        guard control.recipient.noiseKey == ownCard.noiseKey,
+              control.recipient.signingKey == ownCard.signingKey,
+              control.recipient.nostrKey == ownCard.nostrKey else {
+            throw SpotchatFailure.invalidMessage
+        }
+        if let peer {
+            guard transport.noiseSessionPublicKeyData(for: peer) == control.sender.noiseKey else { return }
+        }
+        if let nostrSender, nostrSender != control.sender.nostrKey { return }
+        guard let contact = state.contacts.first(where: { $0.id == control.sender.id }),
+              contact.card.signingKey == control.sender.signingKey,
+              contact.card.noiseKey == control.sender.noiseKey,
+              contact.card.nostrKey == control.sender.nostrKey,
+              canMessage(contact.card) else { return }
+        if let latest = latestTypingEvents[control.sender.id],
+           control.timestamp < latest.timestamp
+            || (control.timestamp == latest.timestamp && control.id <= latest.id) { return }
+        latestTypingEvents[control.sender.id] = (control.timestamp, control.id)
+        if control.isTyping {
+            typingDeadlines[control.sender.id] = Date(
+                timeIntervalSince1970: Double(control.expiresAt) / 1000
+            )
+        } else {
+            typingDeadlines.removeValue(forKey: control.sender.id)
+        }
+        changed()
     }
     private func request(_ card: SpotchatContactCard) throws {
         guard invitationPhase(for: card) != .accepted,
@@ -890,6 +966,7 @@ final class SpotchatMessageStore: ObservableObject {
         retired = true; foreground = false; activeContact = nil
         internet?.received = nil; internet?.stop()
         nearby.removeAll(); helloTimes.removeAll(); ingressRate.removeAll()
+        typingDeadlines.removeAll(); latestTypingEvents.removeAll(); lastTypingSent.removeAll()
     }
     private func changed() { revision &+= 1 }
     private func fail(_ error: Error) { onError?(error.localizedDescription) }

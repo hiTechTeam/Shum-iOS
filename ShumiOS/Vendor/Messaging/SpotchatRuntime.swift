@@ -445,6 +445,16 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         return transport.isPeerConnected(peer)
     }
 
+    func isTyping(_ peer: PeerID) -> Bool {
+        guard let permanent, let card = permanent.card(for: peer) else { return false }
+        return permanent.isTyping(card)
+    }
+
+    func setTyping(_ active: Bool, for peer: PeerID) {
+        guard let permanent, let card = permanent.card(for: peer) else { return }
+        permanent.setTyping(active, for: card)
+    }
+
     func distanceMeters(for peer: PeerID) -> Int? {
         guard isNearby(peer) else { return nil }
         let session = permanent?.card(for: peer).flatMap { permanent?.session(for: $0) } ?? peer
