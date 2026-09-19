@@ -653,7 +653,16 @@ struct ShumDirectoryRow: View {
                     Text(runtime.displayName(entry.peer))
                         .font(.system(size: 17, weight: .semibold)).foregroundStyle(.primary).lineLimit(1)
                     if entry.isNearby && showsNearbyIndicator {
-                        ShumNearbyPixelIndicator()
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.secondary)
+                                .frame(width: 4, height: 4)
+                            Text("Рядом")
+                                .font(.system(size: 11, weight: .regular))
+                                .foregroundStyle(.secondary)
+                        }
+                        .fixedSize()
+                        .accessibilityLabel("Рядом")
                     }
                     Spacer(minLength: 4)
                     if let last {
@@ -702,39 +711,6 @@ struct ShumDirectoryRow: View {
         return entry.invitationPhase == .declinedLocally
             ? "Приглашение отклонено"
             : "Приглашение в чат"
-    }
-}
-
-private struct ShumNearbyPixelIndicator: View {
-    private let pixels: [(Int, Int)] = [
-        (3, 3), (3, 4),
-        (2, 2), (2, 5), (4, 2), (4, 5),
-        (1, 1), (1, 6), (5, 1), (5, 6),
-        (2, 7), (3, 7), (4, 7)
-    ]
-
-    var body: some View {
-        Canvas(rendersAsynchronously: false) { context, size in
-            let unit = min(size.width / 7, size.height / 9)
-            let origin = CGPoint(
-                x: (size.width - unit * 7) / 2,
-                y: (size.height - unit * 9) / 2
-            )
-            for pixel in pixels {
-                context.fill(
-                    Path(CGRect(
-                        x: origin.x + CGFloat(pixel.0) * unit,
-                        y: origin.y + CGFloat(pixel.1) * unit,
-                        width: unit,
-                        height: unit
-                    )),
-                    with: .foreground
-                )
-            }
-        }
-        .foregroundStyle(.secondary)
-        .frame(width: 14, height: 14)
-        .accessibilityLabel("Рядом")
     }
 }
 
