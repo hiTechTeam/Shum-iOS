@@ -9,6 +9,8 @@ final class SpotchatMessageStore: ObservableObject {
     static let encounterRetention: TimeInterval = 24 * 60 * 60
     static let invitationLifetimeMilliseconds: Int64 = 30 * 86_400_000
     static let typingLifetimeMilliseconds: Int64 = 5_000
+    static let presenceLifetimeMilliseconds: Int64 = 55_000
+    static let presenceBroadcastInterval: TimeInterval = 20
     @Published private(set) var revision = 0
     let store: SpotchatConversationStore
     let contacts: SpotchatContactsService
@@ -31,6 +33,9 @@ final class SpotchatMessageStore: ObservableObject {
     private var typingDeadlines: [String: Date] = [:]
     private var latestTypingEvents: [String: (timestamp: Int64, id: String)] = [:]
     private var lastTypingSent: [String: (active: Bool, sentAt: Date)] = [:]
+    private var presenceDeadlines: [String: Date] = [:]
+    private var latestPresenceEvents: [String: (timestamp: Int64, id: String)] = [:]
+    private var lastPresenceBroadcast = Date.distantPast
 
     init(identity: SpotchatIdentityService, store: SpotchatConversationStore, transport: Transport,
          wire: SpotchatSecureTransport, card: SpotchatContactCard,
@@ -77,8 +82,13 @@ final class SpotchatMessageStore: ObservableObject {
     func start() { if !retired && foreground { internet?.start() } }
     func setActive(_ active: Bool) {
         guard !retired else { return }
+        if !active { broadcastPresence(online: false) }
         foreground = active
-        if active { internet?.start(); markRead() }
+        if active {
+            internet?.start()
+            lastPresenceBroadcast = .distantPast
+            markRead()
+        }
         else { internet?.stop() }
     }
     func updateProfile(name: String, bio: String) throws {
@@ -129,6 +139,9 @@ final class SpotchatMessageStore: ObservableObject {
     }
     func isTyping(_ card: SpotchatContactCard) -> Bool {
         typingDeadlines[card.id].map { $0 > now() } == true
+    }
+    func isOnline(_ card: SpotchatContactCard) -> Bool {
+        session(for: card) != nil || presenceDeadlines[card.id].map { $0 > now() } == true
     }
 
     func setTyping(_ active: Bool, for card: SpotchatContactCard) {
@@ -530,8 +543,10 @@ final class SpotchatMessageStore: ObservableObject {
         guard !retired else { return }
         tickNumber += 1
         let expiredTyping = typingDeadlines.filter { $0.value <= now() }.map(\.key)
-        if !expiredTyping.isEmpty {
+        let expiredPresence = presenceDeadlines.filter { $0.value <= now() }.map(\.key)
+        if !expiredTyping.isEmpty || !expiredPresence.isEmpty {
             for id in expiredTyping { typingDeadlines.removeValue(forKey: id) }
+            for id in expiredPresence { presenceDeadlines.removeValue(forKey: id) }
             changed()
         }
         if localSessionID != transport.myPeerID {
@@ -542,6 +557,10 @@ final class SpotchatMessageStore: ObservableObject {
         helloTimes = helloTimes.filter { connected.contains($0.key) }
         if tickNumber % 30 == 0 { ingressRate = ingressRate.filter { now().timeIntervalSince($0.value.0) < 60 } }
         guard active else { return }
+        if internet?.connected == true,
+           now().timeIntervalSince(lastPresenceBroadcast) >= Self.presenceBroadcastInterval {
+            broadcastPresence(online: true)
+        }
         for peer in connected.sorted(by: { $0.id < $1.id }).prefix(20) where now().timeIntervalSince(helloTimes[peer] ?? .distantPast) >= 30 {
             helloTimes[peer] = now(); sendPacket(SpotchatPacket(card: ownCard), to: peer)
         }
@@ -579,13 +598,15 @@ final class SpotchatMessageStore: ObservableObject {
            isBlocked(invitation.sender) || isBlocked(invitation.recipient) { return }
         if let typing = packet.typing,
            isBlocked(typing.sender) || isBlocked(typing.recipient) { return }
+        if let presence = packet.presence,
+           isBlocked(presence.sender) || isBlocked(presence.recipient) { return }
         let source = peer?.id ?? nostrSender ?? "unknown"
         let old = ingressRate[source] ?? (now(), 0)
         let progress = now().timeIntervalSince(old.0) >= 60 ? (now(), 0) : old
         guard progress.1 < 80, ingressRate.count < 1000 || ingressRate[source] != nil,
               packet.version == 1,
               [packet.card != nil, packet.envelope != nil, packet.receipt != nil,
-               packet.invitation != nil, packet.typing != nil]
+               packet.invitation != nil, packet.typing != nil, packet.presence != nil]
                 .filter({ $0 }).count == 1 else { return }
         ingressRate[source] = (progress.0, progress.1 + 1)
         do {
@@ -620,6 +641,8 @@ final class SpotchatMessageStore: ObservableObject {
                 try receiveInvitation(invitation)
             } else if let typing = packet.typing {
                 try receiveTyping(typing, from: peer, nostrSender: nostrSender)
+            } else if let presence = packet.presence {
+                try receivePresence(presence, from: peer, nostrSender: nostrSender)
             }
         } catch { /* Untrusted invalid packets do not produce modal alerts. */ }
     }
@@ -647,8 +670,65 @@ final class SpotchatMessageStore: ObservableObject {
             typingDeadlines[control.sender.id] = Date(
                 timeIntervalSince1970: Double(control.expiresAt) / 1000
             )
+            presenceDeadlines[control.sender.id] = now().addingTimeInterval(
+                Double(Self.presenceLifetimeMilliseconds) / 1000
+            )
         } else {
             typingDeadlines.removeValue(forKey: control.sender.id)
+        }
+        changed()
+    }
+    private func broadcastPresence(online: Bool) {
+        guard !retired, internet?.connected == true else { return }
+        let timestamp = now()
+        let recipients = state.contacts
+            .map(\.card)
+            .filter { !isBlocked($0) && canMessage($0) }
+        for card in recipients {
+            do {
+                let milliseconds = Int64(timestamp.timeIntervalSince1970 * 1000)
+                var control = SpotchatPresenceControl(
+                    id: UUID().uuidString,
+                    sender: ownCard,
+                    recipient: card,
+                    isOnline: online,
+                    timestamp: milliseconds,
+                    expiresAt: milliseconds + Self.presenceLifetimeMilliseconds
+                )
+                guard let signature = transport.noiseSignData(try control.signingBytes()) else { continue }
+                control.signature = signature
+                internet?.send(SpotchatPacket(presence: control), to: card) { _ in }
+            } catch { /* Presence is best effort and never blocks messaging. */ }
+        }
+        lastPresenceBroadcast = timestamp
+    }
+
+    private func receivePresence(_ control: SpotchatPresenceControl, from peer: PeerID?, nostrSender: String?) throws {
+        try control.validate(at: now())
+        guard control.recipient.noiseKey == ownCard.noiseKey,
+              control.recipient.signingKey == ownCard.signingKey,
+              control.recipient.nostrKey == ownCard.nostrKey else {
+            throw SpotchatFailure.invalidMessage
+        }
+        if let peer {
+            guard transport.noiseSessionPublicKeyData(for: peer) == control.sender.noiseKey else { return }
+        }
+        if let nostrSender, nostrSender != control.sender.nostrKey { return }
+        guard let contact = state.contacts.first(where: { $0.id == control.sender.id }),
+              contact.card.signingKey == control.sender.signingKey,
+              contact.card.noiseKey == control.sender.noiseKey,
+              contact.card.nostrKey == control.sender.nostrKey,
+              canMessage(contact.card) else { return }
+        if let latest = latestPresenceEvents[control.sender.id],
+           control.timestamp < latest.timestamp
+            || (control.timestamp == latest.timestamp && control.id <= latest.id) { return }
+        latestPresenceEvents[control.sender.id] = (control.timestamp, control.id)
+        if control.isOnline {
+            presenceDeadlines[control.sender.id] = Date(
+                timeIntervalSince1970: Double(control.expiresAt) / 1000
+            )
+        } else {
+            presenceDeadlines.removeValue(forKey: control.sender.id)
         }
         changed()
     }
@@ -963,10 +1043,12 @@ final class SpotchatMessageStore: ObservableObject {
     }
     // Prevent all delayed callbacks from saving or sending after profile deletion.
     func retire() {
+        broadcastPresence(online: false)
         retired = true; foreground = false; activeContact = nil
         internet?.received = nil; internet?.stop()
         nearby.removeAll(); helloTimes.removeAll(); ingressRate.removeAll()
         typingDeadlines.removeAll(); latestTypingEvents.removeAll(); lastTypingSent.removeAll()
+        presenceDeadlines.removeAll(); latestPresenceEvents.removeAll()
     }
     private func changed() { revision &+= 1 }
     private func fail(_ error: Error) { onError?(error.localizedDescription) }

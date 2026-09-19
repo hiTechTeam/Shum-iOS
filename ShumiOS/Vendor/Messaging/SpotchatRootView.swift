@@ -169,7 +169,9 @@ struct SpotchatConversationView: View {
                             .transition(.opacity)
                     } else {
                         HStack(spacing: 4) {
-                            Circle().fill(runtime.isNearby(peer.id) ? Color.accentColor : Color.secondary).frame(width: 5, height: 5)
+                            if runtime.isOnline(peer.id) {
+                                Circle().fill(Color.accentColor).frame(width: 5, height: 5)
+                            }
                             Text(presenceText)
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
@@ -197,8 +199,8 @@ struct SpotchatConversationView: View {
 
     private var presenceText: String {
         if runtime.isBlocked(peer.id) { return "Заблокирован" }
-        if let meters = runtime.distanceMeters(for: peer.id) { return "\(meters) м" }
-        return runtime.isNearby(peer.id) ? "Рядом" : "Не рядом"
+        if runtime.isNearby(peer.id) { return "Рядом · в сети" }
+        return runtime.isOnline(peer.id) ? "В сети" : "Не в сети"
     }
 
     @ViewBuilder

@@ -124,6 +124,40 @@ struct SpotchatTypingControl: Codable, Equatable, Identifiable {
         }
     }
 }
+struct SpotchatPresenceControl: Codable, Equatable, Identifiable {
+    var version = 1
+    var id: String
+    var sender: SpotchatContactCard
+    var recipient: SpotchatContactCard
+    var isOnline: Bool
+    var timestamp: Int64
+    var expiresAt: Int64
+    var signature = Data()
+
+    func signingBytes() throws -> Data {
+        var value = self
+        value.signature = Data()
+        return try SpotchatCoding.encode(value)
+    }
+
+    func validate(at now: Date) throws {
+        try sender.validate()
+        try recipient.validate()
+        let milliseconds = Int64(now.timeIntervalSince1970 * 1000)
+        guard version == 1,
+              UUID(uuidString: id) != nil,
+              sender.id != recipient.id,
+              timestamp >= 0,
+              timestamp <= milliseconds + 30_000,
+              expiresAt > milliseconds,
+              expiresAt > timestamp,
+              expiresAt - timestamp <= 90_000,
+              try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey)
+                .isValidSignature(signature, for: signingBytes()) else {
+            throw SpotchatFailure.invalidMessage
+        }
+    }
+}
 enum SpotchatDelivery: String, Codable {
     case queued, forwarding, delivered, read, expired, cancelled
     var label: String {
@@ -241,6 +275,7 @@ struct SpotchatPacket: Codable {
     var receipt: SpotchatReceipt?
     var invitation: SpotchatInvitationControl?
     var typing: SpotchatTypingControl?
+    var presence: SpotchatPresenceControl?
 }
 struct SpotchatDatabase: Codable {
     var version = 1
