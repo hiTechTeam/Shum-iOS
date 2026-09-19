@@ -1,4 +1,6 @@
+import Combine
 import SwiftUI
+import UserNotifications
 
 @MainActor
 final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
@@ -7,6 +9,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     @Published var authenticationFlowID = UUID()
     @Published var hasCompletedInitialSessionRefresh = true
     @Published var nearbyNotificationNavigationRequest = UUID()
+    @Published var chatNotificationPeerID: String?
     @Published var showSplash = true
     @Published var isScaning = false
     @Published private(set) var chat: SpotchatRuntime?
@@ -18,7 +21,14 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     let peopleViewModel: PeopleViewModel
     let profilePhotoViewModel: ProfilePhotoViewModel
     private let deletion = SpotchatDeletionService.live()
+    private let nearbyPeopleNotifier = NearbyPeopleNotifier()
     private var photoObserver: NSObjectProtocol?
+    private var chatObserver: AnyCancellable?
+    private var notificationSnapshotInitialized = false
+    private var notifiedIncomingMessageIDs: Set<String> = []
+    private var notifiedInvitationIDs: Set<String> = []
+    private var notifiedNearbyPeerIDs: Set<String> = []
+    private var didSynchronizeBackgroundNearby = false
     private var active = false
 
     init() {
@@ -30,7 +40,10 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         #endif
         authCodeViewModel = LocalProfileViewModel()
         profilePhotoViewModel = ProfilePhotoViewModel()
-        peopleViewModel = PeopleViewModel(bleManager: ShumInactiveCardRadio())
+        peopleViewModel = PeopleViewModel(
+            bleManager: ShumInactiveCardRadio(),
+            nearbyPeopleNotifier: ShumInactiveNearbyPeopleNotifier()
+        )
         #if DEBUG
         if TestEnvironment.isRunningTests { return }
         #endif
@@ -39,6 +52,14 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         #else
         let previewsOnboarding = false
         #endif
+        AppNotificationRouter.shared.configure(
+            openNearby: { [weak self] in
+                self?.nearbyNotificationNavigationRequest = UUID()
+            },
+            openChat: { [weak self] peerID in
+                self?.chatNotificationPeerID = peerID
+            }
+        )
         let hasProfile = store.ownManifest != nil
         let registrationCompleted = UserDefaults.standard.bool(
             forKey: Keys.isReg.rawValue
@@ -84,6 +105,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         model.setBluetoothEnabled(bluetoothEnabled)
         model.setAppActive(false)
         chat = model
+        observeNotifications(in: model)
         synchronizeProfile()
     }
     @discardableResult
@@ -107,6 +129,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             .joined(separator: " ")
     }
     func retryMessaging() {
+        chatObserver?.cancel()
         chat?.retireForDeletion()
         chat = nil
         prepareMessaging()
@@ -131,6 +154,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         // deliberately never created. Rebuild it after registration so the
         // first live session follows the same clean startup path as a normal
         // app launch instead of depending on a background/foreground cycle.
+        chatObserver?.cancel()
         chat = nil
         prepareMessaging()
         synchronizeProfile()
@@ -151,9 +175,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     func setScanning(_ enabled: Bool) {
         isScaning = enabled && isRegistered
         UserDefaults.standard.set(isScaning, forKey: Keys.isScaning.rawValue)
-        chat?.setBluetoothEnabled(
-            isScaning && !ShumAppLock.shared.isLocked
-        )
+        updateApplicationState(isActive: active)
     }
     func refreshSession() async {
         authCodeViewModel.restoreLocalProfile(); profilePhotoViewModel.loadPhotoIfNeeded()
@@ -192,6 +214,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     func deleteAccount() async throws {
         try deletion.begin()
         deletingProfile = true
+        chatObserver?.cancel()
         chat?.retireForDeletion(); chat = nil
         finishDeletion()
         if deletingProfile { throw SpotchatFailure.storage }
@@ -209,15 +232,137 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             try deletion.allowNewProfile()
             isRegistered = false; needsSecuritySetup = false
             isScaning = false; authenticationFlowID = UUID()
+            resetNotificationState()
             deletionError = nil; deletingProfile = false
         } catch { deletionError = "Удаление не завершено. Разблокируйте iPhone и повторите. Обмен сообщениями остановлен." }
     }
     func updateApplicationState(isActive: Bool) {
         active = isActive
-        guard !deletingProfile, isRegistered, let chat else { return }
+        if isActive {
+            didSynchronizeBackgroundNearby = false
+        }
+        guard !deletingProfile, isRegistered, let chat else {
+            nearbyPeopleNotifier.setScanningEnabled(false)
+            nearbyPeopleNotifier.setApplicationActive(false)
+            return
+        }
         let hasCompletedLogin = !ShumAppLock.shared.isLocked
+        let notificationsAreActive = isActive && hasCompletedLogin
+        nearbyPeopleNotifier.setApplicationActive(notificationsAreActive)
+        nearbyPeopleNotifier.setScanningEnabled(
+            isScaning && hasCompletedLogin
+        )
         chat.setBluetoothEnabled(isScaning && hasCompletedLogin)
-        chat.setAppActive(isActive && hasCompletedLogin)
+        chat.setAppActive(notificationsAreActive)
         if isActive && hasCompletedLogin { chat.start() }
+        refreshNotificationState(for: chat)
+    }
+
+    func clearChatNotificationPeerID() {
+        chatNotificationPeerID = nil
+    }
+
+    func refreshNotificationState() {
+        guard let chat else { return }
+        refreshNotificationState(for: chat)
+    }
+
+    private func observeNotifications(in runtime: SpotchatRuntime) {
+        notificationSnapshotInitialized = false
+        notifiedIncomingMessageIDs.removeAll()
+        notifiedInvitationIDs.removeAll()
+        notifiedNearbyPeerIDs.removeAll()
+        chatObserver = runtime.objectWillChange.sink { [weak self, weak runtime] _ in
+            Task { @MainActor in
+                await Task.yield()
+                guard let self, let runtime, self.chat === runtime else {
+                    return
+                }
+                self.refreshNotificationState(for: runtime)
+            }
+        }
+        refreshNotificationState(for: runtime)
+    }
+
+    private func refreshNotificationState(for runtime: SpotchatRuntime) {
+        guard !deletingProfile, isRegistered,
+              let permanent = runtime.permanent else { return }
+
+        let incomingMessages = permanent.state.messages.filter {
+            !$0.outgoing && $0.unread
+        }
+        let incomingMessageIDs = Set(incomingMessages.map(\.id))
+        let invitations = permanent.state.requests.filter {
+            permanent.invitationPhase(for: $0) == .incomingPending
+        }
+        let invitationIDs = Set(invitations.map(\.id))
+        let entries = runtime.directoryEntries
+        let nearbyIDs = Set(
+            entries.filter(\.isNearby).map { $0.peer.id.id }
+        )
+
+        if notificationSnapshotInitialized
+            && (!active || ShumAppLock.shared.isLocked) {
+            for message in incomingMessages where
+                !notifiedIncomingMessageIDs.contains(message.id) {
+                AppNotificationRouter.shared.scheduleMessage(
+                    id: message.id,
+                    peerID: message.envelope.sender.peerID.id,
+                    senderName: message.envelope.sender.name,
+                    text: message.text
+                )
+            }
+            for invitation in invitations where
+                !notifiedInvitationIDs.contains(invitation.id) {
+                AppNotificationRouter.shared.scheduleInvitation(
+                    peerID: invitation.peerID.id,
+                    senderName: invitation.name
+                )
+            }
+        }
+
+        notifiedIncomingMessageIDs = incomingMessageIDs
+        notifiedInvitationIDs = invitationIDs
+        notificationSnapshotInitialized = true
+
+        if !active || ShumAppLock.shared.isLocked {
+            if UIApplication.shared.applicationState == .background,
+               !didSynchronizeBackgroundNearby {
+                nearbyPeopleNotifier.synchronizeNearby(ids: nearbyIDs)
+                didSynchronizeBackgroundNearby = true
+            }
+            for id in nearbyIDs.subtracting(notifiedNearbyPeerIDs) {
+                nearbyPeopleNotifier.detect(id: id)
+            }
+            for id in notifiedNearbyPeerIDs.subtracting(nearbyIDs) {
+                nearbyPeopleNotifier.lose(id: id)
+            }
+        }
+        notifiedNearbyPeerIDs = nearbyIDs
+
+        let chatBadgeCount = entries.reduce(0) {
+            $0 + max(
+                $1.unread,
+                $1.invitationAwaitingResponse ? 1 : 0
+            )
+        }
+        let totalBadgeCount = chatBadgeCount
+            + nearbyIDs.count
+            + permanent.unviewedEncounterCount
+        nearbyPeopleNotifier.setApplicationIconBadgeCount(totalBadgeCount)
+    }
+
+    private func resetNotificationState() {
+        chatObserver?.cancel()
+        chatObserver = nil
+        notificationSnapshotInitialized = false
+        notifiedIncomingMessageIDs.removeAll()
+        notifiedInvitationIDs.removeAll()
+        notifiedNearbyPeerIDs.removeAll()
+        didSynchronizeBackgroundNearby = false
+        nearbyPeopleNotifier.setScanningEnabled(false)
+        nearbyPeopleNotifier.reset()
+        nearbyPeopleNotifier.setApplicationIconBadgeCount(0)
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }
 }

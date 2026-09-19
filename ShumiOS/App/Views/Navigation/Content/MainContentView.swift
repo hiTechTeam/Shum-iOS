@@ -91,6 +91,18 @@ struct MainContentView: View {
         .alert("Shum", isPresented: Binding(get: { chat.error != nil }, set: { if !$0 { chat.error = nil } })) {
             Button("Понятно") { chat.error = nil }
         } message: { Text(chat.error ?? "") }
+        .shumOnChange(of: coordinator.nearbyNotificationNavigationRequest) {
+            _, _ in
+            selectedTab = 1
+            chatsPath.removeAll()
+        }
+        .shumOnChange(of: coordinator.chatNotificationPeerID) {
+            _, peerID in
+            openNotificationChat(peerID)
+        }
+        .onAppear {
+            openNotificationChat(coordinator.chatNotificationPeerID)
+        }
         #if DEBUG && targetEnvironment(simulator)
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments
@@ -105,6 +117,16 @@ struct MainContentView: View {
 
     private func isExistingContact(_ card: SpotchatContactCard) -> Bool {
         chat.permanent?.state.contacts.contains { $0.id == card.id } == true
+    }
+
+    private func openNotificationChat(_ peerID: String?) {
+        guard let peerID,
+              let entry = chat.directoryEntries.first(where: {
+                  $0.peer.id.id == peerID
+              }) else { return }
+        selectedTab = 1
+        chatsPath = [.conversation(entry.peer)]
+        coordinator.clearChatNotificationPeerID()
     }
 
     @ViewBuilder

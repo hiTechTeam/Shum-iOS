@@ -401,7 +401,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
             if entry.card != nil {
                 Button { togglePinned(entry) } label: {
                     Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill")
-                }.tint(pinned ? Color(uiColor: .systemGray) : .accentColor)
+                }.tint(Color(uiColor: .systemGray))
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {

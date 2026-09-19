@@ -102,6 +102,7 @@ struct ProfileOverviewView: View {
             guard phase == .active else { return }
             Task {
                 await refreshNotificationAuthorizationStatus()
+                coordinator.refreshNotificationState()
                 await peopleViewModel.synchronizeBlockedProfiles()
                 peopleViewModel.refreshEncounterHistory()
             }
@@ -245,6 +246,14 @@ struct ProfileOverviewView: View {
                 showScanningSettings = true
             }
             Divider().padding(.leading, 60).padding(.trailing, 20)
+            ProfileOverviewRow(
+                title: Inc.NearbyNotifications.settingsTitle.localized,
+                systemImage: "bell",
+                value: notificationStatusTitle,
+                position: .middle,
+                action: manageNotificationAuthorization
+            )
+            Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(title: "Безопасность", systemImage: "checkmark.shield",
                 value: (appLock.hasPasscode || appLock.isEnabled) ? appLock.preferredMethodTitle : nil,
                 position: .middle) {
@@ -341,6 +350,7 @@ struct ProfileOverviewView: View {
                     options: [.alert, .sound, .badge]
                 )
                 await refreshNotificationAuthorizationStatus()
+                coordinator.refreshNotificationState()
                 return
             }
 

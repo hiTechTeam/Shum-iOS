@@ -457,6 +457,13 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         return permanent.isOnline(card)
     }
 
+    func lastActiveAt(_ peer: PeerID) -> Date? {
+        if let permanent, let card = permanent.card(for: peer) {
+            return permanent.lastActiveAt(card)
+        }
+        return knownPeers[peer]?.lastConnected
+    }
+
     func setTyping(_ active: Bool, for peer: PeerID) {
         guard let permanent, let card = permanent.card(for: peer) else { return }
         permanent.setTyping(active, for: card)

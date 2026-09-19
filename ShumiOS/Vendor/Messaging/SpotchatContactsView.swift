@@ -254,10 +254,113 @@ private struct SpotchatQRShareToolbar: ToolbarContent {
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
-            ShareLink(item: invitationURL)
+            Button {
+                SpotchatSystemSharePresenter.shared.present(invitationURL)
+            } label: {
+                Image(systemName: "square.and.arrow.up")
+            }
                 .tint(.primary)
                 .accessibilityLabel("Поделиться контактом Shum")
         }
+    }
+}
+
+/// Presents the native activity controller without ShareLink's retained toolbar
+/// highlight. A tap received while the previous controller is finishing its
+/// dismissal is queued and presented as soon as that transition completes.
+@MainActor
+private final class SpotchatSystemSharePresenter: NSObject, UIAdaptivePresentationControllerDelegate {
+    static let shared = SpotchatSystemSharePresenter()
+
+    private weak var activityController: UIActivityViewController?
+    private var pendingURL: URL?
+    private var retryWork: DispatchWorkItem?
+
+    func present(_ url: URL) {
+        retryWork?.cancel()
+        if let activityController, activityController.presentingViewController != nil {
+            pendingURL = url
+            return
+        }
+        show(url)
+    }
+
+    private func show(_ url: URL) {
+        guard let presenter = Self.frontmostViewController(),
+              !(presenter is UIActivityViewController),
+              presenter.presentedViewController == nil else {
+            pendingURL = url
+            schedulePendingPresentation()
+            return
+        }
+
+        pendingURL = nil
+        let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        controller.completionWithItemsHandler = { [weak self, weak controller] _, _, _, _ in
+            Task { @MainActor in self?.finished(controller) }
+        }
+        if let popover = controller.popoverPresentationController {
+            popover.sourceView = presenter.view
+            popover.sourceRect = CGRect(x: presenter.view.bounds.maxX - 32,
+                                        y: presenter.view.safeAreaInsets.top + 22,
+                                        width: 1, height: 1)
+        }
+        activityController = controller
+        presenter.present(controller, animated: true) { [weak self, weak controller] in
+            controller?.presentationController?.delegate = self
+        }
+    }
+
+    private func finished(_ controller: UIActivityViewController?) {
+        guard controller == nil || activityController === controller else { return }
+        activityController = nil
+        schedulePendingPresentation()
+    }
+
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        finished(presentationController.presentedViewController as? UIActivityViewController)
+    }
+
+    private func schedulePendingPresentation() {
+        guard pendingURL != nil else { return }
+        retryWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let url = self.pendingURL else { return }
+            if let activityController = self.activityController,
+               activityController.presentingViewController != nil {
+                self.schedulePendingPresentation()
+            } else if let presenter = Self.frontmostViewController(),
+                      !(presenter is UIActivityViewController),
+                      presenter.presentedViewController == nil {
+                self.activityController = nil
+                self.show(url)
+            } else {
+                self.schedulePendingPresentation()
+            }
+        }
+        retryWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+    }
+
+    private static func frontmostViewController() -> UIViewController? {
+        let window = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)
+        return frontmost(from: window?.rootViewController)
+    }
+
+    private static func frontmost(from controller: UIViewController?) -> UIViewController? {
+        if let presented = controller?.presentedViewController {
+            return frontmost(from: presented)
+        }
+        if let navigation = controller as? UINavigationController {
+            return frontmost(from: navigation.visibleViewController)
+        }
+        if let tabs = controller as? UITabBarController {
+            return frontmost(from: tabs.selectedViewController)
+        }
+        return controller
     }
 }
 

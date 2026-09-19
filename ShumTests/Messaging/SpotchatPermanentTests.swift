@@ -209,6 +209,28 @@ struct SpotchatPermanentTests {
         #expect(b.store.state.messages.count == 2)
         #expect(b.store.state.conversations.count == 1)
     }
+    @Test func typingTrafficDoesNotDelayDirectMessagesOrReceipts() throws {
+        let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
+        try allowBoth(a, b, clock: clock)
+        connect(a, b, clock: clock)
+        b.service.open(a.card)
+        // Repeated short drafts create start/stop controls, as in an active chat.
+        for _ in 0..<45 {
+            a.service.setTyping(true, for: b.card)
+            a.service.setTyping(false, for: b.card)
+            drain([a, b])
+            clock.date.addTimeInterval(0.5)
+        }
+        #expect(a.service.send("После набора", to: b.card))
+        drain([a, b])
+        #expect(b.store.state.messages.last?.text == "После набора")
+        #expect(a.store.state.messages.last?.status == .read)
+        #expect(b.service.send("Ответ", to: a.card))
+        drain([a, b])
+        #expect(a.store.state.messages.last?.text == "Ответ")
+        #expect(b.store.state.messages.last?.status == .delivered)
+    }
+
     @Test func relayCannotReadCarriesAcrossRestartAndRemovesOnSignedACK() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".enc")
         defer { try? FileManager.default.removeItem(at: url) }

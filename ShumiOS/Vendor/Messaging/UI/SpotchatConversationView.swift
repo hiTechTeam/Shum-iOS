@@ -46,6 +46,7 @@ struct SpotchatConversationView: View {
     @State private var typingPauseTask: Task<Void, Never>?
     @FocusState private var inputFocused: Bool
     @State private var atBottom = true
+    @State private var scrollCommand: SpotchatTimelineCommand?
     private var messages: [SpotchatMessage] { runtime.conversation(peer.id) }
     private var name: String { runtime.displayName(peer) }
     private var invitationPhase: SpotchatInvitationPhase {
@@ -55,79 +56,39 @@ struct SpotchatConversationView: View {
     var body: some View {
         let conversation = messages
         GeometryReader { geometry in
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        if conversation.isEmpty {
-                            VStack(spacing: 12) {
-                                SpotchatAvatar(name: name, size: 70, imageData: runtime.profile(for: peer.id)?.avatar)
-                                Text(emptyTitle).font(.headline)
-                                if let emptyMessage {
-                                    Text(emptyMessage)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .multilineTextAlignment(.center)
-                                }
-                            }
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
-                            .frame(maxWidth: .infinity, minHeight: max(0, geometry.size.height - 10))
+            ZStack {
+                SpotchatConversationTimeline(
+                    items: conversation.indices.map { timelineItem(at: $0, in: conversation) },
+                    storageKey: "shum.chat.position.\(runtime.permanent?.ownCard.id ?? "local").\(peer.id.id)",
+                    appearanceKey: "\(palette.accentUIColor)-\(palette.colorScheme)",
+                    command: scrollCommand,
+                    contentInsets: geometry.safeAreaInsets,
+                    bottomChanged: { atBottom = $0 },
+                    tapped: { inputFocused = false }
+                ) { index, width in
+                    messageRow(at: index, in: conversation, width: width)
+                }
+                .ignoresSafeArea(.container, edges: .vertical)
+                if conversation.isEmpty {
+                    VStack(spacing: 12) {
+                        SpotchatAvatar(name: name, size: 70, imageData: runtime.profile(for: peer.id)?.avatar)
+                        Text(emptyTitle).font(.headline)
+                        if let emptyMessage {
+                            Text(emptyMessage).font(.subheadline).foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
                         }
-                        ForEach(Array(conversation.enumerated()), id: \.element.id) { index, message in
-                            let previous = index > 0 ? conversation[index - 1] : nil
-                            let next = index + 1 < conversation.count ? conversation[index + 1] : nil
-                            let continues = next.map { $0.outgoing == message.outgoing && $0.date.timeIntervalSince(message.date) <= 60 } ?? false
-                            let sameDay = previous.map { Calendar.current.isDate($0.date, inSameDayAs: message.date) } ?? false
-                            if !sameDay {
-                                Text(dayTitle(message.date)).font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(.secondary).padding(.horizontal, 12).padding(.vertical, 5)
-                                    .background(Color(.tertiarySystemFill).opacity(0.5), in: Capsule())
-                                    .padding(.top, 16).padding(.bottom, 18)
-                            }
-                            SpotchatMessageBubble(message: message,
-                                showsTail: !continues,
-                                maximumWidth: min(geometry.size.width * 0.82, 440),
-                                replyAuthor: message.reply.map(replyAuthor),
-                                retry: { runtime.retry(message) },
-                                reply: { beginReply(to: message) },
-                                openReply: { id in
-                                    withAnimation(.easeInOut(duration: 0.25)) {
-                                        proxy.scrollTo(id, anchor: .center)
-                                    }
-                                })
-                                .padding(.top, sameDay && previous?.outgoing != message.outgoing ? 10 : 3)
-                                .id(message.id)
-                        }
-                        Color.clear.frame(height: 10).id("conversation-bottom")
-                    }.padding(.horizontal, 10)
-                        .background(GeometryReader { content in
-                            Color.clear.preference(key: SpotchatBottomKey.self,
-                                value: content.frame(in: .named("conversation")).maxY)
-                        })
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .simultaneousGesture(TapGesture().onEnded { inputFocused = false })
-                .coordinateSpace(name: "conversation")
-                .scrollDismissesKeyboard(.interactively)
-                .onPreferenceChange(SpotchatBottomKey.self) { atBottom = $0 <= geometry.size.height + 80 }
-                .onChange(of: messages.count) { _ in
-                    if atBottom || messages.last?.outgoing == true { scrollToBottom(proxy) }
-                }
-                .onChange(of: inputFocused) { focused in if focused { scrollToBottom(proxy) } }
-                .onChange(of: geometry.size.height) { _ in
-                    if atBottom || inputFocused { scrollToBottom(proxy) }
-                }
-                .onAppear {
-                    runtime.openConversation(peer.id)
-                    proxy.scrollTo("conversation-bottom", anchor: .bottom)
-                }
-                .onDisappear {
-                    typingPauseTask?.cancel()
-                    runtime.setTyping(false, for: peer.id)
-                    runtime.openConversation(nil)
+                    }
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+        }
+        .onAppear { runtime.openConversation(peer.id) }
+        .onDisappear {
+            typingPauseTask?.cancel()
+            runtime.setTyping(false, for: peer.id)
+            runtime.openConversation(nil)
         }
         .background(ShumChatCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
@@ -159,7 +120,33 @@ struct SpotchatConversationView: View {
                 }.buttonStyle(.plain).accessibilityLabel("Профиль собеседника")
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            composer.overlay(alignment: .top) {
+                if !atBottom && !conversation.isEmpty {
+                    HStack {
+                        Spacer()
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            scrollCommand = SpotchatTimelineCommand(target: .bottom)
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .frame(width: 40, height: 40)
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .modifier(SpotchatComposerSurface())
+                        .accessibilityLabel("К последнему сообщению")
+                        .accessibilityIdentifier("spotchat.scrollToBottom")
+                        .padding(.trailing, 3)
+                    }
+                    .frame(maxWidth: 520)
+                    .padding(.horizontal, 20)
+                    .offset(y: -44)
+                }
+            }
+        }
         .sheet(isPresented: $showPeerProfile) {
             SpotchatPeerProfileSheet(runtime: runtime, peer: peer)
         }
@@ -272,6 +259,7 @@ struct SpotchatConversationView: View {
                         typingPauseTask?.cancel()
                         runtime.setTyping(false, for: peer.id)
                         draft = ""
+                        scrollCommand = SpotchatTimelineCommand(target: .bottom)
                         withAnimation(.easeOut(duration: 0.16)) { self.replyingTo = nil }
                     }
                 } label: {
@@ -410,9 +398,48 @@ struct SpotchatConversationView: View {
             "Проведите стрелку вправо, если передумаете."
         }
     }
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.22)) { proxy.scrollTo("conversation-bottom", anchor: .bottom) }
+    private func timelineItem(at index: Int, in conversation: [SpotchatMessage]) -> SpotchatTimelineItem {
+        let message = conversation[index]
+        var revision = Hasher()
+        revision.combine(message.text)
+        revision.combine(message.date)
+        revision.combine(message.outgoing)
+        revision.combine(message.status)
+        revision.combine(message.deliveryLabel)
+        revision.combine(message.waitingForConnection)
+        revision.combine(message.reply)
+        revision.combine(index > 0 ? conversation[index - 1].date : nil)
+        revision.combine(index > 0 ? conversation[index - 1].outgoing : nil)
+        revision.combine(index + 1 < conversation.count ? conversation[index + 1].date : nil)
+        revision.combine(index + 1 < conversation.count ? conversation[index + 1].outgoing : nil)
+        return SpotchatTimelineItem(id: message.id, revision: revision.finalize())
     }
+
+    private func messageRow(at index: Int, in conversation: [SpotchatMessage], width: CGFloat) -> some View {
+        let message = conversation[index]
+        let previous = index > 0 ? conversation[index - 1] : nil
+        let next = index + 1 < conversation.count ? conversation[index + 1] : nil
+        let continues = next.map { $0.outgoing == message.outgoing && $0.date.timeIntervalSince(message.date) <= 60 } ?? false
+        let sameDay = previous.map { Calendar.current.isDate($0.date, inSameDayAs: message.date) } ?? false
+        return VStack(spacing: 0) {
+            if !sameDay {
+                Text(dayTitle(message.date)).font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary).padding(.horizontal, 12).padding(.vertical, 5)
+                    .background(Color(.tertiarySystemFill).opacity(0.5), in: Capsule())
+                    .padding(.top, 16).padding(.bottom, 18)
+            }
+            SpotchatMessageBubble(message: message,
+                showsTail: !continues,
+                maximumWidth: min(width * 0.82, 440),
+                replyAuthor: message.reply.map(replyAuthor),
+                retry: { runtime.retry(message) },
+                reply: { beginReply(to: message) },
+                openReply: { scrollCommand = SpotchatTimelineCommand(target: .message($0)) })
+                .padding(.top, sameDay && previous?.outgoing != message.outgoing ? 10 : 3)
+        }
+        .padding(.horizontal, 10)
+    }
+
     private func dayTitle(_ date: Date) -> String {
         if Calendar.current.isDateInToday(date) { return "Сегодня" }
         if Calendar.current.isDateInYesterday(date) { return "Вчера" }
@@ -420,10 +447,5 @@ struct SpotchatConversationView: View {
     }
 }
 
-
-private struct SpotchatBottomKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
 
 #endif

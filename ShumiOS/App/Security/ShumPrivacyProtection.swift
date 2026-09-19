@@ -9,7 +9,7 @@ struct ShumPrivacyCover: View {
 
     var body: some View {
         ZStack {
-            palette.canvas
+            palette.privacySurface
 
             ShumLogoMark(color: palette.accent)
                 .frame(width: 92, height: 92)

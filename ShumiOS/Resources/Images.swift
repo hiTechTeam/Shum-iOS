@@ -24,7 +24,7 @@ extension Image {
 
 /// Theme-aware pixel cloud used everywhere the Shum mark is shown in-app.
 /// The AppIcon remains a fixed system asset; this view follows the active
-/// palette immediately, including splash and privacy surfaces.
+/// palette by default; callers can supply a fixed color for branded surfaces.
 struct ShumLogoMark: View {
     var color: Color = .accentColor
 

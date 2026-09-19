@@ -2,22 +2,15 @@
 import SwiftUI
 import BitFoundation
 private struct SpotchatMessageBubbleSurface: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
     let shape: SpotchatBubbleShape
     let tint: Color
 
     func body(content: Content) -> some View {
         content
             .background {
-                ZStack {
-                    shape.fill(tint)
-                    shape
-                        .stroke(
-                            Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.07),
-                            lineWidth: 0.5
-                        )
-                }
-                .allowsHitTesting(false)
+                shape
+                    .fill(tint)
+                    .allowsHitTesting(false)
             }
     }
 }
@@ -41,12 +34,15 @@ struct SpotchatMessageBubble: View {
             ZStack(alignment: .trailing) {
                 replyGestureIndicator
                 bubble
+                    .frame(maxWidth: maximumWidth, alignment: message.outgoing ? .trailing : .leading)
+                    .frame(maxWidth: .infinity, alignment: message.outgoing ? .trailing : .leading)
                     .offset(x: horizontalOffset)
-                    .simultaneousGesture(replyDragGesture)
             }
-            .frame(maxWidth: maximumWidth, alignment: message.outgoing ? .trailing : .leading)
+            .frame(maxWidth: .infinity)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(message.outgoing ? "Вы" : "Собеседник"): \(message.text), \(message.date.formatted(date: .omitted, time: .shortened))\(message.outgoing ? ", " + statusDescription : "")")
+            .accessibilityAction(named: "Ответить", reply)
+            .accessibilityAction(named: "Скопировать") { UIPasteboard.general.string = message.text }
             if message.outgoing, let label = message.deliveryLabel, label == "В очереди" || label.hasPrefix("Передаётся") {
                 Text(label).font(.caption).foregroundStyle(.secondary).padding(.top, 2)
             }
@@ -105,26 +101,11 @@ struct SpotchatMessageBubble: View {
     }
 
     private var bubble: some View {
-        bubbleContent
-            .contentShape(.interaction, bubbleShape)
-            .contentShape(.contextMenuPreview, bubbleShape)
-            .contextMenu { messageMenu }
-    }
-
-    @ViewBuilder
-    private var messageMenu: some View {
-        Button(action: reply) {
-            Label("Ответить", systemImage: "arrowshape.turn.up.left")
-                .foregroundStyle(.primary)
-        }
-        .tint(.primary)
-        Button {
-            UIPasteboard.general.string = message.text
-        } label: {
-            Label("Скопировать", systemImage: "doc.on.doc")
-                .foregroundStyle(.primary)
-        }
-        .tint(.primary)
+        SpotchatMessageContextMenu(shape: bubbleShape, maximumWidth: maximumWidth,
+            reply: reply, copy: { UIPasteboard.general.string = message.text },
+            dragChanged: updateReplyDrag, dragEnded: finishReplyDrag) {
+                bubbleContent
+            }
     }
 
     private var bubbleShape: SpotchatBubbleShape {
@@ -135,29 +116,15 @@ struct SpotchatMessageBubble: View {
         let progress = min(1, abs(horizontalOffset) / replyThreshold)
         return Image(systemName: "arrowshape.turn.up.left.fill")
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(progress >= 1 ? themePalette.accentForeground : themePalette.accent)
+            .foregroundStyle(.white)
             .frame(width: 32, height: 32)
-            .background(progress >= 1 ? themePalette.accent : Color(.tertiarySystemFill), in: Circle())
+            .background(.regularMaterial, in: Circle())
+            .environment(\.colorScheme, .dark)
             .scaleEffect(0.72 + 0.28 * progress)
             .opacity(progress)
             .padding(.trailing, 4)
+            .allowsHitTesting(false)
             .accessibilityHidden(true)
-    }
-
-    private var replyDragGesture: some Gesture {
-        DragGesture(minimumDistance: 20, coordinateSpace: .local)
-            .onChanged { value in
-                guard value.translation.width < 0,
-                      abs(value.translation.width) > abs(value.translation.height) * 1.15 else {
-                    return
-                }
-
-                updateReplyDrag(value.translation.width)
-            }
-            .onEnded { value in
-                let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.15
-                finishReplyDrag(value.translation.width, isHorizontal)
-            }
     }
 
     private func updateReplyDrag(_ translation: CGFloat) {

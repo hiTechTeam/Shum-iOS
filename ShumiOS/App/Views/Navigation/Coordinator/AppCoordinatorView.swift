@@ -302,7 +302,7 @@ private struct AppSplashView: View {
 
     var body: some View {
         ZStack {
-            palette.canvas
+            palette.privacySurface
 
             ShumLogoMark(color: palette.accent)
                 .frame(width: 82, height: 82)

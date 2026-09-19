@@ -144,6 +144,39 @@ final class SpotchatMessageStore: ObservableObject {
         session(for: card) != nil || presenceDeadlines[card.id].map { $0 > now() } == true
     }
 
+    func lastActiveAt(_ card: SpotchatContactCard) -> Date? {
+        var candidates: [Date] = []
+
+        if let latestPresence = latestPresenceEvents[card.id] {
+            candidates.append(
+                Date(
+                    timeIntervalSince1970:
+                        Double(latestPresence.timestamp) / 1_000
+                )
+            )
+        }
+        if let encounter = state.encounters?.first(where: {
+            $0.card.id == card.id
+        }) {
+            candidates.append(encounter.lastSeen)
+        }
+        if let latestIncoming = state.messages
+            .filter({ !$0.outgoing && $0.envelope.sender.id == card.id })
+            .max(by: { $0.envelope.timestamp < $1.envelope.timestamp }) {
+            candidates.append(
+                Date(
+                    timeIntervalSince1970:
+                        Double(latestIncoming.envelope.timestamp) / 1_000
+                )
+            )
+        }
+        if let contact = state.contacts.first(where: { $0.id == card.id }) {
+            candidates.append(contact.addedAt)
+        }
+
+        return candidates.max()
+    }
+
     func setTyping(_ active: Bool, for card: SpotchatContactCard) {
         guard !retired, foreground, !isBlocked(card), canMessage(card),
               state.contacts.contains(where: { $0.id == card.id }) else { return }
@@ -600,7 +633,11 @@ final class SpotchatMessageStore: ObservableObject {
            isBlocked(typing.sender) || isBlocked(typing.recipient) { return }
         if let presence = packet.presence,
            isBlocked(presence.sender) || isBlocked(presence.recipient) { return }
-        let source = peer?.id ?? nostrSender ?? "unknown"
+        // Typing/presence and receipt bursts must never spend the delivery
+        // budget. Each traffic class remains independently rate-limited.
+        let trafficClass = packet.typing != nil || packet.presence != nil
+            ? "ephemeral" : (packet.receipt != nil ? "receipt" : "content")
+        let source = "\(peer?.id ?? nostrSender ?? "unknown"):\(trafficClass)"
         let old = ingressRate[source] ?? (now(), 0)
         let progress = now().timeIntervalSince(old.0) >= 60 ? (now(), 0) : old
         guard progress.1 < 80, ingressRate.count < 1000 || ingressRate[source] != nil,

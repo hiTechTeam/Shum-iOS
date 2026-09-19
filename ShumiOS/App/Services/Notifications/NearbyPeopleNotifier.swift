@@ -265,6 +265,16 @@ extension NearbyPeopleNotifying {
 }
 
 @MainActor
+final class ShumInactiveNearbyPeopleNotifier: NearbyPeopleNotifying {
+    func setScanningEnabled(_ enabled: Bool) { }
+    func setApplicationActive(_ isActive: Bool) { }
+    func synchronizeNearby(ids: Set<String>) { }
+    func detect(id: String) { }
+    func lose(id: String) { }
+    func reset() { }
+}
+
+@MainActor
 final class NearbyPeopleNotifier: NearbyPeopleNotifying {
     private let notificationCenter: UNUserNotificationCenter
     private let stateStore: NearbyNotificationStateStoring
@@ -320,6 +330,11 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
 
         Task { [weak self] in
             guard let self else { return }
+            let settings = await notificationCenter.notificationSettings()
+            guard Self.canDeliver(settings.authorizationStatus),
+                  settings.badgeSetting == .enabled else {
+                return
+            }
             do {
                 try await notificationCenter.setBadgeCount(badgeCount)
             } catch {
@@ -386,20 +401,21 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
             let settings = await notificationCenter.notificationSettings()
             let needsInitialAuthorization =
                 settings.authorizationStatus == .notDetermined
-            let needsBadgeRegistration =
-                Self.canDeliver(settings.authorizationStatus)
-                && settings.badgeSetting != .enabled
 
-            guard needsInitialAuthorization || needsBadgeRegistration else {
+            guard needsInitialAuthorization else {
                 return
             }
             do {
                 _ = try await notificationCenter.requestAuthorization(
                     options: [.alert, .sound, .badge]
                 )
-                try await notificationCenter.setBadgeCount(
-                    applicationIconBadgeCount
-                )
+                let updatedSettings = await notificationCenter
+                    .notificationSettings()
+                if updatedSettings.badgeSetting == .enabled {
+                    try await notificationCenter.setBadgeCount(
+                        applicationIconBadgeCount
+                    )
+                }
             } catch {
                 logger.error(
                     "Notification authorization failed: \(error.localizedDescription)"
@@ -449,7 +465,12 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
                     batch.totalCount
                 )
             }
-            content.sound = .default
+            if settings.soundSetting == .enabled {
+                content.sound = .default
+            }
+            if settings.badgeSetting == .enabled {
+                content.badge = NSNumber(value: applicationIconBadgeCount)
+            }
             content.threadIdentifier = threadIdentifier
             content.userInfo = [
                 AppNotificationRouter.routeKey:
@@ -509,14 +530,79 @@ final class AppNotificationRouter: NSObject,
     UNUserNotificationCenterDelegate {
     nonisolated static let routeKey = "shum.route"
     nonisolated static let nearbyRoute = "nearby"
+    nonisolated static let chatRoute = "chat"
+    nonisolated static let peerKey = "shum.peer"
 
     static let shared = AppNotificationRouter()
 
     private var openNearbyAction: (() -> Void)?
+    private var openChatAction: ((String) -> Void)?
 
-    func configure(openNearby: @escaping () -> Void) {
+    func configure(
+        openNearby: @escaping () -> Void,
+        openChat: @escaping (String) -> Void
+    ) {
         openNearbyAction = openNearby
+        openChatAction = openChat
         UNUserNotificationCenter.current().delegate = self
+    }
+
+    func scheduleMessage(
+        id: String,
+        peerID: String,
+        senderName: String,
+        text: String
+    ) {
+        scheduleChatNotification(
+            identifier: "shum.message.\(id)",
+            peerID: peerID,
+            title: senderName,
+            body: text
+        )
+    }
+
+    func scheduleInvitation(peerID: String, senderName: String) {
+        scheduleChatNotification(
+            identifier: "shum.invitation.\(peerID)",
+            peerID: peerID,
+            title: "Новое приглашение",
+            body: "\(senderName) хочет начать общение."
+        )
+    }
+
+    private func scheduleChatNotification(
+        identifier: String,
+        peerID: String,
+        title: String,
+        body: String
+    ) {
+        let center = UNUserNotificationCenter.current()
+        Task {
+            let settings = await center.notificationSettings()
+            guard NearbyPeopleNotifier.canDeliverNotifications(
+                settings.authorizationStatus
+            ) else { return }
+
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.threadIdentifier = "shum.chat.\(peerID)"
+            content.userInfo = [
+                Self.routeKey: Self.chatRoute,
+                Self.peerKey: peerID
+            ]
+            if settings.soundSetting == .enabled {
+                content.sound = .default
+            }
+
+            try? await center.add(
+                UNNotificationRequest(
+                    identifier: identifier,
+                    content: content,
+                    trigger: nil
+                )
+            )
+        }
     }
 
     nonisolated func userNotificationCenter(
@@ -539,9 +625,25 @@ final class AppNotificationRouter: NSObject,
         ] as? String
         completionHandler()
 
-        guard route == Self.nearbyRoute else { return }
         Task { @MainActor [weak self] in
-            self?.openNearbyAction?()
+            switch route {
+            case Self.nearbyRoute:
+                self?.openNearbyAction?()
+            case Self.chatRoute:
+                guard let peerID = response.notification.request.content
+                    .userInfo[Self.peerKey] as? String else { return }
+                self?.openChatAction?(peerID)
+            default:
+                break
+            }
         }
+    }
+}
+
+private extension NearbyPeopleNotifier {
+    static func canDeliverNotifications(
+        _ status: UNAuthorizationStatus
+    ) -> Bool {
+        canDeliver(status)
     }
 }
