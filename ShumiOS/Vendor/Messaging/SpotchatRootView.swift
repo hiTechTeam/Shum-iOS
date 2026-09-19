@@ -35,6 +35,31 @@ private struct SpotchatComposerSurface: ViewModifier {
     }
 }
 
+private struct SpotchatMessageBubbleSurface: ViewModifier {
+    let shape: SpotchatBubbleShape
+    let tint: Color
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular.tint(tint.opacity(0.78)), in: shape)
+        } else {
+            content
+                .background {
+                    shape
+                        .fill(.ultraThinMaterial)
+                        .overlay {
+                            shape.fill(tint.opacity(0.76))
+                        }
+                        .overlay {
+                            shape.stroke(Color(.separator).opacity(0.2), lineWidth: 0.5)
+                        }
+                }
+        }
+    }
+}
+
 struct SpotchatAvatar: View {
     let name: String
     let size: CGFloat
@@ -683,7 +708,7 @@ struct SpotchatMessageBubble: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(bubbleColor, in: bubbleShape)
+        .modifier(SpotchatMessageBubbleSurface(shape: bubbleShape, tint: bubbleColor))
         .contentShape(.interaction, bubbleShape)
         .contentShape(.contextMenuPreview, bubbleShape)
         .contextMenu {
