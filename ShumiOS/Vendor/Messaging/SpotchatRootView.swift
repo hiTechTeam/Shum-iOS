@@ -36,27 +36,27 @@ private struct SpotchatComposerSurface: ViewModifier {
 }
 
 private struct SpotchatMessageBubbleSurface: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
     let shape: SpotchatBubbleShape
     let tint: Color
 
-    @ViewBuilder
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .glassEffect(.regular.tint(tint.opacity(0.78)), in: shape)
-        } else {
-            content
-                .background {
+        content
+            .background {
+                ZStack {
                     shape
                         .fill(.ultraThinMaterial)
-                        .overlay {
-                            shape.fill(tint.opacity(0.76))
-                        }
-                        .overlay {
-                            shape.stroke(Color(.separator).opacity(0.2), lineWidth: 0.5)
-                        }
+                    shape
+                        .fill(tint.opacity(colorScheme == .dark ? 0.52 : 0.58))
+                    shape
+                        .stroke(
+                            Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.07),
+                            lineWidth: 0.5
+                        )
                 }
-        }
+                .compositingGroup()
+                .allowsHitTesting(false)
+            }
     }
 }
 
