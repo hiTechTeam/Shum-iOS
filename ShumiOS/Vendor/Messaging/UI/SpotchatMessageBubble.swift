@@ -10,17 +10,13 @@ private struct SpotchatMessageBubbleSurface: ViewModifier {
         content
             .background {
                 ZStack {
-                    shape
-                        .fill(.ultraThinMaterial)
-                    shape
-                        .fill(tint.opacity(colorScheme == .dark ? 0.52 : 0.58))
+                    shape.fill(tint)
                     shape
                         .stroke(
                             Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.07),
                             lineWidth: 0.5
                         )
                 }
-                .compositingGroup()
                 .allowsHitTesting(false)
             }
     }
@@ -70,18 +66,18 @@ struct SpotchatMessageBubble: View {
         }.frame(maxWidth: .infinity, alignment: message.outgoing ? .trailing : .leading)
     }
 
-    private var bubble: some View {
+    private var bubbleContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let reference = message.reply {
                 Button {
                     openReply(reference.messageID)
                 } label: {
                     HStack(spacing: 8) {
-                        Capsule().fill(Color.accentColor).frame(width: 3, height: 32)
+                        Capsule().fill(themePalette.accent).frame(width: 3, height: 32)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(replyAuthor ?? "Сообщение")
                                 .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(themePalette.accent)
                             Text(reference.text)
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
@@ -106,22 +102,29 @@ struct SpotchatMessageBubble: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .modifier(SpotchatMessageBubbleSurface(shape: bubbleShape, tint: bubbleColor))
-        .contentShape(.interaction, bubbleShape)
-        .contentShape(.contextMenuPreview, bubbleShape)
-        .contextMenu {
-            Button(action: reply) {
-                Label("Ответить", systemImage: "arrowshape.turn.up.left")
-                    .foregroundStyle(.primary)
-            }
-            .tint(.primary)
-            Button {
-                UIPasteboard.general.string = message.text
-            } label: {
-                Label("Скопировать", systemImage: "doc.on.doc")
-                    .foregroundStyle(.primary)
-            }
-            .tint(.primary)
+    }
+
+    private var bubble: some View {
+        bubbleContent
+            .contentShape(.interaction, bubbleShape)
+            .contentShape(.contextMenuPreview, bubbleShape)
+            .contextMenu { messageMenu }
+    }
+
+    @ViewBuilder
+    private var messageMenu: some View {
+        Button(action: reply) {
+            Label("Ответить", systemImage: "arrowshape.turn.up.left")
+                .foregroundStyle(.primary)
         }
+        .tint(.primary)
+        Button {
+            UIPasteboard.general.string = message.text
+        } label: {
+            Label("Скопировать", systemImage: "doc.on.doc")
+                .foregroundStyle(.primary)
+        }
+        .tint(.primary)
     }
 
     private var bubbleShape: SpotchatBubbleShape {
@@ -132,9 +135,9 @@ struct SpotchatMessageBubble: View {
         let progress = min(1, abs(horizontalOffset) / replyThreshold)
         return Image(systemName: "arrowshape.turn.up.left.fill")
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(progress >= 1 ? Color.black : Color.accentColor)
+            .foregroundStyle(progress >= 1 ? themePalette.accentForeground : themePalette.accent)
             .frame(width: 32, height: 32)
-            .background(progress >= 1 ? Color.accentColor : Color(.tertiarySystemFill), in: Circle())
+            .background(progress >= 1 ? themePalette.accent : Color(.tertiarySystemFill), in: Circle())
             .scaleEffect(0.72 + 0.28 * progress)
             .opacity(progress)
             .padding(.trailing, 4)
@@ -197,7 +200,7 @@ struct SpotchatMessageBubble: View {
     @ViewBuilder private var receipt: some View {
         switch message.status {
         case .read:
-            SpotchatDoubleCheck().stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+            SpotchatDoubleCheck().stroke(themePalette.accent, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
                 .frame(width: 16, height: 10)
         case .delivered:
             Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
@@ -224,11 +227,16 @@ struct SpotchatBubbleLayout: Layout {
     var inline: Bool
     private func metrics(_ proposal: ProposedViewSize, _ subviews: Subviews) -> (CGSize, CGSize, Bool) {
         let limit = max(1, proposal.width ?? 300)
-        let meta = subviews[1].sizeThatFits(.unspecified)
-        let ideal = subviews[0].sizeThatFits(.unspecified)
-        let fits = inline && ideal.width + meta.width + 8 <= limit
-        let text = subviews[0].sizeThatFits(ProposedViewSize(width: min(limit, ideal.width), height: nil))
+        let meta = roundedUp(subviews[1].sizeThatFits(.unspecified))
+        let ideal = roundedUp(subviews[0].sizeThatFits(.unspecified))
+        // SwiftUI can re-propose a rounded width after measurement. A fractional
+        // difference must not flip an inline message into a narrower two-line one.
+        let fits = inline && ideal.width + meta.width + 8 <= limit + 0.5
+        let text = roundedUp(subviews[0].sizeThatFits(ProposedViewSize(width: min(limit, ideal.width), height: nil)))
         return (text, meta, fits)
+    }
+    private func roundedUp(_ size: CGSize) -> CGSize {
+        CGSize(width: ceil(size.width), height: ceil(size.height))
     }
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let (text, meta, fits) = metrics(proposal, subviews)
@@ -236,7 +244,7 @@ struct SpotchatBubbleLayout: Layout {
             : CGSize(width: max(text.width, meta.width), height: text.height + meta.height + 2)
     }
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let (text, meta, _) = metrics(proposal, subviews)
+        let (text, meta, _) = metrics(ProposedViewSize(width: bounds.width, height: bounds.height), subviews)
         subviews[0].place(at: bounds.origin, proposal: ProposedViewSize(text))
         subviews[1].place(at: CGPoint(x: bounds.maxX - meta.width, y: bounds.maxY - meta.height), proposal: ProposedViewSize(meta))
     }

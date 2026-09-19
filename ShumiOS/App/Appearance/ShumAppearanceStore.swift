@@ -10,11 +10,13 @@ struct ShumThemePalette {
     let chatDoodleUIColor: UIColor
     let chatDoodleOpacity: Double
     let colorScheme: ColorScheme
+    var pinnedRowOpacity: Double = 0.15
 
     var accent: Color { Color(uiColor: accentUIColor) }
     var canvas: Color { Color(uiColor: canvasUIColor) }
     var chatDoodle: Color { Color(uiColor: chatDoodleUIColor) }
     var accentForeground: Color { Color(uiColor: accentForegroundUIColor) }
+    var pinnedRowSurface: Color { accent.opacity(pinnedRowOpacity) }
 
     var accentForegroundUIColor: UIColor {
         let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
@@ -315,7 +317,8 @@ final class ShumAppearanceStore: ObservableObject {
                         alpha: 1
                     ),
                     chatDoodleOpacity: 0.14,
-                    colorScheme: colorScheme
+                    colorScheme: colorScheme,
+                    pinnedRowOpacity: 0.05
                 )
             case .monochromeDark:
                 ShumThemePalette(
@@ -338,7 +341,8 @@ final class ShumAppearanceStore: ObservableObject {
                         alpha: 1
                     ),
                     chatDoodleOpacity: 0.15,
-                    colorScheme: colorScheme
+                    colorScheme: colorScheme,
+                    pinnedRowOpacity: 0.06
                 )
             }
         }

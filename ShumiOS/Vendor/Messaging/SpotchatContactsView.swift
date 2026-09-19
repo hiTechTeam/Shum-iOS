@@ -656,7 +656,10 @@ private struct ShumScannerShade: Shape {
         path.addRect(rect)
         path.addRoundedRect(
             in: cutout,
-            cornerSize: CGSize(width: 22, height: 22)
+            cornerSize: CGSize(
+                width: ShumScannerGeometry.cornerRadius,
+                height: ShumScannerGeometry.cornerRadius
+            )
         )
         return path
     }
@@ -665,7 +668,7 @@ private struct ShumScannerShade: Shape {
 private struct ShumScannerCorners: Shape {
     func path(in rect: CGRect) -> Path {
         let length: CGFloat = 38
-        let radius: CGFloat = 18
+        let radius = ShumScannerGeometry.cornerRadius
         var path = Path()
 
         path.move(to: CGPoint(x: rect.minX, y: rect.minY + length))
@@ -701,6 +704,10 @@ private struct ShumScannerCorners: Shape {
         path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - length))
         return path
     }
+}
+
+private enum ShumScannerGeometry {
+    static let cornerRadius: CGFloat = 22
 }
 
 struct SpotchatPhoneBook: UIViewControllerRepresentable {

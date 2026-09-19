@@ -9,6 +9,7 @@ struct ShumProfileBlockRequest: Identifiable {
 }
 
 struct ShumPeopleScreen: View {
+    @Environment(\.shumThemePalette) private var palette
     @EnvironmentObject private var coordinator: AppCoordinator
     @ObservedObject var runtime: SpotchatRuntime
     let select: (SpotchatPeer) -> Void
@@ -108,7 +109,7 @@ struct ShumPeopleScreen: View {
                     .background {
                         if pinned {
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(Color.accentColor.opacity(0.15))
+                                .fill(palette.pinnedRowSurface)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
                         }
@@ -530,6 +531,7 @@ extension Date {
 }
 
 struct ShumEncounterHistoryView: View {
+    @Environment(\.shumThemePalette) private var palette
     @ObservedObject var runtime: SpotchatRuntime
     let openChat: (SpotchatPeer) -> Void
 
@@ -653,7 +655,7 @@ struct ShumEncounterHistoryView: View {
                     persistentSurfaceColor: highlightedEncounterIDs.contains(encounter.id)
                         ? Color.orange.opacity(0.16)
                         : pinned
-                            ? Color.accentColor.opacity(0.15)
+                            ? palette.pinnedRowSurface
                             : nil,
                     hidesPersistentSurfaceAfterSwipe: !pinned
                 ) {
@@ -667,16 +669,24 @@ struct ShumEncounterHistoryView: View {
                     .contextMenu {
                         Button { selectedEncounter = encounter } label: {
                             Label("Посмотреть профиль", systemImage: "person.crop.circle")
+                                .foregroundStyle(.primary)
                         }
+                        .tint(.primary)
                         Button { openChat(peer) } label: {
                             Label("Написать", systemImage: "paperplane")
+                                .foregroundStyle(.primary)
                         }
+                        .tint(.primary)
                         Button { togglePinned(encounter) } label: {
                             Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill")
+                                .foregroundStyle(.primary)
                         }
+                        .tint(.primary)
                         Button(role: .destructive) { pendingDelete = encounter } label: {
                             Label("Очистить", systemImage: "trash")
+                                .foregroundStyle(.red)
                         }
+                        .tint(.red)
                         Divider()
                         Button(role: .destructive) {
                             blockRequest = ShumProfileBlockRequest(
@@ -686,7 +696,9 @@ struct ShumEncounterHistoryView: View {
                             )
                         } label: {
                             Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                                .foregroundStyle(.red)
                         }
+                        .tint(.red)
                     } preview: {
                         ShumEncounterContextPreview(
                             runtime: runtime,
@@ -837,6 +849,29 @@ private struct ShumEncounterContextPreview: View {
     }
 
     var body: some View {
+        previewRow
+        .frame(width: sourceWidth, height: sourceHeight)
+        .scaleEffect(previewScale)
+        .frame(
+            width: previewWidth,
+            height: sourceHeight * previewScale
+        )
+    }
+
+    @ViewBuilder
+    private var previewRow: some View {
+        if #available(iOS 26.0, *) {
+            row
+                .background(
+                    Color.profileRowSwipeSurface,
+                    in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+                )
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
         ShumStoredPersonRow(
             runtime: runtime,
             peer: peer,
@@ -845,16 +880,6 @@ private struct ShumEncounterContextPreview: View {
             writeAction: { }
         )
         .allowsHitTesting(false)
-        .frame(width: sourceWidth, height: sourceHeight)
-        .background(
-            Color.profileRowSwipeSurface,
-            in: RoundedRectangle(cornerRadius: 26, style: .continuous)
-        )
-        .scaleEffect(previewScale)
-        .frame(
-            width: previewWidth,
-            height: sourceHeight * previewScale
-        )
     }
 }
 

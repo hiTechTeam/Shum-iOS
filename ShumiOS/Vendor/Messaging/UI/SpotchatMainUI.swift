@@ -317,6 +317,7 @@ struct ShumPixelEmptyIcon: View {
 
 /// Both the directory and search use the same rows, swipe actions and confirmation presentation.
 struct ShumDirectoryList<Header: View, Empty: View>: View {
+    @Environment(\.shumThemePalette) private var palette
     @ObservedObject var runtime: SpotchatRuntime
     let folder: ShumChatFolder
     let entries: [ShumDirectoryEntry]
@@ -369,7 +370,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         let pinned = isPinned(entry)
         return NativeSwipeInteractionRow(
             persistentSurfaceColor: pinned
-                ? Color.accentColor.opacity(0.15)
+                ? palette.pinnedRowSurface
                 : nil,
             hidesPersistentSurfaceAfterSwipe: false
         ) {
@@ -377,6 +378,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
                 ShumDirectoryRow(
                     runtime: runtime,
                     entry: entry,
+                    isPinned: pinned,
                     showsNearbyIndicator: folder != .nearby
                 )
             }
@@ -384,6 +386,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
                 ShumDirectoryContextPreview(
                     runtime: runtime,
                     entry: entry,
+                    isPinned: pinned,
                     showsNearbyIndicator: folder != .nearby
                 )
             }
@@ -578,6 +581,7 @@ private struct ShumDirectoryPressedButtonStyle: ButtonStyle {
 private struct ShumDirectoryContextPreview: View {
     @ObservedObject var runtime: SpotchatRuntime
     let entry: ShumDirectoryEntry
+    let isPinned: Bool
     let showsNearbyIndicator: Bool
 
     private let sourceHeight: CGFloat = 78
@@ -590,21 +594,35 @@ private struct ShumDirectoryContextPreview: View {
     }
 
     var body: some View {
-        ShumDirectoryRow(
-            runtime: runtime,
-            entry: entry,
-            showsNearbyIndicator: showsNearbyIndicator
-        )
+        previewRow
             .frame(width: sourceWidth, height: sourceHeight)
-            .background(
-                Color.profileRowSwipeSurface,
-                in: RoundedRectangle(cornerRadius: 26, style: .continuous)
-            )
             .scaleEffect(previewScale)
             .frame(
                 width: previewWidth,
                 height: sourceHeight * previewScale
             )
+    }
+
+    @ViewBuilder
+    private var previewRow: some View {
+        if #available(iOS 26.0, *) {
+            row
+                .background(
+                    Color.profileRowSwipeSurface,
+                    in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+                )
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
+        ShumDirectoryRow(
+            runtime: runtime,
+            entry: entry,
+            isPinned: isPinned,
+            showsNearbyIndicator: showsNearbyIndicator
+        )
     }
 }
 
@@ -636,6 +654,7 @@ struct ShumDirectoryRow: View {
     @Environment(\.shumThemePalette) private var palette
     @ObservedObject var runtime: SpotchatRuntime
     let entry: ShumDirectoryEntry
+    var isPinned = false
     var showsNearbyIndicator = true
     private var last: SpotchatMessage? { runtime.conversation(entry.peer.id).last }
     var body: some View {
@@ -706,6 +725,13 @@ struct ShumDirectoryRow: View {
                             .foregroundStyle(palette.accentForeground)
                             .padding(.horizontal, 6).frame(minWidth: 21, minHeight: 21)
                             .background(Color.accentColor, in: Capsule())
+                    } else if isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 12, weight: .regular))
+                            .rotationEffect(.degrees(40))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 21, height: 21)
+                            .accessibilityLabel("Закреплён")
                     }
                 }
                 .animation(.easeInOut(duration: 0.18), value: typing)
