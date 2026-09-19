@@ -133,7 +133,7 @@ private struct QuickActionToggleRow: View {
             Toggle("", isOn: $isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
-                .tint(.green)
+                .tint(.accentColor)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 13)

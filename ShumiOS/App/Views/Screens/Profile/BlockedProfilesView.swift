@@ -136,7 +136,7 @@ struct SavedProfilesView: View {
 
     var body: some View {
         ZStack {
-            Color.peopleListBackground.ignoresSafeArea()
+            ShumThemeCanvas().ignoresSafeArea()
 
             if visibleSavedUsers.isEmpty {
                 ShumContentUnavailableView(

@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct Welcome: View {
     @EnvironmentObject private var coordinator: AppCoordinator
+    @Environment(\.shumThemePalette) private var palette
     @State private var legalDocument: ShumLegalDocument?
     @State private var isImportingBackup = false
     @State private var importedBackup: Data?
@@ -40,7 +41,7 @@ struct Welcome: View {
         NavigationStack {
             VStack(spacing: 24) {
                 Spacer()
-                Image("ShumLogo").resizable().scaledToFit().frame(width: 100, height: 100)
+                ShumLogoMark().frame(width: 100, height: 100)
                 Text("Shum").font(.system(size: 46, weight: .bold))
                 Text("Разговор начинается рядом").font(.title2.weight(.semibold)).multilineTextAlignment(.center)
                 Text("Находите людей поблизости и общайтесь по Bluetooth. Даже без интернета.")
@@ -54,7 +55,7 @@ struct Welcome: View {
                 } label: {
                     Text(Inc.Onboarding.start.localized)
                         .font(.system(size: 17, weight: .regular))
-                        .foregroundStyle(.black)
+                        .foregroundStyle(palette.accentForeground)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
                         .background(Color.accentColor, in: Capsule())
@@ -70,7 +71,7 @@ struct Welcome: View {
 
                 Text("Профиль создаётся на этом устройстве. Номер телефона и внешний аккаунт не нужны.")
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.bottom, 18)
-            }.padding(.horizontal, 28).background(Color("ls-Background").ignoresSafeArea())
+            }.padding(.horizontal, 28).background(ShumThemeCanvas().ignoresSafeArea())
                 .navigationDestination(isPresented: $showSecuritySetup) {
                     RegistrationSecurityReadyView()
                 }

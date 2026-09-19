@@ -150,6 +150,7 @@ struct AppCoordinatorView: View {
 }
 
 private struct ShumLockedView: View {
+    @Environment(\.shumThemePalette) private var palette
     @ObservedObject var appLock: ShumAppLock
     @State private var showingPasscode: Bool
     @State private var isWaitingForAutomaticBiometrics: Bool
@@ -170,7 +171,7 @@ private struct ShumLockedView: View {
 
     var body: some View {
         ZStack {
-            Color("ls-Background").ignoresSafeArea()
+            ShumThemeCanvas().ignoresSafeArea()
 
             if isWaitingForAutomaticBiometrics {
                 AppSplashView()
@@ -200,9 +201,7 @@ private struct ShumLockedView: View {
 
     private var passcodeContent: some View {
         VStack(spacing: 18) {
-            Image.shumLogo
-                .resizable()
-                .scaledToFit()
+            ShumLogoMark()
                 .frame(width: 70, height: 70)
 
             Text("Введите код Shum")
@@ -245,9 +244,7 @@ private struct ShumLockedView: View {
 
     private var biometricContent: some View {
         VStack(spacing: 18) {
-            Image.shumLogo
-                .resizable()
-                .scaledToFit()
+            ShumLogoMark()
                 .frame(width: 76, height: 76)
 
             Text("Shum заблокирован")
@@ -265,7 +262,7 @@ private struct ShumLockedView: View {
                 } label: {
                     Text("Открыть с \(appLock.biometricTitle)")
                         .font(.system(size: 17, weight: .regular))
-                        .foregroundStyle(.black)
+                        .foregroundStyle(palette.accentForeground)
                         .frame(maxWidth: 300)
                         .frame(height: 50)
                         .background(Color.accentColor, in: Capsule())
@@ -301,13 +298,13 @@ private struct ShumLockedView: View {
 }
 
 private struct AppSplashView: View {
+    @ObservedObject private var appearance = ShumAppearanceStore.shared
+
     var body: some View {
         ZStack {
-            Color("ls-Background")
+            appearance.palette.canvas
 
-            Image.shumLogo
-                .resizable()
-                .scaledToFit()
+            ShumLogoMark(color: appearance.palette.accent)
                 .frame(width: 82, height: 82)
         }
         .ignoresSafeArea()

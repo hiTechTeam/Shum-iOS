@@ -231,13 +231,13 @@ private struct ShumChangePasscodeView: View {
             RegistrationPrimaryButton(
                 title: phase == .confirm ? "Сохранить код" : "Продолжить",
                 isEnabled: code.count == 5 && !isWorking,
-                accentColor: Color(uiColor: .systemGreen),
+                accentColor: Color.accentColor,
                 action: continueFlow
             )
             .padding(.bottom, 20)
         }
         .padding(.horizontal, 24)
-        .background(Color("ls-Background").ignoresSafeArea())
+        .background(ShumThemeCanvas().ignoresSafeArea())
         .navigationTitle("Код Shum")
         .navigationBarTitleDisplayMode(.inline)
     }

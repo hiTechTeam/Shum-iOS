@@ -1119,6 +1119,7 @@ struct ProfileSheetView: View {
                         title: Inc.NearbyProfile.write.localized,
                         isEnabled: messengerUsername != nil,
                         accentColor: .blue,
+                        enabledForegroundColor: .white,
                         action: openMessengerChat
                     )
                     .frame(width: 360)

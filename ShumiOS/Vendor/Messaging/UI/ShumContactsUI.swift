@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 
 struct ShumContactsUI: View {
+    @Environment(\.shumThemePalette) private var palette
     @ObservedObject var runtime: SpotchatRuntime
     let open: (SpotchatUIRoute) -> Void
 
@@ -46,14 +47,14 @@ struct ShumContactsUI: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(Color.peopleListBackground)
+        .background(ShumThemeCanvas().ignoresSafeArea())
         .navigationTitle("Контакты")
         .navigationBarTitleDisplayMode(.inline)
         .overlay {
             if contacts.isEmpty {
                 VStack(spacing: 0) {
                     ShumPixelEmptyIcon(kind: .contacts)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                         .frame(width: 88, height: 68)
                         .accessibilityHidden(true)
 
@@ -90,16 +91,16 @@ struct ShumContactsUI: View {
             }
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.circle)
-            .tint(Color(uiColor: .systemGreen))
+            .tint(Color.accentColor)
             .accessibilityLabel("Новый контакт")
             .accessibilityIdentifier("spotchat.addContact")
         } else {
             Button { openNewContact() } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(Color(uiColor: .systemBackground))
+                    .foregroundStyle(palette.accentForeground)
                     .frame(width: 36, height: 36)
-                    .background(Color(uiColor: .systemGreen), in: Circle())
+                    .background(Color.accentColor, in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Новый контакт")
@@ -140,7 +141,7 @@ struct ShumContactsUI: View {
         .listRowSeparator(.visible)
         .listRowSeparatorTint(Color(uiColor: .separator))
         .alignmentGuide(.listRowSeparatorLeading) { _ in 70 }
-        .listRowBackground(Color.peopleListBackground)
+        .listRowBackground(ShumThemeCanvas())
         .accessibilityHint("Открыть чат")
     }
 

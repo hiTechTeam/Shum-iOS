@@ -58,7 +58,7 @@ struct SpotchatAvatar: View {
             }
             .overlay(alignment: .bottomTrailing) {
                 if nearby {
-                    Circle().fill(.green).frame(width: 12, height: 12)
+                    Circle().fill(Color.accentColor).frame(width: 12, height: 12)
                         .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2.5))
                 }
             }.accessibilityHidden(true)
@@ -66,6 +66,7 @@ struct SpotchatAvatar: View {
 }
 
 struct SpotchatConversationView: View {
+    @Environment(\.shumThemePalette) private var palette
     @ObservedObject var runtime: SpotchatRuntime
     let peer: SpotchatPeer
     @State private var draft = ""
@@ -152,14 +153,14 @@ struct SpotchatConversationView: View {
                 .onDisappear { runtime.openConversation(nil) }
             }
         }
-        .background(Color(.systemBackground))
+        .background(ShumThemeCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 2) {
                     Text(name).font(.system(size: 17, weight: .semibold)).lineLimit(1)
                     HStack(spacing: 4) {
-                        Circle().fill(runtime.isNearby(peer.id) ? Color.green : Color.secondary).frame(width: 5, height: 5)
+                        Circle().fill(runtime.isNearby(peer.id) ? Color.accentColor : Color.secondary).frame(width: 5, height: 5)
                         Text(presenceText)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
@@ -203,7 +204,8 @@ struct SpotchatConversationView: View {
                 case .ready:
                     actionCapsule(
                         title: "Отправить приглашение",
-                        color: Color(uiColor: .systemGreen)
+                        color: Color.accentColor,
+                        foreground: palette.accentForeground
                     ) {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         _ = runtime.sendInvitation(to: peer.id)
@@ -307,11 +309,19 @@ struct SpotchatConversationView: View {
 
     private var invitationDecisionControls: some View {
         HStack(spacing: 10) {
-            actionCapsule(title: "Отклонить", color: Color(uiColor: .systemRed)) {
+            actionCapsule(
+                title: "Отклонить",
+                color: Color(uiColor: .systemRed),
+                foreground: .black
+            ) {
                 UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 _ = runtime.declineInvitation(from: peer.id)
             }
-            actionCapsule(title: "Принять", color: Color(uiColor: .systemGreen)) {
+            actionCapsule(
+                title: "Принять",
+                color: Color.accentColor,
+                foreground: palette.accentForeground
+            ) {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 _ = runtime.acceptInvitation(from: peer.id)
             }
@@ -322,12 +332,13 @@ struct SpotchatConversationView: View {
     private func actionCapsule(
         title: String,
         color: Color,
+        foreground: Color,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(Color.black)
+                .foregroundStyle(foreground)
                 .frame(maxWidth: .infinity, minHeight: 46)
                 .contentShape(Capsule())
         }
@@ -410,6 +421,7 @@ struct SpotchatConversationView: View {
 }
 
 private struct ShumInvitationRecoverySlider: View {
+    @Environment(\.shumThemePalette) private var palette
     let accept: () -> Bool
     @State private var offset: CGFloat = 0
     @State private var crossedFeedbackPoint = false
@@ -422,36 +434,51 @@ private struct ShumInvitationRecoverySlider: View {
         GeometryReader { geometry in
             let travel = max(0, geometry.size.width - controlSize - inset * 2)
             let progress = travel > 0 ? min(1, offset / travel) : 0
-            let greenProgress = Double(progress)
+            let accentProgress = Double(progress)
+            let filledWidth = controlSize + inset * 2 + offset
 
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color(uiColor: .systemRed).opacity(0.16 * (1 - greenProgress)))
+                    .fill(Color(uiColor: .systemRed).opacity(0.16 * (1 - accentProgress)))
 
                 Capsule()
-                    .fill(Color(uiColor: .systemGreen).opacity(0.22 + 0.78 * greenProgress))
-                    .frame(width: controlSize + inset * 2 + offset)
+                    .fill(Color.accentColor.opacity(0.22 + 0.78 * accentProgress))
+                    .frame(width: filledWidth)
                     .clipped()
 
-                Text("Проведите, чтобы принять")
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .opacity(1 - Double(progress) * 0.72)
+                ZStack {
+                    recoveryLabel
+                        .foregroundStyle(Color.secondary)
+                        .opacity(1 - Double(progress) * 0.72)
+
+                    recoveryLabel
+                        .foregroundStyle(palette.accentForeground)
+                        .mask {
+                            HStack(spacing: 0) {
+                                Rectangle().frame(width: filledWidth)
+                                Spacer(minLength: 0)
+                            }
+                        }
+                }
+                .compositingGroup()
 
                 Image(systemName: completing ? "checkmark" : "arrow.right")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(
+                        accentProgress > 0.5 || completing
+                            ? palette.accentForeground
+                            : Color.white
+                    )
                     .frame(width: controlSize, height: controlSize)
                     .background {
                         Circle().fill(Color(uiColor: .systemRed))
                         Circle()
-                            .fill(Color(uiColor: .systemGreen))
-                            .opacity(completing ? 1 : greenProgress)
+                            .fill(Color.accentColor)
+                            .opacity(completing ? 1 : accentProgress)
                     }
                     .overlay {
                         Circle()
-                            .stroke(Color(uiColor: .systemGreen).opacity(greenProgress), lineWidth: 1.5)
+                            .stroke(Color.accentColor.opacity(accentProgress), lineWidth: 1.5)
                     }
                     .offset(x: inset + offset)
                     .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
@@ -460,12 +487,12 @@ private struct ShumInvitationRecoverySlider: View {
                 ZStack {
                     Capsule()
                         .stroke(
-                            Color(uiColor: .systemRed).opacity(0.3 * (1 - greenProgress)),
+                            Color(uiColor: .systemRed).opacity(0.3 * (1 - accentProgress)),
                             lineWidth: 0.5
                         )
                     Capsule()
                         .stroke(
-                            Color(uiColor: .systemGreen).opacity(greenProgress),
+                            Color.accentColor.opacity(accentProgress),
                             lineWidth: 0.75 + progress * 0.75
                         )
                 }
@@ -515,6 +542,12 @@ private struct ShumInvitationRecoverySlider: View {
         .accessibilityHint("Проведите вправо до конца")
         .accessibilityAddTraits(.isButton)
     }
+
+    private var recoveryLabel: some View {
+        Text("Проведите, чтобы принять")
+            .font(.system(size: 15, weight: .regular))
+            .frame(maxWidth: .infinity)
+    }
 }
 
 private struct SpotchatBottomKey: PreferenceKey {
@@ -531,6 +564,7 @@ struct SpotchatMessageBubble: View {
     var reply: () -> Void = {}
     var openReply: (String) -> Void = { _ in }
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.shumThemePalette) private var themePalette
     @State private var horizontalOffset: CGFloat = 0
     @State private var crossedReplyThreshold = false
 
@@ -661,11 +695,13 @@ struct SpotchatMessageBubble: View {
     }
     private var bubbleColor: Color {
         message.outgoing
-            ? (colorScheme == .dark ? Color(red: 0.08, green: 0.24, blue: 0.16) : Color(red: 0.83, green: 0.97, blue: 0.86))
+            ? themePalette.outgoingMessageBubble(for: colorScheme)
             : Color(.secondarySystemBackground)
     }
     private var metadataColor: Color {
-        message.outgoing ? (colorScheme == .dark ? Color(red: 0.56, green: 0.76, blue: 0.63) : Color(red: 0.24, green: 0.46, blue: 0.31)) : .secondary
+        message.outgoing
+            ? themePalette.outgoingMessageMetadata(for: colorScheme)
+            : .secondary
     }
     @ViewBuilder private var receipt: some View {
         switch message.status {

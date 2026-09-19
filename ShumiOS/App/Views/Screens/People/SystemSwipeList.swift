@@ -47,6 +47,7 @@ struct SystemSwipeAction {
         self.handler = handler
     }
 
+    @MainActor
     static func save(
         title: String,
         removeTitle: String
@@ -54,7 +55,7 @@ struct SystemSwipeAction {
         SystemSwipeAction(
             title: title,
             systemImage: "heart",
-            backgroundColor: .systemGreen,
+            backgroundColor: ShumAppearanceStore.shared.accentUIColor,
             style: .normal,
             savedPresentation: SavedPresentation(
                 title: removeTitle,

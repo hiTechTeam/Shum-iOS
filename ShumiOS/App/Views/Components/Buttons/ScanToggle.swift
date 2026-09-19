@@ -24,7 +24,7 @@ struct ScanToggle: View {
     
     private var scanToggle: some View {
         Toggle(Inc.Scanning.scanning.localized, isOn: $isScaning)
-            .toggleStyle(SwitchToggleStyle(tint: .green))
+            .toggleStyle(SwitchToggleStyle(tint: .accentColor))
             .shumOnChange(of: isScaning) { _, newValue in
                 coordinator.setScanning(newValue)
 

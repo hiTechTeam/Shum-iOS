@@ -129,6 +129,7 @@ struct ShumChatFolderBar: View {
 private struct ShumNativeFolderPicker: UIViewRepresentable {
     @Binding var selection: ShumChatFolder
     let counts: [Int]
+    @ObservedObject private var appearance = ShumAppearanceStore.shared
 
     func makeUIView(context: Context) -> FolderViewport { FolderViewport() }
 
@@ -144,10 +145,18 @@ private struct ShumNativeFolderPicker: UIViewRepresentable {
             selection = folders[index]
         }
         view.update(titles: zip(folders, counts).map { "\($0.0.rawValue)  \($0.1)" },
-                    selected: folders.firstIndex(of: selection) ?? 0)
+                    selected: folders.firstIndex(of: selection) ?? 0,
+                    accentColor: appearance.accentUIColor)
     }
 
     final class FolderViewport: UIView {
+        private let glassView: UIVisualEffectView = {
+            if #available(iOS 26.0, *) {
+                return UIVisualEffectView(effect: UIGlassEffect(style: .regular))
+            } else {
+                return UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+            }
+        }()
         private let scrollView = FolderScrollView()
         private let selectionView = UIView()
         private var buttons: [UIButton] = []
@@ -158,8 +167,14 @@ private struct ShumNativeFolderPicker: UIViewRepresentable {
         override init(frame: CGRect) {
             super.init(frame: frame)
             clipsToBounds = true
-            backgroundColor = .secondarySystemBackground
+            backgroundColor = .clear
             layer.cornerCurve = .continuous
+            if #unavailable(iOS 26.0) {
+                layer.borderWidth = 0.5
+                layer.borderColor = UIColor.separator.withAlphaComponent(0.32).cgColor
+            }
+            glassView.isUserInteractionEnabled = false
+            addSubview(glassView)
             scrollView.showsHorizontalScrollIndicator = false
             scrollView.showsVerticalScrollIndicator = false
             scrollView.alwaysBounceHorizontal = true
@@ -170,14 +185,15 @@ private struct ShumNativeFolderPicker: UIViewRepresentable {
             scrollView.contentInsetAdjustmentBehavior = .never
             scrollView.accessibilityIdentifier = "shum.chatFolders"
             addSubview(scrollView)
-            selectionView.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.2)
+            selectionView.backgroundColor = ShumAppearanceStore.shared.accentUIColor.withAlphaComponent(0.2)
             selectionView.isUserInteractionEnabled = false
             selectionView.layer.cornerCurve = .continuous
             scrollView.addSubview(selectionView)
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-        func update(titles: [String], selected: Int) {
+        func update(titles: [String], selected: Int, accentColor: UIColor) {
+            selectionView.backgroundColor = accentColor.withAlphaComponent(0.2)
             if buttons.count != titles.count {
                 buttons.forEach { $0.removeFromSuperview() }
                 buttons = titles.indices.map { index in
@@ -203,8 +219,12 @@ private struct ShumNativeFolderPicker: UIViewRepresentable {
         override func layoutSubviews() {
             super.layoutSubviews()
             // The viewport never takes its width from the longer row of buttons.
+            glassView.frame = bounds
             scrollView.frame = bounds
             layer.cornerRadius = bounds.height / 2
+            glassView.layer.cornerCurve = .continuous
+            glassView.layer.cornerRadius = bounds.height / 2
+            glassView.clipsToBounds = true
             let font = UIFont.preferredFont(forTextStyle: .subheadline)
             var x: CGFloat = 3
             for button in buttons {

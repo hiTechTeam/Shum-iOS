@@ -130,12 +130,12 @@ private struct ShumChatEmptyState: View {
     let folder: ShumChatFolder
     let action: () -> Void
 
-    private let accent = Color(uiColor: .systemGreen)
+    private var accent: Color { .accentColor }
 
     var body: some View {
         VStack(spacing: 0) {
             ShumPixelEmptyIcon(kind: iconKind)
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .frame(width: 88, height: 68)
                 .accessibilityHidden(true)
 
@@ -343,7 +343,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(Color.peopleListBackground)
+        .background(ShumThemeCanvas().ignoresSafeArea())
         .scrollDismissesKeyboard(.interactively)
         .animation(
             .spring(response: 0.48, dampingFraction: 0.84),
@@ -369,22 +369,19 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         let pinned = isPinned(entry)
         return NativeSwipeInteractionRow(
             persistentSurfaceColor: pinned
-                ? Color(uiColor: .systemGreen).opacity(0.15)
+                ? Color.accentColor.opacity(0.15)
                 : nil,
             hidesPersistentSurfaceAfterSwipe: false
         ) {
-            Button { activate(entry) } label: {
+            ShumDirectoryPressButton(action: { activate(entry) }) {
                 ShumDirectoryRow(runtime: runtime, entry: entry)
             }
-            .buttonStyle(.plain)
             .contextMenu { menu(entry) } preview: {
-                ShumDirectoryRow(runtime: runtime, entry: entry)
-                    .frame(width: max(280, UIScreen.main.bounds.width - 32))
-                    .background(Color.profileRowSwipeSurface, in: RoundedRectangle(cornerRadius: 26))
+                ShumDirectoryContextPreview(runtime: runtime, entry: entry)
             }
         }
         .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.peopleListBackground)
+        .listRowBackground(ShumThemeCanvas())
         .listRowSeparator(isLast ? .hidden : .visible, edges: .bottom)
         .listRowSeparatorTint(Color.secondary.opacity(0.24))
         .alignmentGuide(.listRowSeparatorLeading) { _ in 86 }
@@ -393,7 +390,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
             if entry.card != nil {
                 Button { togglePinned(entry) } label: {
                     Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill")
-                }.tint(pinned ? Color(uiColor: .systemGray) : .green)
+                }.tint(pinned ? Color(uiColor: .systemGray) : .accentColor)
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -514,6 +511,90 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
 
 }
 
+private struct ShumDirectoryPressButton<Label: View>: View {
+    let action: () -> Void
+    let label: Label
+
+    @State private var maintainsPressedHighlight = false
+
+    init(
+        action: @escaping () -> Void,
+        @ViewBuilder label: () -> Label
+    ) {
+        self.action = action
+        self.label = label()
+    }
+
+    var body: some View {
+        Button {
+            maintainsPressedHighlight = true
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                action()
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                    maintainsPressedHighlight = false
+                }
+            }
+        } label: {
+            label
+        }
+        .buttonStyle(
+            ShumDirectoryPressedButtonStyle(
+                maintainsHighlight: maintainsPressedHighlight
+            )
+        )
+    }
+}
+
+private struct ShumDirectoryPressedButtonStyle: ButtonStyle {
+    let maintainsHighlight: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let isHighlighted = configuration.isPressed || maintainsHighlight
+
+        configuration.label
+            .background(
+                isHighlighted
+                    ? Color(uiColor: .secondarySystemFill)
+                    : .clear
+            )
+            .animation(.easeOut(duration: 0.12), value: isHighlighted)
+    }
+}
+
+/// Keeps the preview laid out at exactly the same width as its source row,
+/// then scales the finished row into the context-menu viewport. This makes
+/// every trailing element travel with the avatar instead of relaying out and
+/// jumping when the menu opens.
+private struct ShumDirectoryContextPreview: View {
+    @ObservedObject var runtime: SpotchatRuntime
+    let entry: ShumDirectoryEntry
+
+    private let sourceHeight: CGFloat = 78
+    private var sourceWidth: CGFloat { UIScreen.main.bounds.width }
+    private var previewWidth: CGFloat {
+        min(sourceWidth, max(280, sourceWidth - 32))
+    }
+    private var previewScale: CGFloat {
+        sourceWidth > 0 ? previewWidth / sourceWidth : 1
+    }
+
+    var body: some View {
+        ShumDirectoryRow(runtime: runtime, entry: entry)
+            .frame(width: sourceWidth, height: sourceHeight)
+            .background(
+                Color.profileRowSwipeSurface,
+                in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+            )
+            .scaleEffect(previewScale)
+            .frame(
+                width: previewWidth,
+                height: sourceHeight * previewScale
+            )
+    }
+}
+
 private enum DirectoryConfirmation {
     case clear(SpotchatContactCard), decline(SpotchatContactCard)
     var title: String {
@@ -539,6 +620,7 @@ private enum DirectoryConfirmation {
 }
 
 struct ShumDirectoryRow: View {
+    @Environment(\.shumThemePalette) private var palette
     @ObservedObject var runtime: SpotchatRuntime
     let entry: ShumDirectoryEntry
     private var last: SpotchatMessage? { runtime.conversation(entry.peer.id).last }
@@ -547,8 +629,8 @@ struct ShumDirectoryRow: View {
             ShumProfileAvatar(size: 58, imageData: runtime.profile(for: entry.peer.id)?.avatar)
                 .overlay(alignment: .bottomTrailing) {
                     if entry.isNearby {
-                        Circle().fill(.green).frame(width: 13, height: 13)
-                            .overlay(Circle().stroke(Color.peopleListBackground, lineWidth: 2.5))
+                        Circle().fill(Color.accentColor).frame(width: 13, height: 13)
+                            .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 2.5))
                     }
                 }
             VStack(alignment: .leading, spacing: 5) {
@@ -569,7 +651,8 @@ struct ShumDirectoryRow: View {
                     Spacer(minLength: 4)
                     if entry.unread > 0 || entry.invitationAwaitingResponse {
                         Text(entry.unread > 99 ? "99+" : String(max(entry.unread, entry.invitationAwaitingResponse ? 1 : 0)))
-                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(palette.accentForeground)
                             .padding(.horizontal, 6).frame(minWidth: 21, minHeight: 21)
                             .background(Color.accentColor, in: Capsule())
                     }

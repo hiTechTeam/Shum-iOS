@@ -1,0 +1,310 @@
+import SwiftUI
+import UIKit
+
+/// The single semantic color source for the whole app. Components use the
+/// root tint for ordinary accents and this palette for derived surfaces such
+/// as outgoing message bubbles.
+struct ShumThemePalette {
+    let accentUIColor: UIColor
+    let canvasUIColor: UIColor
+    let colorScheme: ColorScheme
+
+    var accent: Color { Color(uiColor: accentUIColor) }
+    var canvas: Color { Color(uiColor: canvasUIColor) }
+    var accentForeground: Color { Color(uiColor: accentForegroundUIColor) }
+
+    var accentForegroundUIColor: UIColor {
+        let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+        return accentUIColor.contrastingForeground(
+            resolvedFor: UITraitCollection(userInterfaceStyle: style)
+        )
+    }
+
+    func outgoingMessageBubble(for colorScheme: ColorScheme) -> Color {
+        Color(
+            uiColor: accentUIColor.mixed(
+                with: colorScheme == .dark ? .black : .white,
+                accentAmount: colorScheme == .dark ? 0.30 : 0.17
+            )
+        )
+    }
+
+    func outgoingMessageMetadata(for colorScheme: ColorScheme) -> Color {
+        Color(
+            uiColor: accentUIColor.mixed(
+                with: colorScheme == .dark ? .white : .black,
+                accentAmount: colorScheme == .dark ? 0.68 : 0.48
+            )
+        )
+    }
+}
+
+private extension UIColor {
+    func contrastingForeground(resolvedFor traits: UITraitCollection) -> UIColor {
+        let resolved = resolvedColor(with: traits)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        guard resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+            return traits.userInterfaceStyle == .dark ? .black : .white
+        }
+
+        func linearized(_ component: CGFloat) -> CGFloat {
+            component <= 0.04045
+                ? component / 12.92
+                : pow((component + 0.055) / 1.055, 2.4)
+        }
+
+        let luminance = 0.2126 * linearized(red)
+            + 0.7152 * linearized(green)
+            + 0.0722 * linearized(blue)
+        let blackContrast = (luminance + 0.05) / 0.05
+        let whiteContrast = 1.05 / (luminance + 0.05)
+        return blackContrast >= whiteContrast ? .black : .white
+    }
+
+    func mixed(with base: UIColor, accentAmount: CGFloat) -> UIColor {
+        var accentRed: CGFloat = 0
+        var accentGreen: CGFloat = 0
+        var accentBlue: CGFloat = 0
+        var accentAlpha: CGFloat = 0
+        var baseRed: CGFloat = 0
+        var baseGreen: CGFloat = 0
+        var baseBlue: CGFloat = 0
+        var baseAlpha: CGFloat = 0
+
+        guard getRed(&accentRed, green: &accentGreen, blue: &accentBlue, alpha: &accentAlpha),
+              base.getRed(&baseRed, green: &baseGreen, blue: &baseBlue, alpha: &baseAlpha) else {
+            return self
+        }
+
+        let amount = min(max(accentAmount, 0), 1)
+        return UIColor(
+            red: baseRed + (accentRed - baseRed) * amount,
+            green: baseGreen + (accentGreen - baseGreen) * amount,
+            blue: baseBlue + (accentBlue - baseBlue) * amount,
+            alpha: baseAlpha + (accentAlpha - baseAlpha) * amount
+        )
+    }
+}
+
+private struct ShumThemePaletteKey: EnvironmentKey {
+    static let defaultValue = ShumThemePalette(
+        accentUIColor: .systemGreen,
+        canvasUIColor: UIColor(red: 8 / 255, green: 10 / 255, blue: 9 / 255, alpha: 1),
+        colorScheme: .dark
+    )
+}
+
+extension EnvironmentValues {
+    var shumThemePalette: ShumThemePalette {
+        get { self[ShumThemePaletteKey.self] }
+        set { self[ShumThemePaletteKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Applies the theme once at the application root. SwiftUI descendants,
+    /// presented system views and embedded UIKit controls inherit the same
+    /// accent instead of keeping separate green constants.
+    func shumTheme(_ palette: ShumThemePalette) -> some View {
+        tint(palette.accent)
+            .accentColor(palette.accent)
+            .preferredColorScheme(palette.colorScheme)
+            .environment(\.shumThemePalette, palette)
+            .background {
+                palette.canvas
+                    .ignoresSafeArea()
+            }
+            .background {
+                ShumWindowTintBridge(
+                    tintColor: palette.accentUIColor,
+                    canvasColor: palette.canvasUIColor
+                )
+                    .frame(width: 0, height: 0)
+            }
+    }
+}
+
+struct ShumThemeCanvas: View {
+    @Environment(\.shumThemePalette) private var palette
+
+    var body: some View {
+        palette.canvas
+    }
+}
+
+private struct ShumWindowTintBridge: UIViewRepresentable {
+    let tintColor: UIColor
+    let canvasColor: UIColor
+
+    func makeUIView(context: Context) -> UIView { UIView(frame: .zero) }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        DispatchQueue.main.async {
+            view.window?.tintColor = tintColor
+            view.window?.backgroundColor = canvasColor
+            view.window?.rootViewController?.view.backgroundColor = canvasColor
+        }
+    }
+}
+
+@MainActor
+final class ShumAppearanceStore: ObservableObject {
+    enum Theme: String, CaseIterable, Identifiable {
+        case classic
+        case darkPink
+        case lightClassic
+        case lightPink
+        case monochromeLight
+        case monochromeDark
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .classic: "Dark Classic"
+            case .darkPink: "Dark Pink"
+            case .lightClassic: "Light Classic"
+            case .lightPink: "Light Pink"
+            case .monochromeLight: "Monochrome Light"
+            case .monochromeDark: "Monochrome Dark"
+            }
+        }
+
+        var colorScheme: ColorScheme {
+            switch self {
+            case .classic, .darkPink, .monochromeDark: .dark
+            case .lightClassic, .lightPink, .monochromeLight: .light
+            }
+        }
+
+        var accentColor: Color {
+            palette.accent
+        }
+
+        var accentUIColor: UIColor {
+            palette.accentUIColor
+        }
+
+        var palette: ShumThemePalette {
+            switch self {
+            case .classic:
+                ShumThemePalette(
+                    accentUIColor: .systemGreen,
+                    canvasUIColor: UIColor(
+                        red: 8 / 255,
+                        green: 10 / 255,
+                        blue: 9 / 255,
+                        alpha: 1
+                    ),
+                    colorScheme: colorScheme
+                )
+            case .darkPink:
+                ShumThemePalette(
+                    accentUIColor: UIColor(
+                        red: 1,
+                        green: 79 / 255,
+                        blue: 154 / 255,
+                        alpha: 1
+                    ),
+                    canvasUIColor: UIColor(
+                        red: 8 / 255,
+                        green: 10 / 255,
+                        blue: 9 / 255,
+                        alpha: 1
+                    ),
+                    colorScheme: colorScheme
+                )
+            case .lightClassic:
+                ShumThemePalette(
+                    accentUIColor: .systemGreen,
+                    canvasUIColor: UIColor(
+                        red: 250 / 255,
+                        green: 250 / 255,
+                        blue: 250 / 255,
+                        alpha: 1
+                    ),
+                    colorScheme: colorScheme
+                )
+            case .lightPink:
+                ShumThemePalette(
+                    accentUIColor: UIColor(
+                        red: 1,
+                        green: 79 / 255,
+                        blue: 154 / 255,
+                        alpha: 1
+                    ),
+                    canvasUIColor: UIColor(
+                        red: 1,
+                        green: 247 / 255,
+                        blue: 251 / 255,
+                        alpha: 1
+                    ),
+                    colorScheme: colorScheme
+                )
+            case .monochromeLight:
+                ShumThemePalette(
+                    accentUIColor: UIColor(
+                        red: 22 / 255,
+                        green: 23 / 255,
+                        blue: 22 / 255,
+                        alpha: 1
+                    ),
+                    canvasUIColor: UIColor(
+                        red: 250 / 255,
+                        green: 250 / 255,
+                        blue: 250 / 255,
+                        alpha: 1
+                    ),
+                    colorScheme: colorScheme
+                )
+            case .monochromeDark:
+                ShumThemePalette(
+                    accentUIColor: UIColor(
+                        red: 245 / 255,
+                        green: 245 / 255,
+                        blue: 245 / 255,
+                        alpha: 1
+                    ),
+                    canvasUIColor: UIColor(
+                        red: 8 / 255,
+                        green: 10 / 255,
+                        blue: 9 / 255,
+                        alpha: 1
+                    ),
+                    colorScheme: colorScheme
+                )
+            }
+        }
+    }
+
+    static let shared = ShumAppearanceStore()
+
+    @Published private(set) var theme: Theme
+
+    private let defaultsKey = "shum.appearance.theme"
+
+    private init(defaults: UserDefaults = .standard) {
+        theme = defaults.string(forKey: defaultsKey)
+            .flatMap(Theme.init(rawValue:))
+            ?? .classic
+    }
+
+    var accentColor: Color { theme.accentColor }
+    var accentUIColor: UIColor { theme.accentUIColor }
+    var palette: ShumThemePalette { theme.palette }
+
+    func select(_ theme: Theme) {
+        guard self.theme != theme else { return }
+        self.theme = theme
+        UserDefaults.standard.set(theme.rawValue, forKey: defaultsKey)
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
+    func resetToClassic() {
+        theme = .classic
+        UserDefaults.standard.removeObject(forKey: defaultsKey)
+    }
+}

@@ -1,0 +1,11 @@
+{
+  "fill" : { "automatic-gradient" : "extended-srgb:0.98039,0.32157,0.60784,1.00000" },
+  "groups" : [
+    {
+      "layers" : [ { "glass" : false, "image-name" : "ShumLightPink.png", "name" : "Shum Light Pink" } ],
+      "shadow" : { "kind" : "neutral", "opacity" : 0.5 },
+      "translucency" : { "enabled" : true, "value" : 0.5 }
+    }
+  ],
+  "supported-platforms" : { "circles" : [ "watchOS" ], "squares" : "shared" }
+}

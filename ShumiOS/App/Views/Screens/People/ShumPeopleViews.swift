@@ -18,7 +18,7 @@ struct ShumPeopleScreen: View {
 
     var body: some View {
         ZStack {
-            Color.peopleListBackground.ignoresSafeArea()
+            ShumThemeCanvas().ignoresSafeArea()
 
             if !coordinator.isScaning {
                 ShumPeopleUnavailable(
@@ -108,7 +108,7 @@ struct ShumPeopleScreen: View {
                     .background {
                         if pinned {
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(Color(uiColor: .systemGreen).opacity(0.15))
+                                .fill(Color.accentColor.opacity(0.15))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
                         }
@@ -125,7 +125,7 @@ struct ShumPeopleScreen: View {
                         } label: {
                             Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill")
                         }
-                        .tint(pinned ? Color(uiColor: .systemGray) : .green)
+                        .tint(pinned ? Color(uiColor: .systemGray) : .accentColor)
                     }
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -567,7 +567,7 @@ struct ShumEncounterHistoryView: View {
 
     var body: some View {
         ZStack {
-            Color.peopleListBackground.ignoresSafeArea()
+            ShumThemeCanvas().ignoresSafeArea()
 
             if encounters.isEmpty {
                 ShumEncounterHistoryEmptyState()
@@ -653,7 +653,7 @@ struct ShumEncounterHistoryView: View {
                     persistentSurfaceColor: highlightedEncounterIDs.contains(encounter.id)
                         ? Color.orange.opacity(0.16)
                         : pinned
-                            ? Color(uiColor: .systemGreen).opacity(0.15)
+                            ? Color.accentColor.opacity(0.15)
                             : nil,
                     hidesPersistentSurfaceAfterSwipe: !pinned
                 ) {
@@ -687,13 +687,19 @@ struct ShumEncounterHistoryView: View {
                         } label: {
                             Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
                         }
+                    } preview: {
+                        ShumEncounterContextPreview(
+                            runtime: runtime,
+                            peer: peer,
+                            lastMetAt: encounter.lastSeen
+                        )
                     }
                 }
                 .onAppear {
                     revealEncounterIfNeeded(encounter)
                 }
                 .listRowInsets(EdgeInsets())
-                .listRowBackground(Color(uiColor: .systemBackground))
+                .listRowBackground(ShumThemeCanvas())
                 .listRowSeparator(.hidden)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
                 .zIndex(elevatedEncounterIDs.contains(encounter.id) ? 1_000 : (pinned ? 1 : 0))
@@ -701,7 +707,7 @@ struct ShumEncounterHistoryView: View {
                     Button { togglePinned(encounter) } label: {
                         Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill")
                     }
-                    .tint(pinned ? Color(uiColor: .systemGray) : .green)
+                    .tint(pinned ? Color(uiColor: .systemGray) : .accentColor)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { pendingDelete = encounter } label: {
@@ -786,7 +792,7 @@ private struct ShumEncounterHistoryEmptyState: View {
     var body: some View {
         VStack(spacing: 0) {
             ShumPixelEmptyIcon(kind: .encounters)
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .frame(width: 88, height: 68)
                 .accessibilityHidden(true)
 
@@ -811,6 +817,44 @@ private struct ShumEncounterHistoryEmptyState: View {
         .frame(maxWidth: 330)
         .padding(.horizontal, 24)
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// Matches the lifted chat-row geometry so holding an encounter does not use
+/// the full-width rectangular List snapshot supplied by the system.
+private struct ShumEncounterContextPreview: View {
+    @ObservedObject var runtime: SpotchatRuntime
+    let peer: SpotchatPeer
+    let lastMetAt: Date
+
+    private let sourceHeight: CGFloat = 72
+    private var sourceWidth: CGFloat { UIScreen.main.bounds.width }
+    private var previewWidth: CGFloat {
+        min(sourceWidth, max(280, sourceWidth - 32))
+    }
+    private var previewScale: CGFloat {
+        sourceWidth > 0 ? previewWidth / sourceWidth : 1
+    }
+
+    var body: some View {
+        ShumStoredPersonRow(
+            runtime: runtime,
+            peer: peer,
+            lastMetAt: lastMetAt,
+            cardAction: { },
+            writeAction: { }
+        )
+        .allowsHitTesting(false)
+        .frame(width: sourceWidth, height: sourceHeight)
+        .background(
+            Color.profileRowSwipeSurface,
+            in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+        )
+        .scaleEffect(previewScale)
+        .frame(
+            width: previewWidth,
+            height: sourceHeight * previewScale
+        )
     }
 }
 

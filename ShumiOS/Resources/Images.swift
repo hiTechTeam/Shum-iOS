@@ -21,3 +21,19 @@ extension Image {
     static let ellipsisCircleFill: Image = Image(systemName: "ellipsis.circle.fill")
     
 }
+
+/// Theme-aware pixel cloud used everywhere the Shum mark is shown in-app.
+/// The AppIcon remains a fixed system asset; this view follows the active
+/// palette immediately, including splash and privacy surfaces.
+struct ShumLogoMark: View {
+    var color: Color = .accentColor
+
+    var body: some View {
+        Image.shumLogo
+            .renderingMode(.template)
+            .resizable()
+            .interpolation(.none)
+            .scaledToFit()
+            .foregroundStyle(color)
+    }
+}

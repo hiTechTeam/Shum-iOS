@@ -4,6 +4,7 @@ import BitFoundation
 
 struct ShumChatsView: View {
     @EnvironmentObject private var chat: ShumChatRuntime
+    @Environment(\.shumThemePalette) private var palette
     @State private var query = ""
     @State private var unreadOnly = false
     @State private var showPeople = false
@@ -18,7 +19,7 @@ struct ShumChatsView: View {
             }.listRowSeparator(.hidden).listRowBackground(Color.clear)
             if filtered.isEmpty {
                 VStack(spacing: 16) {
-                    Image("ShumLogo").resizable().scaledToFit().frame(width: 64, height: 64)
+                    ShumLogoMark().frame(width: 64, height: 64)
                     Text(query.isEmpty ? "Разговор начинается рядом" : "Ничего не найдено").font(.title3.bold())
                     Text(query.isEmpty ? "Откройте Shum на другом iPhone поблизости и начните переписку по Bluetooth." : "Попробуйте другое имя.")
                         .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
@@ -39,7 +40,11 @@ struct ShumChatsView: View {
                                 Text(chat.conversation(contact.id).last?.text ?? "Начните разговор").font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                                 Spacer()
                                 if chat.unread(contact.id) > 0 {
-                                    Text("\(chat.unread(contact.id))").font(.caption.bold()).foregroundStyle(.black).padding(6).background(Color.accentColor, in: Circle())
+                                    Text("\(chat.unread(contact.id))")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(palette.accentForeground)
+                                        .padding(6)
+                                        .background(Color.accentColor, in: Circle())
                                 }
                             }
                         }

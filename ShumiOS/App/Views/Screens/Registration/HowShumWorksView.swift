@@ -136,7 +136,7 @@ struct RegistrationSecurityCreationView: View {
                 ForEach(stageTitles.indices, id: \.self) { index in
                     Capsule()
                         .fill(index <= min(stage, 3)
-                            ? Color(uiColor: .systemGreen)
+                            ? Color.accentColor
                             : Color.secondary.opacity(0.24))
                         .frame(height: 5)
                 }
@@ -151,11 +151,11 @@ struct RegistrationSecurityCreationView: View {
                             if index < stage || stage > 3 {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 17, weight: .semibold))
-                                    .foregroundStyle(Color(uiColor: .systemGreen))
+                                    .foregroundStyle(Color.accentColor)
                             } else {
                                 Circle()
                                     .fill(stage == index
-                                        ? Color(uiColor: .systemGreen)
+                                        ? Color.accentColor
                                         : Color.secondary.opacity(0.38))
                                     .frame(width: 17, height: 17)
                             }
@@ -180,7 +180,7 @@ struct RegistrationSecurityCreationView: View {
                 RegistrationPrimaryButton(
                     title: "Продолжить",
                     isEnabled: true,
-                    accentColor: Color(uiColor: .systemGreen)
+                    accentColor: Color.accentColor
                 ) {
                     showReady = true
                 }
@@ -194,7 +194,7 @@ struct RegistrationSecurityCreationView: View {
             }
         }
         .padding(.horizontal, 24)
-        .background(Color("ls-Background").ignoresSafeArea())
+        .background(ShumThemeCanvas().ignoresSafeArea())
         .navigationTitle("Защита")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
@@ -296,7 +296,7 @@ private struct RegistrationKeyCreationIllustration: View {
                     x: (size.width - 32 * unit) / 2,
                     y: (size.height - 29 * unit) / 2
                 )
-                let green = Color(uiColor: .systemGreen)
+                let accent = Color.accentColor
                 let keyProgress = eased(progress(elapsed, from: 0.05, duration: 1.35))
                 let shieldProgress = eased(progress(elapsed, from: 1.25, duration: 1.8))
                 let storageProgress = eased(progress(elapsed, from: 2.75, duration: 1.55))
@@ -333,7 +333,7 @@ private struct RegistrationKeyCreationIllustration: View {
                 draw(
                     Self.cloudPixels,
                     progress: keyProgress,
-                    color: green.opacity(1 - completionProgress),
+                    color: accent.opacity(1 - completionProgress),
                     scatter: true,
                     in: &context,
                     origin: origin,
@@ -347,7 +347,7 @@ private struct RegistrationKeyCreationIllustration: View {
                         context.fill(
                             Path(rect),
                             with: .color(index.isMultiple(of: 3)
-                                ? green.opacity(0.35 + 0.6 * pulse)
+                                ? accent.opacity(0.35 + 0.6 * pulse)
                                 : Color.secondary.opacity(0.25 + 0.45 * pulse))
                         )
                     }
@@ -363,12 +363,12 @@ private struct RegistrationKeyCreationIllustration: View {
                     )
                     context.fill(
                         Path(scanRect),
-                        with: .color(green.opacity(0.72 * (1 - completionProgress)))
+                        with: .color(accent.opacity(0.72 * (1 - completionProgress)))
                     )
                     draw(
                         Self.checkPixels,
                         progress: verificationProgress,
-                        color: green.opacity(1 - completionProgress),
+                        color: accent.opacity(1 - completionProgress),
                         scatter: false,
                         in: &context,
                         origin: origin,
@@ -380,14 +380,14 @@ private struct RegistrationKeyCreationIllustration: View {
                     context.drawLayer { glowingContext in
                         glowingContext.addFilter(
                             .shadow(
-                                color: green.opacity(0.35 + completionProgress * 0.45),
+                                color: accent.opacity(0.35 + completionProgress * 0.45),
                                 radius: 2 + completionProgress * 6
                             )
                         )
                         draw(
                             Self.shieldPixels,
                             progress: shieldProgress,
-                            color: green.opacity(completionProgress),
+                            color: accent.opacity(completionProgress),
                             scatter: false,
                             in: &glowingContext,
                             origin: origin,
@@ -396,7 +396,7 @@ private struct RegistrationKeyCreationIllustration: View {
                         draw(
                             Self.keyPixels,
                             progress: keyProgress,
-                            color: green.opacity(completionProgress),
+                            color: accent.opacity(completionProgress),
                             scatter: false,
                             in: &glowingContext,
                             origin: origin,
@@ -405,7 +405,7 @@ private struct RegistrationKeyCreationIllustration: View {
                         draw(
                             Self.cloudPixels,
                             progress: keyProgress,
-                            color: green.opacity(completionProgress),
+                            color: accent.opacity(completionProgress),
                             scatter: false,
                             in: &glowingContext,
                             origin: origin,
@@ -414,7 +414,7 @@ private struct RegistrationKeyCreationIllustration: View {
                         draw(
                             Self.checkPixels,
                             progress: verificationProgress,
-                            color: green.opacity(completionProgress),
+                            color: accent.opacity(completionProgress),
                             scatter: false,
                             in: &glowingContext,
                             origin: origin,
@@ -574,7 +574,7 @@ struct RegistrationSecurityReadyView: View {
             Spacer()
 
             ShumOnboardingPixelIllustration(kind: .security)
-                .foregroundStyle(Color(uiColor: .systemGreen))
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 112, height: 92)
                 .accessibilityHidden(true)
 
@@ -610,14 +610,14 @@ struct RegistrationSecurityReadyView: View {
             RegistrationPrimaryButton(
                 title: "Продолжить",
                 isEnabled: true,
-                accentColor: Color(uiColor: .systemGreen)
+                accentColor: Color.accentColor
             ) {
                 showPasscode = true
             }
             .padding(.bottom, 20)
         }
         .padding(.horizontal, 24)
-        .background(Color("ls-Background").ignoresSafeArea())
+        .background(ShumThemeCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showPasscode) {
             RegistrationPasscodeSetupView()
@@ -627,7 +627,7 @@ struct RegistrationSecurityReadyView: View {
     private func securityStatus(_ title: String) -> some View {
         HStack(spacing: 11) {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(Color(uiColor: .systemGreen))
+                .foregroundStyle(Color.accentColor)
             Text(title)
                 .font(.subheadline)
             Spacer(minLength: 0)
@@ -655,7 +655,7 @@ private struct RegistrationPasscodeSetupView: View {
             Spacer()
 
             ShumOnboardingPixelIllustration(kind: .passcode)
-                .foregroundStyle(Color(uiColor: .systemGreen))
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 112, height: 92)
                 .accessibilityHidden(true)
 
@@ -688,13 +688,13 @@ private struct RegistrationPasscodeSetupView: View {
             RegistrationPrimaryButton(
                 title: phase == .create ? "Продолжить" : "Сохранить код",
                 isEnabled: code.count == 5 && !isSaving,
-                accentColor: Color(uiColor: .systemGreen),
+                accentColor: Color.accentColor,
                 action: continueFlow
             )
             .padding(.bottom, 20)
         }
         .padding(.horizontal, 24)
-        .background(Color("ls-Background").ignoresSafeArea())
+        .background(ShumThemeCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showFaceID) {
             RegistrationFaceIDView()
@@ -741,7 +741,7 @@ private struct RegistrationFaceIDView: View {
             Spacer()
 
             ShumOnboardingPixelIllustration(kind: .faceID)
-                .foregroundStyle(Color(uiColor: .systemGreen))
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 112, height: 92)
                 .accessibilityHidden(true)
 
@@ -772,7 +772,7 @@ private struct RegistrationFaceIDView: View {
                 RegistrationPrimaryButton(
                     title: "Включить \(appLock.biometricTitle)",
                     isEnabled: !isWorking,
-                    accentColor: Color(uiColor: .systemGreen)
+                    accentColor: Color.accentColor
                 ) {
                     enableProtection()
                 }
@@ -788,7 +788,7 @@ private struct RegistrationFaceIDView: View {
             .padding(.bottom, 20)
         }
         .padding(.horizontal, 24)
-        .background(Color("ls-Background").ignoresSafeArea())
+        .background(ShumThemeCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -819,7 +819,7 @@ private struct ShumOnboardingPage: View {
             Spacer()
 
             ShumOnboardingPixelIllustration(kind: illustration)
-                .foregroundStyle(Color(uiColor: .systemGreen))
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 112, height: 92)
                 .accessibilityHidden(true)
 
@@ -841,7 +841,7 @@ private struct ShumOnboardingPage: View {
             HStack(spacing: 9) {
                 ForEach(0..<pageCount, id: \.self) { index in
                     Circle()
-                        .fill(index == pageIndex ? Color(uiColor: .systemGreen) : Color.secondary.opacity(0.38))
+                        .fill(index == pageIndex ? Color.accentColor : Color.secondary.opacity(0.38))
                         .frame(width: 7, height: 7)
                 }
             }
@@ -852,13 +852,13 @@ private struct ShumOnboardingPage: View {
             RegistrationPrimaryButton(
                 title: buttonTitle,
                 isEnabled: true,
-                accentColor: Color(uiColor: .systemGreen),
+                accentColor: Color.accentColor,
                 action: action
             )
             .padding(.bottom, 20)
         }
         .padding(.horizontal, 24)
-        .background(Color("ls-Background").ignoresSafeArea())
+        .background(ShumThemeCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
     }
 }

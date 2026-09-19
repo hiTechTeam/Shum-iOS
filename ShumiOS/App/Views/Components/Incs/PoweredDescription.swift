@@ -17,9 +17,7 @@ struct PoweredDescription: View {
     }
     
     private var icon: some View {
-        Image.chatIcon
-            .resizable()
-            .scaledToFit()
+        ShumLogoMark()
             .frame(width: iconWidth, height: iconHeight)
     }
     

@@ -5,14 +5,13 @@ import UIKit
 /// A neutral surface used for system snapshots and while the scene is captured.
 /// It intentionally contains no profile, notification, or connection state.
 struct ShumPrivacyCover: View {
+    @ObservedObject private var appearance = ShumAppearanceStore.shared
+
     var body: some View {
         ZStack {
-            Color("ls-Background")
+            appearance.palette.canvas
 
-            Image.shumLogo
-                .resizable()
-                .interpolation(.none)
-                .scaledToFit()
+            ShumLogoMark(color: appearance.palette.accent)
                 .frame(width: 92, height: 92)
                 .accessibilityHidden(true)
         }
@@ -38,7 +37,7 @@ struct ShumCaptureProtectedContainer<Content: View>: View {
             ShumPrivacyCover()
 
             ZStack {
-                Color("ls-Background").ignoresSafeArea()
+                ShumThemeCanvas().ignoresSafeArea()
                 content
             }
             .shumHiddenFromSystemCapture()

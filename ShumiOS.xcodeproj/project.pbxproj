@@ -393,6 +393,7 @@ A100000000000000000000003,
 			baseConfigurationReferenceRelativePath = Configuration/Configs/Debug.xcconfig;
 			buildSettings = {
 
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconPink AppIconLight AppIconLightPink AppIconMonoLight AppIconMono";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
@@ -437,6 +438,7 @@ A100000000000000000000003,
 			baseConfigurationReferenceRelativePath = Configuration/Configs/Release.xcconfig;
 			buildSettings = {
 
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconPink AppIconLight AppIconLightPink AppIconMonoLight AppIconMono";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;

@@ -15,7 +15,7 @@ struct LocalCardRegistration: View {
                 isEnabled: true, accentColor: .accentColor) { showDetails = true }
                 .padding(.bottom, 20)
         }
-        .padding(.horizontal, 24).background(Color("ls-Background").ignoresSafeArea())
+        .padding(.horizontal, 24).background(ShumThemeCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showDetails) {
             LocalCardDetailsView(
@@ -74,7 +74,7 @@ struct LocalCardDetailsView: View {
                     .padding(.top, 12).accessibilityIdentifier("local.save")
             }.padding(24)
         }
-        .background(Color("ls-Background").ignoresSafeArea()).scrollDismissesKeyboard(.interactively)
+        .background(ShumThemeCanvas().ignoresSafeArea()).scrollDismissesKeyboard(.interactively)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if mode != .registration {

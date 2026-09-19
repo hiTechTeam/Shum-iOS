@@ -25,6 +25,7 @@ struct ProfileOverviewView: View {
     let open: (ShumProfileRoute) -> Void
     @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
     @ObservedObject private var appLock = ShumAppLock.shared
+    @ObservedObject private var appearance = ShumAppearanceStore.shared
 
     @State private var showPrivacy = false
     @State private var showScanningSettings = false
@@ -33,6 +34,7 @@ struct ProfileOverviewView: View {
     @State private var showBlockedProfiles = false
     @State private var showQuickActions = false
     @State private var showSecurity = false
+    @State private var showAppearance = false
     @State private var showLogoutConfirmation = false
     @State private var showLogoutError = false
     @State private var showDeleteConfirmation = false
@@ -76,14 +78,13 @@ struct ProfileOverviewView: View {
 
     var body: some View {
         ZStack {
-            Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+            appearance.palette.canvas.ignoresSafeArea()
 
             ScrollView {
-                VStack(spacing: 30) {
-                    VStack(spacing: 20) {
-                        settingsCard
-                        encounterCard
-                    }
+                VStack(spacing: 20) {
+                    settingsCard
+                    applicationCard
+                    encounterCard
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 30)
@@ -163,6 +164,9 @@ struct ProfileOverviewView: View {
         }
         .navigationDestination(isPresented: $showSecurity) {
             ShumSecuritySettingsView(fingerprint: coordinator.identityFingerprint)
+        }
+        .navigationDestination(isPresented: $showAppearance) {
+            ShumAppearanceSettingsView()
         }
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let image = photoVM.uiImage {
@@ -248,12 +252,35 @@ struct ProfileOverviewView: View {
                 }
             Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(title: "Конфиденциальность", systemImage: "lock.shield",
-                value: "", position: .middle) { showPrivacy = true }
-            Divider().padding(.leading, 60).padding(.trailing, 20)
-            ProfileOverviewRow(title: "О приложении", systemImage: "info.circle",
-                value: "Shum", position: .bottom) { showInfoSheet = true }
+                value: "", position: .bottom) { showPrivacy = true }
         }
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
+    }
+
+    private var applicationCard: some View {
+        VStack(spacing: 0) {
+            ProfileOverviewRow(
+                title: "О приложении",
+                systemImage: "info.circle",
+                value: "Shum",
+                position: .top
+            ) {
+                showInfoSheet = true
+            }
+            Divider().padding(.leading, 60).padding(.trailing, 20)
+            ProfileOverviewRow(
+                title: "Оформление",
+                systemImage: "paintpalette",
+                value: appearance.theme.title,
+                position: .bottom
+            ) {
+                showAppearance = true
+            }
+        }
+        .background(
+            Color(uiColor: .secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
     }
 
     private var encounterCard: some View {
@@ -340,6 +367,195 @@ struct ProfileOverviewView: View {
                 showDeleteError = true
             }
         }
+    }
+}
+
+private struct ShumAppearanceSettingsView: View {
+    @ObservedObject private var appearance = ShumAppearanceStore.shared
+    @ObservedObject private var appIcons = ShumAppIconStore.shared
+
+    var body: some View {
+        List {
+            Section {
+                LazyVGrid(
+                    columns: Array(
+                        repeating: GridItem(.flexible(), spacing: 8),
+                        count: 4
+                    ),
+                    spacing: 16
+                ) {
+                    ForEach(ShumAppearanceStore.Theme.allCases) { theme in
+                        Button {
+                            appearance.select(theme)
+                        } label: {
+                            ShumThemeChoice(
+                                theme: theme,
+                                isSelected: appearance.theme == theme
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 8)
+            } header: {
+                ShumAppearanceSectionTitle("Тема приложения")
+            } footer: {
+                Text("Тема меняет цвет кнопок, выбранных элементов и пиксельных иконок Shum.")
+                    .font(.system(size: 13, weight: .regular))
+                    .textCase(nil)
+            }
+
+            Section {
+                LazyVGrid(
+                    columns: Array(
+                        repeating: GridItem(.flexible(), spacing: 8),
+                        count: 4
+                    ),
+                    spacing: 16
+                ) {
+                    ForEach(ShumAppIconStore.Icon.allCases) { icon in
+                        Button {
+                            appIcons.select(icon)
+                        } label: {
+                            ShumAppIconChoice(
+                                icon: icon,
+                                isSelected: appIcons.selected == icon
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(appIcons.isChanging)
+                    }
+                }
+                .padding(.vertical, 8)
+            } header: {
+                ShumAppearanceSectionTitle("Иконка приложения")
+            } footer: {
+                Text("Иконка выбирается отдельно от темы приложения.")
+                    .font(.system(size: 13, weight: .regular))
+                    .textCase(nil)
+            }
+        }
+        .navigationTitle("Оформление")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(
+            "Не удалось изменить иконку",
+            isPresented: Binding(
+                get: { appIcons.errorMessage != nil },
+                set: { if !$0 { appIcons.errorMessage = nil } }
+            )
+        ) {
+            Button("Понятно", role: .cancel) {
+                appIcons.errorMessage = nil
+            }
+        } message: {
+            Text(appIcons.errorMessage ?? "")
+        }
+    }
+}
+
+private struct ShumAppearanceSectionTitle: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 15, weight: .regular))
+            .foregroundStyle(.secondary)
+            .textCase(nil)
+    }
+}
+
+private struct ShumThemeChoice: View {
+    let theme: ShumAppearanceStore.Theme
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(spacing: 7) {
+            ShumThemeSwatch(theme: theme)
+                .frame(width: 42, height: 42)
+                .padding(3)
+                .overlay {
+                    Circle()
+                        .stroke(
+                            isSelected ? theme.accentColor : .clear,
+                            lineWidth: 2
+                        )
+                }
+
+            Text(theme.title)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(isSelected ? theme.accentColor : Color.primary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.74)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: 34, alignment: .top)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct ShumThemeSwatch: View {
+    let theme: ShumAppearanceStore.Theme
+
+    var body: some View {
+        Canvas(rendersAsynchronously: false) { context, size in
+            let bounds = CGRect(origin: .zero, size: size)
+            let circle = Path(ellipseIn: bounds)
+            context.fill(circle, with: .color(theme.palette.canvas))
+
+            var accentHalf = Path()
+            accentHalf.move(to: CGPoint(x: 0, y: size.height))
+            accentHalf.addLine(to: CGPoint(x: size.width, y: size.height))
+            accentHalf.addLine(to: CGPoint(x: size.width, y: 0))
+            accentHalf.closeSubpath()
+            context.fill(accentHalf, with: .color(theme.accentColor))
+        }
+        .clipShape(Circle())
+        .overlay {
+            Circle()
+                .stroke(Color.secondary.opacity(0.28), lineWidth: 1)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private struct ShumAppIconChoice: View {
+    let icon: ShumAppIconStore.Icon
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(spacing: 7) {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(icon.backgroundColor)
+                .frame(width: 60, height: 60)
+                .overlay {
+                    ShumLogoMark(color: icon.markColor)
+                        .frame(width: 39, height: 39)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke(
+                            isSelected
+                                ? Color.accentColor
+                                : Color.secondary.opacity(0.20),
+                            lineWidth: isSelected ? 2 : 0.75
+                        )
+                }
+
+            Text(icon.title)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.72)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: 34, alignment: .top)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
     }
 }
 

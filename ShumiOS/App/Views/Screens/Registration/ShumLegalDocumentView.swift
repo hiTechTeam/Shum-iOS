@@ -71,7 +71,7 @@ struct ShumLegalDocumentView: View {
             .padding(.horizontal, 22)
             .padding(.vertical, 24)
         }
-        .background(Color("ls-Background").ignoresSafeArea())
+        .background(ShumThemeCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {

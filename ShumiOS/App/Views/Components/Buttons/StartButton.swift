@@ -3,15 +3,16 @@ import SwiftUI
 struct RegistrationPrimaryButton: View {
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.shumThemePalette) private var palette
 
     let title: String
     var isEnabled = true
     var accentColor: Color = .accentColor
-    var enabledForegroundColor: Color = .black
+    var enabledForegroundColor: Color?
     let action: () -> Void
 
     private var foregroundColor: Color {
-        guard !isEnabled else { return enabledForegroundColor }
+        guard !isEnabled else { return enabledForegroundColor ?? palette.accentForeground }
 
         return colorScheme == .dark
             ? .white.opacity(0.4)
@@ -51,7 +52,6 @@ struct StartButton: View {
         RegistrationPrimaryButton(
             title: title,
             accentColor: accentColor,
-            enabledForegroundColor: .black,
             action: onStart
         )
         .accessibilityHint(Inc.Onboarding.continueHint.localized)
@@ -61,9 +61,10 @@ struct StartButton: View {
 struct ShumPrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.shumThemePalette) private var palette
 
     private var foregroundColor: Color {
-        if enabled { return .black }
+        if enabled { return palette.accentForeground }
         return colorScheme == .dark ? .white.opacity(0.4) : .black.opacity(0.32)
     }
 

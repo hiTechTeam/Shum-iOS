@@ -205,6 +205,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             authCodeViewModel.clearProfile(); profilePhotoViewModel.resetAccountScopedState()
             SavedPeopleStateStore.shared.removeAll(); QuickActionsSettingsStore.shared.reset()
             ShumAppLock.shared.reset()
+            ShumAppearanceStore.shared.resetToClassic()
             try deletion.allowNewProfile()
             isRegistered = false; needsSecuritySetup = false
             isScaning = false; authenticationFlowID = UUID()
