@@ -642,10 +642,24 @@ struct ShumDirectoryRow: View {
         let typing = runtime.isTyping(entry.peer.id)
         HStack(spacing: 12) {
             ShumProfileAvatar(size: 58, imageData: runtime.profile(for: entry.peer.id)?.avatar)
+                .mask {
+                    Circle()
+                        .fill(.white)
+                        .overlay(alignment: .bottomTrailing) {
+                            if runtime.isOnline(entry.peer.id) {
+                                Circle()
+                                    .frame(width: 18, height: 18)
+                                    .blendMode(.destinationOut)
+                            }
+                        }
+                        .compositingGroup()
+                }
                 .overlay(alignment: .bottomTrailing) {
                     if runtime.isOnline(entry.peer.id) {
-                        Circle().fill(Color(uiColor: .systemGreen)).frame(width: 13, height: 13)
-                            .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 2.5))
+                        Circle()
+                            .fill(Color(uiColor: .systemGreen))
+                            .frame(width: 13, height: 13)
+                            .frame(width: 18, height: 18)
                     }
                 }
             VStack(alignment: .leading, spacing: 5) {
