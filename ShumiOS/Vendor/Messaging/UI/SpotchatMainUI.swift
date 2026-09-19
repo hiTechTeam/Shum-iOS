@@ -648,7 +648,7 @@ struct ShumDirectoryRow: View {
                         .overlay(alignment: .bottomTrailing) {
                             if runtime.isOnline(entry.peer.id) {
                                 Circle()
-                                    .frame(width: 18, height: 18)
+                                    .frame(width: 14, height: 14)
                                     .blendMode(.destinationOut)
                             }
                         }
@@ -658,8 +658,8 @@ struct ShumDirectoryRow: View {
                     if runtime.isOnline(entry.peer.id) {
                         Circle()
                             .fill(Color(uiColor: .systemGreen))
-                            .frame(width: 13, height: 13)
-                            .frame(width: 18, height: 18)
+                            .frame(width: 10, height: 10)
+                            .frame(width: 14, height: 14)
                     }
                 }
             VStack(alignment: .leading, spacing: 5) {

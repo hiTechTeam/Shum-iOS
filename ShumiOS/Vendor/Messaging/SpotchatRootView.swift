@@ -306,7 +306,7 @@ struct SpotchatConversationView: View {
                 } label: {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(canSend ? Color.black : Color.secondary)
+                        .foregroundStyle(canSend ? palette.accentForeground : Color.secondary)
                         .frame(width: 36, height: 36)
                         .background(canSend ? Color.accentColor : Color(.tertiarySystemFill), in: Circle())
                         .contentShape(Circle())
