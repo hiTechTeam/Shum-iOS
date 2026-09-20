@@ -52,6 +52,12 @@ struct ShumConversationView: View {
     private var invitationPhase: ShumInvitationPhase {
         runtime.invitationPhase(for: peer.id)
     }
+    private var peerCard: ShumContactCard? {
+        runtime.permanent?.card(for: peer.id)
+    }
+    private var offersAddContact: Bool {
+        peerCard != nil && !runtime.isContact(peer.id) && !runtime.isBlocked(peer.id)
+    }
 
     var body: some View {
         let conversation = messages
@@ -168,6 +174,9 @@ struct ShumConversationView: View {
     @ViewBuilder
     private var composer: some View {
         VStack(spacing: 8) {
+            if offersAddContact {
+                addContactShortcut
+            }
             if runtime.isLegacyOnly(peer.id) {
                 lockedCapsule(
                     title: "История сохранена",
@@ -205,6 +214,30 @@ struct ShumConversationView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 8)
         .animation(.easeOut(duration: 0.2), value: invitationPhase)
+    }
+
+    private var addContactShortcut: some View {
+        Button {
+            guard let peerCard else { return }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            _ = runtime.addContact(peerCard, source: "conversation")
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "person.badge.plus")
+                    .foregroundStyle(.secondary)
+                Text("Не в контактах")
+                    .foregroundStyle(.secondary)
+                Text("·")
+                    .foregroundStyle(.secondary)
+                Text("Добавить")
+                    .foregroundStyle(Color.accentColor)
+            }
+            .font(.system(size: 13, weight: .regular))
+            .frame(minHeight: 28)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Добавить пользователя в контакты")
     }
 
     private var messageComposer: some View {

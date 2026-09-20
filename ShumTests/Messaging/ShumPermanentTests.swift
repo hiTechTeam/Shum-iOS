@@ -430,22 +430,46 @@ struct ShumPermanentTests {
         #expect(a.store.state.receipts.isEmpty)
     }
 
-    @Test func deletingAContactAlsoBlocksItAtomically() throws {
+    @Test func removingFromContactsPreservesChatAndMessagingAccess() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
         try allowBoth(a, b, clock: clock)
         #expect(a.service.send("История", to: b.card))
 
-        try a.service.deleteConversation(
-            with: b.card,
-            removeContact: true,
-            blockContact: true
-        )
+        try a.service.removeFromContacts(b.card)
 
-        #expect(a.store.state.contacts.isEmpty)
-        #expect(a.store.state.messages.isEmpty)
-        #expect(a.store.state.conversations.isEmpty)
-        #expect(a.service.isBlocked(b.card))
-        #expect(!a.service.send("Недоступно", to: b.card))
+        #expect(!a.service.isAddressBookContact(b.card))
+        #expect(a.store.state.contacts.count == 1)
+        #expect(a.store.state.messages.count == 1)
+        #expect(a.store.state.conversations.count == 1)
+        #expect(!a.service.isBlocked(b.card))
+        #expect(a.service.invitationPhase(for: b.card) == .accepted)
+        #expect(a.service.send("Общение сохранено", to: b.card))
+
+        try a.service.add(b.card, source: "chat-menu")
+        #expect(a.service.isAddressBookContact(b.card))
+    }
+    @Test func addingAnInvitationSenderToContactsDoesNotAcceptTheInvitation() throws {
+        let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
+        connect(a, b, clock: clock)
+
+        #expect(a.service.sendInvitation(b.card))
+        drain([a, b])
+        #expect(!a.service.isAddressBookContact(b.card))
+        #expect(!b.service.isAddressBookContact(a.card))
+        #expect(b.service.invitationPhase(for: a.card) == .incomingPending)
+
+        try b.service.add(a.card, source: "conversation")
+
+        #expect(b.service.isAddressBookContact(a.card))
+        #expect(b.service.invitationPhase(for: a.card) == .incomingPending)
+        #expect(b.store.state.requests.contains { $0.id == a.card.id })
+
+        #expect(b.service.acceptInvitation(a.card))
+        drain([a, b])
+        #expect(!a.service.isAddressBookContact(b.card))
+        #expect(b.service.isAddressBookContact(a.card))
+        #expect(a.service.invitationPhase(for: b.card) == .accepted)
+        #expect(b.service.invitationPhase(for: a.card) == .accepted)
     }
     @Test func clearingChatPreservesAcceptanceAndRepairsPreviouslyResetPeer() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)

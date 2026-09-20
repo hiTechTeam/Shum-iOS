@@ -99,7 +99,7 @@ enum ShumChatDirectory {
             }
         }
         // Retain contacts whose local conversation was deleted, without recreating it.
-        for contact in permanent?.state.contacts ?? [] {
+        for contact in (permanent?.state.contacts ?? []).filter(\.isAddressBookEntry) {
             include(ShumPeer(id: contact.card.peerID, name: contact.card.name, lastConnected: contact.addedAt), card: contact.card) { _ in }
         }
         return order.compactMap { id in

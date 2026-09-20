@@ -107,24 +107,33 @@ final class ShumMessageStore: ObservableObject {
     func add(_ card: ShumContactCard, source: String, avatar: Data? = nil) throws {
         guard !retired else { throw ShumFailure.unavailableIdentity }
         guard !isBlocked(card) else { throw ShumFailure.blocked }
-        let acceptsIncomingInvitation = state.requests.contains { $0.id == card.id }
         try contacts.add(card, source: source, avatar: avatar, now: now())
         try contacts.conversation(with: card, now: now())
-        if acceptsIncomingInvitation {
-            try transitionInvitation(with: card, action: .accept, phase: .accepted, removesRequest: true)
-        } else {
-            try store.transaction { state in
-                if state.invitationStates == nil { state.invitationStates = [:] }
-                if state.invitationStates?[card.id] == nil {
-                    state.invitationStates?[card.id] = ShumInvitationState(
-                        phase: source == "preview" ? .accepted : .ready,
-                        updatedAt: Int64(now().timeIntervalSince1970 * 1000),
-                        eventID: UUID().uuidString
-                    )
-                }
+        try store.transaction { state in
+            if state.invitationStates == nil { state.invitationStates = [:] }
+            if state.invitationStates?[card.id] == nil {
+                state.invitationStates?[card.id] = ShumInvitationState(
+                    phase: source == "preview" ? .accepted : .ready,
+                    updatedAt: Int64(now().timeIntervalSince1970 * 1000),
+                    eventID: UUID().uuidString
+                )
             }
-            changed()
         }
+        changed()
+    }
+    func isAddressBookContact(_ card: ShumContactCard) -> Bool {
+        state.contacts.first(where: { $0.id == card.id })?.isAddressBookEntry == true
+    }
+    func isAddressBookContact(_ peer: PeerID) -> Bool {
+        state.contacts.first(where: { $0.card.peerID == peer })?.isAddressBookEntry == true
+    }
+    func removeFromContacts(_ card: ShumContactCard) throws {
+        guard !retired else { throw ShumFailure.unavailableIdentity }
+        try store.transaction { state in
+            guard let index = state.contacts.firstIndex(where: { $0.id == card.id }) else { return }
+            state.contacts[index].metadata["addressBook"] = "false"
+        }
+        changed()
     }
     func dismissRequest(_ card: ShumContactCard) {
         _ = declineInvitation(card)
@@ -210,7 +219,12 @@ final class ShumMessageStore: ObservableObject {
     func sendInvitation(_ card: ShumContactCard) -> Bool {
         guard !retired, !isBlocked(card), invitationPhase(for: card) == .ready else { return false }
         do {
-            try contacts.add(card, source: "chat-invitation", now: now())
+            try contacts.add(
+                card,
+                source: "chat-invitation",
+                now: now(),
+                includeInAddressBook: false
+            )
             try contacts.conversation(with: card, now: now())
             try transitionInvitation(with: card, action: .request, phase: .outgoingPending)
             return true
@@ -221,7 +235,12 @@ final class ShumMessageStore: ObservableObject {
         let phase = invitationPhase(for: card)
         guard !retired, !isBlocked(card), phase == .incomingPending || phase == .declinedLocally else { return false }
         do {
-            try contacts.add(card, source: "accepted-invitation", now: now())
+            try contacts.add(
+                card,
+                source: "accepted-invitation",
+                now: now(),
+                includeInAddressBook: false
+            )
             try contacts.conversation(with: card, now: now())
             try transitionInvitation(with: card, action: .accept, phase: .accepted, removesRequest: true)
             return true
@@ -353,7 +372,12 @@ final class ShumMessageStore: ObservableObject {
                     || currentPhase == .declinedByPeer
                     || currentPhase == .accepted
                     || (currentPhase == .incomingPending && hasOutgoingRequest) else { return }
-            try contacts.add(control.sender, source: "invitation-accepted", now: now())
+            try contacts.add(
+                control.sender,
+                source: "invitation-accepted",
+                now: now(),
+                includeInAddressBook: false
+            )
             try contacts.conversation(with: control.sender, now: now())
             try store.transaction { state in
                 if state.invitationStates == nil { state.invitationStates = [:] }
@@ -664,7 +688,14 @@ final class ShumMessageStore: ObservableObject {
                     let first = nearby[peer] == nil; nearby[peer] = card
                     if first { sendPacket(ShumPacket(card: ownCard), to: peer) }
                     try recordEncounter(card)
-                    if state.contacts.contains(where: { $0.id == card.id }) { try contacts.add(card, source: "nearby", now: now()) }
+                    if state.contacts.contains(where: { $0.id == card.id }) {
+                        try contacts.add(
+                            card,
+                            source: "nearby",
+                            now: now(),
+                            includeInAddressBook: false
+                        )
+                    }
                     changed()
                 } else if nostrSender == card.nostrKey { try request(card) }
             } else if let envelope = packet.envelope {
@@ -1032,27 +1063,10 @@ final class ShumMessageStore: ObservableObject {
         wire.sendShumPacket(bytes, to: peer)
     }
     func isBlocked(_ card: ShumContactCard) -> Bool { state.blocked?[card.id] != nil }
-    func deleteConversation(
-        with card: ShumContactCard,
-        removeContact: Bool = false,
-        blockContact: Bool = false
-    ) throws {
+    func deleteConversation(with card: ShumContactCard, removeContact: Bool = false) throws {
         guard !retired else { throw ShumFailure.unavailableIdentity }
-        if blockContact { try card.validate() }
         let conversationID = ShumConversation.identifier(ownCard.id, card.id)
         try store.transaction { state in
-            if blockContact {
-                if state.blocked == nil { state.blocked = [:] }
-                guard state.blocked!.count < 2000 || state.blocked?[card.id] != nil else {
-                    throw ShumFailure.quota
-                }
-                state.blocked?[card.id] = card
-                state.relay.removeAll {
-                    $0.envelope.sender.id == card.id ||
-                    $0.envelope.recipient.id == card.id ||
-                    $0.depositor == card.id
-                }
-            }
             // Ignore old relay/Nostr replays after local deletion. New messages
             // from a retained contact may create a new conversation.
             if state.deletedMessageIDs == nil { state.deletedMessageIDs = [:] }
@@ -1076,7 +1090,6 @@ final class ShumMessageStore: ObservableObject {
             }
         }
         if activeContact == card.id { activeContact = nil }
-        if blockContact { nearby = nearby.filter { $0.value.id != card.id } }
         changed()
     }
     func clearDirectoryEntry(_ card: ShumContactCard) throws {

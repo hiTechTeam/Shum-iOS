@@ -501,6 +501,18 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     }
 
     @ViewBuilder private func menu(_ entry: ShumDirectoryEntry) -> some View {
+        if let card = entry.card, !runtime.isContact(entry.peer.id) {
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                _ = runtime.addContact(card, source: "chat-menu")
+            } label: {
+                Label("Добавить в контакты", systemImage: "person.badge.plus")
+                    .foregroundStyle(.primary)
+            }
+            .tint(.primary)
+
+            Divider()
+        }
         Button { selectedPeer = entry.peer } label: {
             Label("Посмотреть профиль", systemImage: "person.crop.circle").foregroundStyle(.primary)
         }.tint(.primary)

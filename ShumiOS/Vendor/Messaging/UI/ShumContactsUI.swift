@@ -6,13 +6,13 @@ struct ShumContactsUI: View {
     @Environment(\.shumThemePalette) private var palette
     @ObservedObject var runtime: ShumRuntime
     let open: (ShumUIRoute) -> Void
-    @State private var contactToDelete: ShumContact?
-    @State private var deletionError: String?
+    @State private var contactToRemove: ShumContact?
+    @State private var removalError: String?
 
     private var contacts: [ShumContact] {
         guard let permanent = runtime.permanent else { return [] }
         return permanent.state.contacts
-            .filter { !permanent.isBlocked($0.card) }
+            .filter { $0.isAddressBookEntry && !permanent.isBlocked($0.card) }
             .sorted {
                 $0.card.name.localizedStandardCompare($1.card.name) == .orderedAscending
             }
@@ -105,30 +105,30 @@ struct ShumContactsUI: View {
             }
         }
         .alert(
-            "Удалить контакт?",
+            "Убрать из контактов?",
             isPresented: Binding(
-                get: { contactToDelete != nil },
-                set: { if !$0 { contactToDelete = nil } }
+                get: { contactToRemove != nil },
+                set: { if !$0 { contactToRemove = nil } }
             ),
-            presenting: contactToDelete
+            presenting: contactToRemove
         ) { contact in
-            Button("Отмена", role: .cancel) { contactToDelete = nil }
-            Button("Удалить контакт", role: .destructive) {
-                deleteAndBlock(contact)
+            Button("Отмена", role: .cancel) { contactToRemove = nil }
+            Button("Убрать из контактов", role: .destructive) {
+                removeFromContacts(contact)
             }
         } message: { _ in
-            Text("Контакт и переписка будут удалены с устройства. Пользователь будет заблокирован и больше не сможет отправлять вам сообщения и приглашения.")
+            Text("Пользователь исчезнет из Контактов. Переписка и возможность общения сохранятся.")
         }
         .alert(
             "Shum",
             isPresented: Binding(
-                get: { deletionError != nil },
-                set: { if !$0 { deletionError = nil } }
+                get: { removalError != nil },
+                set: { if !$0 { removalError = nil } }
             )
         ) {
-            Button("Понятно") { deletionError = nil }
+            Button("Понятно") { removalError = nil }
         } message: {
-            Text(deletionError ?? "")
+            Text(removalError ?? "")
         }
     }
 
@@ -207,9 +207,9 @@ struct ShumContactsUI: View {
             Divider()
 
             Button(role: .destructive) {
-                contactToDelete = contact
+                contactToRemove = contact
             } label: {
-                Label("Удалить контакт", systemImage: "person.crop.circle.badge.minus")
+                Label("Убрать из контактов", systemImage: "person.crop.circle.badge.minus")
                     .foregroundStyle(.red)
             }
             .tint(.red)
@@ -222,17 +222,13 @@ struct ShumContactsUI: View {
         .accessibilityHint("Открыть чат")
     }
 
-    private func deleteAndBlock(_ contact: ShumContact) {
+    private func removeFromContacts(_ contact: ShumContact) {
         do {
-            try runtime.permanent?.deleteConversation(
-                with: contact.card,
-                removeContact: true,
-                blockContact: true
-            )
+            try runtime.permanent?.removeFromContacts(contact.card)
         } catch {
-            deletionError = error.localizedDescription
+            removalError = error.localizedDescription
         }
-        contactToDelete = nil
+        contactToRemove = nil
     }
 
     private func contactStatus(for peer: ShumPeer) -> String {
@@ -280,7 +276,7 @@ struct ShumNewMessageSheet: View {
     private var contacts: [ShumContact] {
         guard let permanent = runtime.permanent else { return [] }
         return permanent.state.contacts
-            .filter { !permanent.isBlocked($0.card) }
+            .filter { $0.isAddressBookEntry && !permanent.isBlocked($0.card) }
             .filter { contact in
                 let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
                 return trimmed.isEmpty || contact.card.name.localizedCaseInsensitiveContains(trimmed)

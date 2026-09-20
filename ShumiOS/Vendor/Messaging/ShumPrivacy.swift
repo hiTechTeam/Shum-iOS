@@ -120,7 +120,7 @@ struct ShumContactActionsMenu: View {
             }
             .tint(.primary)
             Button { action = "contact" } label: {
-                Label("Удалить контакт", systemImage: "person.crop.circle.badge.minus")
+                Label("Убрать из контактов", systemImage: "person.crop.circle.badge.minus")
                     .foregroundStyle(.primary)
             }
             .tint(.primary)
@@ -131,20 +131,26 @@ struct ShumContactActionsMenu: View {
                 Button(title, role: blocked && action == "block" ? nil : .destructive) {
                     do {
                         if action == "block" { try runtime.permanent?.setBlocked(card, blocked: !blocked) }
-                        else { try runtime.permanent?.deleteConversation(with: card, removeContact: action == "contact"); onDelete() }
+                        else if action == "contact" {
+                            try runtime.permanent?.removeFromContacts(card)
+                            onDelete()
+                        } else {
+                            try runtime.permanent?.deleteConversation(with: card)
+                            onDelete()
+                        }
                     } catch { self.error = error.localizedDescription }
                     self.action = nil
                 }
             }
             Button("Отмена", role: .cancel) { action = nil }
         } message: {
-            Text(action == "block" ? (blocked ? "Вы снова сможете обмениваться сообщениями." : "Сообщения и приглашения этого пользователя будут отклоняться на вашем iPhone. Неотправленные сообщения будут отменены.") : (action == "contact" ? "Контакт, история и очередь будут удалены на этом iPhone. Копии у собеседника и существующая блокировка сохранятся." : "История и очередь будут удалены на этом iPhone. Контакт сохранится, и вы сможете начать новый разговор."))
+            Text(action == "block" ? (blocked ? "Вы снова сможете обмениваться сообщениями." : "Сообщения и приглашения этого пользователя будут отклоняться на вашем iPhone. Неотправленные сообщения будут отменены.") : (action == "contact" ? "Пользователь исчезнет из Контактов. Переписка и возможность общения сохранятся." : "История и очередь будут удалены на этом iPhone. Контакт сохранится, и вы сможете начать новый разговор."))
         }
         .alert("Shum", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("Понятно") {} } message: { Text(error ?? "") }
     }
     private var title: String {
         switch action { case "block": return blocked ? "Разблокировать контакт" : "Заблокировать контакт"
-        case "contact": return "Удалить контакт"; default: return "Удалить чат" }
+        case "contact": return "Убрать из контактов"; default: return "Удалить чат" }
     }
 }
 #endif

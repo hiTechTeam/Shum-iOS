@@ -343,6 +343,20 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             return ShumPeer(id: card.peerID, name: card.name, lastConnected: Date())
         } catch { self.error = error.localizedDescription; return nil }
     }
+    func isContact(_ peer: PeerID) -> Bool {
+        permanent?.isAddressBookContact(peer) == true
+    }
+    @discardableResult
+    func removeContact(_ card: ShumContactCard) -> Bool {
+        do {
+            guard let permanent else { throw ShumFailure.unavailableIdentity }
+            try permanent.removeFromContacts(card)
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
+    }
     func resolveContact(
         _ locator: ShumContactLocator,
         completion: @escaping (Result<ShumContactCard, Error>) -> Void

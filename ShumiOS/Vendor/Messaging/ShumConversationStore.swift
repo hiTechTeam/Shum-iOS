@@ -15,6 +15,7 @@ struct ShumContact: Codable, Identifiable {
     var avatar: Data?
     var metadata: [String: String] = [:]
     var id: String { card.id }
+    var isAddressBookEntry: Bool { metadata["addressBook"] != "false" }
 }
 struct ShumEncounter: Codable, Equatable, Identifiable {
     var card: ShumContactCard
@@ -373,11 +374,21 @@ final class ShumConversationStore {
 final class ShumContactsService {
     let store: ShumConversationStore
     init(store: ShumConversationStore) { self.store = store }
-    func add(_ card: ShumContactCard, source: String, avatar: Data? = nil, now: Date = Date()) throws {
+    func add(
+        _ card: ShumContactCard,
+        source: String,
+        avatar: Data? = nil,
+        now: Date = Date(),
+        includeInAddressBook: Bool = true
+    ) throws {
         try card.validate()
         guard card.id != store.state.ownerID else { throw ShumFailure.invalidContact }
-        if let existing = store.state.contacts.first(where: { $0.id == card.id }), existing.card == card,
-           avatar == nil || existing.avatar == avatar { return }
+        if let existing = store.state.contacts.first(where: { $0.id == card.id }),
+           existing.card == card,
+           avatar == nil || existing.avatar == avatar,
+           !includeInAddressBook || existing.isAddressBookEntry {
+            return
+        }
         try store.transaction { state in
             if let index = state.contacts.firstIndex(where: { $0.id == card.id }) {
                 // Identity bindings are pinned. Name/bio updates cannot rotate authentication keys.
@@ -385,9 +396,21 @@ final class ShumContactsService {
                       state.contacts[index].card.nostrKey == card.nostrKey else { throw ShumFailure.invalidContact }
                 state.contacts[index].card = card
                 if let avatar, avatar.count <= 40_960 { state.contacts[index].avatar = avatar }
+                if includeInAddressBook {
+                    state.contacts[index].metadata["addressBook"] = "true"
+                    state.contacts[index].metadata["source"] = source
+                }
             } else {
                 guard state.contacts.count < 2000 else { throw ShumFailure.quota }
-                state.contacts.append(ShumContact(card: card, addedAt: now, avatar: avatar, metadata: ["source": source]))
+                state.contacts.append(ShumContact(
+                    card: card,
+                    addedAt: now,
+                    avatar: avatar,
+                    metadata: [
+                        "source": source,
+                        "addressBook": includeInAddressBook ? "true" : "false"
+                    ]
+                ))
             }
         }
     }
