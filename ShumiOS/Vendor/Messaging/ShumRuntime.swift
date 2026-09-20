@@ -4,13 +4,13 @@ import CryptoKit
 import CoreBluetooth
 import Foundation
 
-struct SpotchatPeer: Identifiable, Hashable {
+struct ShumPeer: Identifiable, Hashable {
     let id: PeerID
     var name: String
     var lastConnected: Date
 }
 
-struct SpotchatMessage: Identifiable {
+struct ShumMessage: Identifiable {
     let id: String
     let peerID: PeerID
     let text: String
@@ -23,23 +23,25 @@ struct SpotchatMessage: Identifiable {
     var disconnectedWait: TimeInterval = 0
     var lastProgress: Date = .distantPast
     var deliveryLabel: String?
-    var reply: SpotchatReplyReference? = nil
+    var reply: ShumReplyReference? = nil
 }
 
-/// Spotchat composition. Radio/session management stays inside the transport;
+/// Shum composition. Radio/session management stays inside the transport;
 /// permanent identity, history and routing belong to the application services.
 @MainActor
-final class SpotchatRuntime: ObservableObject, TransportEventDelegate, TransportPeerEventsDelegate {
-    @Published private(set) var peers: [SpotchatPeer] = []
+final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeerEventsDelegate {
+    private static let nicknameKey = "shum.nickname"
+    private static let legacyNicknameKey = "spotchat.nickname"
+    @Published private(set) var peers: [ShumPeer] = []
     @Published private var nearbyDistances: [PeerID: Int] = [:]
-    @Published private(set) var messages: [SpotchatMessage] = []
+    @Published private(set) var messages: [ShumMessage] = []
     @Published private var unreadMessageIDs: Set<String> = []
     @Published private(set) var nickname: String
     @Published private(set) var bluetoothState: CBManagerState = .unknown
     @Published var error: String?
     @Published private(set) var internetConnected = false
-    let profiles: SpotchatProfiles
-    private(set) var permanent: SpotchatMessageStore?
+    let profiles: ShumProfiles
+    private(set) var permanent: ShumMessageStore?
     private var permanentChanges: AnyCancellable?
     private var setupFailed = false
     private var retired = false
@@ -48,6 +50,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     private(set) var activePeer: PeerID?
     private var appActive = true
     private var bluetoothEnabled = true
+    private var connectedPeerIDs: Set<PeerID> = []
     var isReady: Bool { !setupFailed && !retired }
     private var readAttempts: [String: (count: Int, sentAt: Date)] = [:]
     private let transport: Transport
@@ -55,7 +58,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     private let now: () -> Date
     private var timer: AnyCancellable?
     private var started = false
-    private var knownPeers: [PeerID: SpotchatPeer] = [:]
+    private var knownPeers: [PeerID: ShumPeer] = [:]
     private var receivedIDs: Set<String> = []
     private var receivedOrder: [String] = []
     static let disappearanceDelay: TimeInterval = 6
@@ -63,7 +66,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     static let maxAttempts = 3
     static let connectionWaitLimit: TimeInterval = 120
 
-    static func live() -> SpotchatRuntime {
+    static func live() -> ShumRuntime {
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("-ShumPreview") { return preview() }
         #endif
@@ -72,20 +75,20 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
             keychain: keychain,
             deferBluetoothStartup: true
         )
-        let model = SpotchatRuntime(transport: ble, profileStore: .live())
+        let model = ShumRuntime(transport: ble, profileStore: .live())
         // Legacy synthetic radio diagnostics remain isolated from real history.
         if UserDefaults.standard.string(forKey: "ShumSelfTestRun") == nil {
             do {
-                let identity = try SpotchatIdentityService(transport: ble, keychain: keychain, bridge: NostrIdentityBridge(keychain: keychain))
+                let identity = try ShumIdentityService(transport: ble, keychain: keychain, bridge: NostrIdentityBridge(keychain: keychain))
                 let card = try identity.card(name: model.nickname, bio: model.profiles.own.bio)
                 var preview = false
                 #if DEBUG && targetEnvironment(simulator)
                 preview = ProcessInfo.processInfo.arguments.contains("-ShumPermanentPreview")
                 #endif
-                let store = try SpotchatConversationStore(ownerID: card.id, key: identity.storageKey, url: preview ? nil : SpotchatConversationStore.liveURL)
+                let store = try ShumConversationStore(ownerID: card.id, key: identity.storageKey, url: preview ? nil : ShumConversationStore.liveURL)
                 if !preview { try ShumHistoryMigration.live(into: store) }
-                let internet = preview ? nil : SpotchatNostrService(identity: identity.nostr, manager: .spotchat())
-                let permanent = SpotchatMessageStore(identity: identity, store: store, transport: ble, wire: ble, card: card, internet: internet)
+                let internet = preview ? nil : ShumNostrService(identity: identity.nostr, manager: .shum())
+                let permanent = ShumMessageStore(identity: identity, store: store, transport: ble, wire: ble, card: card, internet: internet)
                 model.permanent = permanent
                 permanent.configureContactLookup { [weak model] in model?.profiles.own }
                 permanent.onError = { [weak model] in model?.error = $0 }
@@ -100,12 +103,12 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     }
 
     #if DEBUG && targetEnvironment(simulator)
-    private static func preview() -> SpotchatRuntime {
-        let wire = SpotchatPreviewTransport()
-        let model = SpotchatRuntime(transport: wire, defaults: UserDefaults(suiteName: "Shum.UI.Preview")!)
+    private static func preview() -> ShumRuntime {
+        let wire = ShumPreviewTransport()
+        let model = ShumRuntime(transport: wire, defaults: UserDefaults(suiteName: "Shum.UI.Preview")!)
         model.nickname = "Руслан"
-        try? model.profiles.save(SpotchatProfile(name: "Руслан", bio: "Люблю знакомиться и создавать новое"))
-        model.profiles.seedPreview(SpotchatProfile(name: "Аня", bio: "Кофе, прогулки и хорошие разговоры"), for: wire.samples[0].peerID)
+        try? model.profiles.save(ShumProfile(name: "Руслан", bio: "Люблю знакомиться и создавать новое"))
+        model.profiles.seedPreview(ShumProfile(name: "Аня", bio: "Кофе, прогулки и хорошие разговоры"), for: wire.samples[0].peerID)
         model.didReceiveTransportEvent(.bluetoothStateUpdated(.poweredOn))
         model.didUpdatePeerSnapshots(wire.samples)
         let peer = wire.samples[0].peerID
@@ -119,21 +122,21 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
             ("Всё работает!", true)
         ]
         model.messages = lines.enumerated().map { index, line in
-            SpotchatMessage(id: "preview-\(index)", peerID: peer, text: line.0,
+            ShumMessage(id: "preview-\(index)", peerID: peer, text: line.0,
                 date: Date().addingTimeInterval(Double(index - lines.count) * 30),
                 outgoing: line.1, status: .read(by: "Аня", at: Date()))
         }
         for (index, text) in ["Увидимся!", "Привет, я тоже здесь", "Отличная идея 👍"].enumerated() {
             let sample = wire.samples[index + 1]
             let id = "preview-peer-\(index)"
-            model.messages.append(SpotchatMessage(id: id, peerID: sample.peerID, text: text,
+            model.messages.append(ShumMessage(id: id, peerID: sample.peerID, text: text,
                 date: Date().addingTimeInterval(-600), outgoing: false, status: .delivered(to: "Руслан", at: Date())))
             if index == 1 { model.unreadMessageIDs.insert("\(sample.peerID.id):\(id)") }
         }
         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewEmptyChat") { model.messages = [] }
         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewLongBio") {
-            let bio = String(String(repeating: "Люблю прогулки, новые знакомства и разговоры о том, что вдохновляет. ", count: 3).prefix(SpotchatProfile.maxBioCharacters))
-            model.profiles.seedPreview(SpotchatProfile(name: "Аня", bio: bio, avatar: SpotchatAvatarCodec.diagnosticPhoto(seed: 64)), for: peer)
+            let bio = String(String(repeating: "Люблю прогулки, новые знакомства и разговоры о том, что вдохновляет. ", count: 3).prefix(ShumProfile.maxBioCharacters))
+            model.profiles.seedPreview(ShumProfile(name: "Аня", bio: bio, avatar: ShumAvatarCodec.diagnosticPhoto(seed: 64)), for: peer)
         }
         return model
     }
@@ -148,7 +151,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         for name in names {
             let noise = Curve25519.KeyAgreement.PrivateKey()
             let signing = Curve25519.Signing.PrivateKey()
-            var card = SpotchatContactCard(noiseKey: noise.publicKey.rawRepresentation, signingKey: signing.publicKey.rawRepresentation,
+            var card = ShumContactCard(noiseKey: noise.publicKey.rawRepresentation, signingKey: signing.publicKey.rawRepresentation,
                 nostrKey: try NostrIdentity.generate().publicKeyHex, name: name, bio: "Кофе, прогулки и хорошие разговоры")
             card.signature = try signing.signature(for: card.signedBytes())
             try permanent.add(card, source: "preview")
@@ -157,7 +160,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         }
         let noise = Curve25519.KeyAgreement.PrivateKey()
         let signing = Curve25519.Signing.PrivateKey()
-        var invitation = SpotchatContactCard(noiseKey: noise.publicKey.rawRepresentation, signingKey: signing.publicKey.rawRepresentation,
+        var invitation = ShumContactCard(noiseKey: noise.publicKey.rawRepresentation, signingKey: signing.publicKey.rawRepresentation,
             nostrKey: try NostrIdentity.generate().publicKeyHex, name: "Александра", bio: "")
         invitation.signature = try signing.signature(for: invitation.signedBytes())
         try permanent.store.transaction { $0.requests.append(invitation) }
@@ -165,12 +168,18 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     #endif
 
     init(transport: Transport, defaults: UserDefaults = .standard,
-         profileStore: SpotchatProfileStore = SpotchatProfileStore(),
+         profileStore: ShumProfileStore = ShumProfileStore(),
          now: @escaping () -> Date = Date.init) {
         self.transport = transport
         self.defaults = defaults
         self.now = now
-        var initialName = defaults.string(forKey: "spotchat.nickname")
+        let storedName = defaults.string(forKey: Self.nicknameKey)
+            ?? defaults.string(forKey: Self.legacyNicknameKey)
+        if defaults.string(forKey: Self.nicknameKey) == nil,
+           let storedName {
+            defaults.set(storedName, forKey: Self.nicknameKey)
+        }
+        var initialName = storedName
             .flatMap(InputValidator.validateNickname) ?? "Гость \(transport.myPeerID.id.prefix(4))"
         #if DEBUG
         if let testName = defaults.string(forKey: "ShumSelfTestName"),
@@ -180,11 +189,11 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         #endif
         var activeStore = profileStore
         #if DEBUG
-        if defaults.string(forKey: "ShumSelfTestRun") != nil { activeStore = SpotchatProfileStore() }
+        if defaults.string(forKey: "ShumSelfTestRun") != nil { activeStore = ShumProfileStore() }
         #endif
-        let profileModel = SpotchatProfiles(name: initialName, store: activeStore, now: now,
+        let profileModel = ShumProfiles(name: initialName, store: activeStore, now: now,
             connected: { transport.isPeerConnected($0) },
-            send: { data, peer in (transport as? SpotchatProfileTransporting)?.sendSpotchatProfile(data, to: peer) })
+            send: { data, peer in (transport as? ShumProfileTransporting)?.sendShumProfile(data, to: peer) })
         profiles = profileModel
         nickname = profileModel.own.name
         transport.eventDelegate = self
@@ -194,7 +203,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         #if DEBUG && os(iOS)
         if let run = defaults.string(forKey: "ShumSelfTestRun") {
             let seed = nickname.utf8.reduce(0) { ($0 + Int($1)) % 255 }
-            try? profiles.save(SpotchatProfile(name: nickname, bio: "Проверка профиля \(run)", avatar: SpotchatAvatarCodec.diagnosticPhoto(seed: seed)))
+            try? profiles.save(ShumProfile(name: nickname, bio: "Проверка профиля \(run)", avatar: ShumAvatarCodec.diagnosticPhoto(seed: seed)))
         }
         #endif
     }
@@ -224,10 +233,16 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     }
 
     func setBluetoothEnabled(_ enabled: Bool) {
-        guard !retired else { return }
+        guard !retired, bluetoothEnabled != enabled else { return }
+        ShumDiscoveryTrace.record(enabled ? "visibility-on" : "visibility-off")
         bluetoothEnabled = enabled
         if enabled && started && appActive { transport.startServices() }
-        else if !enabled { transport.stopServices(); peers = []; nearbyDistances = [:] }
+        else if !enabled {
+            transport.stopServices()
+            knownPeers.removeAll()
+            didUpdatePeerSnapshots([])
+            permanent?.tick(connected: [], active: appActive)
+        }
     }
 
     func setAppActive(_ active: Bool) {
@@ -246,6 +261,8 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
             if bluetoothEnabled { transport.startServices() }
             tick()
             markVisibleRead()
+        } else {
+            serviceBackgroundTransport()
         }
         #if DEBUG
         recordSelfTestEvent(active ? "foreground" : "background")
@@ -266,19 +283,19 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         guard let valid = InputValidator.validateNickname(name), valid.utf8.count <= 64 else {
             error = "Введите короткое имя без служебных символов."; return false
         }
-        let profile = SpotchatProfile(name: valid, bio: bio.trimmingCharacters(in: .whitespacesAndNewlines), avatar: avatar)
-        guard profile.valid else { error = "Описание — до \(SpotchatProfile.maxBioCharacters) символов. Попробуйте выбрать фото ещё раз."; return false }
+        let profile = ShumProfile(name: valid, bio: bio.trimmingCharacters(in: .whitespacesAndNewlines), avatar: avatar)
+        guard profile.valid else { error = "Описание — до \(ShumProfile.maxBioCharacters) символов. Попробуйте выбрать фото ещё раз."; return false }
         do { try profiles.save(profile) }
         catch { self.error = "Не удалось сохранить профиль. Попробуйте ещё раз."; return false }
         do { try permanent?.updateProfile(name: valid, bio: profile.bio) }
         catch { self.error = error.localizedDescription; return false }
         nickname = valid
-        defaults.set(valid, forKey: "spotchat.nickname")
+        defaults.set(valid, forKey: Self.nicknameKey)
         transport.setNickname(valid)
         return true
     }
 
-    func displayName(_ peer: SpotchatPeer) -> String {
+    func displayName(_ peer: ShumPeer) -> String {
         permanent?.card(for: peer.id)?.name
             ?? permanent?.state.encounters?.first(where: { $0.card.peerID == peer.id })?.card.name
             ?? profiles.remote[peer.id]?.name
@@ -286,48 +303,48 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
             ?? peer.name
     }
 
-    var chatPeers: [SpotchatPeer] {
+    var chatPeers: [ShumPeer] {
         guard let permanent else { return peers }
-        let current: [SpotchatPeer] = permanent.state.conversations.sorted { a, b in
+        let current: [ShumPeer] = permanent.state.conversations.sorted { a, b in
             let aTime = permanent.state.messages.last(where: { $0.envelope.conversationID == a.id })?.envelope.timestamp ?? Int64(a.createdAt.timeIntervalSince1970 * 1000)
             let bTime = permanent.state.messages.last(where: { $0.envelope.conversationID == b.id })?.envelope.timestamp ?? Int64(b.createdAt.timeIntervalSince1970 * 1000)
             return aTime > bTime
         }.compactMap { conversation in
             guard let contact = permanent.state.contacts.first(where: { $0.id == conversation.contactID }) else { return nil }
-            return SpotchatPeer(id: contact.card.peerID, name: contact.card.name, lastConnected: contact.addedAt)
+            return ShumPeer(id: contact.card.peerID, name: contact.card.name, lastConnected: contact.addedAt)
         }
         let legacy = (permanent.state.legacyHistory?.contacts ?? []).filter { old in
             !permanent.state.contacts.contains { $0.id == old.id }
-        }.map { old in SpotchatPeer(id: ShumLegacyArchive.peerID(old.id), name: old.name, lastConnected: .distantPast) }
+        }.map { old in ShumPeer(id: ShumLegacyArchive.peerID(old.id), name: old.name, lastConnected: .distantPast) }
         return current + legacy
     }
-    func profile(for peer: PeerID) -> SpotchatProfile? {
+    func profile(for peer: PeerID) -> ShumProfile? {
         if let permanent, let card = permanent.card(for: peer) {
             let avatar = permanent.session(for: card).flatMap { profiles.remote[$0]?.avatar }
                 ?? permanent.state.contacts.first(where: { $0.id == card.id })?.avatar
                 ?? permanent.state.encounters?.first(where: { $0.id == card.id })?.avatar
-            return SpotchatProfile(name: card.name, bio: card.bio, avatar: avatar)
+            return ShumProfile(name: card.name, bio: card.bio, avatar: avatar)
         }
         if let encounter = permanent?.state.encounters?.first(where: { $0.card.peerID == peer }) {
-            return SpotchatProfile(name: encounter.card.name, bio: encounter.card.bio, avatar: encounter.avatar)
+            return ShumProfile(name: encounter.card.name, bio: encounter.card.bio, avatar: encounter.avatar)
         }
         return profiles.remote[peer]
     }
-    func addContact(_ card: SpotchatContactCard, source: String) -> SpotchatPeer? {
+    func addContact(_ card: ShumContactCard, source: String) -> ShumPeer? {
         do {
-            guard let permanent else { throw SpotchatFailure.unavailableIdentity }
+            guard let permanent else { throw ShumFailure.unavailableIdentity }
             let avatar = permanent.session(for: card).flatMap { profiles.remote[$0]?.avatar }
                 ?? profiles.remote[card.peerID]?.avatar
             try permanent.add(card, source: source, avatar: avatar)
-            return SpotchatPeer(id: card.peerID, name: card.name, lastConnected: Date())
+            return ShumPeer(id: card.peerID, name: card.name, lastConnected: Date())
         } catch { self.error = error.localizedDescription; return nil }
     }
     func resolveContact(
-        _ locator: SpotchatContactLocator,
-        completion: @escaping (Result<SpotchatContactCard, Error>) -> Void
+        _ locator: ShumContactLocator,
+        completion: @escaping (Result<ShumContactCard, Error>) -> Void
     ) {
         guard let permanent else {
-            completion(.failure(SpotchatFailure.unavailableIdentity))
+            completion(.failure(ShumFailure.unavailableIdentity))
             return
         }
         let nearbyCard = permanent.nearby.values.first {
@@ -365,7 +382,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
             case .expired: status = .failed(reason: "Срок доставки истёк")
             case .cancelled: status = .failed(reason: "Отменено после блокировки")
             }
-            return SpotchatMessage(id: stored.id, peerID: card.peerID, text: stored.text,
+            return ShumMessage(id: stored.id, peerID: card.peerID, text: stored.text,
                 date: Date(timeIntervalSince1970: Double(stored.envelope.timestamp) / 1000), outgoing: stored.outgoing,
                 status: status, attempts: stored.attempts,
                 deliveryLabel: stored.status == .forwarding && stored.deliveryTransport == "mesh" ? "Передаётся через mesh" : stored.status.label,
@@ -374,7 +391,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         if let history = permanent.state.legacyHistory {
             messages += history.messages.map { old in
                 let peer = permanent.state.contacts.first { $0.id == old.contactID }?.card.peerID ?? ShumLegacyArchive.peerID(old.contactID)
-                return SpotchatMessage(id: "legacy-" + old.id, peerID: peer, text: old.text, date: old.date,
+                return ShumMessage(id: "legacy-" + old.id, peerID: peer, text: old.text, date: old.date,
                     outgoing: old.outgoing, status: old.status, deliveryLabel: "История")
             }
             messages.sort { $0.date < $1.date }
@@ -392,7 +409,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
 
     func isLegacyOnly(_ peer: PeerID) -> Bool { peer.id.hasPrefix("legacy-") }
 
-    func conversation(_ peer: PeerID) -> [SpotchatMessage] {
+    func conversation(_ peer: PeerID) -> [ShumMessage] {
         messages.filter { $0.peerID == peer }
     }
 
@@ -404,7 +421,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         guard let permanent, let card = permanent.card(for: peer) else { return false }
         return permanent.isBlocked(card)
     }
-    func invitationPhase(for peer: PeerID) -> SpotchatInvitationPhase {
+    func invitationPhase(for peer: PeerID) -> ShumInvitationPhase {
         #if DEBUG && targetEnvironment(simulator)
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("-ShumPreviewInvitationReady") { return .ready }
@@ -437,7 +454,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     }
     private func isBlockedSession(_ peer: PeerID) -> Bool {
         guard let key = transport.noiseSessionPublicKeyData(for: peer) else { return false }
-        return permanent?.state.blocked?[SpotchatContactCard.userID(key)] != nil
+        return permanent?.state.blocked?[ShumContactCard.userID(key)] != nil
     }
     func isNearby(_ peer: PeerID) -> Bool {
         guard bluetoothState == .poweredOn else { return false }
@@ -476,12 +493,12 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     }
 
     @discardableResult
-    func send(_ text: String, to peer: PeerID, replyingTo original: SpotchatMessage? = nil) -> Bool {
+    func send(_ text: String, to peer: PeerID, replyingTo original: ShumMessage? = nil) -> Bool {
         guard !setupFailed else { return false }
         if let permanent {
             guard let card = permanent.card(for: peer) else { error = "Дождитесь проверки профиля собеседника."; return false }
             let reply = original.map {
-                SpotchatReplyReference(messageID: $0.id,
+                ShumReplyReference(messageID: $0.id,
                     senderID: $0.outgoing ? permanent.ownCard.id : card.id,
                     text: $0.text)
             }
@@ -500,11 +517,11 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
             return false
         }
         let reply = original.map {
-            SpotchatReplyReference(messageID: $0.id,
+            ShumReplyReference(messageID: $0.id,
                 senderID: $0.outgoing ? "self" : peer.id,
                 text: $0.text)
         }
-        let message = SpotchatMessage(id: UUID().uuidString, peerID: peer,
+        let message = ShumMessage(id: UUID().uuidString, peerID: peer,
                                       text: content, date: now(), outgoing: true,
                                       status: .sending, reply: reply)
         messages.append(message)
@@ -513,7 +530,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         return true
     }
 
-    func retry(_ message: SpotchatMessage) {
+    func retry(_ message: ShumMessage) {
         if let permanent, let card = permanent.card(for: message.peerID) {
             if case .failed = message.status { _ = permanent.send(message.text, to: card, reply: message.reply) }
             return
@@ -543,12 +560,27 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         guard !retired else { return }
         internetConnected = permanent?.internetConnected == true
         didUpdatePeerSnapshots(transport.currentPeerSnapshots())
+        if transport is ShumProfileTransporting,
+           bluetoothState == .poweredOn,
+           appActive {
+            profiles.tick()
+        }
+        if let permanent, appActive {
+            permanent.tick(
+                connected: Set(peers.filter {
+                    transport.isPeerConnected($0.id)
+                }.map(\.id)),
+                active: true
+            )
+            for peer in peers {
+                if let profile = profiles.remote[peer.id] {
+                    permanent.updateAvatar(profile.avatar, for: peer.id)
+                }
+            }
+        } else if permanent == nil, appActive {
+            advancePendingMessages()
+        }
         if appActive {
-            if transport is SpotchatProfileTransporting, bluetoothState == .poweredOn { profiles.tick() }
-            if let permanent {
-                permanent.tick(connected: Set(peers.filter { transport.isPeerConnected($0.id) }.map(\.id)), active: appActive)
-                for peer in peers { if let profile = profiles.remote[peer.id] { permanent.updateAvatar(profile.avatar, for: peer.id) } }
-            } else { advancePendingMessages() }
             markVisibleRead()
         }
         #if DEBUG
@@ -593,8 +625,11 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     func didUpdatePeerSnapshots(_ snapshots: [TransportPeerSnapshot]) {
         guard !retired else { return }
         let current = now()
-        let connected = snapshots.filter { bluetoothState == .poweredOn && $0.peerID != transport.myPeerID && $0.isConnected && !isBlockedSession($0.peerID) }
+        let connected = snapshots.filter { bluetoothEnabled && bluetoothState == .poweredOn && $0.peerID != transport.myPeerID && $0.isConnected && !isBlockedSession($0.peerID) }
         let ids = Set(connected.map(\.peerID))
+        let connectionsChanged = connectedPeerIDs != ids
+        if connectionsChanged { ShumDiscoveryTrace.record("runtime-connected-count-\(ids.count)") }
+        connectedPeerIDs = ids
         let distances = Dictionary(connected.compactMap { snapshot -> (PeerID, Int)? in
             guard let meters = snapshot.distanceMeters, meters > 0 else { return nil }
             return (snapshot.peerID, meters)
@@ -609,10 +644,35 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         #endif
         profiles.updatePeers(ids)
         for peer in connected.prefix(100) {
-            knownPeers[peer.peerID] = SpotchatPeer(id: peer.peerID, name: peer.nickname, lastConnected: current)
+            knownPeers[peer.peerID] = ShumPeer(id: peer.peerID, name: peer.nickname, lastConnected: current)
         }
         knownPeers = knownPeers.filter { ids.contains($0.key) || current.timeIntervalSince($0.value.lastConnected) < Self.disappearanceDelay }
         peers = knownPeers.values.sorted { $0.name == $1.name ? $0.id.id < $1.id.id : $0.name < $1.name }
+        if connectionsChanged, appActive {
+            // Start the signed-card exchange on the connection event itself,
+            // including reconnects with the same persistent identity.
+            permanent?.tick(connected: ids, active: true)
+            if bluetoothEnabled { profiles.tick() }
+        }
+        if !appActive {
+            serviceBackgroundTransport(connected: ids)
+        }
+    }
+
+    /// CoreBluetooth can wake the process briefly while its UI remains
+    /// inactive. Use that window for encrypted card handshakes, queued local
+    /// messages and delivery receipts, while keeping read state and Internet
+    /// presence strictly tied to the foreground.
+    private func serviceBackgroundTransport(connected: Set<PeerID>? = nil) {
+        guard !retired, !appActive, bluetoothEnabled,
+              bluetoothState == .poweredOn,
+              let permanent else { return }
+        let connectedPeers = connected ?? Set(
+            transport.currentPeerSnapshots()
+                .filter { $0.isConnected }
+                .map(\.peerID)
+        )
+        permanent.tick(connected: connectedPeers, active: false)
     }
 
     func didReceiveTransportEvent(_ event: TransportEvent) {
@@ -627,10 +687,14 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         didUpdatePeerSnapshots(transport.currentPeerSnapshots())
         case .noisePayloadReceived(let peer, let type, let data, let date):
             guard !isBlockedSession(peer) else { return }
-            if type == .spotchatEnvelope { permanent?.receiveBytes(data, from: peer); return }
-            if permanent != nil && type != .spotchatProfile { return }
+            if type == .shumEnvelope {
+                permanent?.receiveBytes(data, from: peer)
+                if !appActive { serviceBackgroundTransport() }
+                return
+            }
+            if permanent != nil && type != .shumProfile { return }
             switch type {
-            case .spotchatProfile:
+            case .shumProfile:
                 profiles.receive(data, from: peer)
             case .privateMessage:
                 guard let packet = PrivateMessagePacket.decode(from: data),
@@ -641,7 +705,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
                     if !appActive || activePeer != peer { unreadMessageIDs.insert(dedupID) }
                     receivedOrder.append(dedupID)
                     if receivedOrder.count > 4000 { receivedIDs.remove(receivedOrder.removeFirst()) }
-                    messages.append(SpotchatMessage(id: packet.messageID, peerID: peer,
+                    messages.append(ShumMessage(id: packet.messageID, peerID: peer,
                                                    text: packet.content, date: date,
                                                    outgoing: false, status: .delivered(to: nickname, at: now())))
                     trimMessages()
@@ -740,7 +804,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
     private func processSelfTestCommand(run: String) {
         guard ProcessInfo.processInfo.arguments.contains("-ShumSelfTestStage5"), appActive,
               let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
-              let data = try? Data(contentsOf: directory.appendingPathComponent("spotchat-test-command.json")), data.count < 2048,
+              let data = try? Data(contentsOf: directory.appendingPathComponent("shum-test-command.json")), data.count < 2048,
               let command = try? JSONSerialization.jsonObject(with: data) as? [String: String],
               command["run"] == run, let id = command["id"], id.utf8.count <= 40, !testCommands.contains(id) else { return }
         switch command["action"] {
@@ -802,8 +866,8 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
             "nearbyCount": peers.count,
             "profileReceivedCount": receivedProfiles.count,
             "avatarReceivedCount": receivedPhotos.count,
-            "ownAvatarHash": profiles.own.avatar.map(SpotchatProfile.digest) ?? "",
-            "receivedAvatarHashes": receivedPhotos.map(SpotchatProfile.digest),
+            "ownAvatarHash": profiles.own.avatar.map(ShumProfile.digest) ?? "",
+            "receivedAvatarHashes": receivedPhotos.map(ShumProfile.digest),
             "receivedAvatarBytes": receivedPhotos.map(\.count),
             "sentCount": synthetic.filter(\.outgoing).count,
             "receivedCount": synthetic.filter { !$0.outgoing }.count,
@@ -812,7 +876,7 @@ final class SpotchatRuntime: ObservableObject, TransportEventDelegate, Transport
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]),
               let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-        try? data.write(to: directory.appendingPathComponent("spotchat-test-result.json"), options: .atomic)
+        try? data.write(to: directory.appendingPathComponent("shum-test-result.json"), options: .atomic)
     }
     #endif
 }

@@ -3,18 +3,18 @@ import UIKit
 
 struct ShumProfileBlockRequest: Identifiable {
     let id = UUID()
-    let peer: SpotchatPeer
-    let card: SpotchatContactCard
+    let peer: ShumPeer
+    let card: ShumContactCard
     let waitsForTransientUI: Bool
 }
 
 struct ShumPeopleScreen: View {
     @Environment(\.shumThemePalette) private var palette
     @EnvironmentObject private var coordinator: AppCoordinator
-    @ObservedObject var runtime: SpotchatRuntime
-    let select: (SpotchatPeer) -> Void
+    @ObservedObject var runtime: ShumRuntime
+    let select: (ShumPeer) -> Void
 
-    @State private var selectedPeer: SpotchatPeer?
+    @State private var selectedPeer: ShumPeer?
     @State private var blockRequest: ShumProfileBlockRequest?
 
     var body: some View {
@@ -150,7 +150,7 @@ struct ShumPeopleScreen: View {
         .refreshable { runtime.tick() }
     }
 
-    private func togglePinned(_ card: SpotchatContactCard) {
+    private func togglePinned(_ card: ShumContactCard) {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         do {
             _ = try runtime.permanent?.togglePinned(card, in: ShumChatFolder.nearby.pinKey)
@@ -158,8 +158,8 @@ struct ShumPeopleScreen: View {
     }
 
     private func requestBlock(
-        _ card: SpotchatContactCard?,
-        peer: SpotchatPeer,
+        _ card: ShumContactCard?,
+        peer: ShumPeer,
         waitsForTransientUI: Bool
     ) {
         guard let card else {
@@ -217,8 +217,8 @@ private struct ShumPeopleUnavailable: View {
 }
 
 private struct ShumPeopleRow: View {
-    @ObservedObject var runtime: SpotchatRuntime
-    let peer: SpotchatPeer
+    @ObservedObject var runtime: ShumRuntime
+    let peer: ShumPeer
     let cardAction: () -> Void
     let writeAction: () -> Void
 
@@ -277,8 +277,8 @@ struct ShumProfileAvatar: View {
 }
 
 private struct ShumDistanceLabel: View {
-    @ObservedObject var runtime: SpotchatRuntime
-    let peer: SpotchatPeer
+    @ObservedObject var runtime: ShumRuntime
+    let peer: ShumPeer
 
     var body: some View {
         Group {
@@ -298,29 +298,33 @@ private struct ShumDistanceLabel: View {
 }
 
 struct ShumPeerCard: View {
-    @ObservedObject var runtime: SpotchatRuntime
-    let peer: SpotchatPeer
-    let profileCard: SpotchatContactCard?
+    @ObservedObject var runtime: ShumRuntime
+    let peer: ShumPeer
+    let profileCard: ShumContactCard?
     var lastMetAt: Date?
+    var verifiesIdentity: Bool
     let write: () -> Void
 
     @State private var showPhoto = false
+    @State private var showVerification = false
 
     init(
-        runtime: SpotchatRuntime,
-        peer: SpotchatPeer,
-        card: SpotchatContactCard? = nil,
+        runtime: ShumRuntime,
+        peer: ShumPeer,
+        card: ShumContactCard? = nil,
         lastMetAt: Date? = nil,
+        verifiesIdentity: Bool = false,
         write: @escaping () -> Void
     ) {
         self.runtime = runtime
         self.peer = peer
         self.profileCard = card
         self.lastMetAt = lastMetAt
+        self.verifiesIdentity = verifiesIdentity
         self.write = write
     }
 
-    private var card: SpotchatContactCard? { profileCard ?? runtime.permanent?.card(for: peer.id) }
+    private var card: ShumContactCard? { profileCard ?? runtime.permanent?.card(for: peer.id) }
     private var avatar: Data? { runtime.profile(for: peer.id)?.avatar }
 
     var body: some View {
@@ -351,8 +355,23 @@ struct ShumPeerCard: View {
                             .frame(width: contentWidth)
                             .offset(y: -10)
 
-                        RegistrationPrimaryButton(title: "Написать", action: write)
-                            .frame(width: contentWidth)
+                        if verifiesIdentity {
+                            if card != nil {
+                                RegistrationPrimaryButton(
+                                    title: "Сверить ключ",
+                                    action: { showVerification = true }
+                                )
+                                .frame(width: contentWidth)
+                            } else {
+                                Text("Ключ контакта пока недоступен")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: contentWidth)
+                            }
+                        } else {
+                            RegistrationPrimaryButton(title: "Написать", action: write)
+                                .frame(width: contentWidth)
+                        }
                     }
                     .fixedSize(horizontal: false, vertical: true)
                     .layoutPriority(1)
@@ -373,6 +392,15 @@ struct ShumPeerCard: View {
                 FullScreenPhotoView(isPresented: $showPhoto) {
                     Image(uiImage: image).resizable().scaledToFit()
                 }
+            }
+        }
+        .sheet(isPresented: $showVerification) {
+            if let card {
+                ShumKeyVerificationView(
+                    runtime: runtime,
+                    card: card,
+                    avatar: avatar
+                )
             }
         }
     }
@@ -406,9 +434,9 @@ struct ShumPeerCard: View {
 }
 
 private struct ShumPersonContextMenuModifier: ViewModifier {
-    @ObservedObject var runtime: SpotchatRuntime
-    let peer: SpotchatPeer
-    let card: SpotchatContactCard?
+    @ObservedObject var runtime: ShumRuntime
+    let peer: ShumPeer
+    let card: ShumContactCard?
     var lastMetAt: Date?
     var deleteAction: (() -> Void)?
     let writeAction: () -> Void
@@ -457,9 +485,9 @@ private struct ShumPersonContextMenuModifier: ViewModifier {
 
 private extension View {
     func shumPeopleContextMenu(
-        runtime: SpotchatRuntime,
-        peer: SpotchatPeer,
-        card: SpotchatContactCard?,
+        runtime: ShumRuntime,
+        peer: ShumPeer,
+        card: ShumContactCard?,
         lastMetAt: Date? = nil,
         deleteAction: (() -> Void)? = nil,
         writeAction: @escaping () -> Void,
@@ -480,8 +508,8 @@ private extension View {
 }
 
 private struct ShumPersonContextPreview: View {
-    @ObservedObject var runtime: SpotchatRuntime
-    let peer: SpotchatPeer
+    @ObservedObject var runtime: ShumRuntime
+    let peer: ShumPeer
     let lastMetAt: Date?
 
     private var sourceWidth: CGFloat { UIScreen.main.bounds.width }
@@ -532,18 +560,18 @@ extension Date {
 
 struct ShumEncounterHistoryView: View {
     @Environment(\.shumThemePalette) private var palette
-    @ObservedObject var runtime: SpotchatRuntime
-    let openChat: (SpotchatPeer) -> Void
+    @ObservedObject var runtime: ShumRuntime
+    let openChat: (ShumPeer) -> Void
 
-    @State private var selectedEncounter: SpotchatEncounter?
-    @State private var pendingDelete: SpotchatEncounter?
+    @State private var selectedEncounter: ShumEncounter?
+    @State private var pendingDelete: ShumEncounter?
     @State private var blockRequest: ShumProfileBlockRequest?
     @State private var showsClearConfirmation = false
     @State private var highlightedEncounterIDs: Set<String> = []
     @State private var elevatedEncounterIDs: Set<String> = []
     @State private var pinTransitionEncounterIDs: Set<String> = []
 
-    private var encounters: [SpotchatEncounter] {
+    private var encounters: [ShumEncounter] {
         let values = runtime.permanent?.encounterHistory ?? []
         let pinnedIDs = runtime.permanent?.pinnedCardIDs(
             in: ShumChatFolder.encounters.pinKey
@@ -748,11 +776,11 @@ struct ShumEncounterHistoryView: View {
         )
     }
 
-    private func isPinned(_ encounter: SpotchatEncounter) -> Bool {
+    private func isPinned(_ encounter: ShumEncounter) -> Bool {
         runtime.permanent?.isPinned(encounter.card, in: ShumChatFolder.encounters.pinKey) == true
     }
 
-    private func togglePinned(_ encounter: SpotchatEncounter) {
+    private func togglePinned(_ encounter: ShumEncounter) {
         guard pinTransitionEncounterIDs.insert(encounter.id).inserted else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
@@ -783,7 +811,7 @@ struct ShumEncounterHistoryView: View {
         }
     }
 
-    private func revealEncounterIfNeeded(_ encounter: SpotchatEncounter) {
+    private func revealEncounterIfNeeded(_ encounter: ShumEncounter) {
         guard runtime.permanent?.unviewedEncounterIDs.contains(encounter.id) == true,
               highlightedEncounterIDs.insert(encounter.id).inserted else {
             return
@@ -835,8 +863,8 @@ private struct ShumEncounterHistoryEmptyState: View {
 /// Matches the lifted chat-row geometry so holding an encounter does not use
 /// the full-width rectangular List snapshot supplied by the system.
 private struct ShumEncounterContextPreview: View {
-    @ObservedObject var runtime: SpotchatRuntime
-    let peer: SpotchatPeer
+    @ObservedObject var runtime: ShumRuntime
+    let peer: ShumPeer
     let lastMetAt: Date
 
     private let sourceHeight: CGFloat = 72
@@ -884,7 +912,7 @@ private struct ShumEncounterContextPreview: View {
 }
 
 private struct ShumProfileBlockSheetModifier: ViewModifier {
-    @ObservedObject var runtime: SpotchatRuntime
+    @ObservedObject var runtime: ShumRuntime
     @Binding var request: ShumProfileBlockRequest?
     @State private var activeRequest: ShumProfileBlockRequest?
 
@@ -924,7 +952,7 @@ private struct ShumProfileBlockSheetModifier: ViewModifier {
 }
 
 private struct ShumProfileBlockOptionsSheet: View {
-    @ObservedObject var runtime: SpotchatRuntime
+    @ObservedObject var runtime: ShumRuntime
     let request: ShumProfileBlockRequest
     let onClose: () -> Void
     let onBlock: () -> Void
@@ -997,7 +1025,7 @@ private struct ShumProfileBlockOptionsSheet: View {
 
 extension View {
     func shumProfileBlockSheet(
-        runtime: SpotchatRuntime,
+        runtime: ShumRuntime,
         request: Binding<ShumProfileBlockRequest?>
     ) -> some View {
         modifier(
@@ -1010,8 +1038,8 @@ extension View {
 }
 
 private struct ShumStoredPersonRow: View {
-    @ObservedObject var runtime: SpotchatRuntime
-    let peer: SpotchatPeer
+    @ObservedObject var runtime: ShumRuntime
+    let peer: ShumPeer
     var lastMetAt: Date?
     let cardAction: () -> Void
     let writeAction: () -> Void
@@ -1055,8 +1083,8 @@ private struct ShumStoredPersonRow: View {
 
 }
 
-private extension SpotchatEncounter {
-    var peer: SpotchatPeer {
-        SpotchatPeer(id: card.peerID, name: card.name, lastConnected: lastSeen)
+private extension ShumEncounter {
+    var peer: ShumPeer {
+        ShumPeer(id: card.peerID, name: card.name, lastConnected: lastSeen)
     }
 }

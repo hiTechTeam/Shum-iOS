@@ -6,15 +6,15 @@ import Testing
 @Suite("Unified chat folders", .serialized)
 @MainActor
 struct ShumChatDirectoryTests {
-    typealias Node = SpotchatPermanentTests.Node
-    typealias Clock = SpotchatPermanentTests.Clock
+    typealias Node = ShumPermanentTests.Node
+    typealias Clock = ShumPermanentTests.Clock
 
-    private func rows(_ owner: Node, chats: [SpotchatPeer] = [], nearby: [SpotchatPeer] = [], unread: Int = 0) -> [ShumDirectoryEntry] {
+    private func rows(_ owner: Node, chats: [ShumPeer] = [], nearby: [ShumPeer] = [], unread: Int = 0) -> [ShumDirectoryEntry] {
         ShumChatDirectory.entries(chats: chats, peers: nearby, permanent: owner.service,
                                   isNearby: { id in nearby.contains { $0.id == id } }, unreadCount: { _ in unread })
     }
-    private func peer(_ node: Node) -> SpotchatPeer {
-        SpotchatPeer(id: node.card.peerID, name: node.card.name, lastConnected: Date())
+    private func peer(_ node: Node) -> ShumPeer {
+        ShumPeer(id: node.card.peerID, name: node.card.name, lastConnected: Date())
     }
 
     @Test func overlappingSourcesProduceOneCardAndIndependentFolders() throws {
@@ -38,7 +38,7 @@ struct ShumChatDirectoryTests {
     @Test func staleConnectionIdentityDoesNotDuplicateKnownPerson() throws {
         let clock = Clock(), owner = try Node("Owner", clock: clock), person = try Node("Person", clock: clock)
         try owner.service.add(person.card, source: "test")
-        let connectionPeer = SpotchatPeer(
+        let connectionPeer = ShumPeer(
             id: PeerID(publicKey: person.card.noiseKey),
             name: person.card.name,
             lastConnected: Date()
@@ -54,7 +54,7 @@ struct ShumChatDirectoryTests {
 
     @Test func unverifiedConnectionIdentityIsNotShownAsAPerson() throws {
         let clock = Clock(), owner = try Node("Owner", clock: clock)
-        let connectionPeer = SpotchatPeer(
+        let connectionPeer = ShumPeer(
             id: PeerID(str: "temporary-session"),
             name: "Ожидание проверки",
             lastConnected: Date()

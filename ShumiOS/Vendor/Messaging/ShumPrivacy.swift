@@ -3,7 +3,7 @@ import Foundation
 /// A durable marker keeps a failed/interrupted deletion from reopening radios
 /// or silently creating replacement keys on the next launch.
 @MainActor
-final class SpotchatDeletionService {
+final class ShumDeletionService {
     private let marker: URL
     private let directories: [URL]
     private let deleteKeys: () -> Bool
@@ -16,7 +16,7 @@ final class SpotchatDeletionService {
     var completed: Bool { (try? String(contentsOf: marker, encoding: .utf8)) == "deleted" }
     func begin() throws { try writeMarker("pending") }
     func finish() throws {
-        guard hasDeletion else { throw SpotchatFailure.storage }
+        guard hasDeletion else { throw ShumFailure.storage }
         // Remove files before committing success. A partial failure leaves the
         // marker and the app closed; Retry is safe even after key deletion.
         for directory in directories where FileManager.default.fileExists(atPath: directory.path) {
@@ -25,12 +25,12 @@ final class SpotchatDeletionService {
                 try FileManager.default.removeItem(at: entry)
             }
         }
-        guard deleteKeys() else { throw SpotchatFailure.unavailableIdentity }
+        guard deleteKeys() else { throw ShumFailure.unavailableIdentity }
         clearPreferences()
         try writeMarker("deleted")
     }
     func allowNewProfile() throws {
-        guard completed else { throw SpotchatFailure.storage }
+        guard completed else { throw ShumFailure.storage }
         try FileManager.default.removeItem(at: marker)
     }
     private func writeMarker(_ value: String) throws {
@@ -40,10 +40,10 @@ final class SpotchatDeletionService {
         var values = URLResourceValues(); values.isExcludedFromBackup = true
         try? folder.setResourceValues(values)
     }
-    static func live() -> SpotchatDeletionService {
+    static func live() -> ShumDeletionService {
         let files = FileManager.default
         let support = files.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return SpotchatDeletionService(marker: support.appendingPathComponent("ShumPrivacy/deletion.state"),
+        return ShumDeletionService(marker: support.appendingPathComponent("ShumPrivacy/deletion.state"),
             directories: [support, files.urls(for: .cachesDirectory, in: .userDomainMask)[0], files.urls(for: .documentDirectory, in: .userDomainMask)[0], files.temporaryDirectory],
             deleteKeys: { KeychainManager.makeDefault().deleteAllKeychainData() },
             clearPreferences: { if let bundle = Bundle.main.bundleIdentifier { UserDefaults.standard.removePersistentDomain(forName: bundle) } })
@@ -53,29 +53,15 @@ final class SpotchatDeletionService {
 #if os(iOS)
 import SwiftUI
 
-struct SpotchatPrivacySettings: View {
-    @ObservedObject var runtime: SpotchatRuntime
-    @Environment(\.openURL) private var openURL
+struct ShumPrivacySettings: View {
+    @ObservedObject var runtime: ShumRuntime
+    @Environment(\.dismiss) private var dismiss
     @State private var confirmDelete = false
-    @State private var error: String?
     var body: some View {
         List {
-            Section("Заблокированные") {
-                let cards = (runtime.permanent?.state.blocked?.values.map { $0 } ?? []).sorted { $0.name < $1.name }
-                if cards.isEmpty { Text("Нет заблокированных контактов").foregroundStyle(.secondary) }
-                ForEach(cards) { card in
-                    HStack {
-                        Text(card.name); Spacer()
-                        Button("Разблокировать") {
-                            do { try runtime.permanent?.setBlocked(card, blocked: false) }
-                            catch { self.error = error.localizedDescription }
-                        }.font(.subheadline)
-                    }
-                }
-            }
             Section {
                 Button("Удалить профиль и данные", role: .destructive) { confirmDelete = true }
-                    .accessibilityIdentifier("spotchat.deleteProfile")
+                    .accessibilityIdentifier("shum.deleteProfile")
             } footer: {
                 Text("Удаляет профиль, ключи, контакты, историю и очередь на этом iPhone. Восстановить прежний профиль будет нельзя. Копии у других людей не удаляются.")
             }
@@ -91,18 +77,24 @@ struct SpotchatPrivacySettings: View {
                 NSLocalizedString("local.delete.action", comment: ""),
                 role: .destructive
             ) {
-                runtime.deleteProfileHandler?()
+                // Close the settings sheet before replacing the registered
+                // app hierarchy. Otherwise SwiftUI can retain its presentation
+                // host over the newly-created registration screen.
+                dismiss()
+                Task { @MainActor in
+                    await Task.yield()
+                    runtime.deleteProfileHandler?()
+                }
             }
         } message: {
             Text(NSLocalizedString("local.delete.message", comment: ""))
         }
-        .alert("Shum", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("Понятно") {} } message: { Text(error ?? "") }
     }
 }
 
-struct SpotchatContactActionsMenu: View {
-    @ObservedObject var runtime: SpotchatRuntime
-    let card: SpotchatContactCard
+struct ShumContactActionsMenu: View {
+    @ObservedObject var runtime: ShumRuntime
+    let card: ShumContactCard
     var onDelete: () -> Void = {}
     @State private var action: String?
     @State private var error: String?

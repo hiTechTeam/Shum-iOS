@@ -2,7 +2,7 @@
 import SwiftUI
 import BitFoundation
 
-private struct SpotchatAvatarToolbar<Content: View>: ToolbarContent {
+private struct ShumAvatarToolbar<Content: View>: ToolbarContent {
     private let content: Content
     init(@ViewBuilder content: () -> Content) { self.content = content() }
 
@@ -18,7 +18,7 @@ private struct SpotchatAvatarToolbar<Content: View>: ToolbarContent {
     }
 }
 
-private struct SpotchatComposerSurface: ViewModifier {
+private struct ShumComposerSurface: ViewModifier {
     private let shape = RoundedRectangle(cornerRadius: 23, style: .continuous)
 
     @ViewBuilder
@@ -36,20 +36,20 @@ private struct SpotchatComposerSurface: ViewModifier {
 }
 
 
-struct SpotchatConversationView: View {
+struct ShumConversationView: View {
     @Environment(\.shumThemePalette) private var palette
-    @ObservedObject var runtime: SpotchatRuntime
-    let peer: SpotchatPeer
+    @ObservedObject var runtime: ShumRuntime
+    let peer: ShumPeer
     @State private var draft = ""
     @State private var showPeerProfile = false
-    @State private var replyingTo: SpotchatMessage?
+    @State private var replyingTo: ShumMessage?
     @State private var typingPauseTask: Task<Void, Never>?
     @FocusState private var inputFocused: Bool
     @State private var atBottom = true
-    @State private var scrollCommand: SpotchatTimelineCommand?
-    private var messages: [SpotchatMessage] { runtime.conversation(peer.id) }
+    @State private var scrollCommand: ShumTimelineCommand?
+    private var messages: [ShumMessage] { runtime.conversation(peer.id) }
     private var name: String { runtime.displayName(peer) }
-    private var invitationPhase: SpotchatInvitationPhase {
+    private var invitationPhase: ShumInvitationPhase {
         runtime.invitationPhase(for: peer.id)
     }
 
@@ -57,7 +57,7 @@ struct SpotchatConversationView: View {
         let conversation = messages
         GeometryReader { geometry in
             ZStack {
-                SpotchatConversationTimeline(
+                ShumConversationTimeline(
                     items: conversation.indices.map { timelineItem(at: $0, in: conversation) },
                     storageKey: "shum.chat.position.\(runtime.permanent?.ownCard.id ?? "local").\(peer.id.id)",
                     appearanceKey: "\(palette.accentUIColor)-\(palette.colorScheme)",
@@ -65,13 +65,18 @@ struct SpotchatConversationView: View {
                     contentInsets: geometry.safeAreaInsets,
                     bottomChanged: { atBottom = $0 },
                     tapped: { inputFocused = false }
-                ) { index, width in
-                    messageRow(at: index, in: conversation, width: width)
+                ) { index, width, highlightToken in
+                    messageRow(
+                        at: index,
+                        in: conversation,
+                        width: width,
+                        highlightToken: highlightToken
+                    )
                 }
                 .ignoresSafeArea(.container, edges: .vertical)
                 if conversation.isEmpty {
                     VStack(spacing: 12) {
-                        SpotchatAvatar(name: name, size: 70, imageData: runtime.profile(for: peer.id)?.avatar)
+                        ShumAvatar(name: name, size: 70, imageData: runtime.profile(for: peer.id)?.avatar)
                         Text(emptyTitle).font(.headline)
                         if let emptyMessage {
                             Text(emptyMessage).font(.subheadline).foregroundStyle(.secondary)
@@ -97,7 +102,7 @@ struct SpotchatConversationView: View {
                 VStack(spacing: 2) {
                     Text(name).font(.system(size: 17, weight: .semibold)).lineLimit(1)
                     if runtime.isTyping(peer.id) {
-                        SpotchatTypingIndicator()
+                        ShumTypingIndicator()
                             .transition(.opacity)
                     } else {
                         HStack(spacing: 4) {
@@ -113,9 +118,9 @@ struct SpotchatConversationView: View {
                 }.accessibilityElement(children: .combine)
                     .animation(.easeInOut(duration: 0.18), value: runtime.isTyping(peer.id))
             }
-            SpotchatAvatarToolbar {
+            ShumAvatarToolbar {
                 Button { inputFocused = false; showPeerProfile = true } label: {
-                    SpotchatAvatar(name: name, size: 34, imageData: runtime.profile(for: peer.id)?.avatar)
+                    ShumAvatar(name: name, size: 34, imageData: runtime.profile(for: peer.id)?.avatar)
                         .frame(width: 44, height: 44).contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityLabel("Профиль собеседника")
             }
@@ -127,7 +132,7 @@ struct SpotchatConversationView: View {
                         Spacer()
                         Button {
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            scrollCommand = SpotchatTimelineCommand(target: .bottom)
+                            scrollCommand = ShumTimelineCommand(target: .bottom)
                         } label: {
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 17, weight: .semibold))
@@ -136,9 +141,9 @@ struct SpotchatConversationView: View {
                                 .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
-                        .modifier(SpotchatComposerSurface())
+                        .modifier(ShumComposerSurface())
                         .accessibilityLabel("К последнему сообщению")
-                        .accessibilityIdentifier("spotchat.scrollToBottom")
+                        .accessibilityIdentifier("shum.scrollToBottom")
                         .padding(.trailing, 3)
                     }
                     .frame(maxWidth: 520)
@@ -148,7 +153,7 @@ struct SpotchatConversationView: View {
             }
         }
         .sheet(isPresented: $showPeerProfile) {
-            SpotchatPeerProfileSheet(runtime: runtime, peer: peer)
+            ShumPeerProfileSheet(runtime: runtime, peer: peer)
         }
         .onChange(of: showPeerProfile) { visible in
             runtime.openConversation(!visible && runtime.chatPeers.contains(where: { $0.id == peer.id }) ? peer.id : nil)
@@ -243,7 +248,7 @@ struct SpotchatConversationView: View {
                     .font(.body).lineLimit(1...5).focused($inputFocused)
                     .textFieldStyle(.plain)
                     .padding(.leading, 16).padding(.vertical, 12)
-                    .accessibilityIdentifier("spotchat.messageInput")
+                    .accessibilityIdentifier("shum.messageInput")
                     #if DEBUG && targetEnvironment(simulator)
                     .task {
                         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewKeyboard") {
@@ -259,7 +264,7 @@ struct SpotchatConversationView: View {
                         typingPauseTask?.cancel()
                         runtime.setTyping(false, for: peer.id)
                         draft = ""
-                        scrollCommand = SpotchatTimelineCommand(target: .bottom)
+                        scrollCommand = ShumTimelineCommand(target: .bottom)
                         withAnimation(.easeOut(duration: 0.16)) { self.replyingTo = nil }
                     }
                 } label: {
@@ -274,11 +279,11 @@ struct SpotchatConversationView: View {
                 .disabled(!canSend)
                 .padding(.trailing, 5).padding(.vertical, 5)
                 .accessibilityLabel("Отправить сообщение")
-                .accessibilityIdentifier("spotchat.sendMessage")
+                .accessibilityIdentifier("shum.sendMessage")
             }
         }
         .frame(maxWidth: 520, minHeight: 46)
-        .modifier(SpotchatComposerSurface())
+        .modifier(ShumComposerSurface())
         .animation(.easeOut(duration: 0.15), value: canSend)
         .animation(.easeOut(duration: 0.18), value: replyingTo?.id)
     }
@@ -346,7 +351,7 @@ struct SpotchatConversationView: View {
             && (runtime.permanent != nil || runtime.isNearby(peer.id))
     }
 
-    private func beginReply(to message: SpotchatMessage) {
+    private func beginReply(to message: ShumMessage) {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) {
             replyingTo = message
         }
@@ -365,7 +370,7 @@ struct SpotchatConversationView: View {
         }
     }
 
-    private func replyAuthor(_ reference: SpotchatReplyReference) -> String {
+    private func replyAuthor(_ reference: ShumReplyReference) -> String {
         if let ownID = runtime.permanent?.ownCard.id, reference.senderID == ownID { return "Вы" }
         if reference.senderID == "self" { return "Вы" }
         return name
@@ -398,7 +403,7 @@ struct SpotchatConversationView: View {
             "Проведите стрелку вправо, если передумаете."
         }
     }
-    private func timelineItem(at index: Int, in conversation: [SpotchatMessage]) -> SpotchatTimelineItem {
+    private func timelineItem(at index: Int, in conversation: [ShumMessage]) -> ShumTimelineItem {
         let message = conversation[index]
         var revision = Hasher()
         revision.combine(message.text)
@@ -412,10 +417,15 @@ struct SpotchatConversationView: View {
         revision.combine(index > 0 ? conversation[index - 1].outgoing : nil)
         revision.combine(index + 1 < conversation.count ? conversation[index + 1].date : nil)
         revision.combine(index + 1 < conversation.count ? conversation[index + 1].outgoing : nil)
-        return SpotchatTimelineItem(id: message.id, revision: revision.finalize())
+        return ShumTimelineItem(id: message.id, revision: revision.finalize())
     }
 
-    private func messageRow(at index: Int, in conversation: [SpotchatMessage], width: CGFloat) -> some View {
+    private func messageRow(
+        at index: Int,
+        in conversation: [ShumMessage],
+        width: CGFloat,
+        highlightToken: UUID?
+    ) -> some View {
         let message = conversation[index]
         let previous = index > 0 ? conversation[index - 1] : nil
         let next = index + 1 < conversation.count ? conversation[index + 1] : nil
@@ -428,13 +438,14 @@ struct SpotchatConversationView: View {
                     .background(Color(.tertiarySystemFill).opacity(0.5), in: Capsule())
                     .padding(.top, 16).padding(.bottom, 18)
             }
-            SpotchatMessageBubble(message: message,
+            ShumMessageBubble(message: message,
                 showsTail: !continues,
                 maximumWidth: min(width * 0.82, 440),
                 replyAuthor: message.reply.map(replyAuthor),
+                quoteHighlightToken: highlightToken,
                 retry: { runtime.retry(message) },
                 reply: { beginReply(to: message) },
-                openReply: { scrollCommand = SpotchatTimelineCommand(target: .message($0)) })
+                openReply: { scrollCommand = ShumTimelineCommand(target: .message($0)) })
                 .padding(.top, sameDay && previous?.outgoing != message.outgoing ? 10 : 3)
         }
         .padding(.horizontal, 10)

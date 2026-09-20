@@ -12,15 +12,15 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     @Published var chatNotificationPeerID: String?
     @Published var showSplash = true
     @Published var isScaning = false
-    @Published private(set) var chat: SpotchatRuntime?
+    @Published private(set) var chat: ShumRuntime?
     @Published var deletionError: String?
-    @Published var invitation: SpotchatContactCard?
+    @Published var invitation: ShumContactCard?
     @Published var invitationError: String?
     @Published var deletingProfile = false
     let authCodeViewModel: LocalProfileViewModel
     let peopleViewModel: PeopleViewModel
     let profilePhotoViewModel: ProfilePhotoViewModel
-    private let deletion = SpotchatDeletionService.live()
+    private let deletion = ShumDeletionService.live()
     private let nearbyPeopleNotifier = NearbyPeopleNotifier()
     private var photoObserver: NSObjectProtocol?
     private var chatObserver: AnyCancellable?
@@ -98,7 +98,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             chat?.setBluetoothEnabled(bluetoothEnabled)
             return
         }
-        let model = SpotchatRuntime.live()
+        let model = ShumRuntime.live()
         model.deleteProfileHandler = { [weak self] in
             Task { @MainActor in try? await self?.deleteAccount() }
         }
@@ -138,7 +138,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     private func synchronizeProfile() {
         guard !deletingProfile, let own = LocalCardStore.shared.ownManifest, let chat, chat.isReady else { return }
         let avatar = LocalCardStore.shared.photo(own.body.photoHash)
-        let profile = SpotchatProfile(name: own.body.name, bio: own.body.bio ?? "", avatar: avatar)
+        let profile = ShumProfile(name: own.body.name, bio: own.body.bio ?? "", avatar: avatar)
         if chat.profiles.own != profile { _ = chat.saveProfile(name: profile.name, bio: profile.bio, avatar: profile.avatar) }
     }
     func completedRegistration() {
@@ -191,12 +191,12 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         }
 
         do {
-            switch try SpotchatInvitationPayload.parse(url) {
+            switch try ShumInvitationPayload.parse(url) {
             case .card(let card):
                 invitationError = nil
                 invitation = card
             case .locator(let locator):
-                guard let chat else { throw SpotchatFailure.unavailableIdentity }
+                guard let chat else { throw ShumFailure.unavailableIdentity }
                 invitationError = nil
                 chat.resolveContact(locator) { [weak self] result in
                     switch result {
@@ -217,7 +217,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         chatObserver?.cancel()
         chat?.retireForDeletion(); chat = nil
         finishDeletion()
-        if deletingProfile { throw SpotchatFailure.storage }
+        if deletingProfile { throw ShumFailure.storage }
     }
     func finishDeletion() {
         do {
@@ -267,7 +267,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         refreshNotificationState(for: chat)
     }
 
-    private func observeNotifications(in runtime: SpotchatRuntime) {
+    private func observeNotifications(in runtime: ShumRuntime) {
         notificationSnapshotInitialized = false
         notifiedIncomingMessageIDs.removeAll()
         notifiedInvitationIDs.removeAll()
@@ -284,7 +284,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         refreshNotificationState(for: runtime)
     }
 
-    private func refreshNotificationState(for runtime: SpotchatRuntime) {
+    private func refreshNotificationState(for runtime: ShumRuntime) {
         guard !deletingProfile, isRegistered,
               let permanent = runtime.permanent else { return }
 

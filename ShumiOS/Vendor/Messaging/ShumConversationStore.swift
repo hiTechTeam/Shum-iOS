@@ -2,36 +2,43 @@ import BitFoundation
 import CryptoKit
 import Foundation
 
-struct SpotchatContact: Codable, Identifiable {
-    var card: SpotchatContactCard
+enum ShumWireProtocol {
+    static let messageName = "shum.message.v1"
+    static let legacyMessageName = "spotchat.message.v1"
+    static let relayPrefix = "shum-v1:"
+    static let legacyRelayPrefix = "spotchat-v1:"
+}
+
+struct ShumContact: Codable, Identifiable {
+    var card: ShumContactCard
     var addedAt: Date
     var avatar: Data?
     var metadata: [String: String] = [:]
     var id: String { card.id }
 }
-struct SpotchatEncounter: Codable, Equatable, Identifiable {
-    var card: SpotchatContactCard
+struct ShumEncounter: Codable, Equatable, Identifiable {
+    var card: ShumContactCard
     var firstSeen: Date
     var lastSeen: Date
     var seenCount: Int
     var avatar: Data?
     var id: String { card.id }
 }
-struct SpotchatSavedProfile: Codable, Equatable, Identifiable {
-    var card: SpotchatContactCard
+struct ShumSavedProfile: Codable, Equatable, Identifiable {
+    var card: ShumContactCard
     var savedAt: Date
     var avatar: Data?
     var id: String { card.id }
 }
-struct SpotchatConversation: Codable, Identifiable {
+struct ShumConversation: Codable, Identifiable {
     var id: String
     var contactID: String
     var createdAt: Date
     static func identifier(_ first: String, _ second: String) -> String {
-        SpotchatContactCard.userID(Data([first, second].sorted().joined(separator: ":").utf8))
+        ShumContactCard.userID(Data([first, second].sorted().joined(separator: ":").utf8))
     }
 }
-enum SpotchatInvitationPhase: String, Codable {
+enum ShumInvitationPhase: String, Codable {
     case ready
     case outgoingPending
     case incomingPending
@@ -39,22 +46,22 @@ enum SpotchatInvitationPhase: String, Codable {
     case declinedByPeer
     case declinedLocally
 }
-struct SpotchatInvitationState: Codable, Equatable {
-    var phase: SpotchatInvitationPhase
+struct ShumInvitationState: Codable, Equatable {
+    var phase: ShumInvitationPhase
     var updatedAt: Int64
     var eventID: String
 }
-enum SpotchatInvitationAction: String, Codable {
+enum ShumInvitationAction: String, Codable {
     case request
     case accept
     case decline
 }
-struct SpotchatInvitationControl: Codable, Equatable, Identifiable {
+struct ShumInvitationControl: Codable, Equatable, Identifiable {
     var version = 1
     var id: String
-    var sender: SpotchatContactCard
-    var recipient: SpotchatContactCard
-    var action: SpotchatInvitationAction
+    var sender: ShumContactCard
+    var recipient: ShumContactCard
+    var action: ShumInvitationAction
     var timestamp: Int64
     var expiresAt: Int64
     var signature = Data()
@@ -62,7 +69,7 @@ struct SpotchatInvitationControl: Codable, Equatable, Identifiable {
     func signingBytes() throws -> Data {
         var value = self
         value.signature = Data()
-        return try SpotchatCoding.encode(value)
+        return try ShumCoding.encode(value)
     }
 
     func validate(at now: Date) throws {
@@ -79,22 +86,22 @@ struct SpotchatInvitationControl: Codable, Equatable, Identifiable {
               expiresAt - timestamp <= 30 * 86_400_000,
               try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey)
                 .isValidSignature(signature, for: signingBytes()) else {
-            throw SpotchatFailure.invalidMessage
+            throw ShumFailure.invalidMessage
         }
     }
 }
-struct SpotchatStoredInvitationControl: Codable, Equatable, Identifiable {
-    var control: SpotchatInvitationControl
+struct ShumStoredInvitationControl: Codable, Equatable, Identifiable {
+    var control: ShumInvitationControl
     var lastAttempt: Date = .distantPast
     var attempts = 0
     var nostrAccepted = false
     var id: String { control.id }
 }
-struct SpotchatTypingControl: Codable, Equatable, Identifiable {
+struct ShumTypingControl: Codable, Equatable, Identifiable {
     var version = 1
     var id: String
-    var sender: SpotchatContactCard
-    var recipient: SpotchatContactCard
+    var sender: ShumContactCard
+    var recipient: ShumContactCard
     var isTyping: Bool
     var timestamp: Int64
     var expiresAt: Int64
@@ -103,7 +110,7 @@ struct SpotchatTypingControl: Codable, Equatable, Identifiable {
     func signingBytes() throws -> Data {
         var value = self
         value.signature = Data()
-        return try SpotchatCoding.encode(value)
+        return try ShumCoding.encode(value)
     }
 
     func validate(at now: Date) throws {
@@ -120,15 +127,15 @@ struct SpotchatTypingControl: Codable, Equatable, Identifiable {
               expiresAt - timestamp <= 10_000,
               try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey)
                 .isValidSignature(signature, for: signingBytes()) else {
-            throw SpotchatFailure.invalidMessage
+            throw ShumFailure.invalidMessage
         }
     }
 }
-struct SpotchatPresenceControl: Codable, Equatable, Identifiable {
+struct ShumPresenceControl: Codable, Equatable, Identifiable {
     var version = 1
     var id: String
-    var sender: SpotchatContactCard
-    var recipient: SpotchatContactCard
+    var sender: ShumContactCard
+    var recipient: ShumContactCard
     var isOnline: Bool
     var timestamp: Int64
     var expiresAt: Int64
@@ -137,7 +144,7 @@ struct SpotchatPresenceControl: Codable, Equatable, Identifiable {
     func signingBytes() throws -> Data {
         var value = self
         value.signature = Data()
-        return try SpotchatCoding.encode(value)
+        return try ShumCoding.encode(value)
     }
 
     func validate(at now: Date) throws {
@@ -154,11 +161,11 @@ struct SpotchatPresenceControl: Codable, Equatable, Identifiable {
               expiresAt - timestamp <= 90_000,
               try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey)
                 .isValidSignature(signature, for: signingBytes()) else {
-            throw SpotchatFailure.invalidMessage
+            throw ShumFailure.invalidMessage
         }
     }
 }
-enum SpotchatDelivery: String, Codable {
+enum ShumDelivery: String, Codable {
     case queued, forwarding, delivered, read, expired, cancelled
     var label: String {
         switch self {
@@ -171,34 +178,34 @@ enum SpotchatDelivery: String, Codable {
         }
     }
 }
-struct SpotchatEnvelope: Codable, Equatable, Identifiable {
+struct ShumEnvelope: Codable, Equatable, Identifiable {
     var version = 1
     var id: String
     var conversationID: String
-    var sender: SpotchatContactCard
-    var recipient: SpotchatContactCard
+    var sender: ShumContactCard
+    var recipient: ShumContactCard
     var timestamp: Int64
     var expiresAt: Int64
     var hopLimit = 4
     var ciphertext: Data
     var signature = Data()
-    var digest: String { SpotchatContactCard.userID(ciphertext) }
+    var digest: String { ShumContactCard.userID(ciphertext) }
     func signingBytes() throws -> Data {
-        var value = self; value.signature = Data(); return try SpotchatCoding.encode(value)
+        var value = self; value.signature = Data(); return try ShumCoding.encode(value)
     }
     func validate(at now: Date) throws {
         try sender.validate(); try recipient.validate()
         let ms = Int64(now.timeIntervalSince1970 * 1000)
         guard version == 1, UUID(uuidString: id) != nil, sender.id != recipient.id,
-              conversationID == SpotchatConversation.identifier(sender.id, recipient.id),
+              conversationID == ShumConversation.identifier(sender.id, recipient.id),
               timestamp >= 0, timestamp <= ms + 300_000,
               expiresAt > ms, expiresAt > timestamp, expiresAt - timestamp <= 86_400_000,
               (1...4).contains(hopLimit), !ciphertext.isEmpty, ciphertext.count <= 12_000,
-              try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey).isValidSignature(signature, for: signingBytes()) else { throw SpotchatFailure.invalidMessage }
+              try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey).isValidSignature(signature, for: signingBytes()) else { throw ShumFailure.invalidMessage }
     }
 }
-struct SpotchatPlaintext: Codable {
-    var protocolName = "spotchat.message.v1"
+struct ShumPlaintext: Codable {
+    var protocolName = ShumWireProtocol.messageName
     var id: String
     var conversationID: String
     var senderID: String
@@ -206,20 +213,20 @@ struct SpotchatPlaintext: Codable {
     var timestamp: Int64
     var expiresAt: Int64
     var text: String
-    var reply: SpotchatReplyReference? = nil
+    var reply: ShumReplyReference? = nil
 }
 
-struct SpotchatReplyReference: Codable, Hashable {
+struct ShumReplyReference: Codable, Hashable {
     var messageID: String
     var senderID: String
     var text: String
 }
 
-struct SpotchatStoredMessage: Codable, Identifiable {
-    var envelope: SpotchatEnvelope
+struct ShumStoredMessage: Codable, Identifiable {
+    var envelope: ShumEnvelope
     var text: String // Entire snapshot is encrypted at rest; relays never receive this field.
     var outgoing: Bool
-    var status: SpotchatDelivery
+    var status: ShumDelivery
     var unread = false
     var hopCount = 0
     var deliveryTransport: String?
@@ -229,28 +236,28 @@ struct SpotchatStoredMessage: Codable, Identifiable {
     var nostrAccepted = false
     var deliveredAt: Date?
     var readAt: Date?
-    var reply: SpotchatReplyReference? = nil
+    var reply: ShumReplyReference? = nil
     var id: String { envelope.id }
 }
-struct SpotchatRelayCopy: Codable {
-    var envelope: SpotchatEnvelope
+struct ShumRelayCopy: Codable {
+    var envelope: ShumEnvelope
     var hopCount: Int
     var depositor: String
     var forwardedTo: Set<String> = []
     var lastDirectAttempt: Date = .distantPast
 }
-struct SpotchatReceipt: Codable, Equatable {
+struct ShumReceipt: Codable, Equatable {
     var envelopeID: String
     var digest: String
-    var sender: SpotchatContactCard // Recipient of the original message, signing this ACK.
-    var destination: SpotchatContactCard
+    var sender: ShumContactCard // Recipient of the original message, signing this ACK.
+    var destination: ShumContactCard
     var read: Bool
     var timestamp: Int64
     var expiresAt: Int64
     var signature = Data()
     var key: String { envelopeID + ":" + digest + ":" + sender.id }
     func signingBytes() throws -> Data {
-        var value = self; value.signature = Data(); return try SpotchatCoding.encode(value)
+        var value = self; value.signature = Data(); return try ShumCoding.encode(value)
     }
     func validate(at now: Date) throws {
         try sender.validate(); try destination.validate()
@@ -258,67 +265,67 @@ struct SpotchatReceipt: Codable, Equatable {
         guard UUID(uuidString: envelopeID) != nil, digest.count == 64,
               timestamp >= 0, timestamp <= ms + 300_000, expiresAt > ms,
               expiresAt <= ms + 86_700_000,
-              try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey).isValidSignature(signature, for: signingBytes()) else { throw SpotchatFailure.invalidMessage }
+              try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey).isValidSignature(signature, for: signingBytes()) else { throw ShumFailure.invalidMessage }
     }
 }
-struct SpotchatStoredReceipt: Codable {
-    var receipt: SpotchatReceipt
+struct ShumStoredReceipt: Codable {
+    var receipt: ShumReceipt
     var lastAttempt: Date = .distantPast
     var sentTo: Set<String> = []
     var nostrAccepted = false
 }
-struct SpotchatPacket: Codable {
+struct ShumPacket: Codable {
     var version = 1
-    var card: SpotchatContactCard?
-    var envelope: SpotchatEnvelope?
+    var card: ShumContactCard?
+    var envelope: ShumEnvelope?
     var hopCount: Int?
-    var receipt: SpotchatReceipt?
-    var invitation: SpotchatInvitationControl?
-    var typing: SpotchatTypingControl?
-    var presence: SpotchatPresenceControl?
+    var receipt: ShumReceipt?
+    var invitation: ShumInvitationControl?
+    var typing: ShumTypingControl?
+    var presence: ShumPresenceControl?
 }
-struct SpotchatDatabase: Codable {
+struct ShumDatabase: Codable {
     var version = 1
     var ownerID: String
-    var contacts: [SpotchatContact] = []
-    var requests: [SpotchatContactCard] = []
-    var conversations: [SpotchatConversation] = []
-    var messages: [SpotchatStoredMessage] = []
-    var relay: [SpotchatRelayCopy] = []
-    var receipts: [SpotchatStoredReceipt] = []
+    var contacts: [ShumContact] = []
+    var requests: [ShumContactCard] = []
+    var conversations: [ShumConversation] = []
+    var messages: [ShumStoredMessage] = []
+    var relay: [ShumRelayCopy] = []
+    var receipts: [ShumStoredReceipt] = []
     var seenRelay: [String: Date] = [:]
     // Optional additions decode older v1 snapshots without discarding history.
-    var blocked: [String: SpotchatContactCard]?
+    var blocked: [String: ShumContactCard]?
     var deletedMessageIDs: [String: Date]?
     var legacyHistory: ShumLegacyArchive?
-    var encounters: [SpotchatEncounter]?
-    var savedProfiles: [SpotchatSavedProfile]?
+    var encounters: [ShumEncounter]?
+    var savedProfiles: [ShumSavedProfile]?
     var unviewedEncounterIDs: Set<String>?
     // Ordered like Telegram's pinned indices: the first identifier is shown first.
     var pinnedDirectoryEntries: [String: [String]]?
-    var invitationStates: [String: SpotchatInvitationState]?
-    var invitationOutbox: [SpotchatStoredInvitationControl]?
+    var invitationStates: [String: ShumInvitationState]?
+    var invitationOutbox: [ShumStoredInvitationControl]?
 }
 
 @MainActor
-final class SpotchatConversationStore {
-    private(set) var state: SpotchatDatabase
+final class ShumConversationStore {
+    private(set) var state: ShumDatabase
     private let url: URL?
     private let key: SymmetricKey
     init(ownerID: String, key: SymmetricKey, url: URL?) throws {
         self.key = key; self.url = url
         if let url, FileManager.default.fileExists(atPath: url.path) {
             let encrypted = try Data(contentsOf: url)
-            guard encrypted.count <= 100_000_000 else { throw SpotchatFailure.storage }
+            guard encrypted.count <= 100_000_000 else { throw ShumFailure.storage }
             let plain = try ChaChaPoly.open(ChaChaPoly.SealedBox(combined: encrypted), using: key)
-            var restored = try JSONDecoder().decode(SpotchatDatabase.self, from: plain)
-            guard restored.version == 1, restored.ownerID == ownerID else { throw SpotchatFailure.unavailableIdentity }
+            var restored = try JSONDecoder().decode(ShumDatabase.self, from: plain)
+            guard restored.version == 1, restored.ownerID == ownerID else { throw ShumFailure.unavailableIdentity }
             // Builds before chat invitations allowed every saved contact to
             // message immediately. Preserve that access during migration.
             if restored.invitationStates == nil {
                 restored.invitationStates = Dictionary(uniqueKeysWithValues: restored.contacts.map { contact in
                     let timestamp = Int64(contact.addedAt.timeIntervalSince1970 * 1000)
-                    return (contact.id, SpotchatInvitationState(
+                    return (contact.id, ShumInvitationState(
                         phase: .accepted,
                         updatedAt: timestamp,
                         eventID: "legacy-\(contact.id)"
@@ -331,7 +338,7 @@ final class SpotchatConversationStore {
             restored.savedProfiles = nil
             state = restored
         } else {
-            state = SpotchatDatabase(
+            state = ShumDatabase(
                 ownerID: ownerID,
                 invitationStates: [:],
                 invitationOutbox: []
@@ -339,11 +346,11 @@ final class SpotchatConversationStore {
         }
     }
     // Commit disk first, publish memory second: a failed save never ACKs or loses durable history.
-    func transaction(_ update: (inout SpotchatDatabase) throws -> Void) throws {
+    func transaction(_ update: (inout ShumDatabase) throws -> Void) throws {
         var next = state; try update(&next)
         if let url {
-            let bytes = try ChaChaPoly.seal(SpotchatCoding.encode(next), using: key).combined
-            guard bytes.count <= 100_000_000 else { throw SpotchatFailure.quota }
+            let bytes = try ChaChaPoly.seal(ShumCoding.encode(next), using: key).combined
+            guard bytes.count <= 100_000_000 else { throw ShumFailure.quota }
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             #if os(iOS)
             try bytes.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
@@ -363,30 +370,30 @@ final class SpotchatConversationStore {
 }
 
 @MainActor
-final class SpotchatContactsService {
-    let store: SpotchatConversationStore
-    init(store: SpotchatConversationStore) { self.store = store }
-    func add(_ card: SpotchatContactCard, source: String, avatar: Data? = nil, now: Date = Date()) throws {
+final class ShumContactsService {
+    let store: ShumConversationStore
+    init(store: ShumConversationStore) { self.store = store }
+    func add(_ card: ShumContactCard, source: String, avatar: Data? = nil, now: Date = Date()) throws {
         try card.validate()
-        guard card.id != store.state.ownerID else { throw SpotchatFailure.invalidContact }
+        guard card.id != store.state.ownerID else { throw ShumFailure.invalidContact }
         if let existing = store.state.contacts.first(where: { $0.id == card.id }), existing.card == card,
            avatar == nil || existing.avatar == avatar { return }
         try store.transaction { state in
             if let index = state.contacts.firstIndex(where: { $0.id == card.id }) {
                 // Identity bindings are pinned. Name/bio updates cannot rotate authentication keys.
                 guard state.contacts[index].card.signingKey == card.signingKey,
-                      state.contacts[index].card.nostrKey == card.nostrKey else { throw SpotchatFailure.invalidContact }
+                      state.contacts[index].card.nostrKey == card.nostrKey else { throw ShumFailure.invalidContact }
                 state.contacts[index].card = card
                 if let avatar, avatar.count <= 40_960 { state.contacts[index].avatar = avatar }
             } else {
-                guard state.contacts.count < 2000 else { throw SpotchatFailure.quota }
-                state.contacts.append(SpotchatContact(card: card, addedAt: now, avatar: avatar, metadata: ["source": source]))
+                guard state.contacts.count < 2000 else { throw ShumFailure.quota }
+                state.contacts.append(ShumContact(card: card, addedAt: now, avatar: avatar, metadata: ["source": source]))
             }
         }
     }
-    func conversation(with card: SpotchatContactCard, now: Date) throws {
-        let id = SpotchatConversation.identifier(store.state.ownerID, card.id)
+    func conversation(with card: ShumContactCard, now: Date) throws {
+        let id = ShumConversation.identifier(store.state.ownerID, card.id)
         guard !store.state.conversations.contains(where: { $0.id == id }) else { return }
-        try store.transaction { $0.conversations.append(SpotchatConversation(id: id, contactID: card.id, createdAt: now)) }
+        try store.transaction { $0.conversations.append(ShumConversation(id: id, contactID: card.id, createdAt: now)) }
     }
 }

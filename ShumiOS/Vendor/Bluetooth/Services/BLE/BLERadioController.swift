@@ -79,6 +79,7 @@ final class BLERadioController {
         // Allow duplicates while active for faster discovery: immediate
         // discovery events instead of coalesced ones.
         let allowDuplicates = delegate?.radioIsAppActive() ?? true
+        ShumDiscoveryTrace.record("scan-start")
         central.scanForPeripherals(
             withServices: [BLEService.serviceUUID],
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: allowDuplicates]
@@ -160,6 +161,7 @@ final class BLERadioController {
         rssi: NSNumber
     ) {
         guard delegate?.radioIsPanicSuspended() == false, let central else { return }
+        ShumDiscoveryTrace.record("advertisement-received")
         let peripheralID = peripheral.identifier.uuidString
         let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? (peripheralID.prefix(6) + "…")
         let isConnectable = (advertisementData[CBAdvertisementDataIsConnectable] as? NSNumber)?.boolValue ?? true
@@ -231,13 +233,15 @@ final class BLERadioController {
         guard delegate?.radioIsPanicSuspended() == false else { return }
         let peripheral = candidate.peripheral
         let peripheralID = candidate.peripheralID
-        linkStateStore.beginConnecting(to: peripheral, at: Date())
+        let attemptStartedAt = Date()
+        linkStateStore.beginConnecting(to: peripheral, at: attemptStartedAt)
         peripheral.delegate = peripheralDelegate
         let options: [String: Any] = [
             CBConnectPeripheralOptionNotifyOnConnectionKey: true,
             CBConnectPeripheralOptionNotifyOnDisconnectionKey: true,
             CBConnectPeripheralOptionNotifyOnNotificationKey: true
         ]
+        ShumDiscoveryTrace.record("connect-start")
         central.connect(peripheral, options: options)
         scheduler.recordConnectionAttempt(at: Date())
         SecureLogger.debug("\(logPrefix): \(candidate.name) [RSSI:\(candidate.rssi)]", category: .session)
@@ -245,6 +249,7 @@ final class BLERadioController {
         queue.asyncAfter(deadline: .now() + TransportConfig.bleConnectTimeoutSeconds) { [weak self] in
             guard let self,
                   let state = self.linkStateStore.state(forPeripheralID: peripheralID),
+                  state.lastConnectionAttempt == attemptStartedAt,
                   state.isConnecting && !state.isConnected else { return }
 
             guard peripheral.state != .connected else {

@@ -2,9 +2,9 @@ import Foundation
 import Testing
 @preconcurrency @testable import Shum
 
-@Suite("Spotchat profile deletion", .serialized)
+@Suite("Shum profile deletion", .serialized)
 @MainActor
-struct SpotchatDeletionTests {
+struct ShumDeletionTests {
     @Test func deletionIsRetryableAndKeepsIdentityClosedUntilExplicitNewProfile() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -15,7 +15,7 @@ struct SpotchatDeletionTests {
         let keychain = MockKeychain()
         _ = keychain.saveIdentityKey(Data([1,2,3]), forKey: "noiseStaticKey")
         var clearedPreferences = false
-        let service = SpotchatDeletionService(marker: marker, directories: [root], deleteKeys: { keychain.deleteAllKeychainData() }, clearPreferences: { clearedPreferences = true })
+        let service = ShumDeletionService(marker: marker, directories: [root], deleteKeys: { keychain.deleteAllKeychainData() }, clearPreferences: { clearedPreferences = true })
         try service.begin()
         keychain.simulatedDeleteAllResult = false
         #expect(throws: (any Error).self) { try service.finish() }
@@ -23,7 +23,7 @@ struct SpotchatDeletionTests {
         #expect(!clearedPreferences)
         #expect(throws: (any Error).self) { try service.allowNewProfile() }
         keychain.simulatedDeleteAllResult = true
-        let restarted = SpotchatDeletionService(marker: marker, directories: [root], deleteKeys: { keychain.deleteAllKeychainData() }, clearPreferences: { clearedPreferences = true })
+        let restarted = ShumDeletionService(marker: marker, directories: [root], deleteKeys: { keychain.deleteAllKeychainData() }, clearPreferences: { clearedPreferences = true })
         try restarted.finish()
         #expect(restarted.completed)
         #expect(!FileManager.default.fileExists(atPath: profile.path))

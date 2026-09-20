@@ -4,12 +4,12 @@ import CryptoKit
 import Foundation
 import ImageIO
 
-protocol SpotchatProfileTransporting: AnyObject {
-    func sendSpotchatProfile(_ data: Data, to peer: PeerID)
+protocol ShumProfileTransporting: AnyObject {
+    func sendShumProfile(_ data: Data, to peer: PeerID)
 }
-extension BLEService: SpotchatProfileTransporting {}
+extension BLEService: ShumProfileTransporting {}
 
-struct SpotchatProfile: Codable, Equatable {
+struct ShumProfile: Codable, Equatable {
     var name: String
     var bio: String = ""
     var avatar: Data?
@@ -34,29 +34,29 @@ struct SpotchatProfile: Codable, Equatable {
     }
 }
 
-struct SpotchatProfileManifest: Codable, Equatable {
+struct ShumProfileManifest: Codable, Equatable {
     let name: String
     let bio: String
     let avatarHash: String?
     let avatarBytes: Int
-    var revision: String { SpotchatProfile.digest(Data((name + "\0" + bio + "\0" + (avatarHash ?? "")).utf8)) }
-    init(_ profile: SpotchatProfile) {
+    var revision: String { ShumProfile.digest(Data((name + "\0" + bio + "\0" + (avatarHash ?? "")).utf8)) }
+    init(_ profile: ShumProfile) {
         name = profile.name; bio = profile.bio
-        avatarHash = profile.avatar.map(SpotchatProfile.digest); avatarBytes = profile.avatar?.count ?? 0
+        avatarHash = profile.avatar.map(ShumProfile.digest); avatarBytes = profile.avatar?.count ?? 0
     }
     var valid: Bool {
-        SpotchatProfile(name: name, bio: bio).valid && avatarBytes >= 0 && avatarBytes <= SpotchatProfile.maxAvatarBytes &&
+        ShumProfile(name: name, bio: bio).valid && avatarBytes >= 0 && avatarBytes <= ShumProfile.maxAvatarBytes &&
         (avatarHash.map { Self.validHash($0) && avatarBytes > 0 } ?? (avatarBytes == 0))
     }
     static func validHash(_ hash: String) -> Bool { hash.count == 64 && hash.allSatisfy { "0123456789abcdef".contains($0) } }
 }
 
-struct SpotchatProfilePacket: Codable {
+struct ShumProfilePacket: Codable {
     enum Kind: String, Codable { case query, manifest, chunkRequest, chunk, changed }
     var version = 1
     let kind: Kind
     var request: String = ""
-    var manifest: SpotchatProfileManifest?
+    var manifest: ShumProfileManifest?
     var hash: String?
     var offset: Int?
     var data: Data?
@@ -67,34 +67,34 @@ struct SpotchatProfilePacket: Codable {
 /// Own profile is persistent; remote identity-to-profile bindings are accepted from
 /// an encrypted BLE session or a cryptographically authenticated Nostr lookup.
 /// Only content-addressed images survive a restart.
-final class SpotchatProfileStore {
+final class ShumProfileStore {
     private let directory: URL?
     init(directory: URL? = nil) { self.directory = directory }
-    static func live() -> SpotchatProfileStore {
+    static func live() -> ShumProfileStore {
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return SpotchatProfileStore(directory: root.appendingPathComponent("ShumProfiles", isDirectory: true))
+        return ShumProfileStore(directory: root.appendingPathComponent("ShumProfiles", isDirectory: true))
     }
-    func loadOwn() -> SpotchatProfile? {
+    func loadOwn() -> ShumProfile? {
         guard let directory, let data = try? Data(contentsOf: directory.appendingPathComponent("own.json")),
-              data.count <= 60 * 1024, var profile = try? JSONDecoder().decode(SpotchatProfile.self, from: data) else { return nil }
-        profile.bio = String(profile.bio.prefix(SpotchatProfile.maxBioCharacters))
+              data.count <= 60 * 1024, var profile = try? JSONDecoder().decode(ShumProfile.self, from: data) else { return nil }
+        profile.bio = String(profile.bio.prefix(ShumProfile.maxBioCharacters))
         guard profile.valid else { return nil }
         return profile
     }
-    func saveOwn(_ profile: SpotchatProfile) throws {
+    func saveOwn(_ profile: ShumProfile) throws {
         guard let directory else { return }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try JSONEncoder().encode(profile).write(to: directory.appendingPathComponent("own.json"), options: .atomic)
     }
     func avatar(_ hash: String) -> Data? {
-        guard SpotchatProfileManifest.validHash(hash), let directory,
+        guard ShumProfileManifest.validHash(hash), let directory,
               let data = try? Data(contentsOf: directory.appendingPathComponent(hash + ".jpg")),
-              SpotchatProfile.digest(data) == hash, SpotchatProfile.validAvatar(data) else { return nil }
+              ShumProfile.digest(data) == hash, ShumProfile.validAvatar(data) else { return nil }
         return data
     }
     func cache(_ data: Data, hash: String) {
-        guard SpotchatProfileManifest.validHash(hash), SpotchatProfile.digest(data) == hash,
-              SpotchatProfile.validAvatar(data), let directory else { return }
+        guard ShumProfileManifest.validHash(hash), ShumProfile.digest(data) == hash,
+              ShumProfile.validAvatar(data), let directory else { return }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? data.write(to: directory.appendingPathComponent(hash + ".jpg"), options: .atomic)
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
@@ -107,20 +107,20 @@ final class SpotchatProfileStore {
 }
 
 @MainActor
-final class SpotchatProfiles: ObservableObject {
-    @Published private(set) var own: SpotchatProfile
-    @Published private(set) var remote: [PeerID: SpotchatProfile] = [:]
+final class ShumProfiles: ObservableObject {
+    @Published private(set) var own: ShumProfile
+    @Published private(set) var remote: [PeerID: ShumProfile] = [:]
     @Published private(set) var loading: Set<PeerID> = []
     @Published private(set) var failed: Set<PeerID> = []
     private struct Pending {
         let request: String
-        var manifest: SpotchatProfileManifest?
+        var manifest: ShumProfileManifest?
         var bytes = Data()
         var lastSent = Date.distantPast
         var attempts = 0
         var started: Date
     }
-    private let store: SpotchatProfileStore
+    private let store: ShumProfileStore
     private let send: (Data, PeerID) -> Void
     private let connected: (PeerID) -> Bool
     private let now: () -> Date
@@ -133,19 +133,19 @@ final class SpotchatProfiles: ObservableObject {
     private var retired = false
     static let retryInterval: TimeInterval = 8
 
-    init(name: String, store: SpotchatProfileStore = SpotchatProfileStore(),
+    init(name: String, store: ShumProfileStore = ShumProfileStore(),
          now: @escaping () -> Date = Date.init, connected: @escaping (PeerID) -> Bool,
          send: @escaping (Data, PeerID) -> Void) {
         self.store = store; self.now = now; self.connected = connected; self.send = send
-        own = store.loadOwn() ?? SpotchatProfile(name: name)
+        own = store.loadOwn() ?? ShumProfile(name: name)
     }
     func retire() {
         retired = true; appActive = false
         pending.removeAll(); peers.removeAll(); remote.removeAll(); loading.removeAll(); failed.removeAll()
-        own = SpotchatProfile(name: "")
+        own = ShumProfile(name: "")
     }
-    func save(_ profile: SpotchatProfile) throws {
-        guard !retired else { throw SpotchatFailure.unavailableIdentity }
+    func save(_ profile: ShumProfile) throws {
+        guard !retired else { throw ShumFailure.unavailableIdentity }
         guard profile.valid else { throw CocoaError(.validationMissingMandatoryProperty) }
         try store.saveOwn(profile)
         own = profile
@@ -161,11 +161,11 @@ final class SpotchatProfiles: ObservableObject {
         checked[peer] = nil; pending[peer] = nil; failed.remove(peer)
         tick()
     }
-    func acceptResolved(_ profile: SpotchatProfile, for peer: PeerID) {
+    func acceptResolved(_ profile: ShumProfile, for peer: PeerID) {
         guard !retired, profile.valid else { return }
         remote[peer] = profile
         if let avatar = profile.avatar {
-            store.cache(avatar, hash: SpotchatProfile.digest(avatar))
+            store.cache(avatar, hash: ShumProfile.digest(avatar))
         }
         loading.remove(peer)
         failed.remove(peer)
@@ -194,9 +194,9 @@ final class SpotchatProfiles: ObservableObject {
             }
         }
     }
-    private func emit(_ packet: SpotchatProfilePacket, to peer: PeerID) {
+    private func emit(_ packet: ShumProfilePacket, to peer: PeerID) {
         guard !retired else { return }
-        guard connected(peer), let data = try? JSONEncoder().encode(packet), data.count <= SpotchatProfilePacket.maxWireBytes else { return }
+        guard connected(peer), let data = try? JSONEncoder().encode(packet), data.count <= ShumProfilePacket.maxWireBytes else { return }
         send(data, peer)
     }
     private func requestNext(_ peer: PeerID) {
@@ -208,8 +208,8 @@ final class SpotchatProfiles: ObservableObject {
     }
     func receive(_ data: Data, from peer: PeerID) {
         guard !retired else { return }
-        guard connected(peer), data.count <= SpotchatProfilePacket.maxWireBytes,
-              let packet = try? JSONDecoder().decode(SpotchatProfilePacket.self, from: data), packet.version == 1,
+        guard connected(peer), data.count <= ShumProfilePacket.maxWireBytes,
+              let packet = try? JSONDecoder().decode(ShumProfilePacket.self, from: data), packet.version == 1,
               packet.request.utf8.count <= 64 else { return }
         if !peers.contains(peer) { guard peers.count < 100 else { return }; peers.insert(peer) }
         let rate = packetRate[peer] ?? (.distantPast, 0)
@@ -219,7 +219,7 @@ final class SpotchatProfiles: ObservableObject {
         switch packet.kind {
         case .query:
             guard !packet.request.isEmpty else { return }
-            emit(.init(kind: .manifest, request: packet.request, manifest: SpotchatProfileManifest(own)), to: peer)
+            emit(.init(kind: .manifest, request: packet.request, manifest: ShumProfileManifest(own)), to: peer)
         case .changed:
             guard now().timeIntervalSince(hints[peer] ?? .distantPast) >= 2 else { return }
             hints[peer] = now(); refresh(peer)
@@ -229,9 +229,9 @@ final class SpotchatProfiles: ObservableObject {
             failed.remove(peer)
             let previous = remote[peer]?.avatar
             let cached = manifest.avatarHash.flatMap { hash in
-                previous.flatMap { SpotchatProfile.digest($0) == hash ? $0 : nil } ?? store.avatar(hash)
+                previous.flatMap { ShumProfile.digest($0) == hash ? $0 : nil } ?? store.avatar(hash)
             }
-            remote[peer] = SpotchatProfile(name: manifest.name, bio: manifest.bio, avatar: cached)
+            remote[peer] = ShumProfile(name: manifest.name, bio: manifest.bio, avatar: cached)
             if manifest.avatarHash == nil || cached != nil {
                 finish(peer)
             } else {
@@ -240,21 +240,21 @@ final class SpotchatProfiles: ObservableObject {
             }
         case .chunkRequest:
             guard !packet.request.isEmpty, let avatar = own.avatar, let hash = packet.hash,
-                  hash == SpotchatProfile.digest(avatar), let offset = packet.offset,
-                  offset >= 0, offset < avatar.count, offset % SpotchatProfilePacket.chunkSize == 0 else { return }
-            let end = min(avatar.count, offset + SpotchatProfilePacket.chunkSize)
+                  hash == ShumProfile.digest(avatar), let offset = packet.offset,
+                  offset >= 0, offset < avatar.count, offset % ShumProfilePacket.chunkSize == 0 else { return }
+            let end = min(avatar.count, offset + ShumProfilePacket.chunkSize)
             emit(.init(kind: .chunk, request: packet.request, hash: hash, offset: offset, data: avatar.subdata(in: offset..<end)), to: peer)
         case .chunk:
             guard var item = pending[peer], item.request == packet.request,
                   let manifest = item.manifest, packet.hash == manifest.avatarHash,
                   packet.offset == item.bytes.count, let bytes = packet.data,
-                  bytes.count == min(SpotchatProfilePacket.chunkSize, manifest.avatarBytes - item.bytes.count), !bytes.isEmpty else { return }
+                  bytes.count == min(ShumProfilePacket.chunkSize, manifest.avatarBytes - item.bytes.count), !bytes.isEmpty else { return }
             item.bytes.append(bytes); item.attempts = 0; pending[peer] = item
             if item.bytes.count == manifest.avatarBytes {
-                guard SpotchatProfile.digest(item.bytes) == manifest.avatarHash, SpotchatProfile.validAvatar(item.bytes) else {
+                guard ShumProfile.digest(item.bytes) == manifest.avatarHash, ShumProfile.validAvatar(item.bytes) else {
                     pending[peer] = nil; checked[peer] = now(); loading.remove(peer); failed.insert(peer); return
                 }
-                remote[peer] = SpotchatProfile(name: manifest.name, bio: manifest.bio, avatar: item.bytes)
+                remote[peer] = ShumProfile(name: manifest.name, bio: manifest.bio, avatar: item.bytes)
                 store.cache(item.bytes, hash: manifest.avatarHash!)
                 finish(peer)
             } else { requestNext(peer) }
@@ -264,7 +264,7 @@ final class SpotchatProfiles: ObservableObject {
         pending[peer] = nil; checked[peer] = now(); loading.remove(peer); failed.remove(peer)
     }
     #if DEBUG && targetEnvironment(simulator)
-    func seedPreview(_ profile: SpotchatProfile, for peer: PeerID) { remote[peer] = profile }
+    func seedPreview(_ profile: ShumProfile, for peer: PeerID) { remote[peer] = profile }
     #endif
 
 }

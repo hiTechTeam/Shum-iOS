@@ -79,8 +79,8 @@ final class MockTransport: @unchecked Sendable, Transport, PrivateMediaDeletionP
     /// arriving before the router's send call returns).
     var onSendPrivateMessage: (@MainActor (_ messageID: String) -> Void)?
     let mockKeychain = MockKeychain()
-    var spotchatSessionKeys: [PeerID: Data] = [:]
-    var spotchatPackets: [(PeerID, Data)] = []
+    var shumSessionKeys: [PeerID: Data] = [:]
+    var shumPackets: [(PeerID, Data)] = []
 
     // MARK: - Transport Protocol Implementation
 
@@ -149,7 +149,7 @@ final class MockTransport: @unchecked Sendable, Transport, PrivateMediaDeletionP
     private(set) lazy var mockNoiseService = NoiseEncryptionService(keychain: mockKeychain)
 
     func noiseSessionPublicKeyData(for peerID: PeerID) -> Data? {
-        spotchatSessionKeys[peerID] ?? mockNoiseService.getPeerPublicKeyData(peerID)
+        shumSessionKeys[peerID] ?? mockNoiseService.getPeerPublicKeyData(peerID)
     }
 
     func noiseIdentityFingerprint() -> String {
@@ -466,8 +466,8 @@ final class MockTransport: @unchecked Sendable, Transport, PrivateMediaDeletionP
 }
 
 
-extension MockTransport: SpotchatSecureTransport {
-    func sendSpotchatPacket(_ data: Data, to peer: PeerID) { spotchatPackets.append((peer, data)) }
-    func sealSpotchatPayload(_ data: Data, recipient: Data) throws -> Data { try mockNoiseService.sealCourierPayload(data, recipientStaticKey: recipient) }
-    func openSpotchatPayload(_ data: Data) throws -> (payload: Data, senderStaticKey: Data) { try mockNoiseService.openCourierPayload(data) }
+extension MockTransport: ShumSecureTransport {
+    func sendShumPacket(_ data: Data, to peer: PeerID) { shumPackets.append((peer, data)) }
+    func sealShumPayload(_ data: Data, recipient: Data) throws -> Data { try mockNoiseService.sealCourierPayload(data, recipientStaticKey: recipient) }
+    func openShumPayload(_ data: Data) throws -> (payload: Data, senderStaticKey: Data) { try mockNoiseService.openCourierPayload(data) }
 }

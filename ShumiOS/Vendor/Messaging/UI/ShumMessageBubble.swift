@@ -1,24 +1,28 @@
 #if os(iOS)
 import SwiftUI
 import BitFoundation
-private struct SpotchatMessageBubbleSurface: ViewModifier {
-    let shape: SpotchatBubbleShape
+private struct ShumMessageBubbleSurface: ViewModifier {
+    let shape: ShumBubbleShape
     let tint: Color
+    let highlight: Color
 
     func body(content: Content) -> some View {
         content
             .background {
-                shape
-                    .fill(tint)
-                    .allowsHitTesting(false)
+                ZStack {
+                    shape.fill(tint)
+                    shape.fill(highlight)
+                }
+                .allowsHitTesting(false)
             }
     }
 }
-struct SpotchatMessageBubble: View {
-    let message: SpotchatMessage
+struct ShumMessageBubble: View {
+    let message: ShumMessage
     var showsTail = true
     let maximumWidth: CGFloat
     var replyAuthor: String?
+    var quoteHighlightToken: UUID?
     var retry: () -> Void = {}
     var reply: () -> Void = {}
     var openReply: (String) -> Void = { _ in }
@@ -26,6 +30,7 @@ struct SpotchatMessageBubble: View {
     @Environment(\.shumThemePalette) private var themePalette
     @State private var horizontalOffset: CGFloat = 0
     @State private var crossedReplyThreshold = false
+    @State private var quoteHighlightOpacity: CGFloat = 0
 
     private let replyThreshold: CGFloat = 52
 
@@ -60,6 +65,19 @@ struct SpotchatMessageBubble: View {
                 }.buttonStyle(.plain)
             }
         }.frame(maxWidth: .infinity, alignment: message.outgoing ? .trailing : .leading)
+            .task(id: quoteHighlightToken) {
+                guard quoteHighlightToken != nil else { return }
+                quoteHighlightOpacity = 0
+                await Task.yield()
+                withAnimation(.easeOut(duration: 0.12)) {
+                    quoteHighlightOpacity = 0.34
+                }
+                try? await Task.sleep(nanoseconds: 160_000_000)
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.72)) {
+                    quoteHighlightOpacity = 0
+                }
+            }
     }
 
     private var bubbleContent: some View {
@@ -88,7 +106,7 @@ struct SpotchatMessageBubble: View {
                 .buttonStyle(.plain)
             }
 
-            SpotchatBubbleLayout(inline: !message.text.contains("\n")) {
+            ShumBubbleLayout(inline: !message.text.contains("\n")) {
                 Text(message.text).font(.body).foregroundStyle(.primary)
                 HStack(spacing: 4) {
                     Text(message.date, style: .time).monospacedDigit()
@@ -97,19 +115,25 @@ struct SpotchatMessageBubble: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .modifier(SpotchatMessageBubbleSurface(shape: bubbleShape, tint: bubbleColor))
+        .modifier(
+            ShumMessageBubbleSurface(
+                shape: bubbleShape,
+                tint: bubbleColor,
+                highlight: themePalette.accent.opacity(quoteHighlightOpacity)
+            )
+        )
     }
 
     private var bubble: some View {
-        SpotchatMessageContextMenu(shape: bubbleShape, maximumWidth: maximumWidth,
+        ShumMessageContextMenu(shape: bubbleShape, maximumWidth: maximumWidth,
             reply: reply, copy: { UIPasteboard.general.string = message.text },
             dragChanged: updateReplyDrag, dragEnded: finishReplyDrag) {
                 bubbleContent
             }
     }
 
-    private var bubbleShape: SpotchatBubbleShape {
-        SpotchatBubbleShape(outgoing: message.outgoing, tail: showsTail)
+    private var bubbleShape: ShumBubbleShape {
+        ShumBubbleShape(outgoing: message.outgoing, tail: showsTail)
     }
 
     private var replyGestureIndicator: some View {
@@ -167,7 +191,7 @@ struct SpotchatMessageBubble: View {
     @ViewBuilder private var receipt: some View {
         switch message.status {
         case .read:
-            SpotchatDoubleCheck().stroke(themePalette.accent, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+            ShumDoubleCheck().stroke(themePalette.accent, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
                 .frame(width: 16, height: 10)
         case .delivered:
             Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
@@ -190,7 +214,7 @@ struct SpotchatMessageBubble: View {
 
 /// Measures text before allocating the bubble; short text and time share a line.
 /// Wrapped text gets a trailing metadata line, which never overlaps the message.
-struct SpotchatBubbleLayout: Layout {
+struct ShumBubbleLayout: Layout {
     var inline: Bool
     private func metrics(_ proposal: ProposedViewSize, _ subviews: Subviews) -> (CGSize, CGSize, Bool) {
         let limit = max(1, proposal.width ?? 300)
@@ -217,7 +241,7 @@ struct SpotchatBubbleLayout: Layout {
     }
 }
 
-struct SpotchatBubbleShape: Shape {
+struct ShumBubbleShape: Shape {
     var outgoing: Bool
     var tail: Bool
     func path(in rect: CGRect) -> Path {
@@ -241,7 +265,7 @@ struct SpotchatBubbleShape: Shape {
     }
 }
 
-struct SpotchatDoubleCheck: Shape {
+struct ShumDoubleCheck: Shape {
     func path(in rect: CGRect) -> Path {
         var p = Path()
         p.move(to: CGPoint(x: 0, y: 5)); p.addLine(to: CGPoint(x: 4, y: 9)); p.addLine(to: CGPoint(x: 12, y: 1))

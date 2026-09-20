@@ -45,6 +45,22 @@ struct ShumCaptureProtectedContainer<Content: View>: View {
     }
 }
 
+extension View {
+    /// Opts public, shareable content out of screenshot redaction locally.
+    /// The surrounding navigation, presented screens, recording cover and
+    /// app-switcher cover retain their existing protection.
+    @ViewBuilder
+    func shumAllowsScreenshots() -> some View {
+        if #available(iOS 18.0, *) {
+            transformEnvironment(\.redactionReasons) { reasons in
+                reasons.remove(ShumCaptureRedactionModifier.captureProhibited)
+            }
+        } else {
+            self
+        }
+    }
+}
+
 private extension View {
     @ViewBuilder
     func shumHiddenFromSystemCapture() -> some View {
@@ -58,7 +74,7 @@ private extension View {
 
 @available(iOS 18.0, *)
 private struct ShumCaptureRedactionModifier: ViewModifier {
-    private static let captureProhibited = RedactionReasons(rawValue: 1 << 3)
+    static let captureProhibited = RedactionReasons(rawValue: 1 << 3)
 
     func body(content: Content) -> some View {
         content

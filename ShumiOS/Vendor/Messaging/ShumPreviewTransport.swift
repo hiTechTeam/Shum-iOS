@@ -3,7 +3,7 @@ import BitFoundation
 import Foundation
 
 /// Opt-in UI fixtures. Compiled only into simulator Debug builds; no radio or user data.
-final class SpotchatPreviewTransport: Transport {
+final class ShumPreviewTransport: Transport {
     weak var delegate: BitchatDelegate?
     weak var eventDelegate: TransportEventDelegate?
     weak var peerEventsDelegate: TransportPeerEventsDelegate?

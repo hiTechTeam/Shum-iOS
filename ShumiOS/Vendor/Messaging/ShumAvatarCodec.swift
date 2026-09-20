@@ -3,7 +3,7 @@ import ImageIO
 import UIKit
 
 @MainActor
-enum SpotchatAvatarCodec {
+enum ShumAvatarCodec {
     static func prepare(_ data: Data) throws -> Data {
         guard data.count <= 30 * 1024 * 1024,
               let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -22,7 +22,7 @@ enum SpotchatAvatarCodec {
             image.draw(in: CGRect(x: (360 - size.width) / 2, y: (360 - size.height) / 2, width: size.width, height: size.height))
         }
         for quality in [0.88, 0.75, 0.6, 0.45, 0.3, 0.18] {
-            if let jpeg = square.jpegData(compressionQuality: quality), jpeg.count <= SpotchatProfile.maxAvatarBytes { return jpeg }
+            if let jpeg = square.jpegData(compressionQuality: quality), jpeg.count <= ShumProfile.maxAvatarBytes { return jpeg }
         }
         throw CocoaError(.fileWriteOutOfSpace)
     }

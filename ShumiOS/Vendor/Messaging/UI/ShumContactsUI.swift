@@ -4,10 +4,10 @@ import UIKit
 
 struct ShumContactsUI: View {
     @Environment(\.shumThemePalette) private var palette
-    @ObservedObject var runtime: SpotchatRuntime
-    let open: (SpotchatUIRoute) -> Void
+    @ObservedObject var runtime: ShumRuntime
+    let open: (ShumUIRoute) -> Void
 
-    private var contacts: [SpotchatContact] {
+    private var contacts: [ShumContact] {
         guard let permanent = runtime.permanent else { return [] }
         return permanent.state.contacts
             .filter { !permanent.isBlocked($0.card) }
@@ -112,20 +112,20 @@ struct ShumContactsUI: View {
             }
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.circle)
-            .tint(Color.accentColor)
+            .tint(palette.accent)
             .accessibilityLabel("Новый контакт")
-            .accessibilityIdentifier("spotchat.addContact")
+            .accessibilityIdentifier("shum.addContact")
         } else {
             Button { openNewContact() } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 17, weight: .regular))
                     .foregroundStyle(palette.accentForeground)
                     .frame(width: 36, height: 36)
-                    .background(Color.accentColor, in: Circle())
+                    .background(palette.accent, in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Новый контакт")
-            .accessibilityIdentifier("spotchat.addContact")
+            .accessibilityIdentifier("shum.addContact")
         }
     }
 
@@ -135,10 +135,10 @@ struct ShumContactsUI: View {
     }
 
     private func contactRow(
-        _ contact: SpotchatContact,
+        _ contact: ShumContact,
         showsDivider: Bool
     ) -> some View {
-        let peer = SpotchatPeer(
+        let peer = ShumPeer(
             id: contact.card.peerID,
             name: contact.card.name,
             lastConnected: contact.addedAt
@@ -175,7 +175,7 @@ struct ShumContactsUI: View {
         .accessibilityHint("Открыть чат")
     }
 
-    private func contactStatus(for peer: SpotchatPeer) -> String {
+    private func contactStatus(for peer: ShumPeer) -> String {
         let nearby = runtime.isNearby(peer.id)
         let online = runtime.isOnline(peer.id)
         if nearby && online { return "В сети · Рядом" }
@@ -194,7 +194,7 @@ struct ShumContactsUI: View {
         return "был(а) \(relativeDate)"
     }
 
-    private func contactStatusColor(for peer: SpotchatPeer) -> Color {
+    private func contactStatusColor(for peer: ShumPeer) -> Color {
         runtime.isNearby(peer.id) || runtime.isOnline(peer.id)
             ? Color(uiColor: .systemGreen)
             : .secondary
@@ -211,6 +211,7 @@ struct ShumContactsUI: View {
 }
 
 private struct ContactAlphabetIndex: View {
+    @Environment(\.shumThemePalette) private var palette
     let titles: [String]
     let select: (String) -> Void
 
@@ -220,7 +221,7 @@ private struct ContactAlphabetIndex: View {
                 ForEach(titles, id: \.self) { title in
                     Text(title)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(palette.accent)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
@@ -260,7 +261,7 @@ private struct ContactAlphabetIndex: View {
 
 private struct ContactSection: Identifiable {
     let title: String
-    let contacts: [SpotchatContact]
+    let contacts: [ShumContact]
     var id: String { title }
 }
 #endif

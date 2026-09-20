@@ -10,12 +10,17 @@ struct ShumThemePalette {
     let chatDoodleUIColor: UIColor
     let chatDoodleOpacity: Double
     let colorScheme: ColorScheme
+    var usesMonochromeChrome = false
 
     var accent: Color { Color(uiColor: accentUIColor) }
     var canvas: Color { Color(uiColor: canvasUIColor) }
     var chatDoodle: Color { Color(uiColor: chatDoodleUIColor) }
     var accentForeground: Color { Color(uiColor: accentForegroundUIColor) }
     var privacySurface: Color { colorScheme == .dark ? .black : .white }
+    var tabBarIconUIColor: UIColor? {
+        guard usesMonochromeChrome else { return nil }
+        return colorScheme == .dark ? .white : .black
+    }
     var pinnedRowSurface: Color {
         // Pinning uses the same quiet neutral surface in every theme.
         colorScheme == .dark
@@ -132,7 +137,8 @@ extension View {
             .background {
                 ShumWindowTintBridge(
                     tintColor: palette.accentUIColor,
-                    canvasColor: palette.canvasUIColor
+                    canvasColor: palette.canvasUIColor,
+                    tabBarIconColor: palette.tabBarIconUIColor
                 )
                     .frame(width: 0, height: 0)
             }
@@ -167,6 +173,7 @@ struct ShumChatCanvas: View {
 private struct ShumWindowTintBridge: UIViewRepresentable {
     let tintColor: UIColor
     let canvasColor: UIColor
+    let tabBarIconColor: UIColor?
 
     func makeUIView(context: Context) -> UIView { UIView(frame: .zero) }
 
@@ -175,6 +182,30 @@ private struct ShumWindowTintBridge: UIViewRepresentable {
             view.window?.tintColor = tintColor
             view.window?.backgroundColor = canvasColor
             view.window?.rootViewController?.view.backgroundColor = canvasColor
+            guard let rootView = view.window?.rootViewController?.view else { return }
+            Self.updateTabBars(
+                in: rootView,
+                selectedColor: tabBarIconColor ?? tintColor,
+                unselectedColor: tabBarIconColor
+            )
+        }
+    }
+
+    private static func updateTabBars(
+        in view: UIView,
+        selectedColor: UIColor,
+        unselectedColor: UIColor?
+    ) {
+        if let tabBar = view as? UITabBar {
+            tabBar.tintColor = selectedColor
+            tabBar.unselectedItemTintColor = unselectedColor
+        }
+        view.subviews.forEach {
+            updateTabBars(
+                in: $0,
+                selectedColor: selectedColor,
+                unselectedColor: unselectedColor
+            )
         }
     }
 }
@@ -322,7 +353,8 @@ final class ShumAppearanceStore: ObservableObject {
                         alpha: 1
                     ),
                     chatDoodleOpacity: 0.14,
-                    colorScheme: colorScheme
+                    colorScheme: colorScheme,
+                    usesMonochromeChrome: true
                 )
             case .monochromeDark:
                 ShumThemePalette(
@@ -345,7 +377,8 @@ final class ShumAppearanceStore: ObservableObject {
                         alpha: 1
                     ),
                     chatDoodleOpacity: 0.15,
-                    colorScheme: colorScheme
+                    colorScheme: colorScheme,
+                    usesMonochromeChrome: true
                 )
             }
         }

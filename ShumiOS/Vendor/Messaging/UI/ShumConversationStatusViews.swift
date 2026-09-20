@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 
-struct SpotchatTypingIndicator: View {
+struct ShumTypingIndicator: View {
     @State private var phase = 0
     private let timer = Timer.publish(every: 0.34, on: .main, in: .common).autoconnect()
 

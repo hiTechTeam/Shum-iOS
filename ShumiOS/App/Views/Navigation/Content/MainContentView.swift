@@ -1,12 +1,13 @@
 import SwiftUI
 
 struct MainContentView: View {
+    @Environment(\.shumThemePalette) private var palette
     @EnvironmentObject private var coordinator: AppCoordinator
-    @ObservedObject var chat: SpotchatRuntime
+    @ObservedObject var chat: ShumRuntime
     @ObservedObject var profilePhotoViewModel: ProfilePhotoViewModel
     @State private var selectedTab = 1
-    @State private var contactsPath: [SpotchatUIRoute] = []
-    @State private var chatsPath: [SpotchatUIRoute] = []
+    @State private var contactsPath: [ShumUIRoute] = []
+    @State private var chatsPath: [ShumUIRoute] = []
     @State private var profilePath: [ShumProfileRoute] = []
     @State private var showContacts = false
     var body: some View {
@@ -16,20 +17,20 @@ struct MainContentView: View {
                     if case .newChat = route { showContacts = true }
                     else { contactsPath.append(route) }
                 }
-                .navigationDestination(for: SpotchatUIRoute.self) { route in
-                    SpotchatDestinationUI(runtime: chat, route: route) { contactsPath.append($0) }
+                .navigationDestination(for: ShumUIRoute.self) { route in
+                    ShumDestinationUI(runtime: chat, route: route) { contactsPath.append($0) }
                 }
             }
             .toolbar(contactsPath.isEmpty ? .visible : .hidden, for: .tabBar)
             .tabItem { Label("Контакты", image: "PixelPeople") }.tag(0)
 
             NavigationStack(path: $chatsPath) {
-                SpotchatChatsUI(runtime: chat) { route in
+                ShumChatsUI(runtime: chat) { route in
                     if case .newChat = route { showContacts = true }
                     else { chatsPath.append(route) }
                 }
-                .navigationDestination(for: SpotchatUIRoute.self) { route in
-                    SpotchatDestinationUI(runtime: chat, route: route) { chatsPath.append($0) }
+                .navigationDestination(for: ShumUIRoute.self) { route in
+                    ShumDestinationUI(runtime: chat, route: route) { chatsPath.append($0) }
                 }
             }
             .toolbar(chatsPath.isEmpty ? .visible : .hidden, for: .tabBar)
@@ -54,7 +55,7 @@ struct MainContentView: View {
             )
             .tabItem { Label("Профиль", image: "PixelProfile") }.tag(2)
         }
-        .tint(.accentColor)
+        .tint(palette.accent)
         .safeAreaInset(edge: .top, spacing: 0) {
             if !chat.isReady {
                 Button { coordinator.retryMessaging() } label: {
@@ -64,7 +65,7 @@ struct MainContentView: View {
             }
         }
         .sheet(isPresented: $showContacts) {
-            SpotchatContactsView(runtime: chat, showOwnQR: {
+            ShumContactsView(runtime: chat, showOwnQR: {
                 let sourceTab = selectedTab
                 showContacts = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -80,7 +81,7 @@ struct MainContentView: View {
             }
         }
         .sheet(item: $coordinator.invitation) { card in
-            SpotchatContactConfirmation(
+            ShumContactConfirmation(
                 card: card,
                 imageData: chat.profile(for: card.peerID)?.avatar,
                 isExistingContact: isExistingContact(card)
@@ -115,7 +116,7 @@ struct MainContentView: View {
         #endif
     }
 
-    private func isExistingContact(_ card: SpotchatContactCard) -> Bool {
+    private func isExistingContact(_ card: ShumContactCard) -> Bool {
         chat.permanent?.state.contacts.contains { $0.id == card.id } == true
     }
 
@@ -137,11 +138,11 @@ struct MainContentView: View {
                 profilePath.append(.conversation(peer))
             }
         case .conversation(let peer):
-            SpotchatConversationView(runtime: chat, peer: peer)
+            ShumConversationView(runtime: chat, peer: peer)
                 .toolbar(.hidden, for: .tabBar)
         case .ownQR:
             if let card = chat.permanent?.ownCard {
-                SpotchatQRView(
+                ShumQRView(
                     card: card,
                     resolve: { locator, completion in
                         chat.resolveContact(locator, completion: completion)
@@ -153,10 +154,10 @@ struct MainContentView: View {
         }
     }
 
-    private func openScannedContact(_ card: SpotchatContactCard) {
-        let peer: SpotchatPeer
+    private func openScannedContact(_ card: ShumContactCard) {
+        let peer: ShumPeer
         if isExistingContact(card) {
-            peer = SpotchatPeer(id: card.peerID, name: card.name, lastConnected: Date())
+            peer = ShumPeer(id: card.peerID, name: card.name, lastConnected: Date())
         } else {
             guard let added = chat.addContact(card, source: "link") else { return }
             peer = added

@@ -7,25 +7,26 @@ import PhotosUI
 import SwiftUI
 import Vision
 
-extension SpotchatContactCard: Identifiable {}
+extension ShumContactCard: Identifiable {}
 
-typealias SpotchatContactResolving = (
-    SpotchatContactLocator,
-    @escaping (Result<SpotchatContactCard, Error>) -> Void
+typealias ShumContactResolving = (
+    ShumContactLocator,
+    @escaping (Result<ShumContactCard, Error>) -> Void
 ) -> Void
 
-struct SpotchatContactsView: View {
-    @ObservedObject var runtime: SpotchatRuntime
+struct ShumContactsView: View {
+    @Environment(\.shumThemePalette) private var palette
+    @ObservedObject var runtime: ShumRuntime
     var showOwnQR: (() -> Void)? = nil
-    var select: (SpotchatPeer) -> Void
+    var select: (ShumPeer) -> Void
     @Environment(\.dismiss) private var dismiss
     @ScaledMetric(relativeTo: .body) private var sheetHeight = 280
     @State private var showQR = false
     @State private var showScanner = false
     @State private var showPhoneBook = false
-    @State private var invitation: SpotchatContactCard?
-    @State private var share: SpotchatShareItem?
-    private var service: SpotchatMessageStore? { runtime.permanent }
+    @State private var invitation: ShumContactCard?
+    @State private var share: ShumShareItem?
+    private var service: ShumMessageStore? { runtime.permanent }
     var body: some View {
         NavigationStack {
             List {
@@ -56,7 +57,7 @@ struct SpotchatContactsView: View {
             .fullScreenCover(isPresented: $showQR) {
                 if let card = service?.ownCard {
                     NavigationStack {
-                        SpotchatQRView(
+                        ShumQRView(
                             card: card,
                             resolve: { locator, completion in
                                 runtime.resolveContact(locator, completion: completion)
@@ -70,7 +71,7 @@ struct SpotchatContactsView: View {
                 }
             }
             .fullScreenCover(isPresented: $showScanner) {
-                SpotchatScanView(resolve: { locator, completion in
+                ShumScanView(resolve: { locator, completion in
                     runtime.resolveContact(locator, completion: completion)
                 }) { card in
                     showScanner = false
@@ -80,20 +81,20 @@ struct SpotchatContactsView: View {
                 }
             }
             .sheet(isPresented: $showPhoneBook) {
-                SpotchatPhoneBook { contact in
+                ShumPhoneBook { contact in
                     showPhoneBook = false
                     let name = CNContactFormatter.string(from: contact, style: .fullName) ?? ""
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                         let greeting = name.isEmpty ? "Привет!" : "\(name), привет!"
                         if let url = try? service?.ownCard.invitation() {
-                            share = SpotchatShareItem(text: "\(greeting) Добавь меня в Shum:\n\(url.absoluteString)")
+                            share = ShumShareItem(text: "\(greeting) Добавь меня в Shum:\n\(url.absoluteString)")
                         }
                     }
                 }
             }
-            .sheet(item: $share) { SpotchatShareSheet(items: [$0.text]) }
+            .sheet(item: $share) { ShumShareSheet(items: [$0.text]) }
             .sheet(item: $invitation) { card in
-                SpotchatContactConfirmation(
+                ShumContactConfirmation(
                     card: card,
                     imageData: runtime.profile(for: card.peerID)?.avatar,
                     isExistingContact: isExistingContact(card)
@@ -102,14 +103,14 @@ struct SpotchatContactsView: View {
                 }
             }
         }
-        .tint(.accentColor)
+        .tint(palette.accent)
         .presentationDetents([.height(sheetHeight)])
         .presentationDragIndicator(.visible)
     }
-    private func open(_ card: SpotchatContactCard, source: String) {
-        let peer: SpotchatPeer
+    private func open(_ card: ShumContactCard, source: String) {
+        let peer: ShumPeer
         if isExistingContact(card) {
-            peer = SpotchatPeer(id: card.peerID, name: card.name, lastConnected: Date())
+            peer = ShumPeer(id: card.peerID, name: card.name, lastConnected: Date())
         } else {
             guard let added = runtime.addContact(card, source: source) else { return }
             peer = added
@@ -117,22 +118,22 @@ struct SpotchatContactsView: View {
         dismiss(); select(peer)
     }
 
-    private func isExistingContact(_ card: SpotchatContactCard) -> Bool {
+    private func isExistingContact(_ card: ShumContactCard) -> Bool {
         runtime.permanent?.state.contacts.contains { $0.id == card.id } == true
     }
 }
 
-struct SpotchatContactRequestsView: View {
-    @ObservedObject var runtime: SpotchatRuntime
-    var select: (SpotchatPeer) -> Void
-    @State private var invitation: SpotchatContactCard?
+struct ShumContactRequestsView: View {
+    @ObservedObject var runtime: ShumRuntime
+    var select: (ShumPeer) -> Void
+    @State private var invitation: ShumContactCard?
 
     var body: some View {
         List {
             ForEach(runtime.permanent?.state.requests ?? []) { card in
                 Button { invitation = card } label: {
                     HStack(spacing: 12) {
-                        SpotchatAvatar(name: card.name, size: 48, imageData: runtime.profile(for: card.peerID)?.avatar)
+                        ShumAvatar(name: card.name, size: 48, imageData: runtime.profile(for: card.peerID)?.avatar)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(card.name).font(.body.weight(.semibold)).foregroundStyle(.primary)
                             Text("Хочет добавить вас").font(.caption).foregroundStyle(.secondary)
@@ -153,7 +154,7 @@ struct SpotchatContactRequestsView: View {
         .navigationTitle("Приглашения")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $invitation) { card in
-            SpotchatContactConfirmation(
+            ShumContactConfirmation(
                 card: card,
                 imageData: runtime.profile(for: card.peerID)?.avatar
             ) {
@@ -166,8 +167,8 @@ struct SpotchatContactRequestsView: View {
     }
 }
 
-struct SpotchatContactConfirmation: View {
-    let card: SpotchatContactCard
+struct ShumContactConfirmation: View {
+    let card: ShumContactCard
     var imageData: Data? = nil
     var isExistingContact = false
     var accept: () -> Void
@@ -181,7 +182,7 @@ struct SpotchatContactConfirmation: View {
             VStack(spacing: 0) {
                 Spacer(minLength: 28)
 
-                SpotchatAvatar(name: card.name, size: 202, imageData: imageData)
+                ShumAvatar(name: card.name, size: 202, imageData: imageData)
                     .contentShape(Circle())
                     .onTapGesture(perform: openPhoto)
                     .accessibilityLabel(imageData == nil ? card.name : "Посмотреть фото")
@@ -249,132 +250,29 @@ struct SpotchatContactConfirmation: View {
     }
 }
 
-private struct SpotchatQRShareToolbar: ToolbarContent {
+private struct ShumQRShareToolbar: ToolbarContent {
     let invitationURL: URL
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
-            Button {
-                SpotchatSystemSharePresenter.shared.present(invitationURL)
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-            }
+            ShareLink(item: invitationURL)
                 .tint(.primary)
                 .accessibilityLabel("Поделиться контактом Shum")
         }
     }
 }
 
-/// Presents the native activity controller without ShareLink's retained toolbar
-/// highlight. A tap received while the previous controller is finishing its
-/// dismissal is queued and presented as soon as that transition completes.
-@MainActor
-private final class SpotchatSystemSharePresenter: NSObject, UIAdaptivePresentationControllerDelegate {
-    static let shared = SpotchatSystemSharePresenter()
-
-    private weak var activityController: UIActivityViewController?
-    private var pendingURL: URL?
-    private var retryWork: DispatchWorkItem?
-
-    func present(_ url: URL) {
-        retryWork?.cancel()
-        if let activityController, activityController.presentingViewController != nil {
-            pendingURL = url
-            return
-        }
-        show(url)
-    }
-
-    private func show(_ url: URL) {
-        guard let presenter = Self.frontmostViewController(),
-              !(presenter is UIActivityViewController),
-              presenter.presentedViewController == nil else {
-            pendingURL = url
-            schedulePendingPresentation()
-            return
-        }
-
-        pendingURL = nil
-        let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        controller.completionWithItemsHandler = { [weak self, weak controller] _, _, _, _ in
-            Task { @MainActor in self?.finished(controller) }
-        }
-        if let popover = controller.popoverPresentationController {
-            popover.sourceView = presenter.view
-            popover.sourceRect = CGRect(x: presenter.view.bounds.maxX - 32,
-                                        y: presenter.view.safeAreaInsets.top + 22,
-                                        width: 1, height: 1)
-        }
-        activityController = controller
-        presenter.present(controller, animated: true) { [weak self, weak controller] in
-            controller?.presentationController?.delegate = self
-        }
-    }
-
-    private func finished(_ controller: UIActivityViewController?) {
-        guard controller == nil || activityController === controller else { return }
-        activityController = nil
-        schedulePendingPresentation()
-    }
-
-    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
-        finished(presentationController.presentedViewController as? UIActivityViewController)
-    }
-
-    private func schedulePendingPresentation() {
-        guard pendingURL != nil else { return }
-        retryWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, let url = self.pendingURL else { return }
-            if let activityController = self.activityController,
-               activityController.presentingViewController != nil {
-                self.schedulePendingPresentation()
-            } else if let presenter = Self.frontmostViewController(),
-                      !(presenter is UIActivityViewController),
-                      presenter.presentedViewController == nil {
-                self.activityController = nil
-                self.show(url)
-            } else {
-                self.schedulePendingPresentation()
-            }
-        }
-        retryWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
-    }
-
-    private static func frontmostViewController() -> UIViewController? {
-        let window = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first(where: \.isKeyWindow)
-        return frontmost(from: window?.rootViewController)
-    }
-
-    private static func frontmost(from controller: UIViewController?) -> UIViewController? {
-        if let presented = controller?.presentedViewController {
-            return frontmost(from: presented)
-        }
-        if let navigation = controller as? UINavigationController {
-            return frontmost(from: navigation.visibleViewController)
-        }
-        if let tabs = controller as? UITabBarController {
-            return frontmost(from: tabs.selectedViewController)
-        }
-        return controller
-    }
-}
-
-struct SpotchatQRView: View {
-    let card: SpotchatContactCard
-    var resolve: SpotchatContactResolving?
-    var scanned: ((SpotchatContactCard) -> Void)?
+struct ShumQRView: View {
+    let card: ShumContactCard
+    var resolve: ShumContactResolving?
+    var scanned: ((ShumContactCard) -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var showScanner = false
 
     init(
-        card: SpotchatContactCard,
-        resolve: SpotchatContactResolving? = nil,
-        scanned: ((SpotchatContactCard) -> Void)? = nil
+        card: ShumContactCard,
+        resolve: ShumContactResolving? = nil,
+        scanned: ((ShumContactCard) -> Void)? = nil
     ) {
         self.card = card
         self.resolve = resolve
@@ -431,15 +329,16 @@ struct SpotchatQRView: View {
                 .scrollIndicators(.hidden)
             }
         }
+        .shumAllowsScreenshots()
         .navigationTitle("QR-код")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let invitationURL {
-                SpotchatQRShareToolbar(invitationURL: invitationURL)
+                ShumQRShareToolbar(invitationURL: invitationURL)
             }
         }
         .fullScreenCover(isPresented: $showScanner) {
-            SpotchatScanView(resolve: resolve) { scannedCard in
+            ShumScanView(resolve: resolve) { scannedCard in
                 showScanner = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                     dismiss()
@@ -453,7 +352,7 @@ struct SpotchatQRView: View {
 
     private func profileCard(qrImage: UIImage) -> some View {
         VStack(spacing: 0) {
-            SpotchatAvatar(
+            ShumAvatar(
                 name: card.name,
                 size: 62,
                 imageData: avatarData
@@ -520,9 +419,9 @@ struct SpotchatQRView: View {
     }
 }
 
-struct SpotchatScanView: View {
-    var resolve: SpotchatContactResolving?
-    var scanned: (SpotchatContactCard) -> Void
+struct ShumScanView: View {
+    var resolve: ShumContactResolving?
+    var scanned: (ShumContactCard) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var done = false
     @State private var unavailable = false
@@ -532,8 +431,8 @@ struct SpotchatScanView: View {
     @State private var resolving = false
 
     init(
-        resolve: SpotchatContactResolving? = nil,
-        scanned: @escaping (SpotchatContactCard) -> Void
+        resolve: ShumContactResolving? = nil,
+        scanned: @escaping (ShumContactCard) -> Void
     ) {
         self.resolve = resolve
         self.scanned = scanned
@@ -649,7 +548,7 @@ struct SpotchatScanView: View {
 
                 ShumScannerCorners()
                     .stroke(
-                        Color.accentColor,
+                        Color.white,
                         style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round)
                     )
                     .frame(width: side, height: side)
@@ -700,12 +599,12 @@ struct SpotchatScanView: View {
         done = true
         torchEnabled = false
         do {
-            guard let url = URL(string: text) else { throw SpotchatFailure.invalidContact }
-            switch try SpotchatInvitationPayload.parse(url) {
+            guard let url = URL(string: text) else { throw ShumFailure.invalidContact }
+            switch try ShumInvitationPayload.parse(url) {
             case .card(let card):
                 scanned(card)
             case .locator(let locator):
-                guard let resolve else { throw SpotchatFailure.contactUnavailable }
+                guard let resolve else { throw ShumFailure.contactUnavailable }
                 resolving = true
                 resolve(locator) { result in
                     resolving = false
@@ -732,7 +631,7 @@ struct SpotchatScanView: View {
             guard let data = try await item.loadTransferable(type: Data.self),
                   let image = UIImage(data: data),
                   let cgImage = image.cgImage else {
-                throw SpotchatFailure.invalidContact
+                throw ShumFailure.invalidContact
             }
 
             let request = VNDetectBarcodesRequest()
@@ -813,7 +712,7 @@ private enum ShumScannerGeometry {
     static let cornerRadius: CGFloat = 22
 }
 
-struct SpotchatPhoneBook: UIViewControllerRepresentable {
+struct ShumPhoneBook: UIViewControllerRepresentable {
     var selected: (CNContact) -> Void
     func makeCoordinator() -> Coordinator { Coordinator(selected: selected) }
     func makeUIViewController(context: Context) -> CNContactPickerViewController {
@@ -829,8 +728,8 @@ struct SpotchatPhoneBook: UIViewControllerRepresentable {
         func contactPicker(_ picker: CNContactPickerViewController, didSelect contact: CNContact) { selected(contact) }
     }
 }
-struct SpotchatShareItem: Identifiable { let id = UUID(); let text: String }
-struct SpotchatShareSheet: UIViewControllerRepresentable {
+struct ShumShareItem: Identifiable { let id = UUID(); let text: String }
+struct ShumShareSheet: UIViewControllerRepresentable {
     let items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: items, applicationActivities: nil) }
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}

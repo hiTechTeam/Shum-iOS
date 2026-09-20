@@ -4,9 +4,9 @@ import UIKit
 
 /// Keeps one live bubble throughout pressing, presentation and dismissal.
 /// A system targeted preview would add its own scale, shadow and clipping mask.
-struct SpotchatMessageContextMenu<Content: View>: UIViewRepresentable {
+struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
     @Environment(\.self) private var environment
-    let shape: SpotchatBubbleShape
+    let shape: ShumBubbleShape
     let maximumWidth: CGFloat
     let reply: () -> Void
     let copy: () -> Void
@@ -35,15 +35,15 @@ struct SpotchatMessageContextMenu<Content: View>: UIViewRepresentable {
             return host.view
         }
         private let feedback = UIImpactFeedbackGenerator(style: .medium)
-        private var shape = SpotchatBubbleShape(outgoing: false, tail: true)
+        private var shape = ShumBubbleShape(outgoing: false, tail: true)
         private var reply: () -> Void = {}
         private var copy: () -> Void = {}
         private var dragChanged: (CGFloat) -> Void = { _ in }
         private var dragEnded: (CGFloat, Bool) -> Void = { _, _ in }
-        private var presentation: SpotchatExtractedMessageMenu?
+        private var presentation: ShumExtractedMessageMenu?
         private var pendingContent: AnyView?
         private var pressAnimator: UIViewPropertyAnimator?
-        private lazy var hold = SpotchatMessageHoldGesture()
+        private lazy var hold = ShumMessageHoldGesture()
         private lazy var replyPanGesture = UIPanGestureRecognizer(target: self, action: #selector(replyPan(_:)))
 
         override init(frame: CGRect) {
@@ -77,7 +77,7 @@ struct SpotchatMessageContextMenu<Content: View>: UIViewRepresentable {
             bubbleView.transform = .identity
         }
 
-        func update(content: AnyView, shape: SpotchatBubbleShape, reply: @escaping () -> Void, copy: @escaping () -> Void, dragChanged: @escaping (CGFloat) -> Void, dragEnded: @escaping (CGFloat, Bool) -> Void) {
+        func update(content: AnyView, shape: ShumBubbleShape, reply: @escaping () -> Void, copy: @escaping () -> Void, dragChanged: @escaping (CGFloat) -> Void, dragEnded: @escaping (CGFloat, Bool) -> Void) {
             self.shape = shape
             self.reply = reply
             self.copy = copy
@@ -127,7 +127,7 @@ struct SpotchatMessageContextMenu<Content: View>: UIViewRepresentable {
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
             // A new press may interrupt the previous bubble's return animation.
-            if let window { SpotchatExtractedMessageMenu.finishDismissal(in: window) }
+            if let window { ShumExtractedMessageMenu.finishDismissal(in: window) }
             guard presentation == nil else { return false }
             let point = touch.location(in: self)
             if gestureRecognizer === replyPanGesture {
@@ -197,7 +197,7 @@ struct SpotchatMessageContextMenu<Content: View>: UIViewRepresentable {
         private func presentMenu() {
             guard presentation == nil, let window, !window.screen.isCaptured else { cancelPress(); return }
             finishPressAnimation()
-            let menu = SpotchatExtractedMessageMenu(source: self, bubble: bubbleView, outgoing: shape.outgoing,
+            let menu = ShumExtractedMessageMenu(source: self, bubble: bubbleView, outgoing: shape.outgoing,
                 reply: reply, copy: copy) { [weak self] in
                     guard let self else { return }
                     if #available(iOS 26.0, *) {
@@ -232,7 +232,7 @@ struct SpotchatMessageContextMenu<Content: View>: UIViewRepresentable {
 }
 
 /// Remains possible while shrinking, so a normal scroll never waits for a hold.
-private final class SpotchatMessageHoldGesture: UIGestureRecognizer {
+private final class ShumMessageHoldGesture: UIGestureRecognizer {
     var pressing: (() -> Void)?
     var cancelPress: (() -> Void)?
     var activate: (() -> Void)?

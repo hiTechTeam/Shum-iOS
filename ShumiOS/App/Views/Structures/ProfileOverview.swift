@@ -3,7 +3,7 @@ import UserNotifications
 
 enum ShumProfileRoute: Hashable {
     case encounters
-    case conversation(SpotchatPeer)
+    case conversation(ShumPeer)
     case ownQR
 
     var hidesTabBar: Bool {
@@ -17,9 +17,8 @@ enum ShumProfileRoute: Hashable {
 struct ProfileOverviewView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var coordinator: AppCoordinator
-    @EnvironmentObject private var peopleViewModel: PeopleViewModel
 
-    @ObservedObject var chat: SpotchatRuntime
+    @ObservedObject var chat: ShumRuntime
     @ObservedObject var authCodeViewModel: LocalProfileViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
     let open: (ShumProfileRoute) -> Void
@@ -45,7 +44,7 @@ struct ProfileOverviewView: View {
         UNAuthorizationStatus = .notDetermined
 
     init(
-        chat: SpotchatRuntime,
+        chat: ShumRuntime,
         authCodeViewModel: LocalProfileViewModel,
         photoViewModel: ProfilePhotoViewModel,
         open: @escaping (ShumProfileRoute) -> Void
@@ -103,14 +102,10 @@ struct ProfileOverviewView: View {
             Task {
                 await refreshNotificationAuthorizationStatus()
                 coordinator.refreshNotificationState()
-                await peopleViewModel.synchronizeBlockedProfiles()
-                peopleViewModel.refreshEncounterHistory()
             }
         }
         .task {
             await refreshNotificationAuthorizationStatus()
-            await peopleViewModel.synchronizeBlockedProfiles()
-            peopleViewModel.refreshEncounterHistory()
         }
         .toolbar {
             ProfileAvatarToolbarItem {
@@ -138,7 +133,7 @@ struct ProfileOverviewView: View {
         }
         .sheet(isPresented: $showPrivacy) {
             if let chat = coordinator.chat {
-                NavigationStack { SpotchatPrivacySettings(runtime: chat) }
+                NavigationStack { ShumPrivacySettings(runtime: chat) }
             }
         }
         .sheet(isPresented: $showScanningSettings) {
@@ -153,8 +148,7 @@ struct ProfileOverviewView: View {
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showBlockedProfiles) {
-            BlockedProfilesView()
-                .environmentObject(coordinator.peopleViewModel)
+            BlockedProfilesView(runtime: chat)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -293,16 +287,29 @@ struct ProfileOverviewView: View {
     }
 
     private var encounterCard: some View {
-        ProfileOverviewRow(
-            title: Inc.Tabs.metTitle.localized,
-            systemImage: "clock.arrow.circlepath",
-            accentValue: (chat.permanent?.unviewedEncounterCount ?? 0) > 0
-                ? "+\(chat.permanent?.unviewedEncounterCount ?? 0)"
-                : nil,
-            value: String(chat.permanent?.encounterHistory.count ?? 0),
-            position: .single
-        ) {
-            open(.encounters)
+        VStack(spacing: 0) {
+            ProfileOverviewRow(
+                title: Inc.Tabs.metTitle.localized,
+                systemImage: "clock.arrow.circlepath",
+                accentValue: (chat.permanent?.unviewedEncounterCount ?? 0) > 0
+                    ? "+\(chat.permanent?.unviewedEncounterCount ?? 0)"
+                    : nil,
+                value: String(chat.permanent?.encounterHistory.count ?? 0),
+                position: .top
+            ) {
+                open(.encounters)
+            }
+
+            Divider().padding(.leading, 60).padding(.trailing, 20)
+
+            ProfileOverviewRow(
+                title: Inc.NearbyProfile.blockedMenu.localized,
+                systemImage: "person.crop.circle.badge.xmark",
+                value: String(chat.permanent?.state.blocked?.count ?? 0),
+                position: .bottom
+            ) {
+                showBlockedProfiles = true
+            }
         }
         .background(
             Color(uiColor: .secondarySystemGroupedBackground),

@@ -3,7 +3,7 @@ import UIKit
 
 /// Presents the original hosting view above a separate blur. The bubble has no
 /// snapshot, extra fill, shadow, mask or scale greater than one.
-final class SpotchatExtractedMessageMenu: UIView {
+final class ShumExtractedMessageMenu: UIView {
     private weak var source: UIView?
     private let bubble: UIView
     private let restore: () -> Void
@@ -91,7 +91,7 @@ final class SpotchatExtractedMessageMenu: UIView {
     /// Let the next real touch finish an outgoing presentation immediately.
     /// This does not synthesize or replay touches to the chat underneath.
     static func finishDismissal(in window: UIWindow) {
-        for case let menu as SpotchatExtractedMessageMenu in window.rootViewController?.view.subviews ?? [] where menu.isDismissing {
+        for case let menu as ShumExtractedMessageMenu in window.rootViewController?.view.subviews ?? [] where menu.isDismissing {
             menu.dismiss(animated: false)
         }
     }

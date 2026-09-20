@@ -4,23 +4,40 @@ import Foundation
 import Testing
 @preconcurrency @testable import Shum
 
-@Suite("Spotchat local Bluetooth runtime", .serialized)
+@Suite("Shum local Bluetooth runtime", .serialized)
 @MainActor
-struct SpotchatRuntimeTests {
+struct ShumRuntimeTests {
     private let alice = PeerID(str: "1111111111111111")
     private let bob = PeerID(str: "2222222222222222")
     private let eve = PeerID(str: "3333333333333333")
 
-    private func make(_ transport: MockTransport, now: @escaping () -> Date = Date.init) -> SpotchatRuntime {
-        let defaults = UserDefaults(suiteName: "SpotchatTests.\(UUID().uuidString)")!
-        let model = SpotchatRuntime(transport: transport, defaults: defaults, now: now)
+    private func make(_ transport: MockTransport, now: @escaping () -> Date = Date.init) -> ShumRuntime {
+        let defaults = UserDefaults(suiteName: "ShumTests.\(UUID().uuidString)")!
+        let model = ShumRuntime(transport: transport, defaults: defaults, now: now)
         model.didReceiveTransportEvent(.bluetoothStateUpdated(.poweredOn))
         return model
     }
 
-    private func receive(_ model: SpotchatRuntime, from peer: PeerID, id: String, text: String) throws {
+    private func receive(_ model: ShumRuntime, from peer: PeerID, id: String, text: String) throws {
         let data = try #require(PrivateMessagePacket(messageID: id, content: text).encode())
         model.didReceiveTransportEvent(.noisePayloadReceived(peerID: peer, type: .privateMessage, payload: data, timestamp: Date()))
+    }
+
+    @Test func visibilityOffRejectsLateSnapshotsAndRepeatedUpdatesDoNotRestartRadio() {
+        let wire = MockTransport()
+        let runtime = make(wire)
+        runtime.start(runTimer: false)
+        wire.simulateConnect(bob, nickname: "Боб")
+        runtime.tick()
+        #expect(!runtime.peers.isEmpty)
+        runtime.setBluetoothEnabled(false)
+        runtime.tick()
+        #expect(runtime.peers.isEmpty)
+        runtime.setBluetoothEnabled(false)
+        #expect(wire.stopServicesCallCount == 1)
+        runtime.setBluetoothEnabled(true)
+        runtime.setBluetoothEnabled(true)
+        #expect(wire.startServicesCallCount == 2)
     }
 
     @Test("Two endpoints exchange private text, acknowledge and suppress duplicates")

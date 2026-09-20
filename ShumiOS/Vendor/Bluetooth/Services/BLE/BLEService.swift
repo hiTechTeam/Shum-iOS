@@ -183,11 +183,11 @@ final class BLEService: NSObject {
     
     // MARK: - Constants
     
-    // Spotchat's own discovery namespace, identical in Debug and Release.
+    // Shum's own discovery namespace, identical in Debug and Release.
     static let serviceUUID = CBUUID(string: "F85FC602-7866-4F4C-90AB-4F14E107792B")
     static let characteristicUUID = CBUUID(string: "8F85918D-468D-4FBE-825A-CBD890B74D10")
-    private static let centralRestorationID = "com.hitechteam.spotchat.ble.central"
-    private static let peripheralRestorationID = "com.hitechteam.spotchat.ble.peripheral"
+    private static let centralRestorationID = "com.hitechteam.shum.ble.central"
+    private static let peripheralRestorationID = "com.hitechteam.shum.ble.peripheral"
 
     // Default per-fragment chunk size when link limits are unknown
     private let defaultFragmentSize = TransportConfig.bleDefaultFragmentSize
@@ -471,6 +471,28 @@ final class BLEService: NSObject {
     /// Bluetooth. Leaving them running in the test process is pure background
     /// churn that aggravates flaky exit hangs.
     private var meshBackgroundEnabled = false
+    private let serviceLifecycleLock = NSLock()
+    private var _servicesEnabled = false
+
+    /// Runtime admission gate shared by the app lifecycle and every
+    /// CoreBluetooth callback. Stopping the service must be durable: a late
+    /// powered-on/restoration callback must not silently make an invisible
+    /// profile discoverable again.
+    var acceptsBluetoothActivity: Bool {
+        serviceLifecycleLock.lock()
+        let enabled = _servicesEnabled
+        serviceLifecycleLock.unlock()
+        return enabled && !isPanicSuspended
+    }
+
+    @discardableResult
+    private func setServicesEnabled(_ enabled: Bool) -> Bool {
+        serviceLifecycleLock.lock()
+        let changed = _servicesEnabled != enabled
+        _servicesEnabled = enabled
+        serviceLifecycleLock.unlock()
+        return changed
+    }
 
     // MARK: - Radio (central-role policy: discovery admission, connection
     // budget, connect timeouts, background connects, scan duty, advertising)
@@ -836,7 +858,6 @@ final class BLEService: NSObject {
         }
         requestPeerDataPublish()
         if restartServices {
-            restartGossipManager()
             startServices()
             sendAnnounce(forceSend: true)
         }
@@ -934,7 +955,7 @@ final class BLEService: NSObject {
     /// `startServices()` — the latter matters after a panic reset, where
     /// `stopServices()` cancels and nils the timer.
     private func startMaintenanceTimer() {
-        guard !isPanicSuspended,
+        guard acceptsBluetoothActivity,
               meshBackgroundEnabled,
               maintenanceTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: bleQueue)
@@ -951,6 +972,7 @@ final class BLEService: NSObject {
     func startServices() {
         guard let lifecycleGeneration =
                 capturePanicLifecycleGeneration() else { return }
+        setServicesEnabled(true)
         if shouldInitializeBluetoothManagers {
             meshBackgroundEnabled = true
         }
@@ -963,26 +985,46 @@ final class BLEService: NSObject {
         // and cache cleanup would never resume until app restart.
         startMaintenanceTimer()
 
-        // Start BLE services if not already running
-        if centralManager?.state == .poweredOn {
-            centralManager?.scanForPeripherals(
-                withServices: [BLEService.serviceUUID],
-                options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
-            )
-        }
+        resumeRadioAfterVisibilityEnabled()
         
         // Send initial announce after services are ready
         // Use longer delay to avoid conflicts with other announces
         engineScheduler.schedule(after: TransportConfig.bleInitialAnnounceDelaySeconds) { [weak self] in
             guard let self,
+                  self.acceptsBluetoothActivity,
                   self.isCurrentPanicLifecycleGeneration(
                     lifecycleGeneration
                   ) else { return }
             self.sendAnnounce(forceSend: true)
         }
     }
+
+    /// Match the proven Telescan lifecycle: scanning restarts immediately,
+    /// while peripheral advertising starts only after a freshly published
+    /// GATT service is acknowledged by CoreBluetooth.
+    private func resumeRadioAfterVisibilityEnabled() {
+        bleQueue.async { [weak self] in
+            guard let self, self.acceptsBluetoothActivity else { return }
+
+            self.radio.stopDutyCycle()
+            if let central = self.centralManager,
+               central.state == .poweredOn {
+                central.stopScan()
+                self.radio.startScanning()
+            }
+
+            if let peripheral = self.peripheralManager,
+               peripheral.state == .poweredOn {
+                self.publishPeripheralServiceIfNeeded(on: peripheral)
+            }
+        }
+    }
     
     func stopServices() {
+        setServicesEnabled(false)
+        meshBackgroundEnabled = false
+        gossipSyncManager?.stop()
+        gossipSyncManager = nil
         let localIdentity = localIdentityState.snapshot()
         // Send leave message synchronously to ensure delivery
         var leavePacket = BitchatPacket(
@@ -1037,13 +1079,45 @@ final class BLEService: NSObject {
         maintenanceTimer = nil
         radio.stopDutyCycle()
 
-        centralManager?.stopScan()
-        peripheralManager?.stopAdvertising()
+        let stopRadio = { [self] in
+            centralManager?.stopScan()
+            peripheralManager?.stopAdvertising()
+            peripheralManager?.removeAllServices()
+            characteristic = nil
+        }
+        if DispatchQueue.getSpecific(key: bleQueueKey) != nil {
+            stopRadio()
+        } else {
+            bleQueue.sync(execute: stopRadio)
+        }
 
         // Disconnect all peripherals (synchronized access)
         let peripheralsToDisconnect = bleQueue.sync { linkStateStore.peripheralStates }
         for state in peripheralsToDisconnect {
             centralManager?.cancelPeripheralConnection(state.peripheral)
+        }
+
+        // The signed LEAVE makes the remote peer discard its Noise session.
+        // Discard ours too: retaining it would send ciphertext from the old
+        // session after visibility returns while the receiver awaits a new
+        // handshake. Keep persistent identity keys and chat storage intact.
+        onEngine {
+            for peerID in peerRegistry.peerIDs {
+                clearNoiseSession(for: peerID)
+                _ = linkAuth.retireLinks(ownedBy: peerID)
+            }
+            peerRegistry.mutate { $0.removeAll() }
+            pendingNoiseSessionQueues.removeAll()
+            announceThrottle.reset()
+        }
+        bleQueue.sync {
+            // Explicit visibility changes start a fresh discovery attempt,
+            // rather than inheriting backoff from the previous radio session.
+            radio.reset()
+            subscriptionAnnounceLimiter.removeAll()
+            let centralIDs = linkStateStore.subscribedCentrals.map { $0.identifier.uuidString }
+            linkStateStore.clearCentrals()
+            emitLinkEvent(.allCentralLinksEnded(centralUUIDs: centralIDs, retireProofsAndNotify: true))
         }
     }
 
@@ -1051,6 +1125,8 @@ final class BLEService: NSObject {
     /// pumping the main run loop. Close the radio and timers immediately;
     /// the identity/session cleanup follows synchronously.
     private func stopServicesImmediatelyForPanic() {
+        setServicesEnabled(false)
+        meshBackgroundEnabled = false
         bleQueue.sync {
             pendingNotifications.removeAll()
         }
@@ -2752,7 +2828,7 @@ final class BLEService: NSObject {
         return true
     }
     func sendAnnounce(forceSend: Bool = false) {
-        guard !isPanicSuspended else { return }
+        guard acceptsBluetoothActivity else { return }
         // Announce construction reads the replaceable Noise service and several
         // related state snapshots. Serialize the whole operation with identity
         // rotation instead of letting CoreBluetooth and maintenance callbacks
@@ -2765,7 +2841,7 @@ final class BLEService: NSObject {
     private func sendAnnounceNow(forceSend: Bool) {
         // Re-check on the serialized queue: a panic suspend may have started
         // after this announce was scheduled but before it runs.
-        guard !isPanicSuspended else { return }
+        guard acceptsBluetoothActivity else { return }
         // Throttle announces to prevent flooding
         if !announceThrottle.shouldSend(force: forceSend, now: Date()) {
             return
@@ -2972,7 +3048,7 @@ extension BLEService: GossipSyncManager.Delegate {
 
 extension BLEService: BLERadioControllerDelegate {
     func radioIsPanicSuspended() -> Bool {
-        isPanicSuspended
+        !acceptsBluetoothActivity
     }
 
     func radioIsAppActive() -> Bool {
@@ -4230,6 +4306,7 @@ extension BLEService {
         // message 3. This callback is queued behind the handshake handler, so
         // message 3 is broadcast first. Both peers also send one idempotent
         // echo after receiving the other's state to recover cross-link races.
+        ShumDiscoveryTrace.record("noise-authenticated")
         sendAuthenticatedPeerState(to: normalizedPeerID, echo: false)
         #if DEBUG
         _test_onPrivateMediaSessionReconciled?(normalizedPeerID)
@@ -4373,23 +4450,23 @@ extension BLEService {
 
 
     
-    // Spotchat application envelopes reuse the existing Noise and BLE packet path.
-    func sendSpotchatPacket(_ data: Data, to peer: PeerID) {
+    // Shum application envelopes reuse the existing Noise and BLE packet path.
+    func sendShumPacket(_ data: Data, to peer: PeerID) {
         guard data.count <= 24_000, isPeerConnected(peer) else { return }
-        sendNoisePayload(NoisePayload(type: .spotchatEnvelope, data: data).encode(), to: peer)
+        sendNoisePayload(NoisePayload(type: .shumEnvelope, data: data).encode(), to: peer)
     }
 
-    func sealSpotchatPayload(_ data: Data, recipient: Data) throws -> Data {
+    func sealShumPayload(_ data: Data, recipient: Data) throws -> Data {
         try noiseService.sealCourierPayload(data, recipientStaticKey: recipient)
     }
 
-    func openSpotchatPayload(_ data: Data) throws -> (payload: Data, senderStaticKey: Data) {
+    func openShumPayload(_ data: Data) throws -> (payload: Data, senderStaticKey: Data) {
         try noiseService.openCourierPayload(data)
     }
 
-    func sendSpotchatProfile(_ data: Data, to peer: PeerID) {
-        guard data.count <= SpotchatProfilePacket.maxWireBytes, isPeerConnected(peer) else { return }
-        sendNoisePayload(NoisePayload(type: .spotchatProfile, data: data).encode(), to: peer)
+    func sendShumProfile(_ data: Data, to peer: PeerID) {
+        guard data.count <= ShumProfilePacket.maxWireBytes, isPeerConnected(peer) else { return }
+        sendNoisePayload(NoisePayload(type: .shumProfile, data: data).encode(), to: peer)
     }
 
     private func sendNoisePayload(_ typedPayload: Data, to peerID: PeerID) {
@@ -5230,6 +5307,11 @@ extension BLEService {
     @objc private func appDidBecomeActive() {
         isAppActive = true
         refreshCachedBackgroundTimeRemaining()
+        guard acceptsBluetoothActivity else {
+            centralManager?.stopScan()
+            peripheralManager?.stopAdvertising()
+            return
+        }
         // Restart scanning with allow duplicates when app becomes active
         if centralManager?.state == .poweredOn {
             centralManager?.stopScan()
@@ -5244,6 +5326,11 @@ extension BLEService {
     @objc private func appDidEnterBackground() {
         isAppActive = false
         refreshCachedBackgroundTimeRemaining()
+        guard acceptsBluetoothActivity else {
+            centralManager?.stopScan()
+            peripheralManager?.stopAdvertising()
+            return
+        }
         // Restart scanning without allow duplicates in background
         if centralManager?.state == .poweredOn {
             centralManager?.stopScan()
@@ -6134,6 +6221,7 @@ extension BLEService {
     
     private func handleAnnounce(_ packet: BitchatPacket, from peerID: PeerID) {
         let result = announceHandler.handle(packet, from: peerID)
+        if result?.isVerified == true { ShumDiscoveryTrace.record("announce-verified") }
 
         // A capability bit in the public announce is only a discovery hint.
         // Start authentication promptly for a directly connected candidate,
@@ -7037,7 +7125,7 @@ extension BLEService {
     }
     
     private func performMaintenance() {
-        guard !isPanicSuspended else { return }
+        guard acceptsBluetoothActivity else { return }
         refreshProximityMeasurements()
         maintenanceCounter += 1
         lastMaintenanceAt = Date()

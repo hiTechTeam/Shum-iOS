@@ -830,7 +830,10 @@ final class NoiseEncryptionService {
         }
         
         // Check rate limit
-        guard rateLimiter.allowHandshake(from: peerID) else {
+        guard rateLimiter.allowHandshakeMessage(
+            from: peerID,
+            isInitiation: message.count == NoiseSecurityConstants.xxInitialMessageSize
+        ) else {
             SecureLogger.warning(.authenticationFailed(peerID: "Rate limited: \(peerID)"))
             throw NoiseSecurityError.rateLimitExceeded
         }
@@ -1025,6 +1028,7 @@ final class NoiseEncryptionService {
         remoteStaticKey: Curve25519.KeyAgreement.PublicKey,
         sessionGeneration: UUID
     ) {
+        rateLimiter.handshakeSucceeded(with: peerID)
         // Calculate fingerprint
         let fingerprint = remoteStaticKey.rawRepresentation.sha256Fingerprint()
         

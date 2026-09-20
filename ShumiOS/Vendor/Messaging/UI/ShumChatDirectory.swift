@@ -22,11 +22,11 @@ enum ShumChatFolder: String, CaseIterable, Hashable, Identifiable {
 }
 
 struct ShumDirectoryEntry: Identifiable {
-    let peer: SpotchatPeer
-    var card: SpotchatContactCard?
+    let peer: ShumPeer
+    var card: ShumContactCard?
     var hasChat = false
     var isInvitation = false
-    var invitationPhase: SpotchatInvitationPhase?
+    var invitationPhase: ShumInvitationPhase?
     var invitationAwaitingResponse = false
     var isNearby = false
     var lastSeen: Date?
@@ -46,7 +46,7 @@ struct ShumDirectoryEntry: Identifiable {
     }
 }
 
-extension SpotchatRuntime {
+extension ShumRuntime {
     var directoryEntries: [ShumDirectoryEntry] {
         ShumChatDirectory.entries(chats: chatPeers, peers: peers, permanent: permanent,
                                   isNearby: isNearby, unreadCount: unreadCount)
@@ -55,15 +55,15 @@ extension SpotchatRuntime {
 
 @MainActor
 enum ShumChatDirectory {
-    static func entries(chats: [SpotchatPeer], peers: [SpotchatPeer], permanent: SpotchatMessageStore?,
+    static func entries(chats: [ShumPeer], peers: [ShumPeer], permanent: ShumMessageStore?,
                         isNearby: (PeerID) -> Bool, unreadCount: (PeerID) -> Int) -> [ShumDirectoryEntry] {
         var rows: [PeerID: ShumDirectoryEntry] = [:]
         var order: [PeerID] = []
-        func include(_ peer: SpotchatPeer, card: SpotchatContactCard? = nil,
+        func include(_ peer: ShumPeer, card: ShumContactCard? = nil,
                      update: (inout ShumDirectoryEntry) -> Void) {
             let verifiedCard = card ?? permanent?.card(for: peer.id)
             let canonical = verifiedCard.map {
-                SpotchatPeer(id: $0.peerID, name: $0.name, lastConnected: peer.lastConnected)
+                ShumPeer(id: $0.peerID, name: $0.name, lastConnected: peer.lastConnected)
             } ?? peer
             guard verifiedCard.map({ permanent?.isBlocked($0) != true }) ?? true else { return }
             if rows[canonical.id] == nil {
@@ -75,7 +75,7 @@ enum ShumChatDirectory {
         }
         for peer in chats { include(peer) { $0.hasChat = true } }
         for card in permanent?.state.requests ?? [] {
-            include(SpotchatPeer(id: card.peerID, name: card.name, lastConnected: .distantPast), card: card) {
+            include(ShumPeer(id: card.peerID, name: card.name, lastConnected: .distantPast), card: card) {
                 $0.isInvitation = true
                 $0.invitationPhase = permanent?.invitationPhase(for: card)
                 $0.invitationAwaitingResponse = permanent?.invitationPhase(for: card) == .incomingPending
@@ -94,13 +94,13 @@ enum ShumChatDirectory {
             }
         }
         for encounter in permanent?.encounterHistory ?? [] {
-            include(SpotchatPeer(id: encounter.card.peerID, name: encounter.card.name, lastConnected: encounter.lastSeen), card: encounter.card) {
+            include(ShumPeer(id: encounter.card.peerID, name: encounter.card.name, lastConnected: encounter.lastSeen), card: encounter.card) {
                 $0.lastSeen = encounter.lastSeen
             }
         }
         // Retain contacts whose local conversation was deleted, without recreating it.
         for contact in permanent?.state.contacts ?? [] {
-            include(SpotchatPeer(id: contact.card.peerID, name: contact.card.name, lastConnected: contact.addedAt), card: contact.card) { _ in }
+            include(ShumPeer(id: contact.card.peerID, name: contact.card.name, lastConnected: contact.addedAt), card: contact.card) { _ in }
         }
         return order.compactMap { id in
             guard var row = rows[id] else { return nil }

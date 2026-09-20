@@ -12,7 +12,7 @@ struct InfoSheetView: View {
                 Text("Когда приложение закрыто, iOS может приостановить соединение. Откройте Shum для получения ожидающих сообщений. Очередь хранит неотправленные сообщения до 24 часов.").foregroundStyle(.secondary)
                 Text("Экспериментальная версия").font(.headline)
                 Text("Пока доступны текстовые сообщения. Есть очередь отправки, подтверждения доставки и прочтения. Звонки и вложения ещё не подключены.").foregroundStyle(.secondary)
-                Text("Транспорт и шифрование: BitChat / Spotchat, Unlicense.").font(.footnote).foregroundStyle(.secondary)
+                Text("Транспорт и шифрование: BitChat / Shum, Unlicense.").font(.footnote).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
         }.navigationTitle("О приложении")
     }

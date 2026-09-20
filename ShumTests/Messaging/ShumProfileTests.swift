@@ -5,9 +5,9 @@ import Testing
 import UIKit
 @preconcurrency @testable import Shum
 
-@Suite("Spotchat profile exchange", .serialized)
+@Suite("Shum profile exchange", .serialized)
 @MainActor
-struct SpotchatProfileTests {
+struct ShumProfileTests {
     private let alice = PeerID(str: "1111111111111111")
     private let bob = PeerID(str: "2222222222222222")
 
@@ -23,28 +23,28 @@ struct SpotchatProfileTests {
                 }
             }
         }
-        return try SpotchatAvatarCodec.prepare(#require(image.pngData()))
+        return try ShumAvatarCodec.prepare(#require(image.pngData()))
     }
     @MainActor private final class Network {
         var clock = Date(timeIntervalSince1970: 1000)
         var online = true
-        var nodes: [PeerID: SpotchatProfiles] = [:]
+        var nodes: [PeerID: ShumProfiles] = [:]
         var queue: [(PeerID, PeerID, Data)] = []
-        var sent: [(PeerID, PeerID, SpotchatProfilePacket)] = []
-        func add(_ peer: PeerID, name: String, store: SpotchatProfileStore = SpotchatProfileStore()) -> SpotchatProfiles {
-            let model = SpotchatProfiles(name: name, store: store, now: { [weak self] in self?.clock ?? .distantPast },
+        var sent: [(PeerID, PeerID, ShumProfilePacket)] = []
+        func add(_ peer: PeerID, name: String, store: ShumProfileStore = ShumProfileStore()) -> ShumProfiles {
+            let model = ShumProfiles(name: name, store: store, now: { [weak self] in self?.clock ?? .distantPast },
                 connected: { [weak self] peer in self?.online == true && self?.nodes[peer] != nil },
                 send: { [weak self] data, to in self?.queue.append((peer, to, data)) })
             nodes[peer] = model
             return model
         }
-        func drain(drop: (SpotchatProfilePacket) -> Bool = { _ in false }) throws {
+        func drain(drop: (ShumProfilePacket) -> Bool = { _ in false }) throws {
             var count = 0
             while !queue.isEmpty && count < 2000 {
                 count += 1; clock.addTimeInterval(0.08)
                 let (from, to, data) = queue.removeFirst()
-                #expect(data.count <= SpotchatProfilePacket.maxWireBytes)
-                let packet = try JSONDecoder().decode(SpotchatProfilePacket.self, from: data)
+                #expect(data.count <= ShumProfilePacket.maxWireBytes)
+                let packet = try JSONDecoder().decode(ShumProfilePacket.self, from: data)
                 sent.append((from, to, packet))
                 if !drop(packet) { nodes[to]?.receive(data, from: from) }
             }
@@ -57,7 +57,7 @@ struct SpotchatProfileTests {
         let wire = Network()
         let a = wire.add(alice, name: "Аня"), b = wire.add(bob, name: "Борис")
         let avatar = try photo()
-        #expect(avatar.count > SpotchatProfilePacket.chunkSize)
+        #expect(avatar.count > ShumProfilePacket.chunkSize)
         try a.save(.init(name: "Аня", bio: "Привет 👋", avatar: avatar))
         a.updatePeers([bob]); b.updatePeers([alice]); a.tick(); b.tick()
         try wire.drain()
@@ -92,8 +92,8 @@ struct SpotchatProfileTests {
     @Test("Unsolicited, oversized and corrupt profile payloads never become avatars")
     func rejectedPackets() throws {
         let wire = Network(); let a = wire.add(alice, name: "Аня"), b = wire.add(bob, name: "Борис")
-        let profile = SpotchatProfile(name: "Аня", avatar: try photo())
-        let unsolicited = SpotchatProfilePacket(kind: .manifest, request: "wrong", manifest: .init(profile))
+        let profile = ShumProfile(name: "Аня", avatar: try photo())
+        let unsolicited = ShumProfilePacket(kind: .manifest, request: "wrong", manifest: .init(profile))
         b.receive(try JSONEncoder().encode(unsolicited), from: alice)
         #expect(b.remote.isEmpty)
         b.receive(Data(repeating: 0, count: 10000), from: alice)
@@ -104,7 +104,7 @@ struct SpotchatProfileTests {
         while !wire.queue.isEmpty && steps < 100 {
             steps += 1; wire.clock.addTimeInterval(0.1)
             let (from, to, data) = wire.queue.removeFirst()
-            var packet = try JSONDecoder().decode(SpotchatProfilePacket.self, from: data)
+            var packet = try JSONDecoder().decode(ShumProfilePacket.self, from: data)
             if packet.kind == .chunk, let chunk = packet.data { packet.data = Data(repeating: 0, count: chunk.count) }
             wire.nodes[to]?.receive(try JSONEncoder().encode(packet), from: from)
         }
@@ -130,17 +130,17 @@ struct SpotchatProfileTests {
     func persistence() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let store = SpotchatProfileStore(directory: directory)
-        let profile = SpotchatProfile(name: "Аня", bio: "Сохранено", avatar: try photo())
+        let store = ShumProfileStore(directory: directory)
+        let profile = ShumProfile(name: "Аня", bio: "Сохранено", avatar: try photo())
         try store.saveOwn(profile)
-        #expect(SpotchatProfileStore(directory: directory).loadOwn() == profile)
-        let data = try #require(profile.avatar), hash = SpotchatProfile.digest(data)
+        #expect(ShumProfileStore(directory: directory).loadOwn() == profile)
+        let data = try #require(profile.avatar), hash = ShumProfile.digest(data)
         store.cache(data, hash: hash)
-        #expect(SpotchatProfileStore(directory: directory).avatar(hash) == data)
+        #expect(ShumProfileStore(directory: directory).avatar(hash) == data)
         #expect(store.avatar("../../own") == nil)
-        #expect(!SpotchatProfile(name: "Аня", bio: String(repeating: "x", count: 73)).valid)
-        #expect(!SpotchatProfile.validAvatar(Data(repeating: 0, count: 400)))
-        #expect(SpotchatProfile(name: "Аня", bio: String(repeating: "я", count: 72)).valid)
+        #expect(!ShumProfile(name: "Аня", bio: String(repeating: "x", count: 73)).valid)
+        #expect(!ShumProfile.validAvatar(Data(repeating: 0, count: 400)))
+        #expect(ShumProfile(name: "Аня", bio: String(repeating: "я", count: 72)).valid)
         var legacy = profile
         legacy.bio = String(repeating: "я", count: 160)
         try store.saveOwn(legacy)

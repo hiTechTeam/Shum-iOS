@@ -1,38 +1,49 @@
 import SwiftUI
 
 struct BlockedProfilesView: View {
-    @EnvironmentObject var peopleViewModel: PeopleViewModel
+    @ObservedObject var runtime: ShumRuntime
 
-    @State private var profileBeingUnblocked: UUID?
+    @State private var profileBeingUnblocked: String?
     @State private var showError = false
+
+    private var blockedCards: [ShumContactCard] {
+        (runtime.permanent?.state.blocked?.values.map { $0 } ?? [])
+            .sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+    }
 
     var body: some View {
         NavigationStack {
             Group {
-                if peopleViewModel.blockedProfiles.isEmpty {
+                if blockedCards.isEmpty {
                     ShumContentUnavailableView(
                         Inc.NearbyProfile.noBlockedProfiles.localized,
                         systemImage: "person.crop.circle.badge.checkmark"
                     )
                 } else {
-                    List(peopleViewModel.blockedProfiles) { profile in
+                    List(blockedCards) { card in
                         HStack(spacing: 12) {
-                            BlockedProfileAvatar(profile: profile)
+                            ShumAvatar(
+                                name: card.name,
+                                size: 44,
+                                imageData: runtime.profile(for: card.peerID)?.avatar
+                            )
 
-                            Text(profile.name ?? profile.username ?? "—")
+                            Text(card.name)
                                 .font(.body)
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
 
                             Spacer()
 
-                            if profileBeingUnblocked == profile.id {
+                            if profileBeingUnblocked == card.id {
                                 ProgressView()
                                     .controlSize(.small)
                                     .frame(minWidth: 44)
                             } else {
                                 Button(Inc.NearbyProfile.unblock.localized) {
-                                    unblock(profile)
+                                    unblock(card)
                                 }
                                 .buttonStyle(.borderless)
                                 .font(.subheadline.weight(.semibold))
@@ -61,9 +72,6 @@ struct BlockedProfilesView: View {
                 }
             }
         }
-        .task {
-            await peopleViewModel.synchronizeBlockedProfiles()
-        }
         .alert(
             Inc.NearbyProfile.actionFailedTitle.localized,
             isPresented: $showError
@@ -74,50 +82,17 @@ struct BlockedProfilesView: View {
         }
     }
 
-    private func unblock(_ profile: BlockedProfileResponse) {
+    private func unblock(_ card: ShumContactCard) {
         guard profileBeingUnblocked == nil else { return }
-        profileBeingUnblocked = profile.id
-        Task {
+        profileBeingUnblocked = card.id
+        Task { @MainActor in
             do {
-                try await peopleViewModel.unblock(profile)
+                try runtime.permanent?.setBlocked(card, blocked: false)
             } catch {
                 showError = true
             }
             profileBeingUnblocked = nil
         }
-    }
-}
-
-private struct BlockedProfileAvatar: View {
-    let profile: BlockedProfileResponse
-
-    private let size: CGFloat = 44
-
-    var body: some View {
-        Group {
-            if let photoURL = profile.photoUrl,
-               let url = URL(string: photoURL) {
-                LocalAvatar(url)
-                    .placeholder { placeholder }
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                placeholder
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
-        .accessibilityHidden(true)
-    }
-
-    private var placeholder: some View {
-        Circle()
-            .fill(Color(uiColor: .tertiarySystemFill))
-            .overlay {
-                Image(systemName: "person.fill")
-                    .font(.system(size: 19))
-                    .foregroundStyle(.secondary)
-            }
     }
 }
 

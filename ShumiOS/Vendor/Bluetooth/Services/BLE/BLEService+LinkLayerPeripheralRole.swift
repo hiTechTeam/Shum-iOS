@@ -30,24 +30,13 @@ extension BLEService: CBPeripheralManagerDelegate {
                 characteristic = nil
                 return
             }
-            // Remove all services first to ensure clean state
-            peripheral.removeAllServices()
-
-            // Create characteristic
-            characteristic = CBMutableCharacteristic(
-                type: BLEService.characteristicUUID,
-                properties: [.notify, .write, .writeWithoutResponse, .read],
-                value: nil,
-                permissions: [.readable, .writeable]
-            )
-
-            // Create service
-            let service = CBMutableService(type: BLEService.serviceUUID, primary: true)
-            service.characteristics = [characteristic!]
-
-            // Add service (advertising will start in didAdd delegate)
-            SecureLogger.debug("🔧 Adding BLE service...", category: .session)
-            peripheral.add(service)
+            guard acceptsBluetoothActivity else {
+                peripheral.stopAdvertising()
+                peripheral.removeAllServices()
+                characteristic = nil
+                return
+            }
+            publishPeripheralServiceIfNeeded(on: peripheral)
 
         case .poweredOff:
             // Bluetooth was turned off - clean up peripheral state
@@ -109,6 +98,13 @@ extension BLEService: CBPeripheralManagerDelegate {
             }
         }
 
+        guard acceptsBluetoothActivity else {
+            peripheral.stopAdvertising()
+            peripheral.removeAllServices()
+            characteristic = nil
+            return
+        }
+
         // Via the sampler for a fresh background budget (see central-restore).
         logBluetoothStatus("peripheral-restore")
 
@@ -119,8 +115,12 @@ extension BLEService: CBPeripheralManagerDelegate {
     #endif
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: Error?) {
-        guard !isPanicSuspended else {
+        guard acceptsBluetoothActivity else {
             peripheral.stopAdvertising()
+            if let service = service as? CBMutableService {
+                peripheral.remove(service)
+            }
+            characteristic = nil
             return
         }
         if let error = error {
@@ -131,14 +131,52 @@ extension BLEService: CBPeripheralManagerDelegate {
         SecureLogger.debug("✅ Service added successfully, starting advertising", category: .session)
         
         // Start advertising after service is confirmed added
+        ShumDiscoveryTrace.record("service-published")
         let adData = BLERadioController.advertisementData()
         peripheral.startAdvertising(adData)
         
         SecureLogger.debug("📡 Started advertising (LocalName: \((adData[CBAdvertisementDataLocalNameKey] as? String) != nil ? "on" : "off"), ID: \(myPeerID.id.prefix(8))…)", category: .session)
     }
+
+    /// Publishes the service from scratch after visibility was disabled.
+    /// Keeping a stopped service registered makes iOS reuse stale peripheral
+    /// state and delays discovery on nearby devices.
+    func publishPeripheralServiceIfNeeded(
+        on peripheral: CBPeripheralManager
+    ) {
+        guard acceptsBluetoothActivity,
+              peripheral.state == .poweredOn else { return }
+
+        if characteristic != nil {
+            if !peripheral.isAdvertising {
+                peripheral.startAdvertising(
+                    BLERadioController.advertisementData()
+                )
+            }
+            return
+        }
+
+        peripheral.removeAllServices()
+        let characteristic = CBMutableCharacteristic(
+            type: BLEService.characteristicUUID,
+            properties: [.notify, .write, .writeWithoutResponse, .read],
+            value: nil,
+            permissions: [.readable, .writeable]
+        )
+        self.characteristic = characteristic
+
+        let service = CBMutableService(
+            type: BLEService.serviceUUID,
+            primary: true
+        )
+        service.characteristics = [characteristic]
+        SecureLogger.debug("🔧 Adding BLE service...", category: .session)
+        peripheral.add(service)
+    }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
-        guard !isPanicSuspended else { return }
+        guard acceptsBluetoothActivity else { return }
+        ShumDiscoveryTrace.record("remote-subscribed")
         let centralUUID = central.identifier.uuidString
         SecureLogger.debug("📥 Central subscribed: \(centralUUID.prefix(8))…", category: .session)
         linkStateStore.addSubscribedCentral(central)
@@ -178,7 +216,7 @@ extension BLEService: CBPeripheralManagerDelegate {
         linkStateStore.removeSubscribedCentral(central)
 
         // Ensure we're still advertising for other devices to find us
-        if !isPanicSuspended, peripheral.isAdvertising == false {
+        if acceptsBluetoothActivity, peripheral.isAdvertising == false {
             SecureLogger.debug("📡 Restarting advertising after central unsubscribed", category: .session)
             peripheral.startAdvertising(BLERadioController.advertisementData())
         }
@@ -189,7 +227,7 @@ extension BLEService: CBPeripheralManagerDelegate {
     }
     
     func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
-        guard !isPanicSuspended else { return }
+        guard acceptsBluetoothActivity else { return }
         drainPendingNotifications(logPrefix: "✅ Sent")
     }
 
@@ -250,7 +288,7 @@ extension BLEService: CBPeripheralManagerDelegate {
         for request in requests {
             peripheral.respond(to: request, withResult: .success)
         }
-        guard !isPanicSuspended else { return }
+        guard acceptsBluetoothActivity else { return }
         
         // Process writes. For long writes, CoreBluetooth may deliver multiple CBATTRequest values with offsets.
         // Combine per-central request values by offset before decoding.

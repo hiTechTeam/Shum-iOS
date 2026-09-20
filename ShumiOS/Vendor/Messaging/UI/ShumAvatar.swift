@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 
-struct SpotchatAvatar: View {
+struct ShumAvatar: View {
     let name: String
     let size: CGFloat
     var nearby = false

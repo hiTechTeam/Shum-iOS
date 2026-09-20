@@ -31,7 +31,7 @@ struct ShumProximityTests {
         let wire = MockTransport()
         wire.connectedPeers = [peer]
         let defaults = UserDefaults(suiteName: "ShumProximityTests.\(UUID().uuidString)")!
-        let runtime = SpotchatRuntime(transport: wire, defaults: defaults)
+        let runtime = ShumRuntime(transport: wire, defaults: defaults)
         runtime.didReceiveTransportEvent(.bluetoothStateUpdated(.poweredOn))
         runtime.didUpdatePeerSnapshots([
             .init(peerID: peer, nickname: "Боб", isConnected: true, noisePublicKey: nil,

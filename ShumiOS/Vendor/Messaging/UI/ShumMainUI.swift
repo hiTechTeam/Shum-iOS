@@ -3,9 +3,9 @@ import SwiftUI
 import UIKit
 import BitFoundation
 
-// Current Spotchat chat list, adapted to Shum's navigation and palette.
-enum SpotchatUIRoute: Hashable {
-    case conversation(SpotchatPeer), newChat, requests, ownQR
+// Current Shum chat list, adapted to Shum's navigation and palette.
+enum ShumUIRoute: Hashable {
+    case conversation(ShumPeer), newChat, requests, ownQR
 }
 
 private struct ShumDirectoryRowID: Hashable {
@@ -13,21 +13,21 @@ private struct ShumDirectoryRowID: Hashable {
     let peer: PeerID
 }
 
-struct SpotchatDestinationUI: View {
+struct ShumDestinationUI: View {
     @EnvironmentObject private var coordinator: AppCoordinator
-    @ObservedObject var runtime: SpotchatRuntime
-    let route: SpotchatUIRoute
-    let open: (SpotchatUIRoute) -> Void
+    @ObservedObject var runtime: ShumRuntime
+    let route: ShumUIRoute
+    let open: (ShumUIRoute) -> Void
     var body: some View {
         Group {
             switch route {
             case .conversation(let peer):
-                SpotchatConversationView(runtime: runtime, peer: peer)
-            case .newChat: SpotchatContactsView(runtime: runtime) { open(.conversation($0)) }
-            case .requests: SpotchatContactRequestsView(runtime: runtime) { open(.conversation($0)) }
+                ShumConversationView(runtime: runtime, peer: peer)
+            case .newChat: ShumContactsView(runtime: runtime) { open(.conversation($0)) }
+            case .requests: ShumContactRequestsView(runtime: runtime) { open(.conversation($0)) }
             case .ownQR:
                 if let card = runtime.permanent?.ownCard {
-                    SpotchatQRView(
+                    ShumQRView(
                         card: card,
                         resolve: { locator, completion in
                             runtime.resolveContact(locator, completion: completion)
@@ -41,10 +41,10 @@ struct SpotchatDestinationUI: View {
     }
 }
 
-struct SpotchatChatsUI: View {
+struct ShumChatsUI: View {
     @EnvironmentObject private var coordinator: AppCoordinator
-    @ObservedObject var runtime: SpotchatRuntime
-    let open: (SpotchatUIRoute) -> Void
+    @ObservedObject var runtime: ShumRuntime
+    let open: (ShumUIRoute) -> Void
     @State private var folder: ShumChatFolder = .all
 
 
@@ -318,13 +318,13 @@ struct ShumPixelEmptyIcon: View {
 /// Both the directory and search use the same rows, swipe actions and confirmation presentation.
 struct ShumDirectoryList<Header: View, Empty: View>: View {
     @Environment(\.shumThemePalette) private var palette
-    @ObservedObject var runtime: SpotchatRuntime
+    @ObservedObject var runtime: ShumRuntime
     let folder: ShumChatFolder
     let entries: [ShumDirectoryEntry]
-    let open: (SpotchatUIRoute) -> Void
+    let open: (ShumUIRoute) -> Void
     @ViewBuilder let header: () -> Header
     @ViewBuilder let empty: () -> Empty
-    @State private var selectedPeer: SpotchatPeer?
+    @State private var selectedPeer: ShumPeer?
     @State private var pendingAction: DirectoryConfirmation?
     @State private var blockRequest: ShumProfileBlockRequest?
     @State private var elevatedPeerIDs: Set<PeerID> = []
@@ -579,7 +579,7 @@ private struct ShumDirectoryPressedButtonStyle: ButtonStyle {
 /// every trailing element travel with the avatar instead of relaying out and
 /// jumping when the menu opens.
 private struct ShumDirectoryContextPreview: View {
-    @ObservedObject var runtime: SpotchatRuntime
+    @ObservedObject var runtime: ShumRuntime
     let entry: ShumDirectoryEntry
     let isPinned: Bool
     let showsNearbyIndicator: Bool
@@ -627,7 +627,7 @@ private struct ShumDirectoryContextPreview: View {
 }
 
 private enum DirectoryConfirmation {
-    case clear(SpotchatContactCard), decline(SpotchatContactCard)
+    case clear(ShumContactCard), decline(ShumContactCard)
     var title: String {
         switch self {
         case .clear: "Очистить чат?"
@@ -652,11 +652,11 @@ private enum DirectoryConfirmation {
 
 struct ShumDirectoryRow: View {
     @Environment(\.shumThemePalette) private var palette
-    @ObservedObject var runtime: SpotchatRuntime
+    @ObservedObject var runtime: ShumRuntime
     let entry: ShumDirectoryEntry
     var isPinned = false
     var showsNearbyIndicator = true
-    private var last: SpotchatMessage? { runtime.conversation(entry.peer.id).last }
+    private var last: ShumMessage? { runtime.conversation(entry.peer.id).last }
     var body: some View {
         let typing = runtime.isTyping(entry.peer.id)
         HStack(spacing: 12) {
@@ -791,10 +791,10 @@ private struct ShumChatReceipt: View {
         Group {
             switch status {
             case .read:
-                SpotchatDoubleCheck().stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+                ShumDoubleCheck().stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
                     .frame(width: 16, height: 10)
             case .delivered:
-                SpotchatDoubleCheck().stroke(Color.secondary, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+                ShumDoubleCheck().stroke(Color.secondary, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
                     .frame(width: 16, height: 10)
             case .sent:
                 Image(systemName: "checkmark").foregroundStyle(.secondary)

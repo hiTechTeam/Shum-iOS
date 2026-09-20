@@ -8,7 +8,7 @@ struct ShumChatsView: View {
     @State private var query = ""
     @State private var unreadOnly = false
     @State private var showPeople = false
-    private var filtered: [ShumContact] {
+    private var filtered: [ShumLegacyContact] {
         chat.chatContacts.filter { (!unreadOnly || chat.unread($0.id) > 0) && (query.isEmpty || $0.name.localizedCaseInsensitiveContains(query)) }
     }
     var body: some View {
@@ -27,7 +27,7 @@ struct ShumChatsView: View {
                 }.frame(maxWidth: .infinity).padding(.vertical, 60).listRowSeparator(.hidden)
             }
             ForEach(filtered) { contact in
-                NavigationLink { ShumConversationView(contact: contact) } label: {
+                NavigationLink { ShumLegacyConversationView(contact: contact) } label: {
                     HStack(spacing: 14) {
                         ShumInitialAvatar(name: contact.name)
                         VStack(alignment: .leading, spacing: 5) {
@@ -72,7 +72,7 @@ struct ShumChatsView: View {
 struct ShumPeopleView: View {
     @EnvironmentObject private var chat: ShumChatRuntime
     @EnvironmentObject private var coordinator: AppCoordinator
-    private var nearby: [ShumContact] { chat.contacts.filter { chat.nearbyIDs.contains($0.id) }.sorted { $0.name < $1.name } }
+    private var nearby: [ShumLegacyContact] { chat.contacts.filter { chat.nearbyIDs.contains($0.id) }.sorted { $0.name < $1.name } }
     var body: some View {
         List {
             Section {
@@ -91,7 +91,7 @@ struct ShumPeopleView: View {
                     }.frame(maxWidth: .infinity).padding(.vertical, 40).listRowBackground(Color.clear)
                 }
                 ForEach(nearby) { contact in
-                    NavigationLink { ShumConversationView(contact: contact) } label: {
+                    NavigationLink { ShumLegacyConversationView(contact: contact) } label: {
                         HStack(spacing: 14) {
                             ShumInitialAvatar(name: contact.name)
                             VStack(alignment: .leading, spacing: 5) {
@@ -124,9 +124,9 @@ struct ShumPeopleView: View {
     }
 }
 
-struct ShumConversationView: View {
+struct ShumLegacyConversationView: View {
     @EnvironmentObject private var chat: ShumChatRuntime
-    let contact: ShumContact
+    let contact: ShumLegacyContact
     @State private var draft = ""
     var body: some View {
         ScrollViewReader { proxy in

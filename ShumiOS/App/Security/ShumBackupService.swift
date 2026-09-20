@@ -69,11 +69,73 @@ final class ShumBackupService {
         let noiseStatic: Data
         let noiseSigning: Data
         let nostrIdentity: Data
-        let spotchatStorage: Data
+        let shumStorage: Data
         let nostrDeviceSeed: Data?
         let identityCacheEncryption: Data?
         let identityCache: Data?
         let legacyChatStorage: Data?
+
+        private enum CodingKeys: String, CodingKey {
+            case localCardSigning
+            case noiseStatic
+            case noiseSigning
+            case nostrIdentity
+            case shumStorage
+            case legacyMessagingStorage = "spotchatStorage"
+            case nostrDeviceSeed
+            case identityCacheEncryption
+            case identityCache
+            case legacyChatStorage
+        }
+
+        init(
+            localCardSigning: Data,
+            noiseStatic: Data,
+            noiseSigning: Data,
+            nostrIdentity: Data,
+            shumStorage: Data,
+            nostrDeviceSeed: Data?,
+            identityCacheEncryption: Data?,
+            identityCache: Data?,
+            legacyChatStorage: Data?
+        ) {
+            self.localCardSigning = localCardSigning
+            self.noiseStatic = noiseStatic
+            self.noiseSigning = noiseSigning
+            self.nostrIdentity = nostrIdentity
+            self.shumStorage = shumStorage
+            self.nostrDeviceSeed = nostrDeviceSeed
+            self.identityCacheEncryption = identityCacheEncryption
+            self.identityCache = identityCache
+            self.legacyChatStorage = legacyChatStorage
+        }
+
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            localCardSigning = try values.decode(Data.self, forKey: .localCardSigning)
+            noiseStatic = try values.decode(Data.self, forKey: .noiseStatic)
+            noiseSigning = try values.decode(Data.self, forKey: .noiseSigning)
+            nostrIdentity = try values.decode(Data.self, forKey: .nostrIdentity)
+            shumStorage = try values.decodeIfPresent(Data.self, forKey: .shumStorage)
+                ?? values.decode(Data.self, forKey: .legacyMessagingStorage)
+            nostrDeviceSeed = try values.decodeIfPresent(Data.self, forKey: .nostrDeviceSeed)
+            identityCacheEncryption = try values.decodeIfPresent(Data.self, forKey: .identityCacheEncryption)
+            identityCache = try values.decodeIfPresent(Data.self, forKey: .identityCache)
+            legacyChatStorage = try values.decodeIfPresent(Data.self, forKey: .legacyChatStorage)
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var values = encoder.container(keyedBy: CodingKeys.self)
+            try values.encode(localCardSigning, forKey: .localCardSigning)
+            try values.encode(noiseStatic, forKey: .noiseStatic)
+            try values.encode(noiseSigning, forKey: .noiseSigning)
+            try values.encode(nostrIdentity, forKey: .nostrIdentity)
+            try values.encode(shumStorage, forKey: .shumStorage)
+            try values.encodeIfPresent(nostrDeviceSeed, forKey: .nostrDeviceSeed)
+            try values.encodeIfPresent(identityCacheEncryption, forKey: .identityCacheEncryption)
+            try values.encodeIfPresent(identityCache, forKey: .identityCache)
+            try values.encodeIfPresent(legacyChatStorage, forKey: .legacyChatStorage)
+        }
     }
 
     private struct StoredFile: Codable {
@@ -168,7 +230,7 @@ final class ShumBackupService {
                 service: nostrService,
                 keychain: keychain
             ),
-            spotchatStorage: try requiredIdentityKey("spotchatStorageKey", keychain: keychain),
+            shumStorage: try requiredShumStorageKey(keychain: keychain),
             nostrDeviceSeed: optionalCustomKey(
                 nostrDeviceSeedKey,
                 service: nostrService,
@@ -276,7 +338,7 @@ final class ShumBackupService {
               payload.keys.localCardSigning.count == 32,
               payload.keys.noiseStatic.count == 32,
               payload.keys.noiseSigning.count == 32,
-              payload.keys.spotchatStorage.count == 32 else {
+              payload.keys.shumStorage.count == 32 else {
             throw ShumBackupError.invalidBackup
         }
 
@@ -320,19 +382,19 @@ final class ShumBackupService {
         }
 
         if let profileData = fileMap["ShumProfiles/own.json"] {
-            guard let profile = try? JSONDecoder().decode(SpotchatProfile.self, from: profileData),
+            guard let profile = try? JSONDecoder().decode(ShumProfile.self, from: profileData),
                   profile.valid else {
                 throw ShumBackupError.invalidBackup
             }
         }
 
         if let encryptedHistory = fileMap["ShumConversations/state.enc"] {
-            let key = SymmetricKey(data: payload.keys.spotchatStorage)
+            let key = SymmetricKey(data: payload.keys.shumStorage)
             guard let box = try? ChaChaPoly.SealedBox(combined: encryptedHistory),
                   let plaintext = try? ChaChaPoly.open(box, using: key),
-                  let database = try? JSONDecoder().decode(SpotchatDatabase.self, from: plaintext),
+                  let database = try? JSONDecoder().decode(ShumDatabase.self, from: plaintext),
                   database.version == 1,
-                  database.ownerID == SpotchatContactCard.userID(
+                  database.ownerID == ShumContactCard.userID(
                     noisePrivate.publicKey.rawRepresentation
                   ) else {
                 throw ShumBackupError.invalidBackup
@@ -396,7 +458,11 @@ final class ShumBackupService {
             )
             try saveIdentityKey(payload.keys.noiseStatic, name: "noiseStaticKey", keychain: keychain)
             try saveIdentityKey(payload.keys.noiseSigning, name: "ed25519SigningKey", keychain: keychain)
-            try saveIdentityKey(payload.keys.spotchatStorage, name: "spotchatStorageKey", keychain: keychain)
+            try saveIdentityKey(
+                payload.keys.shumStorage,
+                name: ShumIdentityKeyNames.storage,
+                keychain: keychain
+            )
             if let value = payload.keys.identityCacheEncryption {
                 try saveIdentityKey(value, name: "identityCacheEncryptionKey", keychain: keychain)
             }
@@ -422,7 +488,7 @@ final class ShumBackupService {
                 try KeychainStore.shared.set(value, for: legacyChatStorageKey)
             }
 
-            UserDefaults.standard.set(payload.profileName, forKey: "spotchat.nickname")
+            UserDefaults.standard.set(payload.profileName, forKey: "shum.nickname")
             LocalCardStore.shared.reloadFromDisk()
             guard LocalCardStore.shared.ownManifest != nil else {
                 throw ShumBackupError.couldNotSave
@@ -433,7 +499,9 @@ final class ShumBackupService {
             try? KeychainStore.shared.remove(legacyChatStorageKey)
             _ = keychain.deleteIdentityKey(forKey: "noiseStaticKey")
             _ = keychain.deleteIdentityKey(forKey: "ed25519SigningKey")
-            _ = keychain.deleteIdentityKey(forKey: "spotchatStorageKey")
+            _ = keychain.deleteIdentityKey(
+                forKey: ShumIdentityKeyNames.storage
+            )
             _ = keychain.deleteIdentityKey(forKey: "identityCacheEncryptionKey")
             _ = keychain.deleteIdentityKey(forKey: "bitchat.identityCache.v2")
             keychain.delete(key: nostrIdentityKey, service: nostrService)
@@ -458,6 +526,22 @@ final class ShumBackupService {
             throw ShumBackupError.protectedDataUnavailable
         }
         return value
+    }
+
+    private func requiredShumStorageKey(
+        keychain: KeychainManagerProtocol
+    ) throws -> Data {
+        if case .success(let value) = keychain.getIdentityKeyWithResult(
+            forKey: ShumIdentityKeyNames.storage
+        ) {
+            return value
+        }
+        if case .success(let value) = keychain.getIdentityKeyWithResult(
+            forKey: ShumIdentityKeyNames.legacyStorage
+        ) {
+            return value
+        }
+        throw ShumBackupError.protectedDataUnavailable
     }
 
     private func optionalIdentityKey(

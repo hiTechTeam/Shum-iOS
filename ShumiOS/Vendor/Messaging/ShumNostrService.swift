@@ -1,21 +1,21 @@
 import Combine
 import Foundation
 
-struct SpotchatResolvedContact {
-    let card: SpotchatContactCard
-    let profile: SpotchatProfile
+struct ShumResolvedContact {
+    let card: ShumContactCard
+    let profile: ShumProfile
 }
 
 @MainActor
-final class SpotchatNostrService {
+final class ShumNostrService {
     private struct ContactRequest: Codable {
         let id: String
     }
 
     private struct ContactManifest: Codable {
         let id: String
-        let card: SpotchatContactCard
-        let profile: SpotchatProfileManifest
+        let card: ShumContactCard
+        let profile: ShumProfileManifest
     }
 
     private struct ContactChunk: Codable {
@@ -26,7 +26,7 @@ final class SpotchatNostrService {
     }
 
     private enum Inbound {
-        case packet(SpotchatPacket, String)
+        case packet(ShumPacket, String)
         case contactRequest(ContactRequest, String)
         case contactManifest(ContactManifest, String)
         case contactChunk(ContactChunk, String)
@@ -34,17 +34,17 @@ final class SpotchatNostrService {
 
     private struct Lookup {
         let target: String
-        let completion: (Result<SpotchatResolvedContact, Error>) -> Void
-        var card: SpotchatContactCard?
-        var profile: SpotchatProfileManifest?
+        let completion: (Result<ShumResolvedContact, Error>) -> Void
+        var card: ShumContactCard?
+        var profile: ShumProfileManifest?
         var chunks: [Int: Data] = [:]
     }
 
     let manager: NostrRelayManager
     private let identity: NostrIdentity
-    var received: ((SpotchatPacket, String) -> Void)?
-    private var cardProvider: (() -> SpotchatContactCard?)?
-    private var profileProvider: (() -> SpotchatProfile?)?
+    var received: ((ShumPacket, String) -> Void)?
+    private var cardProvider: (() -> ShumContactCard?)?
+    private var profileProvider: (() -> ShumProfile?)?
     private var seen: Set<String> = []
     private var queuedEvents: [NostrEvent] = []
     private var lookups: [String: Lookup] = [:]
@@ -62,8 +62,8 @@ final class SpotchatNostrService {
     var connected: Bool { manager.isDMRelayConnected }
 
     func configureContactLookup(
-        card: @escaping () -> SpotchatContactCard?,
-        profile: @escaping () -> SpotchatProfile?
+        card: @escaping () -> ShumContactCard?,
+        profile: @escaping () -> ShumProfile?
     ) {
         cardProvider = card
         profileProvider = profile
@@ -73,7 +73,7 @@ final class SpotchatNostrService {
         guard !started else { return }; started = true
         manager.connect()
         // Outer timestamps are randomized by bitchat; allow that skew when fetching.
-        manager.subscribe(filter: .giftWrapsFor(pubkey: identity.publicKeyHex, since: Date().addingTimeInterval(-3 * 86400)), id: "spotchat-private-v1") { [weak self] event in
+        manager.subscribe(filter: .giftWrapsFor(pubkey: identity.publicKeyHex, since: Date().addingTimeInterval(-3 * 86400)), id: "shum-private-v1") { [weak self] event in
             self?.receive(event)
         }
     }
@@ -97,9 +97,18 @@ final class SpotchatNostrService {
                 guard let result = try? NostrProtocol.decryptPrivateMessage(giftWrap: event, recipientIdentity: identity),
                       result.senderPubkey.count == 64 else { return nil }
                 let content = result.content
-                if content.hasPrefix("spotchat-v1:"), content.utf8.count <= 33_000,
-                   let bytes = Data(base64Encoded: String(content.dropFirst(12))), bytes.count <= 24_000,
-                   let packet = try? JSONDecoder().decode(SpotchatPacket.self, from: bytes) {
+                for prefix in [
+                    ShumWireProtocol.relayPrefix,
+                    ShumWireProtocol.legacyRelayPrefix
+                ] where content.hasPrefix(prefix) {
+                    guard content.utf8.count <= 33_000,
+                          let bytes = Data(
+                            base64Encoded: String(content.dropFirst(prefix.count))
+                          ), bytes.count <= 24_000,
+                          let packet = try? JSONDecoder().decode(
+                            ShumPacket.self,
+                            from: bytes
+                          ) else { return nil }
                     return .packet(packet, result.senderPubkey)
                 }
                 if content.hasPrefix(Self.requestPrefix),
@@ -127,14 +136,14 @@ final class SpotchatNostrService {
             decode(queuedEvents.removeFirst())
         }
     }
-    func send(_ packet: SpotchatPacket, to card: SpotchatContactCard, completion: @escaping (Bool) -> Void) {
-        guard connected, let bytes = try? SpotchatCoding.encode(packet) else { completion(false); return }
-        NostrTransport.sendSpotchat(bytes, recipient: card.nostrKey, identity: identity, manager: manager, completion: completion)
+    func send(_ packet: ShumPacket, to card: ShumContactCard, completion: @escaping (Bool) -> Void) {
+        guard connected, let bytes = try? ShumCoding.encode(packet) else { completion(false); return }
+        NostrTransport.sendShum(bytes, recipient: card.nostrKey, identity: identity, manager: manager, completion: completion)
     }
 
-    func resolve(_ locator: SpotchatContactLocator, completion: @escaping (Result<SpotchatResolvedContact, Error>) -> Void) {
+    func resolve(_ locator: ShumContactLocator, completion: @escaping (Result<ShumResolvedContact, Error>) -> Void) {
         guard locator.nostrKey != identity.publicKeyHex, lookups.count < 8 else {
-            completion(.failure(SpotchatFailure.invalidContact))
+            completion(.failure(ShumFailure.invalidContact))
             return
         }
         start()
@@ -142,12 +151,12 @@ final class SpotchatNostrService {
         lookups[id] = Lookup(target: locator.nostrKey, completion: completion)
         guard send(ContactRequest(id: id), prefix: Self.requestPrefix, recipient: locator.nostrKey) else {
             lookups.removeValue(forKey: id)
-            completion(.failure(SpotchatFailure.contactUnavailable))
+            completion(.failure(ShumFailure.contactUnavailable))
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.lookupTimeout) { [weak self] in
             guard let lookup = self?.lookups.removeValue(forKey: id) else { return }
-            lookup.completion(.failure(SpotchatFailure.contactUnavailable))
+            lookup.completion(.failure(ShumFailure.contactUnavailable))
         }
     }
 
@@ -175,14 +184,14 @@ final class SpotchatNostrService {
               card.nostrKey == identity.publicKeyHex, (try? card.validate()) != nil else { return }
         responseRate[sender] = Date()
 
-        let avatar = ownProfile.avatar.flatMap { SpotchatProfile.validAvatar($0) ? $0 : nil }
-        let profile = SpotchatProfile(name: card.name, bio: card.bio, avatar: avatar)
-        let manifest = ContactManifest(id: request.id, card: card, profile: SpotchatProfileManifest(profile))
+        let avatar = ownProfile.avatar.flatMap { ShumProfile.validAvatar($0) ? $0 : nil }
+        let profile = ShumProfile(name: card.name, bio: card.bio, avatar: avatar)
+        let manifest = ContactManifest(id: request.id, card: card, profile: ShumProfileManifest(profile))
         guard send(manifest, prefix: Self.manifestPrefix, recipient: sender), let avatar else { return }
 
-        let hash = SpotchatProfile.digest(avatar)
-        for offset in stride(from: 0, to: avatar.count, by: SpotchatProfilePacket.chunkSize) {
-            let end = min(avatar.count, offset + SpotchatProfilePacket.chunkSize)
+        let hash = ShumProfile.digest(avatar)
+        for offset in stride(from: 0, to: avatar.count, by: ShumProfilePacket.chunkSize) {
+            let end = min(avatar.count, offset + ShumProfilePacket.chunkSize)
             let chunk = ContactChunk(id: request.id, hash: hash, offset: offset, data: avatar.subdata(in: offset ..< end))
             _ = send(chunk, prefix: Self.chunkPrefix, recipient: sender)
         }
@@ -202,11 +211,11 @@ final class SpotchatNostrService {
 
     private func accept(_ chunk: ContactChunk, sender: String) {
         guard Self.validRequestID(chunk.id), var lookup = lookups[chunk.id],
-              lookup.target == sender, SpotchatProfileManifest.validHash(chunk.hash),
-              chunk.offset >= 0, chunk.offset < SpotchatProfile.maxAvatarBytes,
-              chunk.offset % SpotchatProfilePacket.chunkSize == 0,
-              !chunk.data.isEmpty, chunk.data.count <= SpotchatProfilePacket.chunkSize,
-              chunk.offset + chunk.data.count <= SpotchatProfile.maxAvatarBytes else { return }
+              lookup.target == sender, ShumProfileManifest.validHash(chunk.hash),
+              chunk.offset >= 0, chunk.offset < ShumProfile.maxAvatarBytes,
+              chunk.offset % ShumProfilePacket.chunkSize == 0,
+              !chunk.data.isEmpty, chunk.data.count <= ShumProfilePacket.chunkSize,
+              chunk.offset + chunk.data.count <= ShumProfile.maxAvatarBytes else { return }
         lookup.chunks[chunk.offset] = chunk.data
         lookups[chunk.id] = lookup
         finishIfComplete(chunk.id)
@@ -216,9 +225,9 @@ final class SpotchatNostrService {
         guard let lookup = lookups[id], let card = lookup.card, let manifest = lookup.profile else { return }
         if manifest.avatarBytes == 0 {
             lookups.removeValue(forKey: id)
-            lookup.completion(.success(SpotchatResolvedContact(
+            lookup.completion(.success(ShumResolvedContact(
                 card: card,
-                profile: SpotchatProfile(name: manifest.name, bio: manifest.bio)
+                profile: ShumProfile(name: manifest.name, bio: manifest.bio)
             )))
             return
         }
@@ -229,12 +238,12 @@ final class SpotchatNostrService {
             avatar.append(chunk)
         }
         guard avatar.count == manifest.avatarBytes,
-              SpotchatProfile.digest(avatar) == expectedHash,
-              SpotchatProfile.validAvatar(avatar) else { return }
+              ShumProfile.digest(avatar) == expectedHash,
+              ShumProfile.validAvatar(avatar) else { return }
         lookups.removeValue(forKey: id)
-        lookup.completion(.success(SpotchatResolvedContact(
+        lookup.completion(.success(ShumResolvedContact(
             card: card,
-            profile: SpotchatProfile(name: manifest.name, bio: manifest.bio, avatar: avatar)
+            profile: ShumProfile(name: manifest.name, bio: manifest.bio, avatar: avatar)
         )))
     }
 

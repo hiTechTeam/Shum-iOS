@@ -1925,10 +1925,10 @@ private extension TimeInterval {
     }
 }
 
-// Spotchat has its own contact gate; it does not instantiate upstream location,
+// Shum has its own contact gate; it does not instantiate upstream location,
 // favorites, Tor or ChatViewModel singletons. Reuse the same relay engine.
 extension NostrRelayManager {
-    static func spotchat() -> NostrRelayManager {
+    static func shum() -> NostrRelayManager {
         let session = URLSession(configuration: .ephemeral)
         return NostrRelayManager(dependencies: NostrRelayManagerDependencies(
             activationAllowed: { true }, userTorEnabled: { false },

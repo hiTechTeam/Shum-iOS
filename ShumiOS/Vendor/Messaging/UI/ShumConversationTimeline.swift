@@ -2,12 +2,12 @@
 import SwiftUI
 import UIKit
 
-struct SpotchatTimelineItem: Equatable {
+struct ShumTimelineItem: Equatable {
     let id: String
     let revision: Int
 }
 
-struct SpotchatTimelineCommand: Equatable {
+struct ShumTimelineCommand: Equatable {
     enum Target: Equatable { case bottom, message(String) }
     let id = UUID()
     let target: Target
@@ -15,7 +15,7 @@ struct SpotchatTimelineCommand: Equatable {
 
 /// A message and its visible offset survive changes to the history above it.
 /// No message contents are stored in preferences.
-struct SpotchatTimelinePosition: Codable {
+struct ShumTimelinePosition: Codable {
     let messageID: String
     let offset: CGFloat
     let atBottom: Bool
@@ -35,37 +35,37 @@ struct SpotchatTimelinePosition: Codable {
 
 /// UIKit owns scrolling and navigation geometry. The existing SwiftUI bubbles,
 /// including their long-press and reply gestures, are hosted unchanged in rows.
-struct SpotchatConversationTimeline<Row: View>: UIViewControllerRepresentable {
+struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     @Environment(\.self) private var environment
-    let items: [SpotchatTimelineItem]
+    let items: [ShumTimelineItem]
     let storageKey: String
     let appearanceKey: String
-    let command: SpotchatTimelineCommand?
+    let command: ShumTimelineCommand?
     var contentInsets: EdgeInsets = EdgeInsets()
     let bottomChanged: (Bool) -> Void
     let tapped: () -> Void
-    @ViewBuilder let row: (Int, CGFloat) -> Row
+    @ViewBuilder let row: (Int, CGFloat, UUID?) -> Row
 
-    func makeUIViewController(context: Context) -> SpotchatTimelineController {
-        SpotchatTimelineController(storageKey: storageKey)
+    func makeUIViewController(context: Context) -> ShumTimelineController {
+        ShumTimelineController(storageKey: storageKey)
     }
 
-    func updateUIViewController(_ controller: SpotchatTimelineController, context: Context) {
+    func updateUIViewController(_ controller: ShumTimelineController, context: Context) {
         controller.bottomChanged = bottomChanged
         controller.tapped = tapped
         controller.viewportInsets = UIEdgeInsets(top: contentInsets.top, left: 0, bottom: contentInsets.bottom + 10, right: 0)
-        controller.update(items: items, appearanceKey: "\(appearanceKey)-\(environment.dynamicTypeSize)-\(environment.locale.identifier)", command: command) { index, width in
-            AnyView(row(index, width).environment(\.self, environment))
+        controller.update(items: items, appearanceKey: "\(appearanceKey)-\(environment.dynamicTypeSize)-\(environment.locale.identifier)", command: command) { index, width, highlightToken in
+            AnyView(row(index, width, highlightToken).environment(\.self, environment))
         }
     }
 }
 
-final class SpotchatTimelineController: UIViewController, UITableViewDataSource, UITableViewDelegate {
+final class ShumTimelineController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     private let table = UITableView(frame: .zero, style: .plain)
     private let measurementHost = UIHostingController(rootView: AnyView(EmptyView()))
     private let storageKey: String
-    private var items: [SpotchatTimelineItem] = []
-    private var row: (Int, CGFloat) -> AnyView = { _, _ in AnyView(EmptyView()) }
+    private var items: [ShumTimelineItem] = []
+    private var row: (Int, CGFloat, UUID?) -> AnyView = { _, _, _ in AnyView(EmptyView()) }
     private var appearanceKey = ""
     private var heights: [String: CGFloat] = [:]
     private var restored = false
@@ -74,7 +74,10 @@ final class SpotchatTimelineController: UIViewController, UITableViewDataSource,
     private var followsBottom = true
     private var reportedBottom: Bool?
     private var lastCommand: UUID?
-    private var pendingCommand: SpotchatTimelineCommand?
+    private var pendingCommand: ShumTimelineCommand?
+    private var highlightedMessageID: String?
+    private var highlightToken: UUID?
+    private var highlightWork: DispatchWorkItem?
     private var scrollingToBottom = false
     private var saveWork: DispatchWorkItem?
     private var backgroundObserver: NSObjectProtocol?
@@ -106,8 +109,8 @@ final class SpotchatTimelineController: UIViewController, UITableViewDataSource,
         table.delaysContentTouches = false
         table.dataSource = self
         table.delegate = self
-        table.register(SpotchatTimelineCell.self, forCellReuseIdentifier: "message")
-        table.accessibilityIdentifier = "spotchat.timeline"
+        table.register(ShumTimelineCell.self, forCellReuseIdentifier: "message")
+        table.accessibilityIdentifier = "shum.timeline"
         let tap = UITapGestureRecognizer(target: self, action: #selector(didTap))
         tap.cancelsTouchesInView = false
         table.addGestureRecognizer(tap)
@@ -120,6 +123,7 @@ final class SpotchatTimelineController: UIViewController, UITableViewDataSource,
 
     deinit {
         saveWork?.cancel()
+        highlightWork?.cancel()
         if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
     }
 
@@ -146,7 +150,7 @@ final class SpotchatTimelineController: UIViewController, UITableViewDataSource,
         adjusting = true
         defer { adjusting = false }
         UIView.performWithoutAnimation {
-            let position = restored ? currentPosition() : SpotchatTimelinePosition.load(key: storageKey)
+            let position = restored ? currentPosition() : ShumTimelinePosition.load(key: storageKey)
             let effectiveInsets = resolvedViewportInsets()
             let changedSize = table.frame.size != view.bounds.size
             let changedInsets = table.contentInset != effectiveInsets
@@ -183,8 +187,8 @@ final class SpotchatTimelineController: UIViewController, UITableViewDataSource,
         return insets
     }
 
-    func update(items newItems: [SpotchatTimelineItem], appearanceKey: String,
-                command: SpotchatTimelineCommand?, row: @escaping (Int, CGFloat) -> AnyView) {
+    func update(items newItems: [ShumTimelineItem], appearanceKey: String,
+                command: ShumTimelineCommand?, row: @escaping (Int, CGFloat, UUID?) -> AnyView) {
         loadViewIfNeeded()
         self.row = row
         if let command, command.id != lastCommand { pendingCommand = command }
@@ -238,14 +242,19 @@ final class SpotchatTimelineController: UIViewController, UITableViewDataSource,
     }
 
     private func configure(_ cell: UITableViewCell, index: Int) {
-        cell.accessibilityIdentifier = "spotchat.row.\(items[index].id)"
+        cell.accessibilityIdentifier = "shum.row.\(items[index].id)"
         cell.backgroundColor = .clear
         cell.backgroundConfiguration = .clear()
         cell.selectionStyle = .none
         cell.contentView.clipsToBounds = false
         cell.clipsToBounds = false
-        guard let cell = cell as? SpotchatTimelineCell else { return }
-        cell.setContent(AnyView(row(index, table.bounds.width).id(items[index].id)), parent: self)
+        guard let cell = cell as? ShumTimelineCell else { return }
+        let item = items[index]
+        let token = highlightedMessageID == item.id ? highlightToken : nil
+        cell.setContent(
+            AnyView(row(index, table.bounds.width, token).id(item.id)),
+            parent: self
+        )
     }
 
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
@@ -253,7 +262,7 @@ final class SpotchatTimelineController: UIViewController, UITableViewDataSource,
         if let height = heights[id] { return height }
         // Resolve a row's height synchronously. An asynchronous self-sizing pass
         // must not move the viewport after a push or after extracting a bubble.
-        measurementHost.rootView = row(indexPath.row, tableView.bounds.width)
+        measurementHost.rootView = row(indexPath.row, tableView.bounds.width, nil)
         let size = measurementHost.sizeThatFits(in: CGSize(width: max(1, tableView.bounds.width),
                                                          height: .greatestFiniteMagnitude))
         let height = max(1, ceil(size.height))
@@ -292,18 +301,18 @@ final class SpotchatTimelineController: UIViewController, UITableViewDataSource,
         max(0, table.contentSize.height + table.contentInset.bottom - table.bounds.height - table.contentOffset.y)
     }
 
-    private func currentPosition() -> SpotchatTimelinePosition? {
+    private func currentPosition() -> ShumTimelinePosition? {
         guard restored, !items.isEmpty,
               let path = table.indexPathsForVisibleRows?.sorted().first(where: {
                   table.rectForRow(at: $0).maxY > table.contentOffset.y + table.contentInset.top
               }),
               path.row < items.count else { return nil }
-        return SpotchatTimelinePosition(messageID: items[path.row].id,
+        return ShumTimelinePosition(messageID: items[path.row].id,
             offset: table.rectForRow(at: path).minY - table.contentOffset.y - table.contentInset.top,
             atBottom: followsBottom, lastMessageID: items.last?.id)
     }
 
-    private func restore(_ position: SpotchatTimelinePosition?, followNewMessages: Bool = false) {
+    private func restore(_ position: ShumTimelinePosition?, followNewMessages: Bool = false) {
         guard !items.isEmpty else { return }
         let keepAnchor = position.map {
             !$0.atBottom || (!followNewMessages && $0.lastMessageID != items.last?.id)
@@ -353,7 +362,37 @@ final class SpotchatTimelineController: UIViewController, UITableViewDataSource,
             followsBottom = false
             table.scrollToRow(at: IndexPath(row: index, section: 0), at: .middle,
                               animated: !UIAccessibility.isReduceMotionEnabled)
+            scheduleHighlight(for: id)
         }
+    }
+
+    private func scheduleHighlight(for messageID: String) {
+        highlightWork?.cancel()
+        let delay: TimeInterval = UIAccessibility.isReduceMotionEnabled ? 0 : 0.3
+        let work = DispatchWorkItem { [weak self] in
+            guard let self,
+                  let index = self.items.firstIndex(where: { $0.id == messageID }) else {
+                return
+            }
+            self.highlightedMessageID = messageID
+            self.highlightToken = UUID()
+            self.table.layoutIfNeeded()
+            if let cell = self.table.cellForRow(
+                at: IndexPath(row: index, section: 0)
+            ) {
+                self.configure(cell, index: index)
+            }
+
+            let clear = DispatchWorkItem { [weak self] in
+                guard let self, self.highlightedMessageID == messageID else { return }
+                self.highlightedMessageID = nil
+                self.highlightToken = nil
+            }
+            self.highlightWork = clear
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.1, execute: clear)
+        }
+        highlightWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func reportBottom() {
@@ -376,7 +415,7 @@ final class SpotchatTimelineController: UIViewController, UITableViewDataSource,
 /// UIHostingConfiguration inherits a changing safe area for partially visible
 /// cells; a hosting controller with no safe-area regions keeps each bubble in
 /// its own row instead of repositioning it over its neighbours.
-private final class SpotchatTimelineCell: UITableViewCell {
+private final class ShumTimelineCell: UITableViewCell {
     private let host = UIHostingController(rootView: AnyView(EmptyView()))
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {

@@ -7,7 +7,7 @@ struct RegistrationPrimaryButton: View {
 
     let title: String
     var isEnabled = true
-    var accentColor: Color = .accentColor
+    var accentColor: Color? = nil
     var enabledForegroundColor: Color?
     let action: () -> Void
 
@@ -20,7 +20,7 @@ struct RegistrationPrimaryButton: View {
     }
 
     private var backgroundColor: Color {
-        guard !isEnabled else { return accentColor }
+        guard !isEnabled else { return accentColor ?? palette.accent }
 
         return colorScheme == .dark
             ? .white.opacity(0.16)
@@ -69,7 +69,7 @@ struct ShumPrimaryButtonStyle: ButtonStyle {
     }
 
     private var backgroundColor: Color {
-        if enabled { return .accentColor }
+        if enabled { return palette.accent }
         return colorScheme == .dark ? .white.opacity(0.16) : .black.opacity(0.12)
     }
 

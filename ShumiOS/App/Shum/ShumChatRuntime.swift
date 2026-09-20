@@ -4,11 +4,11 @@ import CoreBluetooth
 import CryptoKit
 import BitFoundation
 
-struct ShumContact: Identifiable, Codable, Hashable {
+struct ShumLegacyContact: Identifiable, Codable, Hashable {
     let id: String // SHA256 of the authenticated Noise public key, never the advertised name.
     var name: String
 }
-struct ShumMessage: Identifiable, Codable {
+struct ShumLegacyMessage: Identifiable, Codable {
     let id: String
     let contactID: String
     let text: String
@@ -18,12 +18,12 @@ struct ShumMessage: Identifiable, Codable {
     var unread: Bool
 }
 
-/// Bluetooth-only composition adapted from SpotchatRuntime's private-message path.
+/// Bluetooth-only composition adapted from ShumRuntime's private-message path.
 /// No Internet transport, relay client, gateway or location service is instantiated.
 @MainActor
 final class ShumChatRuntime: ObservableObject, TransportEventDelegate, TransportPeerEventsDelegate {
-    @Published private(set) var contacts: [ShumContact] = []
-    @Published private(set) var messages: [ShumMessage] = []
+    @Published private(set) var contacts: [ShumLegacyContact] = []
+    @Published private(set) var messages: [ShumLegacyMessage] = []
     @Published private(set) var nearbyIDs: Set<String> = []
     @Published private(set) var bluetoothState: CBManagerState = .unknown
     @Published var error: String?
@@ -38,7 +38,7 @@ final class ShumChatRuntime: ObservableObject, TransportEventDelegate, Transport
     private var storageAvailable = false
     private let historyURL: URL
     private var previewMode = false
-    private struct Archive: Codable { var contacts: [ShumContact]; var messages: [ShumMessage] }
+    private struct Archive: Codable { var contacts: [ShumLegacyContact]; var messages: [ShumLegacyMessage] }
 
     init(transport: Transport? = nil, historyURL: URL? = nil, key: SymmetricKey? = nil) {
         self.transport = transport
@@ -48,9 +48,9 @@ final class ShumChatRuntime: ObservableObject, TransportEventDelegate, Transport
             previewMode = true
             for (index, name) in ["Аня", "Саша", "Друзья", "Маша", "Команда", "Денис", "Лиза"].enumerated() {
                 let id = "preview-\(index)"
-                contacts.append(ShumContact(id: id, name: name))
+                contacts.append(ShumLegacyContact(id: id, name: name))
                 nearbyIDs.insert(id)
-                messages.append(ShumMessage(id: UUID().uuidString, contactID: id,
+                messages.append(ShumLegacyMessage(id: UUID().uuidString, contactID: id,
                     text: ["Увидимся у входа?", "Фото просто огонь", "Я уже на месте", "До встречи!", "Всё готово", "Спасибо! До завтра", "Давай на выходных"][index],
                     date: Date().addingTimeInterval(Double(-index * 3600)), outgoing: index % 2 == 1,
                     status: .delivered(to: name, at: Date()), unread: index == 0 || index == 2))
@@ -135,12 +135,12 @@ final class ShumChatRuntime: ObservableObject, TransportEventDelegate, Transport
     private func upsert(id: String, name: String) {
         let name = String(name.prefix(64))
         if let i = contacts.firstIndex(where: { $0.id == id }) { if contacts[i].name != name { contacts[i].name = name } }
-        else if contacts.count < 1000 { contacts.append(ShumContact(id: id, name: name)) }
+        else if contacts.count < 1000 { contacts.append(ShumLegacyContact(id: id, name: name)) }
     }
-    func conversation(_ id: String) -> [ShumMessage] { messages.filter { $0.contactID == id } }
+    func conversation(_ id: String) -> [ShumLegacyMessage] { messages.filter { $0.contactID == id } }
     func unread(_ id: String) -> Int { messages.filter { $0.contactID == id && $0.unread }.count }
     var unreadCount: Int { messages.filter(\.unread).count }
-    var chatContacts: [ShumContact] {
+    var chatContacts: [ShumLegacyContact] {
         contacts.filter { id in messages.contains { $0.contactID == id.id } }.sorted {
             (conversation($0.id).last?.date ?? .distantPast) > (conversation($1.id).last?.date ?? .distantPast)
         }
@@ -154,7 +154,7 @@ final class ShumChatRuntime: ObservableObject, TransportEventDelegate, Transport
               let key = transport.noiseSessionPublicKeyData(for: peer), Self.fingerprint(key) == id else {
             error = "Собеседник сейчас недоступен. Дождитесь подключения по Bluetooth."; return false
         }
-        let message = ShumMessage(id: UUID().uuidString, contactID: id, text: content, date: Date(), outgoing: true, status: .sending, unread: false)
+        let message = ShumLegacyMessage(id: UUID().uuidString, contactID: id, text: content, date: Date(), outgoing: true, status: .sending, unread: false)
         messages.append(message)
         guard persist() else { messages.removeAll { $0.id == message.id }; return false }
         transport.sendPrivateMessage(content, to: peer, recipientNickname: name(id), messageID: message.id)
@@ -188,7 +188,7 @@ final class ShumChatRuntime: ObservableObject, TransportEventDelegate, Transport
                 guard let packet = PrivateMessagePacket.decode(from: payload), !packet.messageID.isEmpty,
                       packet.messageID.utf8.count <= 255, !packet.content.isEmpty, packet.content.utf8.count <= 255 else { return }
                 if !messages.contains(where: { $0.id == packet.messageID && $0.contactID == contactID && !$0.outgoing }) {
-                    messages.append(ShumMessage(id: packet.messageID, contactID: contactID, text: packet.content, date: date, outgoing: false,
+                    messages.append(ShumLegacyMessage(id: packet.messageID, contactID: contactID, text: packet.content, date: date, outgoing: false,
                         status: .delivered(to: nickname, at: Date()), unread: true))
                     guard persist() else { messages.removeLast(); return }
                 }

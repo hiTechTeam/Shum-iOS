@@ -10,16 +10,16 @@ import XCTest
 final class ShumLiveMessengerTests: XCTestCase {
     @MainActor final class Node {
         let wire = MockTransport()
-        let identity: SpotchatIdentityService
-        let card: SpotchatContactCard
-        let internet: SpotchatNostrService
-        let service: SpotchatMessageStore
+        let identity: ShumIdentityService
+        let card: ShumContactCard
+        let internet: ShumNostrService
+        let service: ShumMessageStore
         init(_ name: String) throws {
-            identity = try SpotchatIdentityService(transport: wire, keychain: wire.mockKeychain, bridge: NostrIdentityBridge(keychain: wire.mockKeychain))
+            identity = try ShumIdentityService(transport: wire, keychain: wire.mockKeychain, bridge: NostrIdentityBridge(keychain: wire.mockKeychain))
             card = try identity.card(name: name, bio: "")
-            internet = SpotchatNostrService(identity: identity.nostr, manager: .spotchat())
-            let store = try SpotchatConversationStore(ownerID: card.id, key: identity.storageKey, url: nil)
-            service = SpotchatMessageStore(identity: identity, store: store, transport: wire, wire: wire, card: card, internet: internet)
+            internet = ShumNostrService(identity: identity.nostr, manager: .shum())
+            let store = try ShumConversationStore(ownerID: card.id, key: identity.storageKey, url: nil)
+            service = ShumMessageStore(identity: identity, store: store, transport: wire, wire: wire, card: card, internet: internet)
         }
     }
     func testEncryptedConversationAndReadReceiptWithoutBluetooth() async throws {
@@ -65,6 +65,6 @@ final class ShumLiveMessengerTests: XCTestCase {
         XCTAssertEqual(bob.service.state.messages.first?.text, text)
         XCTAssertEqual(bob.service.state.messages.count, 1)
         XCTAssertEqual(alice.service.state.messages.first?.status, .read)
-        XCTAssertTrue(alice.wire.spotchatPackets.isEmpty && bob.wire.spotchatPackets.isEmpty, "No BLE shortcut")
+        XCTAssertTrue(alice.wire.shumPackets.isEmpty && bob.wire.shumPackets.isEmpty, "No BLE shortcut")
     }
 }

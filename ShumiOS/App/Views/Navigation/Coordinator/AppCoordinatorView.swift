@@ -29,6 +29,10 @@ struct AppCoordinatorView: View {
                         .id(coordinator.authenticationFlowID)
                 }
             }
+            // Profile deletion replaces the complete app session. Giving the
+            // session root a new identity also discards any presentation host
+            // that may still be finishing a sheet dismissal.
+            .id(coordinator.authenticationFlowID)
 
             if coordinator.showSplash {
                 AppSplashView()
