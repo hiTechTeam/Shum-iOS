@@ -51,6 +51,8 @@ struct HowShumWorksView: View {
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
+        .background(ShumThemeCanvas().ignoresSafeArea())
+        .toolbarBackground(.hidden, for: .navigationBar)
         .animation(.easeInOut(duration: 0.25), value: page)
         .navigationDestination(isPresented: $showRegistration) {
             LocalCardRegistration(photoViewModel: coordinator.profilePhotoViewModel)

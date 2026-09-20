@@ -359,6 +359,7 @@ struct ShumPeerCard: View {
                             if card != nil {
                                 RegistrationPrimaryButton(
                                     title: "Сверить ключ",
+                                    trailingSystemImage: "checkmark.shield",
                                     action: { showVerification = true }
                                 )
                                 .frame(width: contentWidth)

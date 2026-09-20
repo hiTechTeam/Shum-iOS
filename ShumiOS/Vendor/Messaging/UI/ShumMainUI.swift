@@ -218,31 +218,34 @@ private struct ShumChatEmptyState: View {
 /// Small bitmap drawings keep the empty states in Shum's pixel language without
 /// introducing a second illustration palette.
 struct ShumPixelEmptyIcon: View {
-    enum Kind { case chats, contacts, nearby, read, invitation, encounters }
+    @Environment(\.colorScheme) private var colorScheme
+    enum Kind { case chats, contacts, nearby, read, invitation, encounters, blocked }
     let kind: Kind
 
-    private let unit: CGFloat = 4
-
     var body: some View {
-        GeometryReader { proxy in
+        PixelDrawing(pixels: pixels).fill(colorScheme == .dark ? Color.white : Color.black)
+    }
+
+    private struct PixelDrawing: Shape {
+        let pixels: [Pixel]
+
+        func path(in rect: CGRect) -> Path {
+            let unit: CGFloat = 4
             let drawingSize = CGSize(width: 22 * unit, height: 17 * unit)
             let origin = CGPoint(
-                x: (proxy.size.width - drawingSize.width) / 2,
-                y: (proxy.size.height - drawingSize.height) / 2
+                x: rect.midX - drawingSize.width / 2,
+                y: rect.midY - drawingSize.height / 2
             )
-            Canvas(rendersAsynchronously: false) { context, _ in
-                for pixel in pixels {
-                    context.fill(
-                        Path(CGRect(
-                            x: origin.x + CGFloat(pixel.x) * unit,
-                            y: origin.y + CGFloat(pixel.y) * unit,
-                            width: unit,
-                            height: unit
-                        )),
-                        with: .foreground
-                    )
-                }
+            var path = Path()
+            for pixel in Set(pixels) {
+                path.addRect(CGRect(
+                    x: origin.x + CGFloat(pixel.x) * unit,
+                    y: origin.y + CGFloat(pixel.y) * unit,
+                    width: unit,
+                    height: unit
+                ))
             }
+            return path
         }
     }
 
@@ -270,6 +273,13 @@ struct ShumPixelEmptyIcon: View {
         case .encounters:
             person(x: 1, y: 5) + person(x: 16, y: 5)
             + [Pixel(10, 8), Pixel(12, 8), Pixel(11, 9), Pixel(10, 10), Pixel(12, 10)]
+        case .blocked:
+            person(x: 1, y: 5)
+            + outline(x: 13, y: 7, width: 8, height: 7, tail: nil)
+            + line(from: Pixel(15, 6), to: Pixel(15, 5))
+            + line(from: Pixel(16, 4), to: Pixel(18, 4))
+            + line(from: Pixel(19, 5), to: Pixel(19, 6))
+            + [Pixel(16, 10), Pixel(17, 10), Pixel(17, 11)]
         }
     }
 

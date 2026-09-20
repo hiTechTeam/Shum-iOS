@@ -9,6 +9,7 @@ struct RegistrationPrimaryButton: View {
     var isEnabled = true
     var accentColor: Color? = nil
     var enabledForegroundColor: Color?
+    var trailingSystemImage: String? = nil
     let action: () -> Void
 
     private var foregroundColor: Color {
@@ -34,6 +35,15 @@ struct RegistrationPrimaryButton: View {
                 .foregroundStyle(foregroundColor)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
+                .overlay(alignment: .trailing) {
+                    if let trailingSystemImage {
+                        Image(systemName: trailingSystemImage)
+                            .font(.system(size: 18, weight: .regular))
+                            .foregroundStyle(foregroundColor)
+                            .padding(.trailing, 20)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .background(backgroundColor)
                 .clipShape(Capsule())
         }

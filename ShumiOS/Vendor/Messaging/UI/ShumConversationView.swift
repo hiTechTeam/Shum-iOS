@@ -299,8 +299,8 @@ struct ShumConversationView: View {
             }
             actionCapsule(
                 title: "Принять",
-                color: Color.accentColor,
-                foreground: palette.accentForeground
+                color: Color(uiColor: .systemGreen),
+                foreground: .black
             ) {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 _ = runtime.acceptInvitation(from: peer.id)

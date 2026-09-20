@@ -125,10 +125,10 @@ extension View {
     /// Applies the theme once at the application root. SwiftUI descendants,
     /// presented system views and embedded UIKit controls inherit the same
     /// accent instead of keeping separate green constants.
-    func shumTheme(_ palette: ShumThemePalette) -> some View {
+    func shumTheme(_ palette: ShumThemePalette, followsSystem: Bool = false) -> some View {
         tint(palette.accent)
             .accentColor(palette.accent)
-            .preferredColorScheme(palette.colorScheme)
+            .preferredColorScheme(followsSystem ? nil : palette.colorScheme)
             .environment(\.shumThemePalette, palette)
             .background {
                 palette.canvas
@@ -186,9 +186,21 @@ private struct ShumWindowTintBridge: UIViewRepresentable {
             Self.updateTabBars(
                 in: rootView,
                 selectedColor: tabBarIconColor ?? tintColor,
-                unselectedColor: tabBarIconColor
+                unselectedColor: Self.unselectedTabBarColor(
+                    monochromeColor: tabBarIconColor
+                )
             )
         }
+    }
+
+    private static func unselectedTabBarColor(
+        monochromeColor: UIColor?
+    ) -> UIColor? {
+        guard let monochromeColor else { return nil }
+        if #available(iOS 26.0, *) {
+            return monochromeColor
+        }
+        return .systemGray
     }
 
     private static func updateTabBars(
@@ -386,29 +398,60 @@ final class ShumAppearanceStore: ObservableObject {
 
     static let shared = ShumAppearanceStore()
 
-    @Published private(set) var theme: Theme
+    @Published private(set) var followsSystem: Bool
+    @Published private var selectedTheme: Theme
+    @Published private var systemColorScheme: ColorScheme
 
     private let defaultsKey = "shum.appearance.theme"
+    private let systemDefaultsKey = "shum.appearance.followsSystem"
+    private let defaults: UserDefaults
 
-    private init(defaults: UserDefaults = .standard) {
-        theme = defaults.string(forKey: defaultsKey)
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        followsSystem = defaults.object(forKey: systemDefaultsKey) as? Bool ?? true
+        systemColorScheme = UIScreen.main.traitCollection.userInterfaceStyle == .dark ? .dark : .light
+        selectedTheme = defaults.string(forKey: defaultsKey)
             .flatMap(Theme.init(rawValue:))
             ?? .classic
     }
 
+    var theme: Theme { resolvedTheme(for: systemColorScheme) }
     var accentColor: Color { theme.accentColor }
     var accentUIColor: UIColor { theme.accentUIColor }
     var palette: ShumThemePalette { theme.palette }
 
+    func resolvedTheme(for systemScheme: ColorScheme) -> Theme {
+        followsSystem ? (systemScheme == .dark ? .classic : .lightClassic) : selectedTheme
+    }
+
+    func updateSystemColorScheme(_ scheme: ColorScheme) {
+        guard followsSystem, systemColorScheme != scheme else { return }
+        systemColorScheme = scheme
+    }
+
+    func setFollowsSystem(_ enabled: Bool) {
+        guard followsSystem != enabled else { return }
+        if !enabled {
+            selectedTheme = theme
+            defaults.set(selectedTheme.rawValue, forKey: defaultsKey)
+        }
+        followsSystem = enabled
+        defaults.set(enabled, forKey: systemDefaultsKey)
+    }
+
     func select(_ theme: Theme) {
-        guard self.theme != theme else { return }
-        self.theme = theme
-        UserDefaults.standard.set(theme.rawValue, forKey: defaultsKey)
+        guard followsSystem || selectedTheme != theme else { return }
+        selectedTheme = theme
+        followsSystem = false
+        defaults.set(false, forKey: systemDefaultsKey)
+        defaults.set(theme.rawValue, forKey: defaultsKey)
         UISelectionFeedbackGenerator().selectionChanged()
     }
 
     func resetToClassic() {
-        theme = .classic
-        UserDefaults.standard.removeObject(forKey: defaultsKey)
+        selectedTheme = .classic
+        followsSystem = true
+        defaults.removeObject(forKey: defaultsKey)
+        defaults.removeObject(forKey: systemDefaultsKey)
     }
 }

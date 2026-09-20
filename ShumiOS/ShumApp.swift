@@ -10,8 +10,28 @@ struct Shum: App {
             ShumCaptureProtectedContainer {
                 coordinator.start()
             }
-            .shumTheme(appearance.palette)
+            .modifier(ShumApplicationTheme(appearance: appearance))
             .environmentObject(appearance)
         }
+    }
+}
+
+private struct ShumApplicationTheme: ViewModifier {
+    @ObservedObject var appearance: ShumAppearanceStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .shumTheme(
+                appearance.resolvedTheme(for: colorScheme).palette,
+                followsSystem: appearance.followsSystem
+            )
+            .onAppear { appearance.updateSystemColorScheme(colorScheme) }
+            .onChange(of: colorScheme) { scheme in
+                appearance.updateSystemColorScheme(scheme)
+            }
+            .onChange(of: appearance.followsSystem) { followsSystem in
+                if followsSystem { appearance.updateSystemColorScheme(colorScheme) }
+            }
     }
 }

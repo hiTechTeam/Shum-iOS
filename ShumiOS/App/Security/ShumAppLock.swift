@@ -9,6 +9,7 @@ final class ShumAppLock: ObservableObject {
     enum PreferredMethod: String {
         case biometrics
         case passcode
+        case none
     }
 
     static let shared = ShumAppLock()
@@ -40,11 +41,13 @@ final class ShumAppLock: ObservableObject {
         let storedMethod = defaults.string(forKey: preferredMethodKey)
             .flatMap(PreferredMethod.init(rawValue:))
 
+        let resolvedMethod = storedMethod
+            ?? (biometricsEnabled ? .biometrics : .passcode)
         isBiometricsEnabled = biometricsEnabled
         hasPasscode = passcodeExists
-        preferredMethod = storedMethod
-            ?? (biometricsEnabled ? .biometrics : .passcode)
-        isLocked = biometricsEnabled || passcodeExists
+        preferredMethod = resolvedMethod
+        isLocked = resolvedMethod != .none
+            && (biometricsEnabled || passcodeExists)
     }
 
     var isEnabled: Bool { isBiometricsEnabled }
@@ -63,9 +66,14 @@ final class ShumAppLock: ObservableObject {
     }
 
     var preferredMethodTitle: String {
-        preferredMethod == .biometrics && isBiometricsEnabled
-            ? biometricTitle
-            : "Код Shum"
+        switch preferredMethod {
+        case .biometrics where isBiometricsEnabled:
+            biometricTitle
+        case .none:
+            "Без проверки"
+        default:
+            "Код Shum"
+        }
     }
 
     var isBiometryAvailable: Bool {
@@ -158,6 +166,14 @@ final class ShumAppLock: ObservableObject {
         errorMessage = nil
     }
 
+    func useNoVerification() {
+        preferredMethod = .none
+        UserDefaults.standard.set(preferredMethod.rawValue, forKey: preferredMethodKey)
+        automaticUnlockAttempted = false
+        isLocked = false
+        errorMessage = nil
+    }
+
     func enable() async -> Bool {
         errorMessage = nil
         guard await authenticate(
@@ -196,6 +212,10 @@ final class ShumAppLock: ObservableObject {
     }
 
     func lock() {
+        guard preferredMethod != .none else {
+            isLocked = false
+            return
+        }
         guard isBiometricsEnabled || hasPasscode else { return }
         if !isLocked {
             automaticUnlockAttempted = false
@@ -205,6 +225,10 @@ final class ShumAppLock: ObservableObject {
 
     @discardableResult
     func unlock() async -> Bool {
+        guard preferredMethod != .none else {
+            isLocked = false
+            return true
+        }
         guard isBiometricsEnabled || hasPasscode else {
             isLocked = false
             return true

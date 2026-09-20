@@ -17,10 +17,7 @@ struct BlockedProfilesView: View {
         NavigationStack {
             Group {
                 if blockedCards.isEmpty {
-                    ShumContentUnavailableView(
-                        Inc.NearbyProfile.noBlockedProfiles.localized,
-                        systemImage: "person.crop.circle.badge.checkmark"
-                    )
+                    ShumBlockedProfilesEmptyState()
                 } else {
                     List(blockedCards) { card in
                         HStack(spacing: 12) {
@@ -93,6 +90,33 @@ struct BlockedProfilesView: View {
             }
             profileBeingUnblocked = nil
         }
+    }
+}
+
+private struct ShumBlockedProfilesEmptyState: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            ShumPixelEmptyIcon(kind: .blocked)
+                .foregroundStyle(.primary)
+                .frame(width: 88, height: 68)
+                .accessibilityHidden(true)
+
+            Text("Никого не заблокировано")
+                .font(.system(size: 23, weight: .semibold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .padding(.top, 26)
+
+            Text("Заблокированные пользователи появятся здесь.")
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
+        }
+        .frame(maxWidth: 330)
+        .padding(.horizontal, 24)
+        .accessibilityElement(children: .contain)
     }
 }
 

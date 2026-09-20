@@ -21,7 +21,6 @@ struct ShumTypingIndicator: View {
 }
 
 struct ShumInvitationRecoverySlider: View {
-    @Environment(\.shumThemePalette) private var palette
     let accept: () -> Bool
     @State private var offset: CGFloat = 0
     @State private var crossedFeedbackPoint = false
@@ -29,6 +28,8 @@ struct ShumInvitationRecoverySlider: View {
 
     private let controlSize: CGFloat = 38
     private let inset: CGFloat = 4
+    private let acceptanceGreen = Color(uiColor: .systemGreen)
+    private let acceptanceForeground = Color.black
 
     var body: some View {
         GeometryReader { geometry in
@@ -42,7 +43,7 @@ struct ShumInvitationRecoverySlider: View {
                     .fill(Color(uiColor: .systemRed).opacity(0.16 * (1 - accentProgress)))
 
                 Capsule()
-                    .fill(Color.accentColor.opacity(0.22 + 0.78 * accentProgress))
+                    .fill(acceptanceGreen.opacity(0.22 + 0.78 * accentProgress))
                     .frame(width: filledWidth)
                     .clipped()
 
@@ -52,7 +53,7 @@ struct ShumInvitationRecoverySlider: View {
                         .opacity(1 - Double(progress) * 0.72)
 
                     recoveryLabel
-                        .foregroundStyle(palette.accentForeground)
+                        .foregroundStyle(acceptanceForeground)
                         .mask {
                             HStack(spacing: 0) {
                                 Rectangle().frame(width: filledWidth)
@@ -66,19 +67,19 @@ struct ShumInvitationRecoverySlider: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(
                         accentProgress > 0.5 || completing
-                            ? palette.accentForeground
+                            ? acceptanceForeground
                             : Color.white
                     )
                     .frame(width: controlSize, height: controlSize)
                     .background {
                         Circle().fill(Color(uiColor: .systemRed))
                         Circle()
-                            .fill(Color.accentColor)
+                            .fill(acceptanceGreen)
                             .opacity(completing ? 1 : accentProgress)
                     }
                     .overlay {
                         Circle()
-                            .stroke(Color.accentColor.opacity(accentProgress), lineWidth: 1.5)
+                            .stroke(acceptanceGreen.opacity(accentProgress), lineWidth: 1.5)
                     }
                     .offset(x: inset + offset)
                     .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
@@ -92,7 +93,7 @@ struct ShumInvitationRecoverySlider: View {
                         )
                     Capsule()
                         .stroke(
-                            Color.accentColor.opacity(accentProgress),
+                            acceptanceGreen.opacity(accentProgress),
                             lineWidth: 0.75 + progress * 0.75
                         )
                 }

@@ -249,7 +249,7 @@ struct ProfileOverviewView: View {
             )
             Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(title: "Безопасность", systemImage: "checkmark.shield",
-                value: (appLock.hasPasscode || appLock.isEnabled) ? appLock.preferredMethodTitle : nil,
+                value: appLock.preferredMethodTitle,
                 position: .middle) {
                     showSecurity = true
                 }
@@ -393,6 +393,17 @@ private struct ShumAppearanceSettingsView: View {
 
     var body: some View {
         List {
+            Section {
+                Toggle("Системная", isOn: Binding(
+                    get: { appearance.followsSystem },
+                    set: { appearance.setFollowsSystem($0) }
+                ))
+            } footer: {
+                Text("Светлая или тёмная тема Classic выбирается по оформлению устройства. Выбор темы ниже отключает системный режим.")
+                    .font(.system(size: 13, weight: .regular))
+                    .textCase(nil)
+            }
+
             Section {
                 LazyVGrid(
                     columns: Array(

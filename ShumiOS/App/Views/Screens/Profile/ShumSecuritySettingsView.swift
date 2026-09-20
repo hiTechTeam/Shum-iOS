@@ -33,6 +33,14 @@ struct ShumSecuritySettingsView: View {
                     action: selectPasscode
                 )
 
+                securityMethodRow(
+                    title: "Без проверки",
+                    subtitle: "Открывать Shum сразу",
+                    systemImage: "lock.open",
+                    selected: appLock.preferredMethod == .none,
+                    action: appLock.useNoVerification
+                )
+
                 Button {
                     showChangeCode = true
                 } label: {
@@ -52,7 +60,7 @@ struct ShumSecuritySettingsView: View {
             } header: {
                 Text("Способ входа")
             } footer: {
-                Text("Face ID используется автоматически. Код Shum можно выбрать основным или использовать, если биометрия недоступна.")
+                Text("Face ID используется автоматически. Код Shum можно выбрать основным или использовать, если биометрия недоступна. Без проверки открывает приложение сразу.")
             }
 
             Section("Ключи профиля") {
