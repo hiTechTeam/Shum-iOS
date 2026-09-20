@@ -429,6 +429,24 @@ struct ShumPermanentTests {
         #expect(a.store.state.messages.isEmpty)
         #expect(a.store.state.receipts.isEmpty)
     }
+
+    @Test func deletingAContactAlsoBlocksItAtomically() throws {
+        let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
+        try allowBoth(a, b, clock: clock)
+        #expect(a.service.send("История", to: b.card))
+
+        try a.service.deleteConversation(
+            with: b.card,
+            removeContact: true,
+            blockContact: true
+        )
+
+        #expect(a.store.state.contacts.isEmpty)
+        #expect(a.store.state.messages.isEmpty)
+        #expect(a.store.state.conversations.isEmpty)
+        #expect(a.service.isBlocked(b.card))
+        #expect(!a.service.send("Недоступно", to: b.card))
+    }
     @Test func clearingChatPreservesAcceptanceAndRepairsPreviouslyResetPeer() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
         try allowBoth(a, b, clock: clock)

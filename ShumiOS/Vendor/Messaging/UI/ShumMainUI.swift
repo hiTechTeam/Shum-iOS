@@ -46,7 +46,8 @@ struct ShumChatsUI: View {
     @ObservedObject var runtime: ShumRuntime
     let open: (ShumUIRoute) -> Void
     @State private var folder: ShumChatFolder = .all
-
+    @State private var searchQuery = ""
+    @State private var showsNewMessage = false
 
     private var entries: [ShumDirectoryEntry] { runtime.directoryEntries }
     private var visible: [ShumDirectoryEntry] {
@@ -77,12 +78,11 @@ struct ShumChatsUI: View {
     }
 
     var body: some View {
-        ShumDirectoryList(runtime: runtime, folder: folder, entries: visible, open: open) {
+        ShumDirectoryList(runtime: runtime, folder: folder, entries: visible, open: open, pinsHeader: true) {
             ShumChatFolderBar(selection: $folder, entries: entries)
-                .padding(.vertical, 6)
-                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+                .padding(.bottom, 8)
         } empty: {
             emptyState
         }
@@ -100,12 +100,41 @@ struct ShumChatsUI: View {
         }
         .navigationTitle("Чаты")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    showsNewMessage = true
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .tint(.primary)
+                .accessibilityLabel("Написать сообщение")
+                .accessibilityIdentifier("shum.newMessage")
+            }
+        }
+        .modifier(ShumChatSearchPresentation(runtime: runtime, query: searchQuery, open: open))
+        .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Поиск")
+        .sheet(isPresented: $showsNewMessage) {
+            ShumNewMessageSheet(runtime: runtime) { peer in
+                showsNewMessage = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+                    open(.conversation(peer))
+                }
+            }
+        }
         .shumOnChange(of: folder) { _, folder in
             if folder == .encounters { runtime.permanent?.markEncountersViewed() }
         }
         #if DEBUG && targetEnvironment(simulator)
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("-ShumPreviewPeople") { folder = .nearby }
+            let arguments = ProcessInfo.processInfo.arguments
+            if let index = arguments.firstIndex(of: "-ShumPreviewFolder"),
+               arguments.indices.contains(index + 1),
+               let previewFolder = ShumChatFolder(rawValue: arguments[index + 1]) {
+                folder = previewFolder
+            }
         }
         #endif
     }
@@ -332,6 +361,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     let folder: ShumChatFolder
     let entries: [ShumDirectoryEntry]
     let open: (ShumUIRoute) -> Void
+    var pinsHeader = false
     @ViewBuilder let header: () -> Header
     @ViewBuilder let empty: () -> Empty
     @State private var selectedPeer: ShumPeer?
@@ -339,27 +369,10 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     @State private var blockRequest: ShumProfileBlockRequest?
     @State private var elevatedPeerIDs: Set<PeerID> = []
     @State private var pinTransitionPeerIDs: Set<PeerID> = []
+    @State private var headerPullOffset: CGFloat = 0
 
     var body: some View {
-        List {
-            header()
-            if entries.isEmpty {
-                empty().listRowBackground(Color.clear).listRowSeparator(.hidden)
-            } else {
-                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                    directoryRow(entry, isLast: index == entries.count - 1)
-                        .id(ShumDirectoryRowID(folder: folder, peer: entry.id))
-                }
-            }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(ShumThemeCanvas().ignoresSafeArea())
-        .scrollDismissesKeyboard(.interactively)
-        .animation(
-            .spring(response: 0.48, dampingFraction: 0.84),
-            value: entries.map(\.id)
-        )
+        list
         .sheet(item: $selectedPeer) { peer in
             ShumPeerCard(runtime: runtime, peer: peer) {
                 selectedPeer = nil
@@ -374,6 +387,46 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
             Button("Отмена", role: .cancel) { pendingAction = nil }
             Button(action.buttonTitle, role: .destructive) { confirm(action); pendingAction = nil }
         } message: { action in Text(action.message) }
+    }
+
+    private var list: some View {
+        List {
+            if !pinsHeader { header() }
+            rows
+        }
+        .listStyle(.plain)
+        .accessibilityIdentifier("shum.chatDirectory")
+        .environment(\.defaultMinListRowHeight, 0)
+        .modifier(ShumDirectoryScrollInsets())
+        .scrollContentBackground(.hidden)
+        .background(ShumThemeCanvas().ignoresSafeArea())
+        .scrollDismissesKeyboard(.interactively)
+        .modifier(ShumDirectoryPullOffset(enabled: pinsHeader, offset: $headerPullOffset))
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if pinsHeader {
+                header()
+                    .offset(y: headerPullOffset)
+            }
+        }
+        .animation(
+            .spring(response: 0.48, dampingFraction: 0.84),
+            value: entries.map(\.id)
+        )
+    }
+
+    @ViewBuilder private var rows: some View {
+        if entries.isEmpty {
+            empty()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+        } else {
+            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                directoryRow(entry, isLast: index == entries.count - 1)
+                    .listRowSeparator(index == 0 ? .hidden : .automatic, edges: .top)
+                    .id(ShumDirectoryRowID(folder: folder, peer: entry.id))
+            }
+        }
     }
 
     private func directoryRow(_ entry: ShumDirectoryEntry, isLast: Bool) -> some View {
@@ -530,6 +583,37 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         }
     }
 
+}
+
+private struct ShumDirectoryScrollInsets: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content
+                .contentMargins(.top, 0, for: .scrollContent)
+                .scrollClipDisabled()
+        } else {
+            content
+        }
+    }
+}
+
+private struct ShumDirectoryPullOffset: ViewModifier {
+    let enabled: Bool
+    @Binding var offset: CGFloat
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *), enabled {
+            content.onScrollGeometryChange(for: CGFloat.self) { geometry in
+                max(0, -geometry.contentOffset.y - geometry.contentInsets.top)
+            } action: { _, value in
+                // Follow native overscroll; the capsule stays fixed once the
+                // list reaches its normal top inset again.
+                offset = value
+            }
+        } else {
+            content
+        }
+    }
 }
 
 private struct ShumDirectoryPressButton<Label: View>: View {

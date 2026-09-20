@@ -6,6 +6,8 @@ struct ShumContactsUI: View {
     @Environment(\.shumThemePalette) private var palette
     @ObservedObject var runtime: ShumRuntime
     let open: (ShumUIRoute) -> Void
+    @State private var contactToDelete: ShumContact?
+    @State private var deletionError: String?
 
     private var contacts: [ShumContact] {
         guard let permanent = runtime.permanent else { return [] }
@@ -102,6 +104,32 @@ struct ShumContactsUI: View {
                 newContactButton
             }
         }
+        .alert(
+            "Удалить контакт?",
+            isPresented: Binding(
+                get: { contactToDelete != nil },
+                set: { if !$0 { contactToDelete = nil } }
+            ),
+            presenting: contactToDelete
+        ) { contact in
+            Button("Отмена", role: .cancel) { contactToDelete = nil }
+            Button("Удалить контакт", role: .destructive) {
+                deleteAndBlock(contact)
+            }
+        } message: { _ in
+            Text("Контакт и переписка будут удалены с устройства. Пользователь будет заблокирован и больше не сможет отправлять вам сообщения и приглашения.")
+        }
+        .alert(
+            "Shum",
+            isPresented: Binding(
+                get: { deletionError != nil },
+                set: { if !$0 { deletionError = nil } }
+            )
+        ) {
+            Button("Понятно") { deletionError = nil }
+        } message: {
+            Text(deletionError ?? "")
+        }
     }
 
     @ViewBuilder
@@ -143,7 +171,7 @@ struct ShumContactsUI: View {
             name: contact.card.name,
             lastConnected: contact.addedAt
         )
-        return Button { open(.conversation(peer)) } label: {
+        return ShumContactPressButton(action: { open(.conversation(peer)) }) {
             HStack(spacing: 12) {
                 ShumProfileAvatar(
                     name: runtime.displayName(peer),
@@ -167,13 +195,44 @@ struct ShumContactsUI: View {
             .padding(.vertical, 7)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                open(.conversation(peer))
+            } label: {
+                Label("Написать", systemImage: "paperplane")
+                    .foregroundStyle(.primary)
+            }
+            .tint(.primary)
+
+            Divider()
+
+            Button(role: .destructive) {
+                contactToDelete = contact
+            } label: {
+                Label("Удалить контакт", systemImage: "person.crop.circle.badge.minus")
+                    .foregroundStyle(.red)
+            }
+            .tint(.red)
+        }
         .listRowInsets(EdgeInsets())
         .listRowSeparator(showsDivider ? .visible : .hidden, edges: .bottom)
         .listRowSeparatorTint(Color(uiColor: .separator))
         .alignmentGuide(.listRowSeparatorLeading) { _ in 70 }
         .listRowBackground(ShumThemeCanvas())
         .accessibilityHint("Открыть чат")
+    }
+
+    private func deleteAndBlock(_ contact: ShumContact) {
+        do {
+            try runtime.permanent?.deleteConversation(
+                with: contact.card,
+                removeContact: true,
+                blockContact: true
+            )
+        } catch {
+            deletionError = error.localizedDescription
+        }
+        contactToDelete = nil
     }
 
     private func contactStatus(for peer: ShumPeer) -> String {
@@ -209,6 +268,232 @@ struct ShumContactsUI: View {
         return formatter
     }()
 
+}
+
+struct ShumNewMessageSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.shumThemePalette) private var palette
+    @ObservedObject var runtime: ShumRuntime
+    let select: (ShumPeer) -> Void
+    @State private var query = ""
+
+    private var contacts: [ShumContact] {
+        guard let permanent = runtime.permanent else { return [] }
+        return permanent.state.contacts
+            .filter { !permanent.isBlocked($0.card) }
+            .filter { contact in
+                let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty || contact.card.name.localizedCaseInsensitiveContains(trimmed)
+            }
+            .sorted {
+                $0.card.name.localizedStandardCompare($1.card.name) == .orderedAscending
+            }
+    }
+
+    private var sections: [ContactSection] {
+        let grouped = Dictionary(grouping: contacts) { contact in
+            let name = contact.card.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let first = name.first, first.isLetter else { return "#" }
+            return String(first).uppercased(with: .current)
+        }
+        return grouped.map { ContactSection(title: $0.key, contacts: $0.value) }
+            .sorted {
+                if $0.title == "#" { return false }
+                if $1.title == "#" { return true }
+                return $0.title.localizedStandardCompare($1.title) == .orderedAscending
+            }
+    }
+
+    var body: some View {
+        NavigationStack {
+            contactList
+            .navigationTitle("Написать сообщение")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(
+                text: $query,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Поиск"
+            )
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(.primary)
+                    .accessibilityLabel("Закрыть")
+                }
+            }
+        }
+        .tint(palette.accent)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var contactList: some View {
+        ScrollViewReader { proxy in
+            List { contactSections }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(ShumThemeCanvas().ignoresSafeArea())
+                .overlay(alignment: .trailing) { alphabetIndex(proxy: proxy) }
+                .overlay { emptyState }
+        }
+    }
+
+    @ViewBuilder
+    private var contactSections: some View {
+        ForEach(sections) { section in
+            Section {
+                ForEach(
+                    Array(section.contacts.enumerated()),
+                    id: \.element.id
+                ) { index, contact in
+                    contactRow(
+                        contact,
+                        showsDivider: index < section.contacts.count - 1
+                    )
+                }
+            } header: {
+                Text(section.title)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .textCase(nil)
+            }
+            .id(section.id)
+            .listSectionSeparator(.hidden)
+        }
+    }
+
+    @ViewBuilder
+    private func alphabetIndex(proxy: ScrollViewProxy) -> some View {
+        if query.isEmpty, sections.count > 1 {
+            ContactAlphabetIndex(titles: sections.map(\.title)) { title in
+                withAnimation(.easeOut(duration: 0.16)) {
+                    proxy.scrollTo(title, anchor: .top)
+                }
+            }
+            .padding(.trailing, 2)
+        }
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if contacts.isEmpty {
+            let hasQuery = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            VStack(spacing: 14) {
+                Image(systemName: hasQuery ? "magnifyingglass" : "person.2")
+                    .font(.system(size: 34, weight: .regular))
+                    .foregroundStyle(.secondary)
+                Text(hasQuery ? "Ничего не найдено" : "Контактов пока нет")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func contactRow(
+        _ contact: ShumContact,
+        showsDivider: Bool
+    ) -> some View {
+        let peer = ShumPeer(
+            id: contact.card.peerID,
+            name: contact.card.name,
+            lastConnected: contact.addedAt
+        )
+        return ShumContactPressButton(action: { select(peer) }) {
+            HStack(spacing: 12) {
+                ShumProfileAvatar(
+                    name: runtime.displayName(peer),
+                    size: 48,
+                    imageData: runtime.profile(for: peer.id)?.avatar ?? contact.avatar
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(runtime.displayName(peer))
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(contactStatus(for: peer))
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(contactStatusColor(for: peer))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(showsDivider ? .visible : .hidden, edges: .bottom)
+        .listRowSeparatorTint(Color(uiColor: .separator))
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 76 }
+        .listRowBackground(ShumThemeCanvas())
+        .accessibilityHint("Открыть чат")
+    }
+
+    private func contactStatus(for peer: ShumPeer) -> String {
+        let nearby = runtime.isNearby(peer.id)
+        let online = runtime.isOnline(peer.id)
+        if nearby && online { return "В сети · Рядом" }
+        if nearby { return "Рядом" }
+        if online { return "В сети" }
+        guard let date = runtime.lastActiveAt(peer.id) else { return "Давно не в сети" }
+        if Date().timeIntervalSince(date) < 60 { return "был(а) только что" }
+        let relative = Self.relativeDateFormatter.localizedString(for: date, relativeTo: Date())
+        return "был(а) \(relative)"
+    }
+
+    private func contactStatusColor(for peer: ShumPeer) -> Color {
+        runtime.isNearby(peer.id) || runtime.isOnline(peer.id)
+            ? Color(uiColor: .systemGreen)
+            : .secondary
+    }
+
+    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.unitsStyle = .full
+        formatter.dateTimeStyle = .numeric
+        return formatter
+    }()
+}
+
+private struct ShumContactPressButton<Label: View>: View {
+    let action: () -> Void
+    let label: Label
+    @State private var keepsHighlight = false
+
+    init(action: @escaping () -> Void, @ViewBuilder label: () -> Label) {
+        self.action = action
+        self.label = label()
+    }
+
+    var body: some View {
+        Button {
+            keepsHighlight = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                action()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                    keepsHighlight = false
+                }
+            }
+        } label: {
+            label
+        }
+        .buttonStyle(ShumContactPressedStyle(keepsHighlight: keepsHighlight))
+    }
+}
+
+private struct ShumContactPressedStyle: ButtonStyle {
+    let keepsHighlight: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let highlighted = configuration.isPressed || keepsHighlight
+        configuration.label
+            .background(highlighted ? Color(uiColor: .secondarySystemFill) : .clear)
+            .animation(.easeOut(duration: 0.12), value: highlighted)
+    }
 }
 
 private struct ContactAlphabetIndex: View {

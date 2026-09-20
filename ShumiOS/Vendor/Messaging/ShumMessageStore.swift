@@ -1032,10 +1032,27 @@ final class ShumMessageStore: ObservableObject {
         wire.sendShumPacket(bytes, to: peer)
     }
     func isBlocked(_ card: ShumContactCard) -> Bool { state.blocked?[card.id] != nil }
-    func deleteConversation(with card: ShumContactCard, removeContact: Bool = false) throws {
+    func deleteConversation(
+        with card: ShumContactCard,
+        removeContact: Bool = false,
+        blockContact: Bool = false
+    ) throws {
         guard !retired else { throw ShumFailure.unavailableIdentity }
+        if blockContact { try card.validate() }
         let conversationID = ShumConversation.identifier(ownCard.id, card.id)
         try store.transaction { state in
+            if blockContact {
+                if state.blocked == nil { state.blocked = [:] }
+                guard state.blocked!.count < 2000 || state.blocked?[card.id] != nil else {
+                    throw ShumFailure.quota
+                }
+                state.blocked?[card.id] = card
+                state.relay.removeAll {
+                    $0.envelope.sender.id == card.id ||
+                    $0.envelope.recipient.id == card.id ||
+                    $0.depositor == card.id
+                }
+            }
             // Ignore old relay/Nostr replays after local deletion. New messages
             // from a retained contact may create a new conversation.
             if state.deletedMessageIDs == nil { state.deletedMessageIDs = [:] }
@@ -1059,6 +1076,7 @@ final class ShumMessageStore: ObservableObject {
             }
         }
         if activeContact == card.id { activeContact = nil }
+        if blockContact { nearby = nearby.filter { $0.value.id != card.id } }
         changed()
     }
     func clearDirectoryEntry(_ card: ShumContactCard) throws {
