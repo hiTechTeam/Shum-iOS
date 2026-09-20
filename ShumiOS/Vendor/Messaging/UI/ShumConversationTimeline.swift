@@ -13,6 +13,10 @@ struct ShumTimelineCommand: Equatable {
     let target: Target
 }
 
+extension Notification.Name {
+    static let shumHighlightMessage = Notification.Name("shum.highlight-message")
+}
+
 /// A message and its visible offset survive changes to the history above it.
 /// No message contents are stored in preferences.
 struct ShumTimelinePosition: Codable {
@@ -44,7 +48,7 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     var contentInsets: EdgeInsets = EdgeInsets()
     let bottomChanged: (Bool) -> Void
     let tapped: () -> Void
-    @ViewBuilder let row: (Int, CGFloat, UUID?) -> Row
+    @ViewBuilder let row: (Int, CGFloat) -> Row
 
     func makeUIViewController(context: Context) -> ShumTimelineController {
         ShumTimelineController(storageKey: storageKey)
@@ -54,8 +58,8 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
         controller.bottomChanged = bottomChanged
         controller.tapped = tapped
         controller.viewportInsets = UIEdgeInsets(top: contentInsets.top, left: 0, bottom: contentInsets.bottom + 10, right: 0)
-        controller.update(items: items, appearanceKey: "\(appearanceKey)-\(environment.dynamicTypeSize)-\(environment.locale.identifier)", command: command) { index, width, highlightToken in
-            AnyView(row(index, width, highlightToken).environment(\.self, environment))
+        controller.update(items: items, appearanceKey: "\(appearanceKey)-\(environment.dynamicTypeSize)-\(environment.locale.identifier)", command: command) { index, width in
+            AnyView(row(index, width).environment(\.self, environment))
         }
     }
 }
@@ -65,7 +69,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     private let measurementHost = UIHostingController(rootView: AnyView(EmptyView()))
     private let storageKey: String
     private var items: [ShumTimelineItem] = []
-    private var row: (Int, CGFloat, UUID?) -> AnyView = { _, _, _ in AnyView(EmptyView()) }
+    private var row: (Int, CGFloat) -> AnyView = { _, _ in AnyView(EmptyView()) }
     private var appearanceKey = ""
     private var heights: [String: CGFloat] = [:]
     private var restored = false
@@ -75,8 +79,6 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     private var reportedBottom: Bool?
     private var lastCommand: UUID?
     private var pendingCommand: ShumTimelineCommand?
-    private var highlightedMessageID: String?
-    private var highlightToken: UUID?
     private var highlightWork: DispatchWorkItem?
     private var scrollingToBottom = false
     private var saveWork: DispatchWorkItem?
@@ -188,7 +190,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     }
 
     func update(items newItems: [ShumTimelineItem], appearanceKey: String,
-                command: ShumTimelineCommand?, row: @escaping (Int, CGFloat, UUID?) -> AnyView) {
+                command: ShumTimelineCommand?, row: @escaping (Int, CGFloat) -> AnyView) {
         loadViewIfNeeded()
         self.row = row
         if let command, command.id != lastCommand { pendingCommand = command }
@@ -249,10 +251,8 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         cell.contentView.clipsToBounds = false
         cell.clipsToBounds = false
         guard let cell = cell as? ShumTimelineCell else { return }
-        let item = items[index]
-        let token = highlightedMessageID == item.id ? highlightToken : nil
         cell.setContent(
-            AnyView(row(index, table.bounds.width, token).id(item.id)),
+            AnyView(row(index, table.bounds.width).id(items[index].id)),
             parent: self
         )
     }
@@ -262,7 +262,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         if let height = heights[id] { return height }
         // Resolve a row's height synchronously. An asynchronous self-sizing pass
         // must not move the viewport after a push or after extracting a bubble.
-        measurementHost.rootView = row(indexPath.row, tableView.bounds.width, nil)
+        measurementHost.rootView = row(indexPath.row, tableView.bounds.width)
         let size = measurementHost.sizeThatFits(in: CGSize(width: max(1, tableView.bounds.width),
                                                          height: .greatestFiniteMagnitude))
         let height = max(1, ceil(size.height))
@@ -368,28 +368,12 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
 
     private func scheduleHighlight(for messageID: String) {
         highlightWork?.cancel()
-        let delay: TimeInterval = UIAccessibility.isReduceMotionEnabled ? 0 : 0.3
+        let delay: TimeInterval = UIAccessibility.isReduceMotionEnabled ? 0 : 0.32
         let work = DispatchWorkItem { [weak self] in
             guard let self,
-                  let index = self.items.firstIndex(where: { $0.id == messageID }) else {
-                return
-            }
-            self.highlightedMessageID = messageID
-            self.highlightToken = UUID()
+                  self.items.contains(where: { $0.id == messageID }) else { return }
             self.table.layoutIfNeeded()
-            if let cell = self.table.cellForRow(
-                at: IndexPath(row: index, section: 0)
-            ) {
-                self.configure(cell, index: index)
-            }
-
-            let clear = DispatchWorkItem { [weak self] in
-                guard let self, self.highlightedMessageID == messageID else { return }
-                self.highlightedMessageID = nil
-                self.highlightToken = nil
-            }
-            self.highlightWork = clear
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.1, execute: clear)
+            NotificationCenter.default.post(name: .shumHighlightMessage, object: messageID)
         }
         highlightWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)

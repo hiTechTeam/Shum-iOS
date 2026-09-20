@@ -65,12 +65,11 @@ struct ShumConversationView: View {
                     contentInsets: geometry.safeAreaInsets,
                     bottomChanged: { atBottom = $0 },
                     tapped: { inputFocused = false }
-                ) { index, width, highlightToken in
+                ) { index, width in
                     messageRow(
                         at: index,
                         in: conversation,
-                        width: width,
-                        highlightToken: highlightToken
+                        width: width
                     )
                 }
                 .ignoresSafeArea(.container, edges: .vertical)
@@ -423,8 +422,7 @@ struct ShumConversationView: View {
     private func messageRow(
         at index: Int,
         in conversation: [ShumMessage],
-        width: CGFloat,
-        highlightToken: UUID?
+        width: CGFloat
     ) -> some View {
         let message = conversation[index]
         let previous = index > 0 ? conversation[index - 1] : nil
@@ -442,7 +440,6 @@ struct ShumConversationView: View {
                 showsTail: !continues,
                 maximumWidth: min(width * 0.82, 440),
                 replyAuthor: message.reply.map(replyAuthor),
-                quoteHighlightToken: highlightToken,
                 retry: { runtime.retry(message) },
                 reply: { beginReply(to: message) },
                 openReply: { scrollCommand = ShumTimelineCommand(target: .message($0)) })

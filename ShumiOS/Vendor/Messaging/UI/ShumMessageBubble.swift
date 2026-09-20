@@ -22,7 +22,6 @@ struct ShumMessageBubble: View {
     var showsTail = true
     let maximumWidth: CGFloat
     var replyAuthor: String?
-    var quoteHighlightToken: UUID?
     var retry: () -> Void = {}
     var reply: () -> Void = {}
     var openReply: (String) -> Void = { _ in }
@@ -31,6 +30,7 @@ struct ShumMessageBubble: View {
     @State private var horizontalOffset: CGFloat = 0
     @State private var crossedReplyThreshold = false
     @State private var quoteHighlightOpacity: CGFloat = 0
+    @State private var quoteHighlightGeneration = 0
 
     private let replyThreshold: CGFloat = 52
 
@@ -65,16 +65,18 @@ struct ShumMessageBubble: View {
                 }.buttonStyle(.plain)
             }
         }.frame(maxWidth: .infinity, alignment: message.outgoing ? .trailing : .leading)
-            .task(id: quoteHighlightToken) {
-                guard quoteHighlightToken != nil else { return }
-                quoteHighlightOpacity = 0
-                await Task.yield()
-                withAnimation(.easeOut(duration: 0.12)) {
-                    quoteHighlightOpacity = 0.34
+            .onReceive(NotificationCenter.default.publisher(for: .shumHighlightMessage)) { note in
+                guard note.object as? String == message.id else { return }
+                quoteHighlightGeneration &+= 1
+            }
+            .task(id: quoteHighlightGeneration) {
+                guard quoteHighlightGeneration > 0 else { return }
+                withAnimation(.easeInOut(duration: 0.24)) {
+                    quoteHighlightOpacity = 0.20
                 }
-                try? await Task.sleep(nanoseconds: 160_000_000)
+                try? await Task.sleep(nanoseconds: 360_000_000)
                 guard !Task.isCancelled else { return }
-                withAnimation(.easeOut(duration: 0.72)) {
+                withAnimation(.easeInOut(duration: 0.88)) {
                     quoteHighlightOpacity = 0
                 }
             }
