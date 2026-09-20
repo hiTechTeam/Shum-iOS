@@ -3,25 +3,54 @@ import SwiftUI
 struct LocalCardRegistration: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @ObservedObject var photoViewModel: ProfilePhotoViewModel
-    @State private var showDetails = false
+    @State private var pendingName = ""
+    @State private var showPhoto = false
+
+    var body: some View {
+        LocalCardDetailsView(
+            profile: coordinator.authCodeViewModel,
+            photo: photoViewModel,
+            onSave: { },
+            onRegistrationContinue: { name in
+                pendingName = name
+                showPhoto = true
+            }
+        )
+        .navigationDestination(isPresented: $showPhoto) {
+            LocalCardPhotoRegistration(
+                name: pendingName,
+                photoViewModel: photoViewModel
+            )
+        }
+    }
+}
+
+private struct LocalCardPhotoRegistration: View {
+    let name: String
+    @ObservedObject var photoViewModel: ProfilePhotoViewModel
+    @State private var showSecurityCreation = false
+
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
             Text("local.onboarding.photo.title").font(.largeTitle.bold()).multilineTextAlignment(.center)
             Text("local.onboarding.photo.description").foregroundStyle(.secondary).multilineTextAlignment(.center)
-            ProfilePhotoView(viewModel: photoViewModel)
+            ProfilePhotoView(
+                viewModel: photoViewModel,
+                name: name
+            )
             Spacer()
             RegistrationPrimaryButton(title: Inc.Onboarding.photoNext.localized,
-                isEnabled: true, accentColor: .accentColor) { showDetails = true }
+                isEnabled: true, accentColor: .accentColor) { showSecurityCreation = true }
                 .padding(.bottom, 20)
         }
         .padding(.horizontal, 24).background(ShumThemeCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(isPresented: $showDetails) {
-            LocalCardDetailsView(
-                profile: coordinator.authCodeViewModel,
-                photo: photoViewModel
-            ) { }
+        .navigationDestination(isPresented: $showSecurityCreation) {
+            RegistrationSecurityCreationView(
+                name: name,
+                photo: photoViewModel.preparedPhoto
+            )
         }
     }
 }
@@ -39,10 +68,8 @@ struct LocalCardDetailsView: View {
     @ObservedObject var photo: ProfilePhotoViewModel
     var mode: LocalCardDetailsMode = .registration
     let onSave: () -> Void
+    var onRegistrationContinue: ((String) -> Void)? = nil
     @State private var name = ""
-    @State private var showSecurityCreation = false
-    @State private var pendingRegistrationName = ""
-    @State private var pendingRegistrationPhoto: Data?
     @FocusState private var focused: Bool
     private var valid: Bool { ShumProfileValidation.name(name) != nil }
     var body: some View {
@@ -67,7 +94,9 @@ struct LocalCardDetailsView: View {
                 }
                 if let error = profile.saveError { Text(error).foregroundStyle(.red).font(.footnote) }
                 RegistrationPrimaryButton(
-                    title: NSLocalizedString("local.profile.save", comment: ""),
+                    title: mode == .registration
+                        ? Inc.Onboarding.photoNext.localized
+                        : NSLocalizedString("local.profile.save", comment: ""),
                     isEnabled: valid,
                     action: save
                 )
@@ -81,21 +110,13 @@ struct LocalCardDetailsView: View {
                 ToolbarItem(placement: .cancellationAction) { Button(Inc.Common.close.localized) { dismiss() } }
             }
         }
-        .navigationDestination(isPresented: $showSecurityCreation) {
-            RegistrationSecurityCreationView(
-                name: pendingRegistrationName,
-                photo: pendingRegistrationPhoto
-            )
-        }
         .onAppear { name = profile.localName ?? ""; profile.saveError = nil }
     }
     private func save() {
         guard let value = ShumProfileValidation.name(name) else { return }
         if mode == .registration {
             focused = false
-            pendingRegistrationName = value
-            pendingRegistrationPhoto = photo.preparedPhoto
-            showSecurityCreation = true
+            onRegistrationContinue?(value)
         } else if profile.updateName(value) {
             focused = false
             onSave()

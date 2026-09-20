@@ -114,7 +114,7 @@
 /* Scanning */
 "nearbyEmptyTitle" = "Пока никого";
 "nearbyListDescription" = "Люди, которые находятся вокруг вас";
-"scanning" = "Видимость рядом";
+"scanning" = "Видимость";
 "scanningStatusActive" = "Активно";
 "scanningStatusInactive" = "Неактивно";
 "justTurnScaning" = "Включите сканирование";

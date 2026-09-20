@@ -439,10 +439,7 @@ private struct EncounterHistoryAvatar: View {
     }
 
     private var placeholder: some View {
-        Image.personCropCircleFill
-            .resizable()
-            .scaledToFit()
-            .foregroundStyle(.gray)
+        ShumInitialsAvatar(name: user.name, size: size)
     }
 }
 

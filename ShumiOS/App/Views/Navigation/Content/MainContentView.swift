@@ -22,7 +22,7 @@ struct MainContentView: View {
                 }
             }
             .toolbar(contactsPath.isEmpty ? .visible : .hidden, for: .tabBar)
-            .tabItem { Label("Контакты", image: "PixelPeople") }.tag(0)
+            .tabItem { tabLabel("Контакты", image: "PixelPeople") }.tag(0)
 
             NavigationStack(path: $chatsPath) {
                 ShumChatsUI(runtime: chat) { route in
@@ -34,7 +34,7 @@ struct MainContentView: View {
                 }
             }
             .toolbar(chatsPath.isEmpty ? .visible : .hidden, for: .tabBar)
-            .tabItem { Label("Чаты", image: "PixelChats") }
+            .tabItem { tabLabel("Чаты", image: "PixelChats") }
                 .badge(chat.directoryEntries.reduce(0) {
                     $0 + max($1.unread, $1.invitationAwaitingResponse ? 1 : 0)
                 }).tag(1)
@@ -53,7 +53,7 @@ struct MainContentView: View {
                 profilePath.last?.hidesTabBar == true ? .hidden : .visible,
                 for: .tabBar
             )
-            .tabItem { Label("Профиль", image: "PixelProfile") }.tag(2)
+            .tabItem { tabLabel("Профиль", image: "PixelProfile") }.tag(2)
         }
         .tint(palette.accent)
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -114,6 +114,22 @@ struct MainContentView: View {
             }
         }
         #endif
+    }
+
+    private func tabLabel(_ title: String, image name: String) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            if #available(iOS 26.0, *),
+               let color = palette.tabBarIconUIColor,
+               let image = UIImage(named: name) {
+                // Preserve monochrome artwork when UIKit refreshes the tab
+                // items after a modal action or a badge update.
+                Image(uiImage: image.withTintColor(color, renderingMode: .alwaysOriginal))
+            } else {
+                Image(name)
+            }
+        }
     }
 
     private func isExistingContact(_ card: ShumContactCard) -> Bool {

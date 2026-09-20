@@ -20,6 +20,7 @@ struct ShumPeerProfileSheet: View {
 }
 
 struct ShumKeyVerificationView: View {
+    @Environment(\.shumThemePalette) private var palette
     @ObservedObject var runtime: ShumRuntime
     let card: ShumContactCard
     let avatar: Data?
@@ -103,7 +104,7 @@ struct ShumKeyVerificationView: View {
                             systemImage: matches ? "checkmark.shield.fill" : "xmark.shield.fill"
                         )
                         .font(.headline)
-                        .foregroundStyle(matches ? Color(uiColor: .systemGreen) : .red)
+                        .foregroundStyle(matches ? palette.accent : Color(uiColor: .systemGray))
                         .padding(.top, 20)
                     }
 

@@ -272,11 +272,12 @@ struct ShumConversationView: View {
                         .foregroundStyle(canSend ? palette.accentForeground : Color.secondary)
                         .frame(width: 36, height: 36)
                         .background(canSend ? Color.accentColor : Color(.tertiarySystemFill), in: Circle())
-                        .contentShape(Circle())
+                        .padding(.trailing, 5).padding(.vertical, 5)
+                        .padding(.leading, 3)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSend)
-                .padding(.trailing, 5).padding(.vertical, 5)
                 .accessibilityLabel("Отправить сообщение")
                 .accessibilityIdentifier("shum.sendMessage")
             }

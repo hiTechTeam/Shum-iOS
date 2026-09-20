@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BlockedProfilesView: View {
     @ObservedObject var runtime: ShumRuntime
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var profileBeingUnblocked: String?
     @State private var showError = false
@@ -44,7 +45,7 @@ struct BlockedProfilesView: View {
                                 }
                                 .buttonStyle(.borderless)
                                 .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(colorScheme == .dark ? Color.white : Color.black)
                                 .disabled(profileBeingUnblocked != nil)
                             }
                         }
@@ -329,12 +330,6 @@ private struct SavedProfileAvatar: View {
     }
 
     private var placeholder: some View {
-        Circle()
-            .fill(Color(uiColor: .tertiarySystemFill))
-            .overlay {
-                Image(systemName: "person.fill")
-                    .font(.system(size: 19))
-                    .foregroundStyle(.secondary)
-            }
+        ShumInitialsAvatar(name: user.name, size: size)
     }
 }

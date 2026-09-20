@@ -64,7 +64,7 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     }
 }
 
-final class ShumTimelineController: UIViewController, UITableViewDataSource, UITableViewDelegate {
+final class ShumTimelineController: UIViewController, UITableViewDataSource, UITableViewDelegate, UIGestureRecognizerDelegate {
     private let table = UITableView(frame: .zero, style: .plain)
     private let measurementHost = UIHostingController(rootView: AnyView(EmptyView()))
     private let storageKey: String
@@ -115,6 +115,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         table.accessibilityIdentifier = "shum.timeline"
         let tap = UITapGestureRecognizer(target: self, action: #selector(didTap))
         tap.cancelsTouchesInView = false
+        tap.delegate = self
         table.addGestureRecognizer(tap)
         view.addSubview(table)
         setContentScrollView(table, for: .all)
@@ -391,6 +392,12 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         saveWork?.cancel()
         guard !leaving, let position = currentPosition() else { return }
         position.save(key: storageKey)
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        // The timeline draws under the composer and navigation bar, but those
+        // areas must never dismiss the keyboard through a gap in a control.
+        view.bounds.inset(by: resolvedViewportInsets()).contains(touch.location(in: view))
     }
 
     @objc private func didTap() { tapped() }

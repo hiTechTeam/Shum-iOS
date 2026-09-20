@@ -196,6 +196,7 @@ struct RegistrationSecurityCreationView: View {
             }
         }
         .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(ShumThemeCanvas().ignoresSafeArea())
         .navigationTitle("Защита")
         .navigationBarTitleDisplayMode(.inline)

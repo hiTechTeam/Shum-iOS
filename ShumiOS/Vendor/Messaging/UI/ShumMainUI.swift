@@ -670,7 +670,11 @@ struct ShumDirectoryRow: View {
     var body: some View {
         let typing = runtime.isTyping(entry.peer.id)
         HStack(spacing: 12) {
-            ShumProfileAvatar(size: 58, imageData: runtime.profile(for: entry.peer.id)?.avatar)
+            ShumProfileAvatar(
+                name: runtime.displayName(entry.peer),
+                size: 58,
+                imageData: runtime.profile(for: entry.peer.id)?.avatar
+            )
                 .mask {
                     Circle()
                         .fill(.white)

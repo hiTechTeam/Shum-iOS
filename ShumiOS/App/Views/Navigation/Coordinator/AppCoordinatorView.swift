@@ -14,7 +14,11 @@ struct AppCoordinatorView: View {
     var body: some View {
         ZStack {
             Group {
-                if coordinator.deletingProfile {
+                if coordinator.showsDeletionCeremony {
+                    ShumDeletionCeremonyView {
+                        coordinator.completeDeletionCeremony()
+                    }
+                } else if coordinator.deletingProfile {
                     VStack(spacing: 20) {
                         Text("Завершение удаления").font(.title2.bold())
                         Text(coordinator.deletionError ?? "Обмен сообщениями остановлен.").multilineTextAlignment(.center)
@@ -150,6 +154,255 @@ struct AppCoordinatorView: View {
                 showsAppSwitcherPrivacyCover = true
             }
         }
+    }
+}
+
+private struct ShumDeletionCeremonyView: View {
+    @Environment(\.shumThemePalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let completion: () -> Void
+
+    @State private var animationStartedAt = Date()
+    @State private var completed = false
+
+    var body: some View {
+        ZStack {
+            ShumThemeCanvas().ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer()
+
+                Text(completed ? "Данные уничтожены" : "Уничтожаем данные")
+                    .font(.title2.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                    .contentTransition(.opacity)
+
+                Group {
+                    if completed {
+                        ShumDeletionCompleteIllustration()
+                            .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                    } else {
+                        ShumDeletionIllustration(
+                            animationStartedAt: animationStartedAt,
+                            reduceMotion: reduceMotion
+                        )
+                        .transition(.opacity)
+                    }
+                }
+                .frame(width: 220, height: 210)
+                .padding(.top, 30)
+
+                Text(completed
+                    ? "На устройстве не осталось профиля, ключей и переписки."
+                    : "Личные данные удалены с устройства.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .frame(maxWidth: 350)
+                    .contentTransition(.opacity)
+
+                Spacer()
+
+                if completed {
+                    RegistrationPrimaryButton(
+                        title: "Начать заново",
+                        isEnabled: true,
+                        accentColor: palette.accent,
+                        action: completion
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 20)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .animation(.easeOut(duration: 0.28), value: completed)
+        .task {
+            animationStartedAt = Date()
+            let soft = UIImpactFeedbackGenerator(style: .soft)
+            let success = UINotificationFeedbackGenerator()
+            soft.prepare()
+            success.prepare()
+            soft.impactOccurred(intensity: 0.7)
+            try? await Task.sleep(nanoseconds: 1_250_000_000)
+            guard !Task.isCancelled else { return }
+            soft.impactOccurred(intensity: 0.9)
+            try? await Task.sleep(nanoseconds: 1_150_000_000)
+            guard !Task.isCancelled else { return }
+            success.notificationOccurred(.success)
+            completed = true
+        }
+    }
+}
+
+private struct ShumDeletionIllustration: View {
+    @Environment(\.shumThemePalette) private var palette
+
+    let animationStartedAt: Date
+    let reduceMotion: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            let elapsed = timeline.date.timeIntervalSince(animationStartedAt)
+            let progress = reduceMotion
+                ? min(max(elapsed / 1.8, 0), 1)
+                : min(max(elapsed / 2.25, 0), 1)
+            let eased = progress * progress * (3 - 2 * progress)
+
+            Canvas(rendersAsynchronously: true) { context, size in
+                let unit = min(size.width / 31, size.height / 31)
+                let origin = CGPoint(
+                    x: (size.width - 29 * unit) / 2,
+                    y: (size.height - 29 * unit) / 2
+                )
+                let center = CGPoint(x: size.width / 2, y: size.height / 2)
+
+                for (index, pixel) in Self.pixels.enumerated() {
+                    let base = CGPoint(
+                        x: origin.x + CGFloat(pixel.x) * unit,
+                        y: origin.y + CGFloat(pixel.y) * unit
+                    )
+                    let dx = base.x - center.x
+                    let dy = base.y - center.y
+                    let distance = max(sqrt(dx * dx + dy * dy), 1)
+                    let jitterX = CGFloat(((index * 19) % 17) - 8) * unit
+                    let jitterY = CGFloat(((index * 13) % 19) - 9) * unit
+                    let travel = CGFloat(eased) * (reduceMotion ? 0.18 : 0.72)
+                    let point = CGPoint(
+                        x: base.x + dx / distance * unit * 15 * travel + jitterX * travel,
+                        y: base.y + dy / distance * unit * 15 * travel + jitterY * travel
+                    )
+                    let shrink = CGFloat(eased) * unit * 0.36
+                    let rect = CGRect(
+                        x: point.x + shrink,
+                        y: point.y + shrink,
+                        width: max(1, unit - 0.7 - shrink * 2),
+                        height: max(1, unit - 0.7 - shrink * 2)
+                    )
+                    let isFadingParticle = index.isMultiple(of: 4) || progress > 0.65
+                    let color = isFadingParticle ? Color.secondary : palette.accent
+                    context.fill(
+                        Path(rect),
+                        with: .color(color.opacity(max(0, 1 - eased * 0.94)))
+                    )
+                }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private static let pixels: [Pixel] = shield(x: 5, y: 1)
+        + key(x: 10, y: 6)
+
+    private static func shield(x: Int, y: Int) -> [Pixel] {
+        var result = line(from: Pixel(x + 2, y), to: Pixel(x + 16, y))
+        result += [Pixel(x + 1, y + 1), Pixel(x + 17, y + 1)]
+        result += line(from: Pixel(x, y + 2), to: Pixel(x, y + 13))
+        result += line(from: Pixel(x + 18, y + 2), to: Pixel(x + 18, y + 13))
+        for step in 0...8 {
+            result += [Pixel(x + step + 1, y + step + 14), Pixel(x + 17 - step, y + step + 14)]
+        }
+        return result + [Pixel(x + 9, y + 23)]
+    }
+
+    private static func key(x: Int, y: Int) -> [Pixel] {
+        outline(x: x + 2, y: y, width: 8, height: 8)
+        + line(from: Pixel(x + 6, y + 8), to: Pixel(x + 6, y + 19))
+        + line(from: Pixel(x + 6, y + 15), to: Pixel(x + 10, y + 15))
+        + line(from: Pixel(x + 6, y + 18), to: Pixel(x + 9, y + 18))
+        + [Pixel(x + 5, y + 3), Pixel(x + 6, y + 3)]
+    }
+
+    private static func outline(x: Int, y: Int, width: Int, height: Int) -> [Pixel] {
+        line(from: Pixel(x + 1, y), to: Pixel(x + width - 2, y))
+        + line(from: Pixel(x + 1, y + height - 1), to: Pixel(x + width - 2, y + height - 1))
+        + line(from: Pixel(x, y + 1), to: Pixel(x, y + height - 2))
+        + line(from: Pixel(x + width - 1, y + 1), to: Pixel(x + width - 1, y + height - 2))
+    }
+
+    private static func line(from start: Pixel, to end: Pixel) -> [Pixel] {
+        let steps = max(abs(end.x - start.x), abs(end.y - start.y))
+        guard steps > 0 else { return [start] }
+        return (0...steps).map { step in
+            Pixel(
+                start.x + (end.x - start.x) * step / steps,
+                start.y + (end.y - start.y) * step / steps
+            )
+        }
+    }
+
+    private struct Pixel: Hashable {
+        let x: Int
+        let y: Int
+        init(_ x: Int, _ y: Int) { self.x = x; self.y = y }
+    }
+}
+
+private struct ShumDeletionCompleteIllustration: View {
+    @Environment(\.shumThemePalette) private var palette
+
+    var body: some View {
+        Canvas { context, size in
+            let unit = min(size.width / 27, size.height / 24)
+            let origin = CGPoint(
+                x: (size.width - 23 * unit) / 2,
+                y: (size.height - 18 * unit) / 2
+            )
+            for pixel in Self.cloudPixels {
+                fill(pixel, color: palette.accent.opacity(0.28), context: &context, origin: origin, unit: unit)
+            }
+            for pixel in Self.checkPixels {
+                fill(pixel, color: palette.accent, context: &context, origin: origin, unit: unit)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func fill(
+        _ pixel: Pixel,
+        color: Color,
+        context: inout GraphicsContext,
+        origin: CGPoint,
+        unit: CGFloat
+    ) {
+        let rect = CGRect(
+            x: origin.x + CGFloat(pixel.x) * unit,
+            y: origin.y + CGFloat(pixel.y) * unit,
+            width: max(1, unit - 0.8),
+            height: max(1, unit - 0.8)
+        )
+        context.fill(Path(rect), with: .color(color))
+    }
+
+    private static let cloudPixels: [Pixel] = [
+        Pixel(3, 7), Pixel(5, 4), Pixel(8, 2), Pixel(12, 3),
+        Pixel(16, 2), Pixel(19, 5), Pixel(21, 8), Pixel(20, 12),
+        Pixel(17, 15), Pixel(13, 17), Pixel(9, 16), Pixel(5, 14),
+        Pixel(2, 11), Pixel(7, 7), Pixel(15, 7), Pixel(18, 10),
+        Pixel(6, 12), Pixel(11, 14)
+    ]
+    private static let checkPixels: [Pixel] =
+        line(from: Pixel(7, 9), to: Pixel(11, 13))
+        + line(from: Pixel(11, 13), to: Pixel(17, 7))
+
+    private static func line(from start: Pixel, to end: Pixel) -> [Pixel] {
+        let steps = max(abs(end.x - start.x), abs(end.y - start.y))
+        guard steps > 0 else { return [start] }
+        return (0...steps).map { step in
+            Pixel(
+                start.x + (end.x - start.x) * step / steps,
+                start.y + (end.y - start.y) * step / steps
+            )
+        }
+    }
+
+    private struct Pixel: Hashable {
+        let x: Int
+        let y: Int
+        init(_ x: Int, _ y: Int) { self.x = x; self.y = y }
     }
 }
 

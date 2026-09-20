@@ -3,6 +3,7 @@ import PhotosUI
 
 struct ProfilePhotoView: View {
     @ObservedObject var viewModel: ProfilePhotoViewModel
+    let name: String
     
     @State private var selectedItem: PhotosPickerItem?
     @State private var showPhotoOptions: Bool = false
@@ -48,17 +49,7 @@ struct ProfilePhotoView: View {
                 if let uiImage = viewModel.uiImage {
                     profilePhoto(uiImage)
                 } else {
-                    Image(systemName: "person.crop.circle.fill")
-                        .resizable()
-                        .scaledToFit()
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.secondary)
-                        .padding(6)
-                        .frame(width: imageSize, height: imageSize)
-                        .background(
-                            Color(uiColor: .secondarySystemBackground),
-                            in: Circle()
-                        )
+                    ShumInitialsAvatar(name: name, size: imageSize)
                 }
             }
             .buttonStyle(.plain)
@@ -75,6 +66,7 @@ struct ProfilePhotoView: View {
         .sheet(isPresented: $showPhotoOptions) {
             ProfilePhotoOptionsSheet(
                 image: viewModel.uiImage,
+                name: name,
                 onClose: { showPhotoOptions = false },
                 onCamera: openCamera,
                 onGallery: openGallery,
@@ -150,6 +142,7 @@ struct ProfilePhotoView: View {
 
 private struct ProfilePhotoOptionsSheet: View {
     let image: UIImage?
+    let name: String
     let onClose: () -> Void
     let onCamera: () -> Void
     let onGallery: () -> Void
@@ -229,10 +222,7 @@ private struct ProfilePhotoOptionsSheet: View {
                 .frame(width: 44, height: 44)
                 .clipShape(Circle())
         } else {
-            Image(systemName: "person.crop.circle.fill")
-                .resizable()
-                .foregroundStyle(.secondary)
-                .frame(width: 44, height: 44)
+            ShumInitialsAvatar(name: name, size: 44)
         }
     }
 

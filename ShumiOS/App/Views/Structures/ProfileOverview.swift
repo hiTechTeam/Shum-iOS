@@ -215,11 +215,7 @@ struct ProfileOverviewView: View {
                         .scaledToFit()
                         .background(Color(uiColor: .secondarySystemBackground))
                 } else {
-                    Image(systemName: "person.crop.circle.fill")
-                        .resizable()
-                        .scaledToFit()
-                        .symbolRenderingMode(.hierarchical)
-                        .padding(2)
+                    ShumInitialsAvatar(name: displayName, size: 34)
                 }
             }
             .frame(width: 34, height: 34)

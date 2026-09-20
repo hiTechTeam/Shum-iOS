@@ -146,6 +146,7 @@ struct ShumContactsUI: View {
         return Button { open(.conversation(peer)) } label: {
             HStack(spacing: 12) {
                 ShumProfileAvatar(
+                    name: runtime.displayName(peer),
                     size: 42,
                     imageData: runtime.profile(for: peer.id)?.avatar ?? contact.avatar
                 )

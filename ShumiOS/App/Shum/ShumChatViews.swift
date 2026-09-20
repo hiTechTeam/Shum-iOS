@@ -76,7 +76,7 @@ struct ShumPeopleView: View {
     var body: some View {
         List {
             Section {
-                Toggle("Видимость рядом", isOn: Binding(get: { coordinator.isScaning }, set: coordinator.setScanning))
+                Toggle("Видимость", isOn: Binding(get: { coordinator.isScaning }, set: coordinator.setScanning))
                     .tint(.accentColor)
             } footer: { Text("Когда видимость включена, люди поблизости могут найти вас и написать без интернета.") }
             Section {
@@ -194,8 +194,6 @@ struct ShumLegacyConversationView: View {
 struct ShumInitialAvatar: View {
     let name: String
     var body: some View {
-        Text(String(name.prefix(1)).uppercased()).font(.title2.weight(.medium))
-            .foregroundStyle(Color.accentColor).frame(width: 52, height: 52).background(Color.accentColor.opacity(0.12), in: Circle())
-            .accessibilityHidden(true)
+        ShumInitialsAvatar(name: name, size: 52)
     }
 }

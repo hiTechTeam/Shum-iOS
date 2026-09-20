@@ -17,6 +17,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     @Published var invitation: ShumContactCard?
     @Published var invitationError: String?
     @Published var deletingProfile = false
+    @Published private(set) var showsDeletionCeremony = false
     let authCodeViewModel: LocalProfileViewModel
     let peopleViewModel: PeopleViewModel
     let profilePhotoViewModel: ProfilePhotoViewModel
@@ -66,6 +67,13 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         )
         isRegistered = hasProfile && registrationCompleted && !previewsOnboarding
         needsSecuritySetup = hasProfile && !registrationCompleted && !previewsOnboarding
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-ShumPreviewDeletion") {
+            isRegistered = false
+            needsSecuritySetup = false
+            showsDeletionCeremony = true
+        }
+        #endif
         isScaning = isRegistered && UserDefaults.standard.bool(forKey: Keys.isScaning.rawValue)
         if deletion.hasDeletion {
             deletingProfile = true
@@ -228,13 +236,17 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             authCodeViewModel.clearProfile(); profilePhotoViewModel.resetAccountScopedState()
             SavedPeopleStateStore.shared.removeAll(); QuickActionsSettingsStore.shared.reset()
             ShumAppLock.shared.reset()
-            ShumAppearanceStore.shared.resetToClassic()
             try deletion.allowNewProfile()
-            isRegistered = false; needsSecuritySetup = false
-            isScaning = false; authenticationFlowID = UUID()
+            isRegistered = false; needsSecuritySetup = false; isScaning = false
             resetNotificationState()
             deletionError = nil; deletingProfile = false
+            showsDeletionCeremony = true
         } catch { deletionError = "Удаление не завершено. Разблокируйте iPhone и повторите. Обмен сообщениями остановлен." }
+    }
+    func completeDeletionCeremony() {
+        ShumAppearanceStore.shared.resetToClassic()
+        showsDeletionCeremony = false
+        authenticationFlowID = UUID()
     }
     func updateApplicationState(isActive: Bool) {
         active = isActive

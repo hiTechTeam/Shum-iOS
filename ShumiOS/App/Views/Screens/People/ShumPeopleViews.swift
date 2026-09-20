@@ -229,7 +229,11 @@ private struct ShumPeopleRow: View {
                 cardAction()
             } label: {
                 HStack(spacing: 12) {
-                    ShumProfileAvatar(size: 52, imageData: runtime.profile(for: peer.id)?.avatar)
+                    ShumProfileAvatar(
+                        name: runtime.displayName(peer),
+                        size: 52,
+                        imageData: runtime.profile(for: peer.id)?.avatar
+                    )
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(runtime.displayName(peer))
@@ -256,6 +260,7 @@ private struct ShumPeopleRow: View {
 }
 
 struct ShumProfileAvatar: View {
+    let name: String
     let size: CGFloat
     let imageData: Data?
 
@@ -264,10 +269,7 @@ struct ShumProfileAvatar: View {
             if let imageData, let image = UIImage(data: imageData) {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
-                Image(systemName: "person.crop.circle.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(.gray)
+                ShumInitialsAvatar(name: name, size: size)
             }
         }
         .frame(width: size, height: size)
@@ -339,7 +341,11 @@ struct ShumPeerCard: View {
                         let availableSize = max(0, min(photoGeometry.size.width, photoGeometry.size.height) - 24)
                         let photoSize = availableSize * 0.9 * 1.04
 
-                        ShumProfileAvatar(size: photoSize, imageData: avatar)
+                        ShumProfileAvatar(
+                            name: card?.name ?? runtime.displayName(peer),
+                            size: photoSize,
+                            imageData: avatar
+                        )
                             .contentShape(Circle())
                             .onTapGesture(perform: openPhoto)
                             .accessibilityLabel("Посмотреть фото")
@@ -519,7 +525,11 @@ private struct ShumPersonContextPreview: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ShumProfileAvatar(size: 52, imageData: runtime.profile(for: peer.id)?.avatar)
+            ShumProfileAvatar(
+                name: runtime.displayName(peer),
+                size: 52,
+                imageData: runtime.profile(for: peer.id)?.avatar
+            )
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(runtime.displayName(peer)).font(.system(size: 15, weight: .medium)).lineLimit(1)
@@ -962,6 +972,7 @@ private struct ShumProfileBlockOptionsSheet: View {
         VStack(spacing: 18) {
             HStack(spacing: 12) {
                 ShumProfileAvatar(
+                    name: runtime.displayName(request.peer),
                     size: 44,
                     imageData: runtime.profile(for: request.peer.id)?.avatar
                 )
@@ -1052,7 +1063,11 @@ private struct ShumStoredPersonRow: View {
                 cardAction()
             } label: {
                 HStack(spacing: 12) {
-                    ShumProfileAvatar(size: 52, imageData: runtime.profile(for: peer.id)?.avatar)
+                    ShumProfileAvatar(
+                        name: runtime.displayName(peer),
+                        size: 52,
+                        imageData: runtime.profile(for: peer.id)?.avatar
+                    )
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(runtime.displayName(peer))

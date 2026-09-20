@@ -157,6 +157,10 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             try permanent.add(card, source: "preview")
             try permanent.recordEncounter(card)
             _ = permanent.send(name == "Максим" ? "Буду через десять минут" : "До встречи!", to: card)
+            if ProcessInfo.processInfo.arguments.contains("-ShumPreviewBlocked"),
+               name == "Аня" || name == "Дима" {
+                try permanent.setBlocked(card, blocked: true)
+            }
         }
         let noise = Curve25519.KeyAgreement.PrivateKey()
         let signing = Curve25519.Signing.PrivateKey()

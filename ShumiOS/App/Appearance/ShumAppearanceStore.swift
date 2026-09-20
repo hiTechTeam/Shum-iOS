@@ -408,7 +408,8 @@ final class ShumAppearanceStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        followsSystem = defaults.object(forKey: systemDefaultsKey) as? Bool ?? true
+        followsSystem = defaults.object(forKey: systemDefaultsKey) == nil
+            ? true : defaults.bool(forKey: systemDefaultsKey)
         systemColorScheme = UIScreen.main.traitCollection.userInterfaceStyle == .dark ? .dark : .light
         selectedTheme = defaults.string(forKey: defaultsKey)
             .flatMap(Theme.init(rawValue:))

@@ -395,17 +395,12 @@ struct ProfileAvatarButton: View {
                let imageURL = URL(string: url) {
                 LocalAvatar(imageURL)
                     .placeholder {
-                        Image.personCropCircleFill
-                            .resizable()
-                            .foregroundStyle(.gray)
+                        ShumInitialsAvatar(name: user.name, size: avatarSize)
                     }
                     .resizable()
                     .scaledToFill()
             } else {
-                Image.personCropCircleFill
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(.gray)
+                ShumInitialsAvatar(name: user.name, size: avatarSize)
             }
         }
         .frame(width: avatarSize, height: avatarSize)
@@ -723,10 +718,7 @@ private struct ProfileBlockOptionsSheet: View {
     }
 
     private var placeholder: some View {
-        Image.personCropCircleFill
-            .resizable()
-            .scaledToFit()
-            .foregroundStyle(.secondary)
+        ShumInitialsAvatar(name: user.name, size: 44)
     }
 
     private var profileIdentity: String {
@@ -883,10 +875,7 @@ struct ProfileRowContextPreview: View {
     }
 
     private var placeholder: some View {
-        Image.personCropCircleFill
-            .resizable()
-            .scaledToFit()
-            .foregroundStyle(.gray)
+        ShumInitialsAvatar(name: user.name, size: avatarSize)
     }
 
     @ViewBuilder
@@ -1044,11 +1033,7 @@ struct ProfileSheetView: View {
     }
 
     private func profilePlaceholder(size: CGFloat) -> some View {
-        Image.personCropCircleFill
-            .resizable()
-            .scaledToFit()
-            .foregroundColor(.gray)
-            .frame(width: size, height: size)
+        ShumInitialsAvatar(name: user.name, size: size)
     }
 
     var body: some View {

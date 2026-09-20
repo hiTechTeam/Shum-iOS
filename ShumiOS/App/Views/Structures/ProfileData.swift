@@ -16,7 +16,10 @@ struct ProfileDataView: View {
 
     private var profileSection: some View {
         VStack(spacing: 34) {
-            ProfilePhotoView(viewModel: photoVM)
+            ProfilePhotoView(
+                viewModel: photoVM,
+                name: authCodeViewModel.localName ?? ""
+            )
             profileInformationCard
         }
         .frame(maxWidth: .infinity)
