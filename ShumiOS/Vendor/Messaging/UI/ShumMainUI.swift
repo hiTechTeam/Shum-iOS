@@ -106,7 +106,7 @@ struct ShumChatsUI: View {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     showsNewMessage = true
                 } label: {
-                    Image(systemName: "square.and.pencil")
+                    newMessageIcon
                 }
                 .tint(.primary)
                 .accessibilityLabel("Написать сообщение")
@@ -137,6 +137,16 @@ struct ShumChatsUI: View {
             }
         }
         #endif
+    }
+
+    @ViewBuilder
+    private var newMessageIcon: some View {
+        if #available(iOS 26.0, *) {
+            Image(systemName: "square.and.pencil")
+                .offset(y: -1)
+        } else {
+            Image(systemName: "square.and.pencil")
+        }
     }
 
     private var emptyState: some View {
@@ -702,6 +712,8 @@ private struct ShumDirectoryContextPreview: View {
     var body: some View {
         previewRow
             .frame(width: sourceWidth, height: sourceHeight)
+            .clipShape(Capsule(style: .continuous))
+            .containerShape(Capsule(style: .continuous))
             .scaleEffect(previewScale)
             .frame(
                 width: previewWidth,
@@ -709,17 +721,8 @@ private struct ShumDirectoryContextPreview: View {
             )
     }
 
-    @ViewBuilder
     private var previewRow: some View {
-        if #available(iOS 26.0, *) {
-            row
-                .background(
-                    Color.profileRowSwipeSurface,
-                    in: RoundedRectangle(cornerRadius: 26, style: .continuous)
-                )
-        } else {
-            row
-        }
+        row
     }
 
     private var row: some View {

@@ -213,6 +213,28 @@ struct ShumContactsUI: View {
                     .foregroundStyle(.red)
             }
             .tint(.red)
+        } preview: {
+            ShumContactContextPreview {
+                HStack(spacing: 12) {
+                    ShumProfileAvatar(
+                        name: runtime.displayName(peer),
+                        size: 42,
+                        imageData: runtime.profile(for: peer.id)?.avatar ?? contact.avatar
+                    )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(runtime.displayName(peer))
+                            .font(.system(size: 16, weight: .regular))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text(contactStatus(for: peer))
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(contactStatusColor(for: peer))
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+            }
         }
         .listRowInsets(EdgeInsets())
         .listRowSeparator(showsDivider ? .visible : .hidden, edges: .bottom)
@@ -264,6 +286,35 @@ struct ShumContactsUI: View {
         return formatter
     }()
 
+}
+
+private struct ShumContactContextPreview<Content: View>: View {
+    private let content: Content
+    private let sourceHeight: CGFloat = 56
+    private var sourceWidth: CGFloat { UIScreen.main.bounds.width }
+    private var previewWidth: CGFloat {
+        min(sourceWidth, max(280, sourceWidth - 32))
+    }
+    private var previewScale: CGFloat {
+        sourceWidth > 0 ? previewWidth / sourceWidth : 1
+    }
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        previewRow
+            .frame(width: sourceWidth, height: sourceHeight)
+            .clipShape(Capsule(style: .continuous))
+            .containerShape(Capsule(style: .continuous))
+            .scaleEffect(previewScale)
+            .frame(width: previewWidth, height: sourceHeight * previewScale)
+    }
+
+    private var previewRow: some View {
+        content
+    }
 }
 
 struct ShumNewMessageSheet: View {

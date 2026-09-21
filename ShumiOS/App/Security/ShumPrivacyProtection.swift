@@ -27,6 +27,7 @@ struct ShumPrivacyCover: View {
 /// symbols, Canvas drawings, links and presentation controllers render normally.
 struct ShumCaptureProtectedContainer<Content: View>: View {
     private let content: Content
+    @State private var allowsScreenshots = false
 
     init(@ViewBuilder content: () -> Content) {
         self.content = content()
@@ -40,8 +41,19 @@ struct ShumCaptureProtectedContainer<Content: View>: View {
                 ShumThemeCanvas().ignoresSafeArea()
                 content
             }
-            .shumHiddenFromSystemCapture()
+            .shumHiddenFromSystemCapture(!allowsScreenshots)
         }
+        .onPreferenceChange(ShumScreenshotAllowancePreferenceKey.self) {
+            allowsScreenshots = $0
+        }
+    }
+}
+
+private struct ShumScreenshotAllowancePreferenceKey: PreferenceKey {
+    static let defaultValue = false
+
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = value || nextValue()
     }
 }
 
@@ -55,17 +67,18 @@ extension View {
             transformEnvironment(\.redactionReasons) { reasons in
                 reasons.remove(ShumCaptureRedactionModifier.captureProhibited)
             }
+            .preference(key: ShumScreenshotAllowancePreferenceKey.self, value: true)
         } else {
-            self
+            preference(key: ShumScreenshotAllowancePreferenceKey.self, value: true)
         }
     }
 }
 
 private extension View {
     @ViewBuilder
-    func shumHiddenFromSystemCapture() -> some View {
+    func shumHiddenFromSystemCapture(_ isEnabled: Bool) -> some View {
         if #available(iOS 18.0, *) {
-            modifier(ShumCaptureRedactionModifier())
+            modifier(ShumCaptureRedactionModifier(isEnabled: isEnabled))
         } else {
             self
         }
@@ -75,12 +88,17 @@ private extension View {
 @available(iOS 18.0, *)
 private struct ShumCaptureRedactionModifier: ViewModifier {
     static let captureProhibited = RedactionReasons(rawValue: 1 << 3)
+    let isEnabled: Bool
 
     func body(content: Content) -> some View {
         content
             .privacySensitive(false)
             .transformEnvironment(\.redactionReasons) { reasons in
-                reasons.insert(Self.captureProhibited)
+                if isEnabled {
+                    reasons.insert(Self.captureProhibited)
+                } else {
+                    reasons.remove(Self.captureProhibited)
+                }
             }
     }
 }

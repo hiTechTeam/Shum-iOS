@@ -889,25 +889,18 @@ private struct ShumEncounterContextPreview: View {
 
     var body: some View {
         previewRow
-        .frame(width: sourceWidth, height: sourceHeight)
-        .scaleEffect(previewScale)
-        .frame(
-            width: previewWidth,
-            height: sourceHeight * previewScale
-        )
+            .frame(width: sourceWidth, height: sourceHeight)
+            .clipShape(Capsule(style: .continuous))
+            .containerShape(Capsule(style: .continuous))
+            .scaleEffect(previewScale)
+            .frame(
+                width: previewWidth,
+                height: sourceHeight * previewScale
+            )
     }
 
-    @ViewBuilder
     private var previewRow: some View {
-        if #available(iOS 26.0, *) {
-            row
-                .background(
-                    Color.profileRowSwipeSurface,
-                    in: RoundedRectangle(cornerRadius: 26, style: .continuous)
-                )
-        } else {
-            row
-        }
+        row
     }
 
     private var row: some View {
