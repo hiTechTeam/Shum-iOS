@@ -1,11 +1,15 @@
 import SwiftUI
 
 struct ShumSecuritySettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var runtime: ShumRuntime
     @ObservedObject private var appLock = ShumAppLock.shared
     let fingerprint: String?
 
     @State private var isWorking = false
     @State private var showChangeCode = false
+    @State private var showBlockedProfiles = false
+    @State private var confirmDelete = false
     @State private var lastBackupDate: Date? = {
         let value = UserDefaults.standard.double(
             forKey: ShumBackupService.lastBackupDateKey
@@ -100,6 +104,35 @@ struct ShumSecuritySettingsView: View {
                 Text("Копия хранится только там, куда вы её сохраните. Для восстановления понадобятся файл и его пароль.")
             }
 
+            Section("Конфиденциальность") {
+                Button {
+                    showBlockedProfiles = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.crop.circle.badge.xmark")
+                            .frame(width: 24)
+                        Text("Заблокированные")
+                        Spacer()
+                        Text(String(runtime.permanent?.state.blocked?.count ?? 0))
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .foregroundStyle(.primary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Section {
+                Button("Удалить профиль и данные", role: .destructive) {
+                    confirmDelete = true
+                }
+                .accessibilityIdentifier("shum.deleteProfile")
+            } footer: {
+                Text("Удаляет профиль, ключи, контакты, историю и очередь на этом устройстве. Копии у собеседников не удаляются.")
+            }
+
             if let message = appLock.errorMessage {
                 Section {
                     Text(message)
@@ -109,8 +142,32 @@ struct ShumSecuritySettingsView: View {
             }
         }
         .fontWeight(.regular)
-        .navigationTitle("Безопасность")
+        .navigationTitle("Безопасность и данные")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showBlockedProfiles) {
+            BlockedProfilesView(runtime: runtime)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .alert(
+            NSLocalizedString("local.delete.title", comment: ""),
+            isPresented: $confirmDelete
+        ) {
+            Button(Inc.Common.cancel.localized, role: .cancel) { }
+            Button(
+                NSLocalizedString("local.delete.action", comment: ""),
+                role: .destructive
+            ) {
+                // Release the pushed settings host before registration replaces the app tree.
+                dismiss()
+                Task { @MainActor in
+                    await Task.yield()
+                    runtime.deleteProfileHandler?()
+                }
+            }
+        } message: {
+            Text(NSLocalizedString("local.delete.message", comment: ""))
+        }
         .navigationDestination(isPresented: $showChangeCode) {
             ShumChangePasscodeView()
         }

@@ -22,24 +22,13 @@ struct ProfileOverviewView: View {
     @ObservedObject var authCodeViewModel: LocalProfileViewModel
     @ObservedObject private var photoVM: ProfilePhotoViewModel
     let open: (ShumProfileRoute) -> Void
-    @ObservedObject private var quickActions = QuickActionsSettingsStore.shared
-    @ObservedObject private var appLock = ShumAppLock.shared
     @ObservedObject private var appearance = ShumAppearanceStore.shared
 
-    @State private var showPrivacy = false
     @State private var showScanningSettings = false
     @State private var showInfoSheet = false
-    @State private var showLogoutOptions = false
-    @State private var showBlockedProfiles = false
-    @State private var showQuickActions = false
     @State private var showSecurity = false
     @State private var showAppearance = false
-    @State private var showLogoutConfirmation = false
-    @State private var showLogoutError = false
-    @State private var showDeleteConfirmation = false
-    @State private var showDeleteError = false
     @State private var showPhotoPreview = false
-    @State private var isWorking = false
     @State private var notificationAuthorizationStatus:
         UNAuthorizationStatus = .notDetermined
 
@@ -81,9 +70,8 @@ struct ProfileOverviewView: View {
 
             ScrollView {
                 VStack(spacing: 20) {
-                    settingsCard
-                    applicationCard
-                    encounterCard
+                    profileSection("Общение") { communicationCard }
+                    profileSection("Приложение") { applicationCard }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 30)
@@ -131,11 +119,6 @@ struct ProfileOverviewView: View {
                 .accessibilityLabel(Inc.Profile.editProfile.localized)
             }
         }
-        .sheet(isPresented: $showPrivacy) {
-            if let chat = coordinator.chat {
-                NavigationStack { ShumPrivacySettings(runtime: chat) }
-            }
-        }
         .sheet(isPresented: $showScanningSettings) {
             ScanningSettingsSheet()
                 .environmentObject(coordinator)
@@ -147,18 +130,11 @@ struct ProfileOverviewView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $showBlockedProfiles) {
-            BlockedProfilesView(runtime: chat)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showQuickActions) {
-            QuickActionsSettingsSheet()
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
         .navigationDestination(isPresented: $showSecurity) {
-            ShumSecuritySettingsView(fingerprint: coordinator.identityFingerprint)
+            ShumSecuritySettingsView(
+                runtime: chat,
+                fingerprint: coordinator.identityFingerprint
+            )
         }
         .navigationDestination(isPresented: $showAppearance) {
             ShumAppearanceSettingsView()
@@ -171,24 +147,6 @@ struct ProfileOverviewView: View {
                         .scaledToFit()
                 }
             }
-        }
-        .alert(
-            NSLocalizedString("local.delete.title", comment: ""),
-            isPresented: $showDeleteConfirmation
-        ) {
-            Button(Inc.Common.cancel.localized, role: .cancel) { }
-            Button(
-                NSLocalizedString("local.delete.action", comment: ""),
-                role: .destructive,
-                action: deleteAccount
-            )
-        } message: {
-            Text(NSLocalizedString("local.delete.message", comment: ""))
-        }
-        .alert(Inc.Profile.deleteAccountFailed.localized, isPresented: $showDeleteError) {
-            Button(Inc.Common.okey.localized, role: .cancel) { }
-        } message: {
-            Text(Inc.Profile.deleteAccountFailedMessage.localized)
         }
     }
 
@@ -225,7 +183,21 @@ struct ProfileOverviewView: View {
         .foregroundStyle(.primary)
     }
 
-    private var settingsCard: some View {
+    private func profileSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 16)
+
+            content()
+        }
+    }
+
+    private var communicationCard: some View {
         VStack(spacing: 0) {
             ProfileOverviewRow(
                 title: Inc.Scanning.scanning.localized,
@@ -237,21 +209,24 @@ struct ProfileOverviewView: View {
             }
             Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(
+                title: Inc.Tabs.metTitle.localized,
+                systemImage: "clock.arrow.circlepath",
+                accentValue: (chat.permanent?.unviewedEncounterCount ?? 0) > 0
+                    ? "+\(chat.permanent?.unviewedEncounterCount ?? 0)"
+                    : nil,
+                value: String(chat.permanent?.encounterHistory.count ?? 0),
+                position: .middle
+            ) {
+                open(.encounters)
+            }
+            Divider().padding(.leading, 60).padding(.trailing, 20)
+            ProfileOverviewRow(
                 title: Inc.NearbyNotifications.settingsTitle.localized,
                 systemImage: "bell",
                 value: notificationStatusTitle,
-                position: .middle,
+                position: .bottom,
                 action: manageNotificationAuthorization
             )
-            Divider().padding(.leading, 60).padding(.trailing, 20)
-            ProfileOverviewRow(title: "Безопасность", systemImage: "checkmark.shield",
-                value: appLock.preferredMethodTitle,
-                position: .middle) {
-                    showSecurity = true
-                }
-            Divider().padding(.leading, 60).padding(.trailing, 20)
-            ProfileOverviewRow(title: "Конфиденциальность", systemImage: "lock.shield",
-                value: "", position: .bottom) { showPrivacy = true }
         }
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
     }
@@ -259,59 +234,34 @@ struct ProfileOverviewView: View {
     private var applicationCard: some View {
         VStack(spacing: 0) {
             ProfileOverviewRow(
-                title: "О приложении",
-                systemImage: "info.circle",
-                value: "Shum",
+                title: "Безопасность и данные",
+                systemImage: "checkmark.shield",
                 position: .top
             ) {
-                showInfoSheet = true
+                showSecurity = true
             }
             Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(
                 title: "Оформление",
                 systemImage: "paintpalette",
                 theme: appearance.theme,
-                position: .bottom
+                position: .middle
             ) {
                 showAppearance = true
             }
-        }
-        .background(
-            Color(uiColor: .secondarySystemGroupedBackground),
-            in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-        )
-    }
-
-    private var encounterCard: some View {
-        VStack(spacing: 0) {
-            ProfileOverviewRow(
-                title: Inc.Tabs.metTitle.localized,
-                systemImage: "clock.arrow.circlepath",
-                accentValue: (chat.permanent?.unviewedEncounterCount ?? 0) > 0
-                    ? "+\(chat.permanent?.unviewedEncounterCount ?? 0)"
-                    : nil,
-                value: String(chat.permanent?.encounterHistory.count ?? 0),
-                position: .top
-            ) {
-                open(.encounters)
-            }
-
             Divider().padding(.leading, 60).padding(.trailing, 20)
-
             ProfileOverviewRow(
-                title: Inc.NearbyProfile.blockedMenu.localized,
-                systemImage: "person.crop.circle.badge.xmark",
-                value: String(chat.permanent?.state.blocked?.count ?? 0),
+                title: "О Shum",
+                systemImage: "info.circle",
                 position: .bottom
             ) {
-                showBlockedProfiles = true
+                showInfoSheet = true
             }
         }
         .background(
             Color(uiColor: .secondarySystemGroupedBackground),
             in: RoundedRectangle(cornerRadius: 22, style: .continuous)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private func normalized(_ value: String?) -> String? {
@@ -329,12 +279,6 @@ struct ProfileOverviewView: View {
         @unknown default:
             Inc.Settings.statusOff.localized
         }
-    }
-
-    private var quickActionsStatusTitle: String {
-        quickActions.hasEnabledActions
-            ? Inc.Settings.statusOn.localized
-            : Inc.Settings.statusOff.localized
     }
 
     private var scanningStatusTitle: String {
@@ -370,17 +314,6 @@ struct ProfileOverviewView: View {
         notificationAuthorizationStatus = settings.authorizationStatus
     }
 
-    private func deleteAccount() {
-        isWorking = true
-        Task {
-            do {
-                try await coordinator.deleteAccount()
-            } catch {
-                isWorking = false
-                showDeleteError = true
-            }
-        }
-    }
 }
 
 private struct ShumAppearanceSettingsView: View {

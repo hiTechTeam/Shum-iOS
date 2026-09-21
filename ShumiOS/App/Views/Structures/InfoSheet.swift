@@ -14,6 +14,6 @@ struct InfoSheetView: View {
                 Text("Пока доступны текстовые сообщения. Есть очередь отправки, подтверждения доставки и прочтения. Звонки и вложения ещё не подключены.").foregroundStyle(.secondary)
                 Text("Транспорт и шифрование: BitChat / Shum, Unlicense.").font(.footnote).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
-        }.navigationTitle("О приложении")
+        }.navigationTitle("О Shum")
     }
 }
