@@ -17,8 +17,7 @@ struct PeopleView: View {
 
     var body: some View {
         ZStack {
-            Color.peopleListBackground
-                .ignoresSafeArea()
+            ShumThemeCanvas().ignoresSafeArea()
 
             if coordinator.isScaning {
                 if peopleViewModel.visibleUsers.isEmpty {

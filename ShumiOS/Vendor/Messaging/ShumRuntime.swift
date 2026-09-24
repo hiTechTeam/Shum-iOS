@@ -133,6 +133,16 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                 date: Date().addingTimeInterval(-600), outgoing: false, status: .delivered(to: "Руслан", at: Date())))
             if index == 1 { model.unreadMessageIDs.insert("\(sample.peerID.id):\(id)") }
         }
+        let previews = ["Договорились, до встречи!", "Спасибо, всё получилось", "Я уже рядом", "Напишу чуть позже", "Как твои дела?", "Отличная идея"]
+        for (index, sample) in wire.samples.dropFirst(4).enumerated() {
+            let id = "preview-directory-\(index)"
+            model.messages.append(ShumMessage(
+                id: id, peerID: sample.peerID, text: previews[index % previews.count],
+                date: Date().addingTimeInterval(-Double(index + 2) * 600),
+                outgoing: index % 3 == 0, status: .delivered(to: "Руслан", at: Date())
+            ))
+            if index % 5 == 0 { model.unreadMessageIDs.insert("\(sample.peerID.id):\(id)") }
+        }
         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewEmptyChat") { model.messages = [] }
         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewLongBio") {
             let bio = String(String(repeating: "Люблю прогулки, новые знакомства и разговоры о том, что вдохновляет. ", count: 3).prefix(ShumProfile.maxBioCharacters))

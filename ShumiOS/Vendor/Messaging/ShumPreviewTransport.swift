@@ -9,10 +9,26 @@ final class ShumPreviewTransport: Transport {
     weak var peerEventsDelegate: TransportPeerEventsDelegate?
     let myPeerID = PeerID(str: "0000000000000000")
     var myNickname = "Руслан"
-    let samples: [TransportPeerSnapshot] = ["Аня", "Дима", "Маша", "Саша"].enumerated().map {
-        TransportPeerSnapshot(peerID: PeerID(str: String(repeating: String($0.offset + 1), count: 16)),
+    private static var sampleNames: [String] {
+        let initial = ["Аня", "Дима", "Маша", "Саша"]
+        guard ProcessInfo.processInfo.arguments.contains("-ShumPreviewLongList") else { return initial }
+        return initial + [
+            "Александр", "Алексей", "Алина", "Андрей", "Антон", "Артём",
+            "Валерия", "Василий", "Вера", "Виктор", "Виктория", "Глеб",
+            "Дарья", "Денис", "Евгения", "Егор", "Екатерина", "Елена",
+            "Иван", "Игорь", "Илья", "Ирина", "Кирилл", "Ксения",
+            "Лев", "Лиза", "Максим", "Марина", "Михаил", "Наталья",
+            "Никита", "Олег", "Ольга", "Павел", "Полина", "Роман",
+            "Сергей", "Соня", "Татьяна", "Тимур", "Юлия", "Ярослав"
+        ]
+    }
+    let samples: [TransportPeerSnapshot] = sampleNames.enumerated().map {
+        let id = $0.offset < 4
+            ? String(repeating: String($0.offset + 1), count: 16)
+            : "eeeeeeeeeeee" + String(format: "%04x", $0.offset)
+        return TransportPeerSnapshot(peerID: PeerID(str: id),
             nickname: $0.element, isConnected: true, noisePublicKey: nil, lastSeen: Date(),
-            distanceMeters: [2, 5, 8, 12][$0.offset])
+            distanceMeters: [2, 5, 8, 12][$0.offset % 4])
     }
     func currentPeerSnapshots() -> [TransportPeerSnapshot] { samples }
     func setNickname(_ nickname: String) { myNickname = nickname }

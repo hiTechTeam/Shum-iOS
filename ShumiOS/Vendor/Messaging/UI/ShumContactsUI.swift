@@ -147,7 +147,7 @@ struct ShumContactsUI: View {
             Button { openNewContact() } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(palette.accentForeground)
+                    .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
                     .background(palette.accent, in: Circle())
             }

@@ -59,8 +59,10 @@ struct BlockedProfilesView: View {
                         )
                     }
                     .listStyle(.plain)
+                    .shumGroupedScreenBackground()
                 }
             }
+            .background(ShumThemeCanvas().ignoresSafeArea())
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

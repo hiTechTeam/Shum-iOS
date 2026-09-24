@@ -4,6 +4,7 @@ import UserNotifications
 
 @MainActor
 final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
+    private static let restoredPasscodeSetupKey = "shum.restore.needsPasscodeSetup"
     @Published var isRegistered = false
     @Published private(set) var needsSecuritySetup = false
     @Published var authenticationFlowID = UUID()
@@ -68,6 +69,12 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         isRegistered = hasProfile && registrationCompleted && !previewsOnboarding
         needsSecuritySetup = hasProfile && !registrationCompleted && !previewsOnboarding
         #if DEBUG && targetEnvironment(simulator)
+        // UI fixtures can be opened on a fresh simulator without creating a
+        // real profile. This path is absent from every physical-device build.
+        if ProcessInfo.processInfo.arguments.contains("-ShumPreview"), !previewsOnboarding {
+            isRegistered = true
+            needsSecuritySetup = false
+        }
         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewDeletion") {
             isRegistered = false
             needsSecuritySetup = false
@@ -151,6 +158,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
     func completedRegistration() {
         guard LocalCardStore.shared.ownManifest != nil else { return }
+        UserDefaults.standard.set(false, forKey: Self.restoredPasscodeSetupKey)
         authCodeViewModel.restoreLocalProfile()
         needsSecuritySetup = false
         isRegistered = true
@@ -178,7 +186,11 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         authCodeViewModel.restoreLocalProfile()
         profilePhotoViewModel.loadPhotoIfNeeded()
         needsSecuritySetup = true
+        UserDefaults.standard.set(true, forKey: Self.restoredPasscodeSetupKey)
         return prepareRegistrationSecurity()
+    }
+    var needsRestoredPasscodeSetup: Bool {
+        needsSecuritySetup && UserDefaults.standard.bool(forKey: Self.restoredPasscodeSetupKey)
     }
     func setScanning(_ enabled: Bool) {
         isScaning = enabled && isRegistered
@@ -236,6 +248,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             authCodeViewModel.clearProfile(); profilePhotoViewModel.resetAccountScopedState()
             SavedPeopleStateStore.shared.removeAll(); QuickActionsSettingsStore.shared.reset()
             ShumAppLock.shared.reset()
+            UserDefaults.standard.set(false, forKey: Self.restoredPasscodeSetupKey)
             try deletion.allowNewProfile()
             isRegistered = false; needsSecuritySetup = false; isScaning = false
             resetNotificationState()

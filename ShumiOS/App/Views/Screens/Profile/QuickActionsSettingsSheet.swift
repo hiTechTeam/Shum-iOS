@@ -71,15 +71,8 @@ struct QuickActionsSettingsSheet: View {
 }
 
 private struct QuickActionsScreenBackground: ViewModifier {
-    @ViewBuilder
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-        } else {
-            content.background(
-                Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
-            )
-        }
+        content.background(ShumThemeCanvas().ignoresSafeArea())
     }
 }
 

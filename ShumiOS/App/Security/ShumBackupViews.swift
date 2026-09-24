@@ -87,9 +87,15 @@ struct ShumBackupCreateView: View {
                 }
             }
         }
+        .shumGroupedScreenBackground()
         .fontWeight(.regular)
         .navigationTitle("Резервная копия")
         .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(isPresented: $isCreating, onDismiss: {
+            if document != nil { isExporting = true }
+        }) {
+            ShumBackupProgressView(operation: .create)
+        }
         .fileExporter(
             isPresented: $isExporting,
             document: document,
@@ -127,7 +133,7 @@ struct ShumBackupCreateView: View {
         } icon: {
             Image(systemName: systemImage)
                 .symbolRenderingMode(.monochrome)
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
         }
     }
 
@@ -144,10 +150,15 @@ struct ShumBackupCreateView: View {
         let backupPassword = password
         Task {
             do {
+                try? await Task.sleep(for: .milliseconds(80))
+                let startedAt = ContinuousClock.now
                 let data = try await ShumBackupService.shared.create(password: backupPassword)
+                let elapsed = startedAt.duration(to: .now)
+                if elapsed < .milliseconds(1_250) {
+                    try? await Task.sleep(for: .milliseconds(1_250) - elapsed)
+                }
                 document = ShumBackupDocument(data: data)
                 isCreating = false
-                isExporting = true
             } catch {
                 isCreating = false
                 message = error.localizedDescription
@@ -164,6 +175,7 @@ struct ShumBackupRestoreView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @State private var password = ""
     @State private var isRestoring = false
+    @State private var restoredSuccessfully = false
     @State private var message: String?
 
     private var metadata: ShumBackupMetadata? {
@@ -220,9 +232,19 @@ struct ShumBackupRestoreView: View {
                     }
                 }
             }
+            .shumGroupedScreenBackground()
             .fontWeight(.regular)
             .navigationTitle("Восстановление")
             .navigationBarTitleDisplayMode(.inline)
+            .fullScreenCover(isPresented: $isRestoring, onDismiss: {
+                if restoredSuccessfully {
+                    restoredSuccessfully = false
+                    onRestored()
+                    dismiss()
+                }
+            }) {
+                ShumBackupProgressView(operation: .restore)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Отмена") { dismiss() }
@@ -239,6 +261,8 @@ struct ShumBackupRestoreView: View {
         let backupPassword = password
         Task {
             do {
+                try? await Task.sleep(for: .milliseconds(80))
+                let startedAt = ContinuousClock.now
                 _ = try await ShumBackupService.shared.restore(
                     data: data,
                     password: backupPassword
@@ -246,14 +270,70 @@ struct ShumBackupRestoreView: View {
                 guard coordinator.prepareRestoredProfileForSecurity() else {
                     throw ShumBackupError.couldNotSave
                 }
+                let elapsed = startedAt.duration(to: .now)
+                if elapsed < .milliseconds(1_250) {
+                    try? await Task.sleep(for: .milliseconds(1_250) - elapsed)
+                }
                 password = ""
+                restoredSuccessfully = true
                 isRestoring = false
-                dismiss()
-                DispatchQueue.main.async { onRestored() }
             } catch {
                 isRestoring = false
                 message = error.localizedDescription
             }
         }
+    }
+}
+
+private struct ShumBackupProgressView: View {
+    enum Operation { case create, restore }
+
+    @Environment(\.shumThemePalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let operation: Operation
+    @State private var startedAt = Date()
+
+    var body: some View {
+        ZStack {
+            ShumThemeCanvas().ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+                    let time = timeline.date.timeIntervalSince(startedAt)
+                    ZStack {
+                        ShumOnboardingPixelIllustration(kind: .security)
+                            .foregroundStyle(palette.accent)
+                            .frame(width: 112, height: 92)
+
+                        ForEach(0..<14, id: \.self) { index in
+                            let phase = (time * 0.85 + Double(index) / 14).truncatingRemainder(dividingBy: 1)
+                            let x = CGFloat(operation == .create ? 1 - phase : phase)
+                            let lane = CGFloat(index % 7 - 3) * 14
+                            Rectangle()
+                                .fill(palette.accent.opacity(0.8))
+                                .frame(width: 8, height: 8)
+                                .offset(x: (x - 0.5) * 240, y: lane)
+                                .opacity(reduceMotion ? 0 : sin(phase * .pi))
+                        }
+                    }
+                    .frame(width: 280, height: 160)
+                }
+                .accessibilityHidden(true)
+
+                Text(operation == .create ? "Шифруем резервную копию" : "Восстанавливаем профиль")
+                    .font(.title2.weight(.semibold))
+                    .multilineTextAlignment(.center)
+
+                Text(operation == .create
+                     ? "Ключи и переписка сохраняются в защищённый файл на устройстве."
+                     : "Проверяем пароль и возвращаем ключи и переписку на устройство.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 330)
+            }
+            .padding(.horizontal, 24)
+        }
+        .accessibilityElement(children: .combine)
     }
 }

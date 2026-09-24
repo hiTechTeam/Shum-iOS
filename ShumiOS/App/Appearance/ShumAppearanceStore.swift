@@ -122,6 +122,12 @@ extension EnvironmentValues {
 }
 
 extension View {
+    func shumGroupedScreenBackground() -> some View {
+        scrollContentBackground(.hidden)
+            .background(ShumThemeCanvas().ignoresSafeArea())
+            .toolbarBackground(.hidden, for: .navigationBar)
+    }
+
     /// Applies the theme once at the application root. SwiftUI descendants,
     /// presented system views and embedded UIKit controls inherit the same
     /// accent instead of keeping separate green constants.

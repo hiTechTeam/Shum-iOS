@@ -117,7 +117,7 @@ struct ShumPeopleScreen: View {
                     .animation(.easeOut(duration: 0.22), value: pinned)
                 }
                 .listRowInsets(EdgeInsets())
-                .listRowBackground(Color(uiColor: .systemBackground))
+                .listRowBackground(ShumThemeCanvas())
                 .listRowSeparator(.hidden)
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
                     if let card {

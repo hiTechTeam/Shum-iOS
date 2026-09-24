@@ -1,8 +1,7 @@
 #if os(iOS)
 import SwiftUI
-import UIKit
 
-/// Search stays local and uses the same canonical directory as the chat folders.
+/// Search uses the same directory and navigation path as the ordinary chat list.
 enum ShumChatSearch {
     static func matches(_ query: String, name: String, messages: [String]) -> Bool {
         let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
@@ -13,103 +12,99 @@ enum ShumChatSearch {
     }
 }
 
-/// The native search presentation supplies focus, keyboard, cancellation and
-/// the collapsing navigation drawer. The original list stays mounted underneath
-/// results so cancelling preserves its folder and scroll position.
-struct ShumChatSearchPresentation: ViewModifier {
-    @Environment(\.isSearching) private var isSearching
-    @Environment(\.dismissSearch) private var dismissSearch
-    @ObservedObject var runtime: ShumRuntime
-    let query: String
-    let open: (ShumUIRoute) -> Void
+struct ShumChatHeaderLayout: Equatable {
+    static let searchHeight: CGFloat = 54
+    let offset: CGFloat
 
-    func body(content: Content) -> some View {
-        content
-            .background(ShumSearchNavigationLifecycle())
-            .allowsHitTesting(!isSearching)
-            .accessibilityHidden(isSearching)
-            .overlay {
-                if isSearching {
-                    ShumChatSearchResults(runtime: runtime, query: query) { route in
-                        dismissSearch()
-                        open(route)
-                    }
-                }
+    var collapse: CGFloat { min(Self.searchHeight, max(0, offset)) }
+    var pull: CGFloat { max(0, -offset) }
+    var searchHeight: CGFloat { Self.searchHeight - collapse }
+    var fieldHeight: CGFloat { max(0, 44 - collapse * 60 / Self.searchHeight) }
+    var contentOpacity: CGFloat { min(1, max(0, (fieldHeight - 34) / 10)) }
+    var fieldOpacity: CGFloat { min(1, fieldHeight / 13) }
+}
+
+/// The collapsed control remains part of the scrollable chat header.
+struct ShumChatSearchBar: View {
+    let layout: ShumChatHeaderLayout
+    let activate: () -> Void
+
+    var body: some View {
+        Button(action: activate) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                Text("Поиск")
             }
+            .font(.system(size: 17))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .frame(height: layout.fieldHeight)
+            .opacity(layout.contentOpacity)
+            .background {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(uiColor: .tertiarySystemFill))
+                    .opacity(layout.fieldOpacity)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("shum.chatSearch.activate")
     }
 }
 
-private struct ShumSearchNavigationLifecycle: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> Controller { Controller() }
-    func updateUIViewController(_ controller: Controller, context: Context) {}
+/// Search is an in-place layer of the chat root, not a UIKit search presentation.
+/// A result can therefore push through exactly the same NavigationStack as a row.
+struct ShumChatSearchOverlay: View {
+    @ObservedObject var runtime: ShumRuntime
+    @Binding var query: String
+    let close: () -> Void
+    let open: (ShumUIRoute) -> Void
+    @FocusState private var searchFocused: Bool
 
-    final class Controller: UIViewController {
-        private var restoresSearchDuringTransition = false
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("Поиск", text: $query)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($searchFocused)
+                        .submitLabel(.search)
+                        .accessibilityIdentifier("shum.chatSearch.field")
+                    if !query.isEmpty {
+                        Button {
+                            query = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Очистить поиск")
+                    }
+                }
+                .font(.system(size: 17))
+                .padding(.horizontal, 14)
+                .frame(height: 44)
+                .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 18))
 
-        private var navigationOwner: UIViewController? {
-            var owner: UIViewController = self
-            while let parent = owner.parent, !(parent is UINavigationController) { owner = parent }
-            return owner.parent is UINavigationController ? owner : nil
-        }
-
-        override func loadView() {
-            view = UIView()
-            view.isUserInteractionEnabled = false
-        }
-        override func viewWillAppear(_ animated: Bool) {
-            super.viewWillAppear(animated)
-            restoresSearchDuringTransition = navigationOwner?.transitionCoordinator != nil
-            restoreDirectoryScrollView()
-        }
-        override func viewDidAppear(_ animated: Bool) {
-            super.viewDidAppear(animated)
-            restoresSearchDuringTransition = false
-        }
-        override func viewWillDisappear(_ animated: Bool) {
-            restoresSearchDuringTransition = false
-            super.viewWillDisappear(animated)
-        }
-        override func viewDidLayoutSubviews() {
-            super.viewDidLayoutSubviews()
-            restoreDirectoryScrollView()
-            guard restoresSearchDuringTransition,
-                  let owner = navigationOwner,
-                  owner === navigationController?.topViewController,
-                  let search = owner.navigationItem.searchController,
-                  !search.isActive, search.searchBar.superview != nil else { return }
-            // SwiftUI reattaches the existing search bar during the pop but
-            // leaves it transparent until the transition finishes. Restore
-            // visibility in that layout pass, alongside the returning screen.
-            // UIKit still owns the drawer's geometry and search activation.
-            UIView.performWithoutAnimation { search.searchBar.alpha = 1 }
-        }
-
-        private func restoreDirectoryScrollView() {
-            guard let owner = navigationOwner,
-                  owner === navigationController?.topViewController else { return }
-
-            let searchBar = owner.navigationItem.searchController?.searchBar
-            let candidates = scrollViews(in: owner.view).filter { scrollView in
-                guard scrollView.bounds.height > 100,
-                      scrollView.bounds.width > 100,
-                      scrollView.isScrollEnabled else { return false }
-                if let searchBar, scrollView.isDescendant(of: searchBar) { return false }
-                return true
+                Button("Отмена", action: close)
+                    .font(.system(size: 17))
+                    .accessibilityIdentifier("shum.chatSearch.cancel")
             }
-            guard let directory = candidates.max(by: {
-                ($0.bounds.width * $0.bounds.height) < ($1.bounds.width * $1.bounds.height)
-            }) else { return }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 6)
 
-            // The conversation controller registers its timeline as the top
-            // content scroll view. Register the directory again while popping
-            // back so UIKit's native search drawer follows this list's drag.
-            owner.setContentScrollView(directory, for: .top)
+            ShumChatSearchResults(runtime: runtime, query: query, open: open)
         }
-
-        private func scrollViews(in view: UIView) -> [UIScrollView] {
-            var result = view.subviews.flatMap(scrollViews)
-            if let scrollView = view as? UIScrollView { result.append(scrollView) }
-            return result
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ShumThemeCanvas().ignoresSafeArea())
+        .onAppear {
+            DispatchQueue.main.async { searchFocused = true }
         }
     }
 }

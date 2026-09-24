@@ -639,7 +639,7 @@ struct RegistrationSecurityReadyView: View {
     }
 }
 
-private struct RegistrationPasscodeSetupView: View {
+struct RegistrationPasscodeSetupView: View {
     private enum Phase {
         case create
         case confirm
@@ -866,7 +866,7 @@ private struct ShumOnboardingPage: View {
     }
 }
 
-private struct ShumOnboardingPixelIllustration: View {
+struct ShumOnboardingPixelIllustration: View {
     enum Kind { case nearby, mesh, courier, network, identity, security, passcode, faceID }
 
     let kind: Kind

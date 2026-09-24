@@ -46,8 +46,9 @@ struct ShumChatsUI: View {
     @ObservedObject var runtime: ShumRuntime
     let open: (ShumUIRoute) -> Void
     @State private var folder: ShumChatFolder = .all
-    @State private var searchQuery = ""
     @State private var showsNewMessage = false
+    @State private var searchActive = false
+    @State private var searchQuery = ""
 
     private var entries: [ShumDirectoryEntry] { runtime.directoryEntries }
     private var visible: [ShumDirectoryEntry] {
@@ -78,7 +79,15 @@ struct ShumChatsUI: View {
     }
 
     var body: some View {
-        ShumDirectoryList(runtime: runtime, folder: folder, entries: visible, open: open, pinsHeader: true) {
+        ShumDirectoryList(
+            runtime: runtime, folder: folder, entries: visible, open: open,
+            pinsHeader: true,
+            searchHeader: { layout in
+                AnyView(ShumChatSearchBar(layout: layout) {
+                    withAnimation(.easeInOut(duration: 0.3)) { searchActive = true }
+                })
+            }
+        ) {
             ShumChatFolderBar(selection: $folder, entries: entries)
                 .padding(.horizontal, 16)
                 .padding(.top, 6)
@@ -86,6 +95,8 @@ struct ShumChatsUI: View {
         } empty: {
             emptyState
         }
+        .allowsHitTesting(!searchActive)
+        .accessibilityHidden(searchActive)
         .refreshable { runtime.tick() }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 6) {
@@ -98,8 +109,24 @@ struct ShumChatsUI: View {
             .foregroundStyle(.secondary)
             .padding(8)
         }
+        .background(ShumThemeCanvas().ignoresSafeArea())
+        .overlay {
+            if searchActive {
+                ShumChatSearchOverlay(
+                    runtime: runtime,
+                    query: $searchQuery,
+                    close: {
+                        withAnimation(.easeInOut(duration: 0.3)) { searchActive = false }
+                        searchQuery = ""
+                    },
+                    open: open
+                )
+                .transition(.opacity)
+            }
+        }
         .navigationTitle("Чаты")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(searchActive ? .hidden : .visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -113,8 +140,6 @@ struct ShumChatsUI: View {
                 .accessibilityIdentifier("shum.newMessage")
             }
         }
-        .modifier(ShumChatSearchPresentation(runtime: runtime, query: searchQuery, open: open))
-        .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Поиск")
         .sheet(isPresented: $showsNewMessage) {
             ShumNewMessageSheet(runtime: runtime) { peer in
                 showsNewMessage = false
@@ -125,6 +150,12 @@ struct ShumChatsUI: View {
         }
         .shumOnChange(of: folder) { _, folder in
             if folder == .encounters { runtime.permanent?.markEncountersViewed() }
+        }
+        .onDisappear {
+            // Keep the search layer mounted throughout the push. Clearing it
+            // only after navigation begins avoids a dismiss-then-push jump.
+            searchActive = false
+            searchQuery = ""
         }
         #if DEBUG && targetEnvironment(simulator)
         .onAppear {
@@ -150,7 +181,7 @@ struct ShumChatsUI: View {
     }
 
     private var emptyState: some View {
-        ShumChatEmptyState(folder: folder) {
+        ShumChatEmptyState(folder: folder, visibilityEnabled: coordinator.isScaning) {
             switch folder {
             case .all, .invitations:
                 open(.newChat)
@@ -167,6 +198,7 @@ struct ShumChatsUI: View {
 
 private struct ShumChatEmptyState: View {
     let folder: ShumChatFolder
+    let visibilityEnabled: Bool
     let action: () -> Void
 
     private var accent: Color { .accentColor }
@@ -221,7 +253,7 @@ private struct ShumChatEmptyState: View {
     private var title: String {
         switch folder {
         case .all: "Пока тихо"
-        case .nearby: "Никого рядом"
+        case .nearby: visibilityEnabled ? "Никого рядом" : "Видимость выключена"
         case .unread: "Всё прочитано"
         case .invitations: "Нет приглашений"
         case .encounters: "Пока не встречались"
@@ -231,7 +263,10 @@ private struct ShumChatEmptyState: View {
     private var message: String {
         switch folder {
         case .all: "Новые разговоры появятся здесь."
-        case .nearby: "Поиск поблизости работает\nавтоматически."
+        case .nearby:
+            visibilityEnabled
+                ? "Поиск поблизости работает\nавтоматически."
+                : "Включите видимость в профиле, чтобы находить людей рядом через Bluetooth."
         case .unread: "Новых сообщений пока нет."
         case .invitations: "Новые приглашения появятся здесь."
         case .encounters: "Встречи поблизости сохранятся здесь."
@@ -372,6 +407,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     let entries: [ShumDirectoryEntry]
     let open: (ShumUIRoute) -> Void
     var pinsHeader = false
+    var searchHeader: ((ShumChatHeaderLayout) -> AnyView)? = nil
     @ViewBuilder let header: () -> Header
     @ViewBuilder let empty: () -> Empty
     @State private var selectedPeer: ShumPeer?
@@ -379,7 +415,9 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     @State private var blockRequest: ShumProfileBlockRequest?
     @State private var elevatedPeerIDs: Set<PeerID> = []
     @State private var pinTransitionPeerIDs: Set<PeerID> = []
-    @State private var headerPullOffset: CGFloat = 0
+    @State private var directoryScrollOffset: CGFloat = 0
+
+    @ScaledMetric(relativeTo: .subheadline) private var folderHeight: CGFloat = 44
 
     var body: some View {
         list
@@ -401,7 +439,16 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
 
     private var list: some View {
         List {
-            if !pinsHeader { header() }
+            if pinsHeader {
+                Color.clear
+                    .frame(height: max(44, folderHeight) + 14 + (searchHeader == nil ? 0 : ShumChatHeaderLayout.searchHeight))
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .accessibilityHidden(true)
+            } else {
+                header()
+            }
             rows
         }
         .listStyle(.plain)
@@ -409,13 +456,21 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         .environment(\.defaultMinListRowHeight, 0)
         .modifier(ShumDirectoryScrollInsets())
         .scrollContentBackground(.hidden)
-        .background(ShumThemeCanvas().ignoresSafeArea())
         .scrollDismissesKeyboard(.interactively)
-        .modifier(ShumDirectoryPullOffset(enabled: pinsHeader, offset: $headerPullOffset))
-        .safeAreaInset(edge: .top, spacing: 0) {
+        .modifier(ShumDirectoryScrollTracking(enabled: pinsHeader, offset: $directoryScrollOffset))
+        .overlay(alignment: .top) {
             if pinsHeader {
-                header()
-                    .offset(y: headerPullOffset)
+                let layout = ShumChatHeaderLayout(offset: directoryScrollOffset)
+                VStack(spacing: 0) {
+                    if let searchHeader {
+                        searchHeader(layout)
+                            .frame(height: layout.searchHeight, alignment: .top)
+                            .allowsHitTesting(layout.collapse < 1)
+                    }
+                    header()
+                }
+                .offset(y: layout.pull)
+                .transaction { $0.animation = nil }
             }
         }
         .animation(
@@ -610,30 +665,64 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
 private struct ShumDirectoryScrollInsets: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 17.0, *) {
-            content
-                .contentMargins(.top, 0, for: .scrollContent)
-                .scrollClipDisabled()
+            content.contentMargins(.top, 0, for: .scrollContent)
         } else {
             content
         }
     }
 }
 
-private struct ShumDirectoryPullOffset: ViewModifier {
+private struct ShumDirectoryScrollTracking: ViewModifier {
     let enabled: Bool
     @Binding var offset: CGFloat
 
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *), enabled {
             content.onScrollGeometryChange(for: CGFloat.self) { geometry in
-                max(0, -geometry.contentOffset.y - geometry.contentInsets.top)
+                min(ShumChatHeaderLayout.searchHeight, geometry.contentOffset.y + geometry.contentInsets.top)
             } action: { _, value in
-                // Follow native overscroll; the capsule stays fixed once the
-                // list reaches its normal top inset again.
-                offset = value
+                var transaction = Transaction(animation: nil)
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { offset = value }
             }
+        } else if enabled {
+            content.background(ShumDirectoryLegacyScrollTracking(offset: $offset))
         } else {
             content
+        }
+    }
+}
+
+/// The same header geometry on iOS 16/17, before onScrollGeometryChange.
+private struct ShumDirectoryLegacyScrollTracking: UIViewControllerRepresentable {
+    @Binding var offset: CGFloat
+    func makeUIViewController(context: Context) -> Controller { Controller() }
+    func updateUIViewController(_ controller: Controller, context: Context) {
+        controller.changed = { value in
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { offset = value }
+        }
+    }
+    final class Controller: UIViewController {
+        var changed: ((CGFloat) -> Void)?
+        private weak var scrollView: UIScrollView?
+        private var observation: NSKeyValueObservation?
+        override func loadView() { view = UIView(); view.isUserInteractionEnabled = false }
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            var owner: UIViewController = self
+            while let parent = owner.parent, !(parent is UINavigationController) { owner = parent }
+            guard let scroll = findScroll(in: owner.view), scroll !== scrollView else { return }
+            scrollView = scroll
+            observation = scroll.observe(\.contentOffset, options: [.initial, .new]) { [weak self] scroll, _ in
+                let value = min(ShumChatHeaderLayout.searchHeight, scroll.contentOffset.y + scroll.adjustedContentInset.top)
+                DispatchQueue.main.async { [weak self] in self?.changed?(value) }
+            }
+        }
+        private func findScroll(in view: UIView) -> UIScrollView? {
+            if let scroll = view as? UIScrollView, scroll.bounds.height > 100 { return scroll }
+            return view.subviews.lazy.compactMap { self.findScroll(in: $0) }.first
         }
     }
 }

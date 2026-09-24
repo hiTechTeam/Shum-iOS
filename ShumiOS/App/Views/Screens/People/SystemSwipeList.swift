@@ -573,7 +573,7 @@ where Item: SavedPeopleListItem & Equatable, RowContent: View {
                     rowContent(item, isSaved)
                 }
                     .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color(uiColor: .systemBackground))
+                    .listRowBackground(ShumThemeCanvas())
                     .listRowSeparator(
                         showsRowSeparators ? .visible : .hidden
                     )

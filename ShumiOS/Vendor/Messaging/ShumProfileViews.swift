@@ -123,6 +123,7 @@ struct ShumKeyVerificationView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, 24)
             }
+            .background(ShumThemeCanvas().ignoresSafeArea())
             .navigationTitle("Сверить ключ")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

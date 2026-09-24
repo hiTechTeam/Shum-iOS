@@ -141,6 +141,7 @@ struct ShumSecuritySettingsView: View {
                 }
             }
         }
+        .shumGroupedScreenBackground()
         .fontWeight(.regular)
         .navigationTitle("Безопасность и данные")
         .navigationBarTitleDisplayMode(.inline)

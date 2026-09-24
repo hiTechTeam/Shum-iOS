@@ -52,7 +52,7 @@ struct ProfileDataView: View {
 
     var body: some View {
         ZStack {
-            Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+            ShumThemeCanvas().ignoresSafeArea()
             scrollContent
         }
         .shumOnChange(of: authCodeViewModel.localPhotoURL) { _, value in
@@ -128,6 +128,7 @@ struct ScanningSettingsSheet: View {
                         .textCase(nil)
                 }
             }
+            .shumGroupedScreenBackground()
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

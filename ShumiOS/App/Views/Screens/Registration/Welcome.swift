@@ -9,6 +9,8 @@ struct Welcome: View {
     @State private var importedBackup: Data?
     @State private var showRestore = false
     @State private var showSecuritySetup = false
+    @State private var showPasscodeSetup = false
+    @State private var didRestoreProfile = false
     @State private var importError: String?
 
     private let privacyPolicyURL = URL(string: "shum-legal://privacy")!
@@ -75,6 +77,9 @@ struct Welcome: View {
                 .navigationDestination(isPresented: $showSecuritySetup) {
                     RegistrationSecurityReadyView()
                 }
+                .navigationDestination(isPresented: $showPasscodeSetup) {
+                    RegistrationPasscodeSetupView()
+                }
         }
         .tint(.accentColor)
         .environment(\.openURL, OpenURLAction { url in
@@ -118,10 +123,14 @@ struct Welcome: View {
         }
         .sheet(isPresented: $showRestore, onDismiss: {
             importedBackup = nil
+            if didRestoreProfile {
+                didRestoreProfile = false
+                showPasscodeSetup = true
+            }
         }) {
             if let importedBackup {
                 ShumBackupRestoreView(data: importedBackup) {
-                    showSecuritySetup = true
+                    didRestoreProfile = true
                 }
                 .environmentObject(coordinator)
             }
@@ -136,7 +145,11 @@ struct Welcome: View {
         }
         .task {
             if coordinator.needsSecuritySetup {
-                showSecuritySetup = true
+                if coordinator.needsRestoredPasscodeSetup {
+                    showPasscodeSetup = true
+                } else {
+                    showSecuritySetup = true
+                }
             }
         }
     }

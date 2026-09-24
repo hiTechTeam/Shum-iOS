@@ -188,7 +188,7 @@ struct ProfileOverviewView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased())
+            Text(title)
                 .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(.secondary)
                 .padding(.leading, 16)
@@ -392,6 +392,7 @@ private struct ShumAppearanceSettingsView: View {
                     .textCase(nil)
             }
         }
+        .shumGroupedScreenBackground()
         .navigationTitle("Оформление")
         .navigationBarTitleDisplayMode(.inline)
         .alert(

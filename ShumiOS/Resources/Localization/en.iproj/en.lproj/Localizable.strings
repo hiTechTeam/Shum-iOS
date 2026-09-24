@@ -118,7 +118,7 @@
 "scanningStatusActive" = "Active";
 "scanningStatusInactive" = "Inactive";
 "justTurnScaning" = "Turn on scanning";
-"scanToggleDescription" = "When visibility is on, people nearby can find you and message you without the internet.";
+"scanToggleDescription" = "Visibility works over Bluetooth. When it is on, people nearby can find you and message you without the internet.";
 "turnedOffScaning" = "Scanning is turned off. Enable scanning in the app to see nearby people.";
 "noPeopleNearby" = "Scanning is active. When Shum users are nearby, they will appear on this screen.";
 "scanAlertText" = "Enable scanning in Settings to open the Nearby section.";

@@ -290,7 +290,7 @@ struct ShumQRView: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            ShumThemeCanvas().ignoresSafeArea()
 
             GeometryReader { geometry in
                 ScrollView {
