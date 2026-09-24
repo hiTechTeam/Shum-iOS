@@ -31,6 +31,7 @@ struct ProfilePhotoView: View {
     private func profilePhoto(_ uiImage: UIImage) -> some View {
         Image(uiImage: uiImage)
             .resizable()
+            .interpolation(viewModel.isNoisyPhoto ? .none : .high)
             .scaledToFill()
             .frame(width: imageSize, height: imageSize)
             .clipShape(Circle())
@@ -67,13 +68,14 @@ struct ProfilePhotoView: View {
             ProfilePhotoOptionsSheet(
                 image: viewModel.uiImage,
                 name: name,
+                isNoisyPhoto: Binding(get: { viewModel.isNoisyPhoto }, set: viewModel.setNoisyPhoto),
                 onClose: { showPhotoOptions = false },
                 onCamera: openCamera,
                 onGallery: openGallery,
                 onDelete: deletePhoto
             )
             .presentationDetents([
-                .height(viewModel.uiImage == nil ? 250 : 310)
+                .height(viewModel.uiImage == nil ? 304 : 364)
             ])
             .presentationDragIndicator(.hidden)
         }
@@ -99,6 +101,7 @@ struct ProfilePhotoView: View {
                 FullScreenPhotoView(isPresented: $showPhotoPreview) {
                     Image(uiImage: uiImage)
                         .resizable()
+                        .interpolation(viewModel.isNoisyPhoto ? .none : .high)
                         .scaledToFit()
                 }
             }
@@ -115,6 +118,18 @@ struct ProfilePhotoView: View {
                 }
             }
         }
+        #if DEBUG && targetEnvironment(simulator)
+        .task {
+            if ProcessInfo.processInfo.arguments.contains("-ShumPreviewNoisyPhoto") {
+                if viewModel.uiImage == nil,
+                   let data = ShumAvatarCodec.diagnosticPhoto(seed: 64),
+                   let image = UIImage(data: data) {
+                    viewModel.updateProfileImage(with: image)
+                }
+                showPhotoOptions = true
+            }
+        }
+        #endif
     }
 
     private func openCamera() {
@@ -143,6 +158,7 @@ struct ProfilePhotoView: View {
 private struct ProfilePhotoOptionsSheet: View {
     let image: UIImage?
     let name: String
+    @Binding var isNoisyPhoto: Bool
     let onClose: () -> Void
     let onCamera: () -> Void
     let onGallery: () -> Void
@@ -192,6 +208,24 @@ private struct ProfilePhotoOptionsSheet: View {
                     action: onGallery
                 )
 
+                optionDivider
+
+                Toggle(isOn: $isNoisyPhoto) {
+                    HStack(spacing: 18) {
+                        Image(systemName: "square.grid.3x3.fill")
+                            .font(.system(size: 20, weight: .regular))
+                            .frame(width: 22)
+                        Text("Шумное фото")
+                            .font(.system(size: 16))
+                    }
+                    .foregroundStyle(.primary)
+                }
+                .toggleStyle(.switch)
+                .padding(.horizontal, 18)
+                .frame(height: 54)
+                .disabled(image == nil)
+                .accessibilityIdentifier("profile.noisyPhoto")
+
                 if image != nil {
                     optionDivider
 
@@ -218,6 +252,7 @@ private struct ProfilePhotoOptionsSheet: View {
         if let image {
             Image(uiImage: image)
                 .resizable()
+                .interpolation(isNoisyPhoto ? .none : .high)
                 .scaledToFill()
                 .frame(width: 44, height: 44)
                 .clipShape(Circle())

@@ -98,6 +98,50 @@ enum LocalCardPhoto {
         }
         throw LocalCardError.invalidPhoto
     }
+
+    @MainActor static func noisy(_ original: Data) throws -> Data {
+        guard validate(original), let image = UIImage(data: original) else { throw LocalCardError.invalidPhoto }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let tiny = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 20), format: format).image { context in
+            context.cgContext.interpolationQuality = .high
+            image.draw(in: CGRect(x: 0, y: 0, width: 20, height: 20))
+        }
+        let enlarged = UIGraphicsImageRenderer(size: CGSize(width: 360, height: 360), format: format).image { context in
+            context.cgContext.interpolationQuality = .none
+            tiny.draw(in: CGRect(x: 0, y: 0, width: 360, height: 360))
+        }
+        return try prepare(enlarged)
+    }
+}
+
+/// Local editing information, never included in a transmitted card or profile.
+struct LocalPhotoEditingState: Codable, Equatable {
+    let original: Data
+    let noisyPhotoHash: String
+
+    func isValid(for photoHash: String?) -> Bool {
+        noisyPhotoHash == photoHash && LocalCardPhoto.validHash(noisyPhotoHash)
+            && LocalCardPhoto.validate(original)
+    }
+}
+
+/// Uses the existing manifest keys, so older installations can still read it.
+/// The original photo and the published manifest commit in one atomic write.
+private struct LocalOwnCardRecord: Encodable {
+    let manifest: LocalCardManifest
+    let photoEditing: LocalPhotoEditingState?
+    enum CodingKeys: String, CodingKey { case photoEditing }
+    func encode(to encoder: Encoder) throws {
+        try manifest.encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(photoEditing, forKey: .photoEditing)
+    }
+}
+
+private struct LocalOwnCardExtras: Decodable {
+    let photoEditing: LocalPhotoEditingState?
 }
 
 /// Disk-backed cards. Access is serialized because Core Bluetooth uses its own queue.
@@ -110,6 +154,7 @@ final class LocalCardStore: @unchecked Sendable {
     private let secureStore: SecureStoring
     private let keyName = "shum.local-card.signing-key.v1"
     private var own: LocalCardManifest?
+    private var photoEditing: LocalPhotoEditingState?
     private var peers: [String: LocalCardManifest] = [:]
 
     init(directory: URL? = nil, defaults: UserDefaults = .standard, secureStore: SecureStoring = KeychainStore.shared) {
@@ -125,10 +170,15 @@ final class LocalCardStore: @unchecked Sendable {
 
     private func loadFromDisk() {
         own = nil
+        photoEditing = nil
         peers.removeAll()
         if let data = try? Data(contentsOf: self.directory.appendingPathComponent("own.json")),
            let value = try? JSONDecoder().decode(LocalCardManifest.self, from: data),
-           (try? value.validate()) != nil { own = value }
+           (try? value.validate()) != nil {
+            own = value
+            if let state = try? JSONDecoder().decode(LocalOwnCardExtras.self, from: data).photoEditing,
+               state.isValid(for: value.body.photoHash) { photoEditing = state }
+        }
         if let data = try? Data(contentsOf: self.directory.appendingPathComponent("peers.json")), data.count <= 2 * 1024 * 1024,
            let values = try? JSONDecoder().decode([String: LocalCardManifest].self, from: data) {
             peers = values.filter { $0.key == $0.value.body.id.uuidString.lowercased() && (try? $0.value.validate()) != nil }
@@ -136,6 +186,7 @@ final class LocalCardStore: @unchecked Sendable {
     }
 
     var ownManifest: LocalCardManifest? { lock.withLock { own } }
+    var ownPhotoEditing: LocalPhotoEditingState? { lock.withLock { photoEditing } }
     func photoURL(_ hash: String?) -> URL? {
         lock.withLock {
             guard let hash, LocalCardPhoto.validHash(hash) else { return nil }
@@ -162,7 +213,7 @@ final class LocalCardStore: @unchecked Sendable {
         }
     }
     @discardableResult
-    func saveOwn(name: String, username: String? = nil, bio: String?, photo: Data?) throws -> LocalCardManifest {
+    func saveOwn(name: String, username: String? = nil, bio: String?, photo: Data?, photoEditing newEditing: LocalPhotoEditingState? = nil, preservePhotoEditing: Bool = true) throws -> LocalCardManifest {
         try lock.withLock {
             let normalizedUsername = username.flatMap(LocalCardManifest.username)
             if username != nil && normalizedUsername == nil { throw LocalCardError.invalidProfile }
@@ -181,9 +232,12 @@ final class LocalCardStore: @unchecked Sendable {
             let result = LocalCardManifest(body: body, publicKey: publicKey,
                 signature: try key.signature(for: LocalCardManifest.encodedBody(body)))
             try result.validate()
+            if let newEditing, !newEditing.isValid(for: body.photoHash) { throw LocalCardError.invalidPhoto }
+            let editing = newEditing ?? (preservePhotoEditing ? photoEditing.flatMap { $0.isValid(for: body.photoHash) ? $0 : nil } : nil)
             if let photo { try cachePhoto(photo, hash: body.photoHash!) }
-            try write(result, name: "own.json")
+            try write(LocalOwnCardRecord(manifest: result, photoEditing: editing), name: "own.json")
             own = result
+            photoEditing = editing
             pruneUnreferencedPhotos()
             return result
         }
@@ -223,6 +277,7 @@ final class LocalCardStore: @unchecked Sendable {
                 try FileManager.default.removeItem(at: directory)
             }
             own = nil
+            photoEditing = nil
             peers.removeAll()
         }
     }

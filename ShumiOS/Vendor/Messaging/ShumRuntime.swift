@@ -167,6 +167,11 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             try permanent.add(card, source: "preview")
             try permanent.recordEncounter(card)
             _ = permanent.send(name == "Максим" ? "Буду через десять минут" : "До встречи!", to: card)
+            if name == "Дима", ProcessInfo.processInfo.arguments.contains("-ShumPreviewLongChat") {
+                for index in 1...35 {
+                    _ = permanent.send("Сообщение \(index). Проверяем прокрутку переписки и прозрачность верхней панели.", to: card)
+                }
+            }
             if ProcessInfo.processInfo.arguments.contains("-ShumPreviewBlocked"),
                name == "Аня" || name == "Дима" {
                 try permanent.setBlocked(card, blocked: true)
@@ -436,6 +441,16 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     }
 
     func isLegacyOnly(_ peer: PeerID) -> Bool { peer.id.hasPrefix("legacy-") }
+
+    func chatProtection(for peer: PeerID) -> ShumChatProtectionState {
+        ShumChatProtectionState(
+            isReady: isReady,
+            isArchive: isLegacyOnly(peer),
+            hasRecipientKey: permanent?.card(for: peer) != nil,
+            session: transport.getNoiseSessionState(for: peer),
+            hasSessionKey: transport.noiseSessionPublicKeyData(for: peer) != nil
+        )
+    }
 
     func conversation(_ peer: PeerID) -> [ShumMessage] {
         messages.filter { $0.peerID == peer }

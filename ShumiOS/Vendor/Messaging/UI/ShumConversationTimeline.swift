@@ -47,6 +47,7 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     let command: ShumTimelineCommand?
     var contentInsets: EdgeInsets = EdgeInsets()
     let bottomChanged: (Bool) -> Void
+    let topCoveredChanged: (Bool) -> Void
     let tapped: () -> Void
     @ViewBuilder let row: (Int, CGFloat) -> Row
 
@@ -56,6 +57,7 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: ShumTimelineController, context: Context) {
         controller.bottomChanged = bottomChanged
+        controller.topCoveredChanged = topCoveredChanged
         controller.tapped = tapped
         controller.viewportInsets = UIEdgeInsets(top: contentInsets.top, left: 0, bottom: contentInsets.bottom + 10, right: 0)
         controller.update(items: items, appearanceKey: "\(appearanceKey)-\(environment.dynamicTypeSize)-\(environment.locale.identifier)", command: command) { index, width in
@@ -77,6 +79,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     private var adjusting = false
     private var followsBottom = true
     private var reportedBottom: Bool?
+    private var reportedTopCovered: Bool?
     private var lastCommand: UUID?
     private var pendingCommand: ShumTimelineCommand?
     private var highlightWork: DispatchWorkItem?
@@ -85,6 +88,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     private var backgroundObserver: NSObjectProtocol?
     var viewportInsets = UIEdgeInsets(top: 0, left: 0, bottom: 10, right: 0)
     var bottomChanged: (Bool) -> Void = { _ in }
+    var topCoveredChanged: (Bool) -> Void = { _ in }
     var tapped: () -> Void = {}
 
     init(storageKey: String) {
@@ -103,7 +107,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         table.automaticallyAdjustsScrollIndicatorInsets = false
         table.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 10, right: 0)
         table.rowHeight = UITableView.automaticDimension
-        table.estimatedRowHeight = 0
+        table.estimatedRowHeight = 72
         table.selfSizingInvalidation = .disabled
         if #available(iOS 16.4, *) { measurementHost.safeAreaRegions = [] }
         table.sectionHeaderTopPadding = 0
@@ -173,7 +177,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
             }
             performPendingCommand()
         }
-        reportBottom()
+        reportScrollEdges()
     }
 
     /// SwiftUI already shortens this controller when the keyboard is visible.
@@ -233,7 +237,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         }
         adjusting = false
         view.setNeedsLayout()
-        if !leaving { performPendingCommand(); reportBottom() }
+        if !leaving { performPendingCommand(); reportScrollEdges() }
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { items.count }
@@ -258,11 +262,15 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         )
     }
 
+    func tableView(_ tableView: UITableView, estimatedHeightForRowAt indexPath: IndexPath) -> CGFloat {
+        heights[items[indexPath.row].id] ?? 72
+    }
+
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
         let id = items[indexPath.row].id
         if let height = heights[id] { return height }
-        // Resolve a row's height synchronously. An asynchronous self-sizing pass
-        // must not move the viewport after a push or after extracting a bubble.
+        // Resolve only rows UIKit needs to display. Estimates keep opening a long
+        // conversation from synchronously building every SwiftUI bubble.
         measurementHost.rootView = row(indexPath.row, tableView.bounds.width)
         let size = measurementHost.sizeThatFits(in: CGSize(width: max(1, tableView.bounds.width),
                                                          height: .greatestFiniteMagnitude))
@@ -274,7 +282,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         guard restored, !adjusting, !leaving else { return }
         followsBottom = distanceFromBottom < 4
-        reportBottom()
+        reportScrollEdges()
         saveWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.persistPosition() }
         saveWork = work
@@ -291,7 +299,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
             adjusting = true
             moveToBottom(animated: false)
             adjusting = false
-            reportBottom()
+            reportScrollEdges()
         }
         persistPosition()
     }
@@ -380,8 +388,13 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    private func reportBottom() {
+    private func reportScrollEdges() {
         guard restored else { return }
+        let topCovered = !items.isEmpty && table.contentOffset.y + table.contentInset.top > 1
+        if reportedTopCovered != topCovered {
+            reportedTopCovered = topCovered
+            DispatchQueue.main.async { [weak self] in self?.topCoveredChanged(topCovered) }
+        }
         let nearBottom = distanceFromBottom < 80
         guard reportedBottom != nearBottom else { return }
         reportedBottom = nearBottom

@@ -1,21 +1,99 @@
 import SwiftUI
 
 struct InfoSheetView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @State private var legalDocument: ShumLegalDocument?
+
+    private var version: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        return Inc.Info.version.localized + " " + version + (build.map { " (\($0))" } ?? "")
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                ShumLogoMark().frame(width: 70, height: 70)
-                Text("Shum").font(.largeTitle.bold())
-                Text("Общение рядом и на расстоянии").font(.title3)
-                Text("Находите людей рядом через Bluetooth или добавляйте по QR-коду. Постоянный контакт позволяет продолжить переписку через интернет, когда вы далеко друг от друга.")
-                Text("Сообщения защищены сквозным шифрованием. Bluetooth и Nostr передают зашифрованные данные; история хранится зашифрованной на этом iPhone. Ключи остаются на устройстве.")
-                Text("Когда приложение закрыто, iOS может приостановить соединение. Откройте Shum для получения ожидающих сообщений. Очередь хранит неотправленные сообщения до 24 часов.").foregroundStyle(.secondary)
-                Text("Экспериментальная версия").font(.headline)
-                Text("Пока доступны текстовые сообщения. Есть очередь отправки, подтверждения доставки и прочтения. Звонки и вложения ещё не подключены.").foregroundStyle(.secondary)
-                Text("Транспорт и шифрование: BitChat / Shum, Unlicense.").font(.footnote).foregroundStyle(.secondary)
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack(spacing: 16) {
+                        ShumLogoMark().frame(width: 56, height: 56)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Shum").font(.largeTitle.bold())
+                            Text(version).font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("about_tagline".localized).font(.title3.weight(.semibold))
+                        Text("about_summary".localized)
+                        Text("about_connection".localized)
+                        Text("about_protection".localized)
+                    }
+                    .font(.body)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    VStack(spacing: 0) {
+                        ProfileMenuButton(position: .top, action: { legalDocument = .privacy }) {
+                            row(Inc.Onboarding.privacyPolicy.localized, symbol: "hand.raised")
+                        }
+                        .accessibilityIdentifier("shum.about.privacy")
+                        Divider().padding(.leading, 52)
+                        ProfileMenuButton(position: .middle, action: { legalDocument = .terms }) {
+                            row(Inc.Onboarding.termsOfService.localized, symbol: "doc.text")
+                        }
+                        .accessibilityIdentifier("shum.about.terms")
+                        Divider().padding(.leading, 52)
+                        ProfileMenuButton(position: .bottom, action: {
+                            if let url = URL(string: Links.supportIssues) { openURL(url) }
+                        }) {
+                            row("about_support".localized, symbol: "lifepreserver", external: true)
+                        }
+                        .accessibilityIdentifier("shum.about.support")
+                        .accessibilityHint("about_support_hint".localized)
+                    }
+                    .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("about_delivery_note".localized)
+                        Text("about_credits".localized)
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: 560, alignment: .leading)
+                .frame(maxWidth: .infinity)
+                .padding(24)
+            }
+            .background(ShumThemeCanvas().ignoresSafeArea())
+            .navigationTitle(Inc.Info.aboutApp.localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(Inc.Common.close.localized) { dismiss() }
+                }
+            }
+            .sheet(item: $legalDocument) { document in
+                NavigationStack {
+                    ShumLegalDocumentView(document: document)
+                }
+            }
         }
-        .background(ShumThemeCanvas().ignoresSafeArea())
-        .navigationTitle("О Shum")
+    }
+
+    private func row(_ title: String, symbol: String, external: Bool = false) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol).frame(width: 24)
+            Text(title).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            Image(systemName: external ? "arrow.up.right" : "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }

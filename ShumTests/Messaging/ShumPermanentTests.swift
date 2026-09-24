@@ -221,6 +221,57 @@ struct ShumPermanentTests {
         #expect(a.service.encounterHistory.isEmpty)
         #expect(!a.service.isPinned(b.card, in: "encounters"))
     }
+    @Test func openingUnreadHistoryCommitsReceiptsOnceAndReopeningDoesNotRepublish() throws {
+        let clock = Clock(), a = try Node("Аня", clock: clock)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".enc")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let b = try Node("Борис", clock: clock, url: url)
+        try allowBoth(a, b, clock: clock)
+        connect(a, b, clock: clock)
+        for index in 0..<8 {
+            clock.date.addTimeInterval(2)
+            #expect(a.service.send("Unread \(index)", to: b.card))
+            drain([a, b])
+        }
+        #expect(b.store.state.messages.filter(\.unread).count == 8)
+        let before = b.service.revision
+        b.service.open(a.card)
+        #expect(b.service.revision == before + 1)
+        #expect(b.store.state.messages.allSatisfy { !$0.unread })
+        #expect(b.store.state.receipts.filter { $0.receipt.read }.count == 8)
+        for receipt in b.store.state.receipts where receipt.receipt.read {
+            try receipt.receipt.validate(at: clock.date)
+        }
+        let restored = try ShumConversationStore(ownerID: b.card.id, key: b.identity.storageKey, url: url)
+        #expect(restored.state.messages.allSatisfy { !$0.unread })
+        #expect(restored.state.receipts.filter { $0.receipt.read }.count == 8)
+        b.service.open(nil)
+        b.service.open(a.card)
+        #expect(b.service.revision == before + 1)
+    }
+
+    @Test func failedReadSaveKeepsUnreadMessagesAndDeliveryReceipts() throws {
+        let clock = Clock(), a = try Node("Аня", clock: clock)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let b = try Node("Борис", clock: clock, url: directory.appendingPathComponent("state.enc"))
+        try allowBoth(a, b, clock: clock)
+        connect(a, b, clock: clock)
+        #expect(a.service.send("Unread", to: b.card))
+        drain([a, b])
+        let before = b.service.revision
+        // Make this test database's parent unwritable as a directory.
+        try FileManager.default.removeItem(at: directory)
+        try Data().write(to: directory)
+        var reportedFailure = false
+        b.service.onError = { _ in reportedFailure = true }
+        b.service.open(a.card)
+        #expect(reportedFailure)
+        #expect(b.service.revision == before)
+        #expect(b.store.state.messages.first?.unread == true)
+        #expect(b.store.state.receipts.allSatisfy { !$0.receipt.read })
+    }
+
     @Test func directDeliveryReadAndSessionChange() throws {
         let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
         try allowBoth(a, b, clock: clock)

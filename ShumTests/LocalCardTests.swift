@@ -171,6 +171,91 @@ struct LocalCardTests {
         let second = try store.saveOwn(name: "Alice", username: "alice_11", bio: nil, photo: nil)
         #expect(first.body.id != second.body.id)
     }
+
+    private func detailedPhoto() -> UIImage {
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1
+        return UIGraphicsImageRenderer(size: CGSize(width: 360, height: 360), format: format).image { ctx in
+            for x in 0..<360 {
+                UIColor(red: CGFloat(x) / 360, green: 0.3, blue: 1 - CGFloat(x) / 360, alpha: 1).setFill()
+                ctx.fill(CGRect(x: x, y: 0, width: 1, height: 360))
+            }
+        }
+    }
+
+    @Test func noisyPhotoSurvivesRelaunchAndNameEditWithoutSharingOriginal() throws {
+        let (store, url, defaults) = makeStore()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let original = try LocalCardPhoto.prepare(detailedPhoto())
+        try store.saveOwn(name: "Alice", bio: nil, photo: original)
+        let model = ProfilePhotoViewModel(store: store, usesLegacyCache: false)
+        model.setNoisyPhoto(true)
+        #expect(model.isNoisyPhoto && !model.saveFailed)
+        let noisy = try #require(model.preparedPhoto)
+        #expect(noisy != original && LocalCardPhoto.validate(noisy))
+        let updated = try store.saveOwn(name: "Alice 2", bio: "Привет", photo: noisy)
+        let wireCard = try JSONEncoder().encode(updated)
+        #expect(!String(decoding: wireCard, as: UTF8.self).contains("photoEditing"))
+        #expect(!String(decoding: wireCard, as: UTF8.self).contains(original.base64EncodedString()))
+
+        let relaunched = LocalCardStore(directory: url, defaults: defaults, secureStore: CardMemoryKeychain())
+        let restored = ProfilePhotoViewModel(store: relaunched, usesLegacyCache: false)
+        #expect(restored.isNoisyPhoto && restored.preparedPhoto == noisy)
+        restored.setNoisyPhoto(false)
+        #expect(restored.preparedPhoto == original)
+        #expect(relaunched.ownPhotoEditing == nil)
+        restored.setNoisyPhoto(true)
+        #expect(restored.preparedPhoto == noisy) // No accumulated pixelation or recompression.
+    }
+
+    @Test func replacementAndDeletionUpdateNoisyPhotoSource() throws {
+        let (store, url, _) = makeStore()
+        defer { try? FileManager.default.removeItem(at: url) }
+        try store.saveOwn(name: "Alice", bio: nil, photo: nil)
+        let model = ProfilePhotoViewModel(store: store, usesLegacyCache: false)
+        model.setNoisyPhoto(true)
+        #expect(!model.isNoisyPhoto)
+        model.updateProfileImage(with: detailedPhoto())
+        model.setNoisyPhoto(true)
+        let replacement = try #require(UIImage(data: photo(.red)))
+        model.updateProfileImage(with: replacement)
+        #expect(model.isNoisyPhoto)
+        model.setNoisyPhoto(false)
+        #expect(model.preparedPhoto == (try LocalCardPhoto.prepare(replacement)))
+        #expect(store.ownPhotoEditing == nil)
+        model.setNoisyPhoto(true)
+        model.updateProfileImage(with: nil)
+        #expect(model.uiImage == nil && model.preparedPhoto == nil && !model.isNoisyPhoto)
+        #expect(store.ownPhotoEditing == nil && store.ownManifest?.body.photoHash == nil)
+    }
+
+    @Test func registrationKeepsReversibleNoisyPhoto() throws {
+        let (store, url, _) = makeStore()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let draft = ProfilePhotoViewModel(store: store, usesLegacyCache: false)
+        draft.updateProfileImage(with: detailedPhoto())
+        let original = draft.preparedPhoto
+        draft.setNoisyPhoto(true)
+        let profile = LocalProfileViewModel(store: store)
+        #expect(profile.save(name: "Alice", photo: draft.preparedPhoto, photoEditing: draft.photoEditing))
+        let saved = ProfilePhotoViewModel(store: store, usesLegacyCache: false)
+        #expect(saved.isNoisyPhoto)
+        saved.setNoisyPhoto(false)
+        #expect(saved.preparedPhoto == original)
+    }
+
+    @Test func noisyPhotoHasFlatBlocksRatherThanBlur() throws {
+        let data = try LocalCardPhoto.noisy(LocalCardPhoto.prepare(detailedPhoto()))
+        let cg = try #require(UIImage(data: data)?.cgImage)
+        #expect(cg.width == 360 && cg.height == 360)
+        var pixels = [UInt8](repeating: 0, count: 360 * 360 * 4)
+        let context = try #require(CGContext(data: &pixels, width: 360, height: 360,
+            bitsPerComponent: 8, bytesPerRow: 360 * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: 360, height: 360))
+        func red(_ x: Int) -> Int { Int(pixels[(180 * 360 + x) * 4]) }
+        #expect(abs(red(5) - red(12)) <= 3)
+        #expect(abs(red(5) - red(30)) >= 8)
+    }
 }
 
 private final class CardMemoryKeychain: SecureStoring {

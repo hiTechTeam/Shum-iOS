@@ -247,3 +247,13 @@
 "local.delete.title" = "Delete profile?";
 "local.delete.action" = "Delete profile";
 "local.delete.message" = "Your profile and chat history will be removed from this iPhone. Messages on other people’s devices will remain.";
+
+/* About Shum */
+"about_tagline" = "Stay connected, nearby and far away";
+"about_summary" = "Shum helps you meet people nearby and stay in touch. Start with just a name, without a phone number or email address.";
+"about_connection" = "Nearby messages travel over Bluetooth without internet. Independent relays deliver messages over the internet. Add contacts by QR code and keep the conversation going wherever you are.";
+"about_protection" = "Conversations are end-to-end encrypted, and history is stored encrypted on your device. Compare keys in the chat profile to verify who you are talking to.";
+"about_support" = "Support on GitHub";
+"about_support_hint" = "Report a bug or suggest an improvement in GitHub Issues";
+"about_delivery_note" = "Text messaging is currently available. Background delivery depends on iOS: open Shum to receive pending messages. Outgoing messages stay queued for up to 24 hours.";
+"about_credits" = "Transport and encryption: BitChat / Shum. Unlicense.";

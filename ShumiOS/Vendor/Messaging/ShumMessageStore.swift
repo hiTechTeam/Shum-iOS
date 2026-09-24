@@ -415,7 +415,13 @@ final class ShumMessageStore: ObservableObject {
     func open(_ card: ShumContactCard?) {
         guard !retired else { return }
         activeContact = card?.id
-        if let card { do { try contacts.conversation(with: card, now: now()); changed() } catch { fail(error) } }
+        if let card {
+            do {
+                let count = state.conversations.count
+                try contacts.conversation(with: card, now: now())
+                if state.conversations.count != count { changed() }
+            } catch { fail(error) }
+        }
         markRead()
     }
     func updateAvatar(_ avatar: Data?, for peer: PeerID) {
@@ -890,12 +896,23 @@ final class ShumMessageStore: ObservableObject {
             return
         }
         guard message.envelope.expiresAt > Int64(now().timeIntervalSince1970 * 1000) else { return }
+        try acceptReceipt(signedReceipt(for: message, read: read))
+    }
+    private func signedReceipt(for message: ShumStoredMessage, read: Bool) throws -> ShumReceipt {
         var receipt = ShumReceipt(envelopeID: message.id, digest: message.envelope.digest, sender: ownCard, destination: message.envelope.sender, read: read, timestamp: Int64(now().timeIntervalSince1970 * 1000), expiresAt: message.envelope.expiresAt)
         guard let signature = transport.noiseSignData(try receipt.signingBytes()) else { throw ShumFailure.unavailableIdentity }
         receipt.signature = signature
-        try acceptReceipt(receipt)
+        return receipt
     }
     private func acceptReceipt(_ receipt: ShumReceipt) throws {
+        var next = state
+        guard try applyReceipt(receipt, to: &next) else { return }
+        try store.transaction { $0 = next }
+        changed()
+    }
+    /// Reuse the same validation for network receipts and a batch of local reads.
+    @discardableResult
+    private func applyReceipt(_ receipt: ShumReceipt, to state: inout ShumDatabase) throws -> Bool {
         try receipt.validate(at: now())
         if let i = state.messages.firstIndex(where: { $0.id == receipt.envelopeID && $0.outgoing }) {
             let message = state.messages[i]
@@ -903,7 +920,7 @@ final class ShumMessageStore: ObservableObject {
                   message.envelope.recipient.signingKey == receipt.sender.signingKey, receipt.destination.id == ownCard.id else { throw ShumFailure.invalidMessage }
         }
         let old = state.receipts.first(where: { $0.receipt.key == receipt.key })
-        if let old, old.receipt.read || !receipt.read { return }
+        if let old, old.receipt.read || !receipt.read { return false }
         // Only the message's recipient may issue a deletion proof. Carry ACKs
         // along the original carrier graph, not arbitrary unsolicited proofs.
         let original = state.messages.first(where: { $0.id == receipt.envelopeID })?.envelope
@@ -912,34 +929,50 @@ final class ShumMessageStore: ObservableObject {
             guard original.digest == receipt.digest,
                   original.recipient.id == receipt.sender.id,
                   original.recipient.signingKey == receipt.sender.signingKey,
-                  original.sender.id == receipt.destination.id else { return }
+                  original.sender.id == receipt.destination.id else { return false }
         } else {
             // A verified delivery proof can authenticate a later read upgrade
             // after this courier has already removed the encrypted message.
             guard let previous = old?.receipt, previous.digest == receipt.digest,
                   previous.sender.signingKey == receipt.sender.signingKey,
-                  previous.destination.id == receipt.destination.id else { return }
+                  previous.destination.id == receipt.destination.id else { return false }
         }
-        guard state.receipts.count < 2000 || old != nil else { return }
-        try store.transaction { state in
-            state.receipts.removeAll { $0.receipt.key == receipt.key }
-            state.receipts.append(ShumStoredReceipt(receipt: receipt))
-            state.relay.removeAll { $0.envelope.id == receipt.envelopeID && $0.envelope.digest == receipt.digest && $0.envelope.recipient.id == receipt.sender.id && $0.envelope.recipient.signingKey == receipt.sender.signingKey }
-            if let i = state.messages.firstIndex(where: { $0.id == receipt.envelopeID && $0.outgoing }) {
-                if state.messages[i].status != .read { state.messages[i].status = receipt.read ? .read : .delivered }
-                state.messages[i].deliveredAt = Date(timeIntervalSince1970: Double(receipt.timestamp) / 1000)
-                if receipt.read { state.messages[i].readAt = state.messages[i].deliveredAt }
-            }
-        }; changed()
+        guard state.receipts.count < 2000 || old != nil else { return false }
+        state.receipts.removeAll { $0.receipt.key == receipt.key }
+        state.receipts.append(ShumStoredReceipt(receipt: receipt))
+        state.relay.removeAll { $0.envelope.id == receipt.envelopeID && $0.envelope.digest == receipt.digest && $0.envelope.recipient.id == receipt.sender.id && $0.envelope.recipient.signingKey == receipt.sender.signingKey }
+        if let i = state.messages.firstIndex(where: { $0.id == receipt.envelopeID && $0.outgoing }) {
+            if state.messages[i].status != .read { state.messages[i].status = receipt.read ? .read : .delivered }
+            state.messages[i].deliveredAt = Date(timeIntervalSince1970: Double(receipt.timestamp) / 1000)
+            if receipt.read { state.messages[i].readAt = state.messages[i].deliveredAt }
+        }
+        return true
     }
     private func markRead() {
         guard foreground, let activeContact else { return }
-        for message in state.messages where !message.outgoing && message.envelope.sender.id == activeContact && message.unread {
-            do {
-                try store.transaction { state in if let i = state.messages.firstIndex(where: { $0.id == message.id }) { state.messages[i].unread = false } }
-                try makeReceipt(for: message, read: true); changed()
-            } catch { fail(error); return }
+        let unread = state.messages.filter {
+            !$0.outgoing && $0.envelope.sender.id == activeContact && $0.unread
         }
+        guard !unread.isEmpty else { return }
+        do {
+            var next = state
+            for message in unread {
+                if message.envelope.expiresAt > Int64(now().timeIntervalSince1970 * 1000),
+                   !next.receipts.contains(where: {
+                       $0.receipt.envelopeID == message.id && $0.receipt.digest == message.envelope.digest && $0.receipt.read
+                   }) {
+                    try applyReceipt(signedReceipt(for: message, read: true), to: &next)
+                }
+            }
+            let readIDs = Set(unread.map(\.id))
+            for index in next.messages.indices where readIDs.contains(next.messages[index].id) {
+                next.messages[index].unread = false
+            }
+            // Commit the read flags and signed receipts together, once per chat.
+            // A failed save leaves both the unread state and outgoing ACKs intact.
+            try store.transaction { $0 = next }
+            changed()
+        } catch { fail(error) }
     }
     private func routeInvitationControls() {
         guard !retired else { return }

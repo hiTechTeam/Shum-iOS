@@ -6,6 +6,11 @@ import BitFoundation
 // Current Shum chat list, adapted to Shum's navigation and palette.
 enum ShumUIRoute: Hashable {
     case conversation(ShumPeer), newChat, requests, ownQR
+
+    var containsMessages: Bool {
+        if case .conversation = self { return true }
+        return false
+    }
 }
 
 private struct ShumDirectoryRowID: Hashable {
@@ -47,8 +52,6 @@ struct ShumChatsUI: View {
     let open: (ShumUIRoute) -> Void
     @State private var folder: ShumChatFolder = .all
     @State private var showsNewMessage = false
-    @State private var searchActive = false
-    @State private var searchQuery = ""
 
     private var entries: [ShumDirectoryEntry] { runtime.directoryEntries }
     private var visible: [ShumDirectoryEntry] {
@@ -81,12 +84,7 @@ struct ShumChatsUI: View {
     var body: some View {
         ShumDirectoryList(
             runtime: runtime, folder: folder, entries: visible, open: open,
-            pinsHeader: true,
-            searchHeader: { layout in
-                AnyView(ShumChatSearchBar(layout: layout) {
-                    withAnimation(.easeInOut(duration: 0.3)) { searchActive = true }
-                })
-            }
+            pinsHeader: true
         ) {
             ShumChatFolderBar(selection: $folder, entries: entries)
                 .padding(.horizontal, 16)
@@ -95,8 +93,6 @@ struct ShumChatsUI: View {
         } empty: {
             emptyState
         }
-        .allowsHitTesting(!searchActive)
-        .accessibilityHidden(searchActive)
         .refreshable { runtime.tick() }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 6) {
@@ -110,23 +106,8 @@ struct ShumChatsUI: View {
             .padding(8)
         }
         .background(ShumThemeCanvas().ignoresSafeArea())
-        .overlay {
-            if searchActive {
-                ShumChatSearchOverlay(
-                    runtime: runtime,
-                    query: $searchQuery,
-                    close: {
-                        withAnimation(.easeInOut(duration: 0.3)) { searchActive = false }
-                        searchQuery = ""
-                    },
-                    open: open
-                )
-                .transition(.opacity)
-            }
-        }
         .navigationTitle("Чаты")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(searchActive ? .hidden : .visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -142,21 +123,16 @@ struct ShumChatsUI: View {
         }
         .sheet(isPresented: $showsNewMessage) {
             ShumNewMessageSheet(runtime: runtime) { peer in
+                guard showsNewMessage else { return }
                 showsNewMessage = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-                    open(.conversation(peer))
-                }
+                open(.conversation(peer))
             }
+            .shumAllowsScreenshots()
         }
         .shumOnChange(of: folder) { _, folder in
             if folder == .encounters { runtime.permanent?.markEncountersViewed() }
         }
-        .onDisappear {
-            // Keep the search layer mounted throughout the push. Clearing it
-            // only after navigation begins avoids a dismiss-then-push jump.
-            searchActive = false
-            searchQuery = ""
-        }
+        .shumHiddenFromSystemCapture(true)
         #if DEBUG && targetEnvironment(simulator)
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("-ShumPreviewPeople") { folder = .nearby }
@@ -265,7 +241,7 @@ private struct ShumChatEmptyState: View {
         case .all: "Новые разговоры появятся здесь."
         case .nearby:
             visibilityEnabled
-                ? "Поиск поблизости работает\nавтоматически."
+                ? "Видимость по Bluetooth работает автоматически."
                 : "Включите видимость в профиле, чтобы находить людей рядом через Bluetooth."
         case .unread: "Новых сообщений пока нет."
         case .invitations: "Новые приглашения появятся здесь."
@@ -399,7 +375,7 @@ struct ShumPixelEmptyIcon: View {
     }
 }
 
-/// Both the directory and search use the same rows, swipe actions and confirmation presentation.
+/// Chat directory rows, swipe actions and confirmation presentation.
 struct ShumDirectoryList<Header: View, Empty: View>: View {
     @Environment(\.shumThemePalette) private var palette
     @ObservedObject var runtime: ShumRuntime
@@ -407,7 +383,6 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     let entries: [ShumDirectoryEntry]
     let open: (ShumUIRoute) -> Void
     var pinsHeader = false
-    var searchHeader: ((ShumChatHeaderLayout) -> AnyView)? = nil
     @ViewBuilder let header: () -> Header
     @ViewBuilder let empty: () -> Empty
     @State private var selectedPeer: ShumPeer?
@@ -416,7 +391,6 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     @State private var elevatedPeerIDs: Set<PeerID> = []
     @State private var pinTransitionPeerIDs: Set<PeerID> = []
     @State private var directoryScrollOffset: CGFloat = 0
-
     @ScaledMetric(relativeTo: .subheadline) private var folderHeight: CGFloat = 44
 
     var body: some View {
@@ -441,7 +415,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         List {
             if pinsHeader {
                 Color.clear
-                    .frame(height: max(44, folderHeight) + 14 + (searchHeader == nil ? 0 : ShumChatHeaderLayout.searchHeight))
+                    .frame(height: max(44, folderHeight) + 14)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -460,17 +434,9 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         .modifier(ShumDirectoryScrollTracking(enabled: pinsHeader, offset: $directoryScrollOffset))
         .overlay(alignment: .top) {
             if pinsHeader {
-                let layout = ShumChatHeaderLayout(offset: directoryScrollOffset)
-                VStack(spacing: 0) {
-                    if let searchHeader {
-                        searchHeader(layout)
-                            .frame(height: layout.searchHeight, alignment: .top)
-                            .allowsHitTesting(layout.collapse < 1)
-                    }
-                    header()
-                }
-                .offset(y: layout.pull)
-                .transaction { $0.animation = nil }
+                header()
+                    .offset(y: max(0, -directoryScrollOffset))
+                    .transaction { $0.animation = nil }
             }
         }
         .animation(
@@ -502,7 +468,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
                 : nil,
             hidesPersistentSurfaceAfterSwipe: false
         ) {
-            ShumDirectoryPressButton(action: { activate(entry) }) {
+            ShumRowPressButton(action: { activate(entry) }) {
                 ShumDirectoryRow(
                     runtime: runtime,
                     entry: entry,
@@ -679,7 +645,7 @@ private struct ShumDirectoryScrollTracking: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *), enabled {
             content.onScrollGeometryChange(for: CGFloat.self) { geometry in
-                min(ShumChatHeaderLayout.searchHeight, geometry.contentOffset.y + geometry.contentInsets.top)
+                min(0, geometry.contentOffset.y + geometry.contentInsets.top)
             } action: { _, value in
                 var transaction = Transaction(animation: nil)
                 transaction.disablesAnimations = true
@@ -716,7 +682,7 @@ private struct ShumDirectoryLegacyScrollTracking: UIViewControllerRepresentable 
             guard let scroll = findScroll(in: owner.view), scroll !== scrollView else { return }
             scrollView = scroll
             observation = scroll.observe(\.contentOffset, options: [.initial, .new]) { [weak self] scroll, _ in
-                let value = min(ShumChatHeaderLayout.searchHeight, scroll.contentOffset.y + scroll.adjustedContentInset.top)
+                let value = min(0, scroll.contentOffset.y + scroll.adjustedContentInset.top)
                 DispatchQueue.main.async { [weak self] in self?.changed?(value) }
             }
         }
@@ -724,58 +690,6 @@ private struct ShumDirectoryLegacyScrollTracking: UIViewControllerRepresentable 
             if let scroll = view as? UIScrollView, scroll.bounds.height > 100 { return scroll }
             return view.subviews.lazy.compactMap { self.findScroll(in: $0) }.first
         }
-    }
-}
-
-private struct ShumDirectoryPressButton<Label: View>: View {
-    let action: () -> Void
-    let label: Label
-
-    @State private var maintainsPressedHighlight = false
-
-    init(
-        action: @escaping () -> Void,
-        @ViewBuilder label: () -> Label
-    ) {
-        self.action = action
-        self.label = label()
-    }
-
-    var body: some View {
-        Button {
-            maintainsPressedHighlight = true
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                action()
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    maintainsPressedHighlight = false
-                }
-            }
-        } label: {
-            label
-        }
-        .buttonStyle(
-            ShumDirectoryPressedButtonStyle(
-                maintainsHighlight: maintainsPressedHighlight
-            )
-        )
-    }
-}
-
-private struct ShumDirectoryPressedButtonStyle: ButtonStyle {
-    let maintainsHighlight: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        let isHighlighted = configuration.isPressed || maintainsHighlight
-
-        configuration.label
-            .background(
-                isHighlighted
-                    ? Color(uiColor: .secondarySystemFill)
-                    : .clear
-            )
-            .animation(.easeOut(duration: 0.12), value: isHighlighted)
     }
 }
 

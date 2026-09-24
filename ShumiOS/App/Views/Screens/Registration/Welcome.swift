@@ -10,7 +10,6 @@ struct Welcome: View {
     @State private var showRestore = false
     @State private var showSecuritySetup = false
     @State private var showPasscodeSetup = false
-    @State private var didRestoreProfile = false
     @State private var importError: String?
 
     private let privacyPolicyURL = URL(string: "shum-legal://privacy")!
@@ -121,16 +120,19 @@ struct Welcome: View {
                 importError = error.localizedDescription
             }
         }
-        .sheet(isPresented: $showRestore, onDismiss: {
+        .fullScreenCover(isPresented: $showRestore, onDismiss: {
             importedBackup = nil
-            if didRestoreProfile {
-                didRestoreProfile = false
-                showPasscodeSetup = true
-            }
         }) {
             if let importedBackup {
                 ShumBackupRestoreView(data: importedBackup) {
-                    didRestoreProfile = true
+                    // Prepare the destination underneath the cover. Dismissing
+                    // reveals code setup directly, without flashing Welcome.
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        showPasscodeSetup = true
+                    }
+                    showRestore = false
                 }
                 .environmentObject(coordinator)
             }

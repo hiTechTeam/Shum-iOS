@@ -1050,15 +1050,15 @@ struct ProfileSheetView: View {
                     )
                     let maxSize = availableSize * 0.9 * 1.04
 
-                    Group {
+                    ShumCardAvatarLayout(size: maxSize, availableWidth: geo.size.width) { size in
                         if let imageURL {
                             profilePhoto(
                                 imageURL: imageURL,
-                                size: maxSize
+                                size: size
                             )
                                 .onTapGesture(perform: openPhotoPreview)
                         } else {
-                            profilePlaceholder(size: maxSize)
+                            profilePlaceholder(size: size)
                         }
                     }
                     .frame(

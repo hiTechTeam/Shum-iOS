@@ -224,10 +224,10 @@ private struct ShumPeopleRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Button {
+            ShumRowPressButton(action: {
                 UIImpactFeedbackGenerator(style: .soft).impactOccurred()
                 cardAction()
-            } label: {
+            }) {
                 HStack(spacing: 12) {
                     ShumProfileAvatar(
                         name: runtime.displayName(peer),
@@ -278,6 +278,27 @@ struct ShumProfileAvatar: View {
     }
 }
 
+struct ShumCardAvatarLayout<Content: View>: View {
+    let size: CGFloat
+    let availableWidth: CGFloat
+    @ViewBuilder var content: (CGFloat) -> Content
+
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            content(size)
+        } else {
+            // A sheet drag changes its proposed height. Keep the photo, mask and
+            // initials at one layout size, and scale the composed avatar together.
+            let referenceSize = max(1, availableWidth)
+            content(referenceSize)
+                .compositingGroup()
+                .scaleEffect(size / referenceSize)
+                .frame(width: size, height: size)
+                .transaction { $0.animation = nil }
+        }
+    }
+}
+
 private struct ShumDistanceLabel: View {
     @ObservedObject var runtime: ShumRuntime
     let peer: ShumPeer
@@ -300,15 +321,18 @@ private struct ShumDistanceLabel: View {
 }
 
 struct ShumPeerCard: View {
+    @Environment(\.shumCaptureProtectionEnabled) private var protectsCapture
     @ObservedObject var runtime: ShumRuntime
     let peer: ShumPeer
     let profileCard: ShumContactCard?
     var lastMetAt: Date?
     var verifiesIdentity: Bool
+    let sharesCaptureCover: Bool
     let write: () -> Void
 
     @State private var showPhoto = false
     @State private var showVerification = false
+    @State private var isOpeningChat = false
 
     init(
         runtime: ShumRuntime,
@@ -316,6 +340,7 @@ struct ShumPeerCard: View {
         card: ShumContactCard? = nil,
         lastMetAt: Date? = nil,
         verifiesIdentity: Bool = false,
+        sharesCaptureCover: Bool = false,
         write: @escaping () -> Void
     ) {
         self.runtime = runtime
@@ -323,6 +348,7 @@ struct ShumPeerCard: View {
         self.profileCard = card
         self.lastMetAt = lastMetAt
         self.verifiesIdentity = verifiesIdentity
+        self.sharesCaptureCover = sharesCaptureCover
         self.write = write
     }
 
@@ -341,11 +367,13 @@ struct ShumPeerCard: View {
                         let availableSize = max(0, min(photoGeometry.size.width, photoGeometry.size.height) - 24)
                         let photoSize = availableSize * 0.9 * 1.04
 
-                        ShumProfileAvatar(
-                            name: card?.name ?? runtime.displayName(peer),
-                            size: photoSize,
-                            imageData: avatar
-                        )
+                        ShumCardAvatarLayout(size: photoSize, availableWidth: photoGeometry.size.width) { size in
+                            ShumProfileAvatar(
+                                name: card?.name ?? runtime.displayName(peer),
+                                size: size,
+                                imageData: avatar
+                            )
+                        }
                             .contentShape(Circle())
                             .onTapGesture(perform: openPhoto)
                             .accessibilityLabel("Посмотреть фото")
@@ -376,7 +404,11 @@ struct ShumPeerCard: View {
                                     .frame(width: contentWidth)
                             }
                         } else {
-                            RegistrationPrimaryButton(title: "Написать", action: write)
+                            RegistrationPrimaryButton(title: "Написать") {
+                                guard !isOpeningChat else { return }
+                                isOpeningChat = true
+                                write()
+                            }
                                 .frame(width: contentWidth)
                         }
                     }
@@ -394,11 +426,13 @@ struct ShumPeerCard: View {
                 .padding(.top, 8)
             }
         }
+        .shumProtectFromCapture(protectsCapture, showsCover: !sharesCaptureCover)
         .fullScreenCover(isPresented: $showPhoto) {
             if let avatar, let image = UIImage(data: avatar) {
                 FullScreenPhotoView(isPresented: $showPhoto) {
                     Image(uiImage: image).resizable().scaledToFit()
                 }
+                .shumProtectFromCapture(protectsCapture)
             }
         }
         .sheet(isPresented: $showVerification) {
@@ -916,6 +950,7 @@ private struct ShumEncounterContextPreview: View {
 }
 
 private struct ShumProfileBlockSheetModifier: ViewModifier {
+    @Environment(\.shumCaptureProtectionEnabled) private var protectsCapture
     @ObservedObject var runtime: ShumRuntime
     @Binding var request: ShumProfileBlockRequest?
     @State private var activeRequest: ShumProfileBlockRequest?
@@ -929,6 +964,7 @@ private struct ShumProfileBlockSheetModifier: ViewModifier {
                     onClose: { activeRequest = nil },
                     onBlock: { block(pending) }
                 )
+                .shumProtectFromCapture(protectsCapture)
                 .presentationDetents([.height(195)])
                 .presentationDragIndicator(.hidden)
             }
@@ -1051,10 +1087,10 @@ private struct ShumStoredPersonRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Button {
+            ShumRowPressButton(action: {
                 UIImpactFeedbackGenerator(style: .soft).impactOccurred()
                 cardAction()
-            } label: {
+            }) {
                 HStack(spacing: 12) {
                     ShumProfileAvatar(
                         name: runtime.displayName(peer),

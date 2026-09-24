@@ -15,24 +15,28 @@ struct MainContentView: View {
             NavigationStack(path: $contactsPath) {
                 ShumContactsUI(runtime: chat) { route in
                     if case .newChat = route { showContacts = true }
-                    else { contactsPath.append(route) }
+                    else { contactsPath.push(route) }
                 }
                 .navigationDestination(for: ShumUIRoute.self) { route in
-                    ShumDestinationUI(runtime: chat, route: route) { contactsPath.append($0) }
+                    ShumDestinationUI(runtime: chat, route: route) { contactsPath.push($0) }
                 }
             }
+            .modifier(ShumPeerCardPresentationHost(runtime: chat))
+            .shumProtectFromCapture(contactsPath.last?.containsMessages == true)
             .toolbar(contactsPath.isEmpty ? .visible : .hidden, for: .tabBar)
             .tabItem { tabLabel("Контакты", image: "PixelPeople", tab: 0) }.tag(0)
 
             NavigationStack(path: $chatsPath) {
                 ShumChatsUI(runtime: chat) { route in
                     if case .newChat = route { showContacts = true }
-                    else { chatsPath.append(route) }
+                    else { chatsPath.push(route) }
                 }
                 .navigationDestination(for: ShumUIRoute.self) { route in
-                    ShumDestinationUI(runtime: chat, route: route) { chatsPath.append($0) }
+                    ShumDestinationUI(runtime: chat, route: route) { chatsPath.push($0) }
                 }
             }
+            .modifier(ShumPeerCardPresentationHost(runtime: chat))
+            .shumProtectFromCapture(chatsPath.last?.containsMessages ?? true)
             .toolbar(chatsPath.isEmpty ? .visible : .hidden, for: .tabBar)
             .tabItem { tabLabel("Чаты", image: "PixelChats", tab: 1) }
                 .badge(chat.directoryEntries.reduce(0) {
@@ -43,12 +47,14 @@ struct MainContentView: View {
                     chat: chat,
                     authCodeViewModel: coordinator.authCodeViewModel,
                     photoViewModel: profilePhotoViewModel,
-                    open: { profilePath.append($0) }
+                    open: { profilePath.push($0) }
                 )
                 .navigationDestination(for: ShumProfileRoute.self) { route in
                     profileDestination(route)
                 }
             }
+            .modifier(ShumPeerCardPresentationHost(runtime: chat))
+            .shumProtectFromCapture(protectsProfileConversation)
             .toolbar(
                 profilePath.last?.hidesTabBar == true ? .hidden : .visible,
                 for: .tabBar
@@ -70,15 +76,16 @@ struct MainContentView: View {
                 showContacts = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                     if sourceTab == 0 {
-                        contactsPath.append(.ownQR)
+                        contactsPath.push(.ownQR)
                     } else {
-                        chatsPath.append(.ownQR)
+                        chatsPath.push(.ownQR)
                     }
                 }
             }) { peer in
                 showContacts = false; selectedTab = 1
-                chatsPath.append(.conversation(peer))
+                chatsPath.push(.conversation(peer))
             }
+            .shumAllowsScreenshots()
         }
         .sheet(item: $coordinator.invitation) { card in
             ShumContactConfirmation(
@@ -88,6 +95,7 @@ struct MainContentView: View {
             ) {
                 openScannedContact(card)
             }
+            .shumAllowsScreenshots()
         }
         .alert("Shum", isPresented: Binding(get: { chat.error != nil }, set: { if !$0 { chat.error = nil } })) {
             Button("Понятно") { chat.error = nil }
@@ -114,6 +122,11 @@ struct MainContentView: View {
             }
         }
         #endif
+    }
+
+    private var protectsProfileConversation: Bool {
+        if case .conversation = profilePath.last { return true }
+        return false
     }
 
     private func tabLabel(_ title: String, image name: String, tab: Int) -> some View {
@@ -163,7 +176,7 @@ struct MainContentView: View {
         switch route {
         case .encounters:
             ShumEncounterHistoryView(runtime: chat) { peer in
-                profilePath.append(.conversation(peer))
+                profilePath.push(.conversation(peer))
             }
         case .conversation(let peer):
             ShumConversationView(runtime: chat, peer: peer)
@@ -192,7 +205,9 @@ struct MainContentView: View {
         }
         coordinator.invitation = nil
         selectedTab = 1
-        chatsPath.append(.conversation(peer))
+        // An explicitly accepted invitation can replace a chat already open
+        // from a notification/deep link; it is not another tap on its source list.
+        chatsPath = [.conversation(peer)]
     }
 
 }

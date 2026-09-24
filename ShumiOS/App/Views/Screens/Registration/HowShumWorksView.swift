@@ -81,6 +81,7 @@ struct RegistrationSecurityCreationView: View {
 
     let name: String
     let photo: Data?
+    var photoEditing: LocalPhotoEditingState? = nil
 
     @State private var stage = 0
     @State private var animationStartedAt = Date()
@@ -244,7 +245,8 @@ struct RegistrationSecurityCreationView: View {
 
             let saved = coordinator.authCodeViewModel.save(
                 name: name,
-                photo: photo
+                photo: photo,
+                photoEditing: photoEditing
             )
             let prepared = saved && coordinator.prepareRegistrationSecurity()
 
@@ -867,7 +869,7 @@ private struct ShumOnboardingPage: View {
 }
 
 struct ShumOnboardingPixelIllustration: View {
-    enum Kind { case nearby, mesh, courier, network, identity, security, passcode, faceID }
+    enum Kind { case nearby, mesh, courier, network, identity, security, passcode, faceID, success, failure }
 
     let kind: Kind
     private let unit: CGFloat = 4
@@ -968,7 +970,29 @@ struct ShumOnboardingPixelIllustration: View {
                 + line(from: Pixel(12, 8), to: Pixel(12, 12))
                 + line(from: Pixel(9, 15), to: Pixel(15, 15))
             )
+        case .success:
+            return Set(
+                resultRing
+                + line(from: Pixel(7, 9), to: Pixel(10, 12))
+                + line(from: Pixel(10, 12), to: Pixel(16, 6))
+            )
+        case .failure:
+            return Set(
+                resultRing
+                + line(from: Pixel(11, 5), to: Pixel(11, 10))
+                + line(from: Pixel(12, 5), to: Pixel(12, 10))
+                + [Pixel(11, 13), Pixel(12, 13)]
+            )
         }
+    }
+
+    private var resultRing: [Pixel] {
+        let upperHalf = line(from: Pixel(8, 1), to: Pixel(15, 1))
+            + [Pixel(6, 2), Pixel(7, 2), Pixel(16, 2), Pixel(17, 2)]
+            + [Pixel(5, 3), Pixel(18, 3), Pixel(4, 4), Pixel(19, 4)]
+            + line(from: Pixel(3, 5), to: Pixel(3, 8))
+            + line(from: Pixel(20, 5), to: Pixel(20, 8))
+        return upperHalf + upperHalf.map { Pixel($0.x, 17 - $0.y) }
     }
 
     private func shield(x: Int, y: Int) -> [Pixel] {

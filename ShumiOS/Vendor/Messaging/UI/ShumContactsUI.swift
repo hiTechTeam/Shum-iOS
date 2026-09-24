@@ -145,9 +145,7 @@ struct ShumContactsUI: View {
             .accessibilityIdentifier("shum.addContact")
         } else {
             Button { openNewContact() } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(.white)
+                legacyAddContactIcon
                     .frame(width: 36, height: 36)
                     .background(palette.accent, in: Circle())
             }
@@ -155,6 +153,21 @@ struct ShumContactsUI: View {
             .accessibilityLabel("Новый контакт")
             .accessibilityIdentifier("shum.addContact")
         }
+    }
+
+    private var legacyAddContactIcon: some View {
+        // Draw the glyph directly: older navigation bars can recolor SF
+        // Symbols even when their image or foreground style specifies white.
+        Canvas { context, size in
+            var path = Path()
+            path.move(to: CGPoint(x: 1, y: size.height / 2))
+            path.addLine(to: CGPoint(x: size.width - 1, y: size.height / 2))
+            path.move(to: CGPoint(x: size.width / 2, y: 1))
+            path.addLine(to: CGPoint(x: size.width / 2, y: size.height - 1))
+            context.stroke(path, with: .color(.white), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+        }
+        .frame(width: 17, height: 17)
+        .accessibilityHidden(true)
     }
 
     private func openNewContact() {
@@ -171,7 +184,7 @@ struct ShumContactsUI: View {
             name: contact.card.name,
             lastConnected: contact.addedAt
         )
-        return ShumContactPressButton(action: { open(.conversation(peer)) }) {
+        return ShumRowPressButton(action: { open(.conversation(peer)) }) {
             HStack(spacing: 12) {
                 ShumProfileAvatar(
                     name: runtime.displayName(peer),
@@ -447,7 +460,7 @@ struct ShumNewMessageSheet: View {
             name: contact.card.name,
             lastConnected: contact.addedAt
         )
-        return ShumContactPressButton(action: { select(peer) }) {
+        return ShumRowPressButton(action: { select(peer) }) {
             HStack(spacing: 12) {
                 ShumProfileAvatar(
                     name: runtime.displayName(peer),
@@ -504,43 +517,6 @@ struct ShumNewMessageSheet: View {
         formatter.dateTimeStyle = .numeric
         return formatter
     }()
-}
-
-private struct ShumContactPressButton<Label: View>: View {
-    let action: () -> Void
-    let label: Label
-    @State private var keepsHighlight = false
-
-    init(action: @escaping () -> Void, @ViewBuilder label: () -> Label) {
-        self.action = action
-        self.label = label()
-    }
-
-    var body: some View {
-        Button {
-            keepsHighlight = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                action()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    keepsHighlight = false
-                }
-            }
-        } label: {
-            label
-        }
-        .buttonStyle(ShumContactPressedStyle(keepsHighlight: keepsHighlight))
-    }
-}
-
-private struct ShumContactPressedStyle: ButtonStyle {
-    let keepsHighlight: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        let highlighted = configuration.isPressed || keepsHighlight
-        configuration.label
-            .background(highlighted ? Color(uiColor: .secondarySystemFill) : .clear)
-            .animation(.easeOut(duration: 0.12), value: highlighted)
-    }
 }
 
 private struct ContactAlphabetIndex: View {

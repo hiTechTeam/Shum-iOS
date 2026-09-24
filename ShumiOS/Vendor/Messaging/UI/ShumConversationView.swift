@@ -38,14 +38,18 @@ private struct ShumComposerSurface: ViewModifier {
 
 struct ShumConversationView: View {
     @Environment(\.shumThemePalette) private var palette
+    @Environment(\.shumPresentPeerCard) private var presentPeerCard
     @ObservedObject var runtime: ShumRuntime
     let peer: ShumPeer
-    @State private var draft = ""
+    @State private var draft = ShumComposerDraft()
+    @State private var refocusAfterSend = false
     @State private var showPeerProfile = false
+    @State private var showProtection = false
     @State private var replyingTo: ShumMessage?
     @State private var typingPauseTask: Task<Void, Never>?
     @FocusState private var inputFocused: Bool
     @State private var atBottom = true
+    @State private var hasContentUnderProtectionBanner = false
     @State private var scrollCommand: ShumTimelineCommand?
     private var messages: [ShumMessage] { runtime.conversation(peer.id) }
     private var name: String { runtime.displayName(peer) }
@@ -70,6 +74,7 @@ struct ShumConversationView: View {
                     command: scrollCommand,
                     contentInsets: geometry.safeAreaInsets,
                     bottomChanged: { atBottom = $0 },
+                    topCoveredChanged: { hasContentUnderProtectionBanner = $0 },
                     tapped: { inputFocused = false }
                 ) { index, width in
                     messageRow(
@@ -101,6 +106,15 @@ struct ShumConversationView: View {
             runtime.openConversation(nil)
         }
         .background(ShumChatCanvas().ignoresSafeArea())
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ShumChatProtectionBanner(
+                state: runtime.chatProtection(for: peer.id),
+                hasContentUnderneath: hasContentUnderProtectionBanner
+            ) {
+                inputFocused = false
+                showProtection = true
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -122,12 +136,14 @@ struct ShumConversationView: View {
                     }
                 }.accessibilityElement(children: .combine)
                     .animation(.easeInOut(duration: 0.18), value: runtime.isTyping(peer.id))
+                    .shumHiddenFromSystemCapture(true)
             }
             ShumAvatarToolbar {
-                Button { inputFocused = false; showPeerProfile = true } label: {
+                Button(action: openPeerProfile) {
                     ShumAvatar(name: name, size: 34, imageData: runtime.profile(for: peer.id)?.avatar)
                         .frame(width: 44, height: 44).contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityLabel("Профиль собеседника")
+                    .shumHiddenFromSystemCapture(true)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -157,12 +173,34 @@ struct ShumConversationView: View {
                 }
             }
         }
-        .sheet(isPresented: $showPeerProfile) {
+        .sheet(isPresented: $showProtection) {
+            ShumChatProtectionSheet(runtime: runtime, peer: peer)
+        }
+        .sheet(isPresented: Binding(
+            get: { showPeerProfile && presentPeerCard == nil },
+            set: { showPeerProfile = $0 }
+        )) {
             ShumPeerProfileSheet(runtime: runtime, peer: peer)
         }
         .onChange(of: showPeerProfile) { visible in
             runtime.openConversation(!visible && runtime.chatPeers.contains(where: { $0.id == peer.id }) ? peer.id : nil)
         }
+        // Keep message rows protected even during a navigation pop transition.
+        .shumHiddenFromSystemCapture(true)
+        #if DEBUG && targetEnvironment(simulator)
+        .task {
+            if ProcessInfo.processInfo.arguments.contains("-ShumPreviewPeerCard") {
+                openPeerProfile()
+            }
+        }
+        #endif
+    }
+
+    private func openPeerProfile() {
+        guard !showPeerProfile else { return }
+        inputFocused = false
+        showPeerProfile = true
+        presentPeerCard?(peer) { showPeerProfile = false }
     }
 
     private var presenceText: String {
@@ -276,26 +314,30 @@ struct ShumConversationView: View {
             }
 
             HStack(alignment: .bottom, spacing: 4) {
-                TextField("Сообщение", text: $draft, prompt: Text("Сообщение").foregroundColor(Color(.secondaryLabel)), axis: .vertical)
+                TextField("Сообщение", text: draftBinding, prompt: Text("Сообщение").foregroundColor(Color(.secondaryLabel)), axis: .vertical)
                     .font(.body).lineLimit(1...5).focused($inputFocused)
                     .textFieldStyle(.plain)
                     .padding(.leading, 16).padding(.vertical, 12)
                     .accessibilityIdentifier("shum.messageInput")
-                    #if DEBUG && targetEnvironment(simulator)
-                    .task {
-                        if ProcessInfo.processInfo.arguments.contains("-ShumPreviewKeyboard") {
-                            draft = "Да, всё отлично"
-                            inputFocused = true
-                        }
+                    .id(draft.revision)
+                    .task(id: draft.revision) {
+                        guard refocusAfterSend else { return }
+                        refocusAfterSend = false
+                        inputFocused = true
                     }
-                    #endif
-                    .onChange(of: draft) { value in updateTyping(for: value) }
+                    .transaction { $0.animation = nil }
+                    .onChange(of: draft.text) { value in updateTyping(for: value) }
                 Button {
                     guard canSend else { return }
-                    if runtime.send(draft, to: peer.id, replyingTo: replyingTo) {
+                    if runtime.send(draft.text, to: peer.id, replyingTo: replyingTo) {
                         typingPauseTask?.cancel()
                         runtime.setTyping(false, for: peer.id)
-                        draft = ""
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            refocusAfterSend = inputFocused
+                            draft.clearAfterSending()
+                        }
                         scrollCommand = ShumTimelineCommand(target: .bottom)
                         withAnimation(.easeOut(duration: 0.16)) { self.replyingTo = nil }
                     }
@@ -319,6 +361,14 @@ struct ShumConversationView: View {
         .modifier(ShumComposerSurface())
         .animation(.easeOut(duration: 0.15), value: canSend)
         .animation(.easeOut(duration: 0.18), value: replyingTo?.id)
+        #if DEBUG && targetEnvironment(simulator)
+        .task {
+            if ProcessInfo.processInfo.arguments.contains("-ShumPreviewKeyboard") {
+                draft.update("Да, всё отлично", from: draft.revision)
+                inputFocused = true
+            }
+        }
+        #endif
     }
 
     private var invitationDecisionControls: some View {
@@ -380,8 +430,16 @@ struct ShumConversationView: View {
 
     private var canSend: Bool {
         invitationPhase == .accepted
-            && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && (runtime.permanent != nil || runtime.isNearby(peer.id))
+    }
+
+    private var draftBinding: Binding<String> {
+        let revision = draft.revision
+        return Binding(
+            get: { draft.text },
+            set: { draft.update($0, from: revision) }
+        )
     }
 
     private func beginReply(to message: ShumMessage) {

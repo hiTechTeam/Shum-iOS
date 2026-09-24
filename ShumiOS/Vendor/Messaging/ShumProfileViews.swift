@@ -14,6 +14,7 @@ struct ShumPeerProfileSheet: View {
             peer: peer,
             verifiesIdentity: true
         ) {}
+            .environment(\.shumCaptureProtectionEnabled, true)
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
     }
@@ -142,6 +143,7 @@ struct ShumKeyVerificationView: View {
                 verify(scannedCard)
             }
         }
+        .shumAllowsScreenshots()
     }
 
     private var formattedFingerprint: String {

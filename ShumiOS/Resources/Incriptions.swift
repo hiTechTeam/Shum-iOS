@@ -434,6 +434,7 @@ struct IncLogos {
 }
 
 struct Links {
+    static let supportIssues = "https://github.com/hiTechTeam/Shum-iOS/issues"
     
     
     static let privacyPolicy = "https://github.com/hiTechTeam/Shum-iOS/blob/main/PRIVACY.md"

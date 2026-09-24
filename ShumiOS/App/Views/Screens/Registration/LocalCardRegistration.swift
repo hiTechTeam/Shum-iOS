@@ -49,7 +49,8 @@ private struct LocalCardPhotoRegistration: View {
         .navigationDestination(isPresented: $showSecurityCreation) {
             RegistrationSecurityCreationView(
                 name: name,
-                photo: photoViewModel.preparedPhoto
+                photo: photoViewModel.preparedPhoto,
+                photoEditing: photoViewModel.photoEditing
             )
         }
     }

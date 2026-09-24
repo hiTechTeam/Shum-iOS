@@ -1,37 +1,18 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct ShumBackupDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.shumBackup, .data] }
-
-    let data: Data
-
-    init(data: Data) {
-        self.data = data
-    }
-
-    init(configuration: ReadConfiguration) throws {
-        guard let data = configuration.file.regularFileContents else {
-            throw ShumBackupError.invalidBackup
-        }
-        self.data = data
-    }
-
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: data)
-    }
-}
-
 struct ShumBackupCreateView: View {
     var onCreated: (Date) -> Void = { _ in }
 
     @State private var password = ""
     @State private var confirmation = ""
-    @State private var isCreating = false
-    @State private var document: ShumBackupDocument?
-    @State private var isExporting = false
-    @State private var message: String?
-    @State private var showSuccess = false
+    @State private var isPreparing = false
+    @State private var isChoosingDestination = false
+    @State private var preparedFile: URL?
+    @State private var didSaveFile = false
+    @State private var showsProgress = false
+    @State private var progress: ShumBackupProgressState = .working
+    @State private var completedAt: Date?
 
     private var validPassword: Bool {
         password.count >= ShumBackupService.minimumPasswordLength
@@ -39,6 +20,47 @@ struct ShumBackupCreateView: View {
     }
 
     var body: some View {
+        Group {
+            if showsProgress {
+                ShumBackupProgressView(operation: .create, state: progress) {
+                    showsProgress = false
+                    if let completedAt {
+                        onCreated(completedAt)
+                        self.completedAt = nil
+                    }
+                }
+                .toolbar(.hidden, for: .navigationBar, .tabBar)
+                .navigationBarBackButtonHidden()
+                .task {
+                    guard progress.isWorking else { return }
+                    // Start the minimum animation time when its view appears,
+                    // after the system Save sheet has finished dismissing.
+                    await ShumBackupProgressState.finishAnimation(since: .now)
+                    guard !Task.isCancelled else { return }
+                    progress = .success
+                }
+            } else {
+                backupForm
+            }
+        }
+        .interactiveDismissDisabled(isPreparing || showsProgress)
+        .sheet(isPresented: $isChoosingDestination, onDismiss: {
+            if let preparedFile {
+                try? FileManager.default.removeItem(at: preparedFile.deletingLastPathComponent())
+            }
+            preparedFile = nil
+            if didSaveFile { finishSaving() }
+        }) {
+            if let preparedFile {
+                ShumBackupSavePicker(file: preparedFile) { saved in
+                    didSaveFile = saved
+                    isChoosingDestination = false
+                }
+            }
+        }
+    }
+
+    private var backupForm: some View {
         Form {
             Section {
                 SecureField("Пароль резервной копии", text: $password)
@@ -65,65 +87,26 @@ struct ShumBackupCreateView: View {
             }
 
             Section {
-                Button(action: createBackup) {
+                Button(action: prepareBackup) {
                     HStack {
                         Spacer()
-                        if isCreating {
+                        if isPreparing {
                             ProgressView()
+                            Text("Подготавливаем файл…")
                         } else {
                             Text("Создать резервную копию")
                         }
                         Spacer()
                     }
                 }
-                .disabled(!validPassword || confirmation != password || isCreating)
-            }
-
-            if let message {
-                Section {
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                .disabled(!validPassword || confirmation != password || isPreparing || showsProgress)
             }
         }
         .shumGroupedScreenBackground()
         .fontWeight(.regular)
         .navigationTitle("Резервная копия")
         .navigationBarTitleDisplayMode(.inline)
-        .fullScreenCover(isPresented: $isCreating, onDismiss: {
-            if document != nil { isExporting = true }
-        }) {
-            ShumBackupProgressView(operation: .create)
-        }
-        .fileExporter(
-            isPresented: $isExporting,
-            document: document,
-            contentType: .shumBackup,
-            defaultFilename: defaultFilename
-        ) { result in
-            switch result {
-            case .success:
-                let date = Date()
-                UserDefaults.standard.set(
-                    date.timeIntervalSince1970,
-                    forKey: ShumBackupService.lastBackupDateKey
-                )
-                password = ""
-                confirmation = ""
-                document = nil
-                onCreated(date)
-                showSuccess = true
-            case .failure(let error):
-                message = error.localizedDescription
-                document = nil
-            }
-        }
-        .alert("Копия создана", isPresented: $showSuccess) {
-            Button("Готово", role: .cancel) { }
-        } message: {
-            Text("Храните файл и пароль отдельно. Shum не сможет восстановить забытый пароль.")
-        }
+        .navigationBarBackButtonHidden(isPreparing)
     }
 
     private func backupItem(_ title: String, systemImage: String) -> some View {
@@ -133,7 +116,7 @@ struct ShumBackupCreateView: View {
         } icon: {
             Image(systemName: systemImage)
                 .symbolRenderingMode(.monochrome)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.primary)
         }
     }
 
@@ -143,26 +126,82 @@ struct ShumBackupCreateView: View {
         return "Shum-\(formatter.string(from: Date())).shumbackup"
     }
 
-    private func createBackup() {
-        guard validPassword, password == confirmation, !isCreating else { return }
-        message = nil
-        isCreating = true
+    private func prepareBackup() {
+        guard validPassword, password == confirmation, !isPreparing, !showsProgress else { return }
+        isPreparing = true
+        didSaveFile = false
+        completedAt = nil
         let backupPassword = password
-        Task {
+        let filename = defaultFilename
+        Task { @MainActor in
             do {
-                try? await Task.sleep(for: .milliseconds(80))
-                let startedAt = ContinuousClock.now
                 let data = try await ShumBackupService.shared.create(password: backupPassword)
-                let elapsed = startedAt.duration(to: .now)
-                if elapsed < .milliseconds(1_250) {
-                    try? await Task.sleep(for: .milliseconds(1_250) - elapsed)
-                }
-                document = ShumBackupDocument(data: data)
-                isCreating = false
+                preparedFile = try await Task.detached(priority: .userInitiated) {
+                    let folder = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("ShumBackup-\(UUID().uuidString)", isDirectory: true)
+                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                    do {
+                        return try ShumBackupFileWriter.save(data, in: folder, filename: filename)
+                    } catch {
+                        try? FileManager.default.removeItem(at: folder)
+                        throw error
+                    }
+                }.value
+                isPreparing = false
+                isChoosingDestination = true
             } catch {
-                isCreating = false
-                message = error.localizedDescription
+                isPreparing = false
+                progress = .failure(error.localizedDescription)
+                showsProgress = true
             }
+        }
+    }
+
+    private func finishSaving() {
+        // Export completion is the only success signal; opening or cancelling
+        // the destination picker must never record a completed backup.
+        didSaveFile = false
+        let date = Date()
+        UserDefaults.standard.set(
+            date.timeIntervalSince1970,
+            forKey: ShumBackupService.lastBackupDateKey
+        )
+        password = ""
+        confirmation = ""
+        completedAt = date
+        progress = .working
+        showsProgress = true
+    }
+}
+
+/// Export mode provides the system Save action, destination and filename UI.
+/// Only an already encrypted file is handed to the system document picker.
+private struct ShumBackupSavePicker: UIViewControllerRepresentable {
+    let file: URL
+    let onSaved: (Bool) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onSaved: onSaved) }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forExporting: [file], asCopy: true)
+        picker.delegate = context.coordinator
+        picker.shouldShowFileExtensions = true
+        picker.title = "Сохранить резервную копию"
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) { }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onSaved: (Bool) -> Void
+        init(onSaved: @escaping (Bool) -> Void) { self.onSaved = onSaved }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            onSaved(!urls.isEmpty)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            onSaved(false)
         }
     }
 }
@@ -174,9 +213,9 @@ struct ShumBackupRestoreView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var coordinator: AppCoordinator
     @State private var password = ""
-    @State private var isRestoring = false
-    @State private var restoredSuccessfully = false
-    @State private var message: String?
+    @State private var showsProgress = false
+    @State private var progress: ShumBackupProgressState = .working
+    @State private var hasInstalledBackup = false
 
     private var metadata: ShumBackupMetadata? {
         try? ShumBackupService.shared.metadata(for: data)
@@ -184,103 +223,119 @@ struct ShumBackupRestoreView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    LabeledContent("Профиль", value: metadata?.profileName ?? "Неизвестно")
-                    if let date = metadata?.createdAt {
-                        LabeledContent("Создана") {
-                            Text(date.formatted(date: .abbreviated, time: .shortened))
-                                .foregroundStyle(.secondary)
-                        }
+            if showsProgress {
+                ShumBackupProgressView(operation: .restore, state: progress) {
+                    if case .success = progress {
+                        onRestored()
+                    } else if hasInstalledBackup {
+                        restore()
+                    } else {
+                        showsProgress = false
                     }
-                } header: {
-                    Text("Резервная копия Shum")
                 }
+                .toolbar(.hidden, for: .navigationBar)
+            } else {
+                restoreForm
+            }
+        }
+        .interactiveDismissDisabled(showsProgress)
+    }
 
-                Section {
-                    SecureField("Пароль резервной копии", text: $password)
-                        .textContentType(.password)
-                        .onSubmit(restore)
-                } footer: {
-                    Text("Пароль проверяется только на этом устройстве и никуда не отправляется.")
-                }
-
-                Section {
-                    Button(action: restore) {
-                        HStack {
-                            Spacer()
-                            if isRestoring {
-                                ProgressView()
-                            } else {
-                                Text("Восстановить профиль")
-                            }
-                            Spacer()
-                        }
-                    }
-                    .disabled(
-                        password.count < ShumBackupService.minimumPasswordLength
-                            || isRestoring
-                            || metadata == nil
-                    )
-                }
-
-                if let message {
-                    Section {
-                        Text(message)
-                            .font(.footnote)
+    private var restoreForm: some View {
+        Form {
+            Section {
+                LabeledContent("Профиль", value: metadata?.profileName ?? "Неизвестно")
+                if let date = metadata?.createdAt {
+                    LabeledContent("Создана") {
+                        Text(date.formatted(date: .abbreviated, time: .shortened))
                             .foregroundStyle(.secondary)
                     }
                 }
+            } header: {
+                Text("Резервная копия Shum")
             }
-            .shumGroupedScreenBackground()
-            .fontWeight(.regular)
-            .navigationTitle("Восстановление")
-            .navigationBarTitleDisplayMode(.inline)
-            .fullScreenCover(isPresented: $isRestoring, onDismiss: {
-                if restoredSuccessfully {
-                    restoredSuccessfully = false
-                    onRestored()
-                    dismiss()
-                }
-            }) {
-                ShumBackupProgressView(operation: .restore)
+
+            Section {
+                SecureField("Пароль резервной копии", text: $password)
+                    .textContentType(.password)
+                    .onSubmit(restore)
+            } footer: {
+                Text("Пароль проверяется только на этом устройстве и никуда не отправляется.")
             }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Отмена") { dismiss() }
+
+            Section {
+                Button(action: restore) {
+                    HStack {
+                        Spacer()
+                        Text("Восстановить профиль")
+                        Spacer()
+                    }
                 }
+                .disabled(
+                    password.count < ShumBackupService.minimumPasswordLength
+                        || metadata == nil
+                )
+            }
+        }
+        .shumGroupedScreenBackground()
+        .fontWeight(.regular)
+        .navigationTitle("Восстановление")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Отмена") { dismiss() }
             }
         }
     }
 
     private func restore() {
         guard password.count >= ShumBackupService.minimumPasswordLength,
-              !isRestoring else { return }
-        message = nil
-        isRestoring = true
+              metadata != nil else { return }
+        if showsProgress, case .working = progress { return }
+        progress = .working
+        showsProgress = true
         let backupPassword = password
-        Task {
+        Task { @MainActor in
+            let startedAt = ContinuousClock.now
+            let result: ShumBackupProgressState
             do {
-                try? await Task.sleep(for: .milliseconds(80))
-                let startedAt = ContinuousClock.now
-                _ = try await ShumBackupService.shared.restore(
-                    data: data,
-                    password: backupPassword
-                )
+                // If installing succeeded but opening the profile failed, retry
+                // that last step without attempting to overwrite the profile.
+                if !hasInstalledBackup {
+                    _ = try await ShumBackupService.shared.restore(
+                        data: data,
+                        password: backupPassword
+                    )
+                    hasInstalledBackup = true
+                }
                 guard coordinator.prepareRestoredProfileForSecurity() else {
                     throw ShumBackupError.couldNotSave
                 }
-                let elapsed = startedAt.duration(to: .now)
-                if elapsed < .milliseconds(1_250) {
-                    try? await Task.sleep(for: .milliseconds(1_250) - elapsed)
-                }
                 password = ""
-                restoredSuccessfully = true
-                isRestoring = false
+                result = .success
             } catch {
-                isRestoring = false
-                message = error.localizedDescription
+                result = .failure(error.localizedDescription)
             }
+            await ShumBackupProgressState.finishAnimation(since: startedAt)
+            progress = result
+        }
+    }
+}
+
+enum ShumBackupProgressState {
+    case working
+    case success
+    case failure(String)
+
+    var isWorking: Bool {
+        if case .working = self { return true }
+        return false
+    }
+
+    static func finishAnimation(since startedAt: ContinuousClock.Instant) async {
+        let elapsed = startedAt.duration(to: .now)
+        if elapsed < .milliseconds(1_250) {
+            try? await Task.sleep(for: .milliseconds(1_250) - elapsed)
         }
     }
 }
@@ -291,6 +346,8 @@ private struct ShumBackupProgressView: View {
     @Environment(\.shumThemePalette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let operation: Operation
+    let state: ShumBackupProgressState
+    let onContinue: () -> Void
     @State private var startedAt = Date()
 
     var body: some View {
@@ -298,14 +355,14 @@ private struct ShumBackupProgressView: View {
             ShumThemeCanvas().ignoresSafeArea()
 
             VStack(spacing: 18) {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion || !state.isWorking)) { timeline in
                     let time = timeline.date.timeIntervalSince(startedAt)
                     ZStack {
-                        ShumOnboardingPixelIllustration(kind: .security)
-                            .foregroundStyle(palette.accent)
+                        ShumOnboardingPixelIllustration(kind: illustrationKind)
+                            .foregroundStyle(illustrationColor)
                             .frame(width: 112, height: 92)
 
-                        ForEach(0..<14, id: \.self) { index in
+                        ForEach(0..<(state.isWorking ? 14 : 0), id: \.self) { index in
                             let phase = (time * 0.85 + Double(index) / 14).truncatingRemainder(dividingBy: 1)
                             let x = CGFloat(operation == .create ? 1 - phase : phase)
                             let lane = CGFloat(index % 7 - 3) * 14
@@ -320,20 +377,68 @@ private struct ShumBackupProgressView: View {
                 }
                 .accessibilityHidden(true)
 
-                Text(operation == .create ? "Шифруем резервную копию" : "Восстанавливаем профиль")
+                Text(title)
                     .font(.title2.weight(.semibold))
                     .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
 
-                Text(operation == .create
-                     ? "Ключи и переписка сохраняются в защищённый файл на устройстве."
-                     : "Проверяем пароль и возвращаем ключи и переписку на устройство.")
+                Text(detail)
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 330)
+
+                if !state.isWorking {
+                    RegistrationPrimaryButton(title: buttonTitle, action: onContinue)
+                        .frame(maxWidth: 330)
+                        .padding(.top, 14)
+                }
             }
             .padding(.horizontal, 24)
         }
-        .accessibilityElement(children: .combine)
+    }
+
+    private var title: String {
+        switch state {
+        case .working:
+            return operation == .create ? "Завершаем сохранение" : "Восстанавливаем профиль"
+        case .success:
+            return operation == .create ? "Резервная копия создана" : "Резервная копия восстановлена"
+        case .failure:
+            return operation == .create ? "Не удалось создать копию" : "Не удалось восстановить копию"
+        }
+    }
+
+    private var detail: String {
+        switch state {
+        case .working:
+            return operation == .create
+                ? "Резервная копия зашифрована и сохранена в выбранную папку."
+                : "Проверяем пароль и возвращаем ключи и переписку на устройство."
+        case .success:
+            return operation == .create
+                ? "Файл сохранён в выбранную папку. Храните его и пароль отдельно."
+                : "Профиль и переписка восстановлены. Продолжите, чтобы настроить код Shum на этом устройстве."
+        case .failure(let message):
+            return message
+        }
+    }
+
+    private var illustrationKind: ShumOnboardingPixelIllustration.Kind {
+        switch state {
+        case .working: return .security
+        case .success: return .success
+        case .failure: return .failure
+        }
+    }
+
+    private var illustrationColor: Color {
+        if case .failure = state { return .gray }
+        return palette.accent
+    }
+
+    private var buttonTitle: String {
+        if operation == .create, case .success = state { return "Отлично" }
+        return "Продолжить"
     }
 }

@@ -7,9 +7,7 @@ struct Shum: App {
 
     var body: some Scene {
         WindowGroup {
-            ShumCaptureProtectedContainer {
-                coordinator.start()
-            }
+            coordinator.start()
             .modifier(ShumApplicationTheme(appearance: appearance))
             .environmentObject(appearance)
         }

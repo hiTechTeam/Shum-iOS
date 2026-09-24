@@ -22,59 +22,66 @@ struct ShumPrivacyCover: View {
 }
 
 /// Keeps the live hierarchy unchanged on screen while replacing it with a
-/// neutral blurred surface in screenshots and recordings. Unlike the former
+/// neutral surface in screenshots and recordings. Unlike the former
 /// secure-text-field container, this does not re-parent SwiftUI/UIKit views, so
 /// symbols, Canvas drawings, links and presentation controllers render normally.
 struct ShumCaptureProtectedContainer<Content: View>: View {
     private let content: Content
-    @State private var allowsScreenshots = false
+    let isEnabled: Bool
+    let showsCover: Bool
 
-    init(@ViewBuilder content: () -> Content) {
+    init(isEnabled: Bool = true, showsCover: Bool = true, @ViewBuilder content: () -> Content) {
+        self.isEnabled = isEnabled
+        self.showsCover = showsCover
         self.content = content()
     }
 
     var body: some View {
         ZStack {
-            ShumPrivacyCover()
-
-            ZStack {
-                ShumThemeCanvas().ignoresSafeArea()
-                content
+            if isEnabled && showsCover {
+                ShumPrivacyCover()
             }
-            .shumHiddenFromSystemCapture(!allowsScreenshots)
-        }
-        .onPreferenceChange(ShumScreenshotAllowancePreferenceKey.self) {
-            allowsScreenshots = $0
+
+            content
+                .background {
+                    if isEnabled { ShumThemeCanvas().ignoresSafeArea() }
+                }
+                .shumHiddenFromSystemCapture(isEnabled)
+                .environment(\.shumCaptureProtectionEnabled, isEnabled)
+
+            if isEnabled && showsCover {
+                ShumCapturePrivacyOverlay()
+                    .allowsHitTesting(false)
+            }
         }
     }
 }
 
-private struct ShumScreenshotAllowancePreferenceKey: PreferenceKey {
+private struct ShumCaptureProtectionKey: EnvironmentKey {
     static let defaultValue = false
+}
 
-    static func reduce(value: inout Bool, nextValue: () -> Bool) {
-        value = value || nextValue()
+extension EnvironmentValues {
+    var shumCaptureProtectionEnabled: Bool {
+        get { self[ShumCaptureProtectionKey.self] }
+        set { self[ShumCaptureProtectionKey.self] = newValue }
     }
 }
 
 extension View {
-    /// Opts public, shareable content out of screenshot redaction locally.
-    /// The surrounding navigation, presented screens, recording cover and
-    /// app-switcher cover retain their existing protection.
-    @ViewBuilder
+    func shumProtectFromCapture(_ isEnabled: Bool = true, showsCover: Bool = true) -> some View {
+        ShumCaptureProtectedContainer(isEnabled: isEnabled, showsCover: showsCover) { self }
+    }
+
+    /// Only opts this presentation out. A QR sheet must never disable protection
+    /// on the conversation or contact card still visible underneath it.
     func shumAllowsScreenshots() -> some View {
-        if #available(iOS 18.0, *) {
-            transformEnvironment(\.redactionReasons) { reasons in
-                reasons.remove(ShumCaptureRedactionModifier.captureProhibited)
-            }
-            .preference(key: ShumScreenshotAllowancePreferenceKey.self, value: true)
-        } else {
-            preference(key: ShumScreenshotAllowancePreferenceKey.self, value: true)
-        }
+        shumHiddenFromSystemCapture(false)
+            .environment(\.shumCaptureProtectionEnabled, false)
     }
 }
 
-private extension View {
+extension View {
     @ViewBuilder
     func shumHiddenFromSystemCapture(_ isEnabled: Bool) -> some View {
         if #available(iOS 18.0, *) {
@@ -103,7 +110,7 @@ private struct ShumCaptureRedactionModifier: ViewModifier {
     }
 }
 
-/// Covers the app during recording, mirroring, AirPlay, or remote screen sharing.
+/// Covers a protected chat surface during recording, mirroring or screen sharing.
 /// iOS 17 and newer expose capture state directly to SwiftUI.
 struct ShumCapturePrivacyOverlay: View {
     var body: some View {

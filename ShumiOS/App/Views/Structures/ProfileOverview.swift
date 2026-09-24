@@ -29,6 +29,9 @@ struct ProfileOverviewView: View {
     @State private var showSecurity = false
     @State private var showAppearance = false
     @State private var showPhotoPreview = false
+    #if DEBUG && targetEnvironment(simulator)
+    @State private var showPhotoEditorPreview = false
+    #endif
     @State private var notificationAuthorizationStatus:
         UNAuthorizationStatus = .notDetermined
 
@@ -95,6 +98,18 @@ struct ProfileOverviewView: View {
         .task {
             await refreshNotificationAuthorizationStatus()
         }
+        #if DEBUG && targetEnvironment(simulator)
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("-ShumPreviewNoisyPhoto") {
+                showPhotoEditorPreview = true
+            }
+        }
+        .navigationDestination(isPresented: $showPhotoEditorPreview) {
+            ProfileDataView(authCodeViewModel: authCodeViewModel, photoViewModel: photoVM)
+                .navigationTitle(Inc.Tabs.profile.localized)
+                .navigationBarTitleDisplayMode(.inline)
+        }
+        #endif
         .toolbar {
             ProfileAvatarToolbarItem {
                 profileAvatarButton
@@ -251,7 +266,7 @@ struct ProfileOverviewView: View {
             }
             Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(
-                title: "О Shum",
+                title: Inc.Info.aboutApp.localized,
                 systemImage: "info.circle",
                 position: .bottom
             ) {
@@ -668,7 +683,6 @@ struct ProfileMenuButton<Label: View>: View {
     let action: () -> Void
     let label: Label
 
-    @State private var maintainsPressedHighlight = false
 
     init(
         position: ProfileMenuRowPosition,
@@ -681,34 +695,17 @@ struct ProfileMenuButton<Label: View>: View {
     }
 
     var body: some View {
-        Button {
-            maintainsPressedHighlight = true
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                action()
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    maintainsPressedHighlight = false
-                }
-            }
-        } label: {
+        ShumPressButton(action: action, style: ProfileMenuPressedButtonStyle(position: position)) {
             label
         }
-        .buttonStyle(
-            ProfileMenuPressedButtonStyle(
-                position: position,
-                maintainsHighlight: maintainsPressedHighlight
-            )
-        )
     }
 }
 
 private struct ProfileMenuPressedButtonStyle: ButtonStyle {
     let position: ProfileMenuRowPosition
-    let maintainsHighlight: Bool
 
     func makeBody(configuration: Configuration) -> some View {
-        let isHighlighted = configuration.isPressed || maintainsHighlight
+        let isHighlighted = configuration.isPressed
 
         configuration.label
             .background(
@@ -716,7 +713,7 @@ private struct ProfileMenuPressedButtonStyle: ButtonStyle {
                 in: position.shape
             )
             .animation(
-                .easeOut(duration: 0.12),
+                isHighlighted ? nil : .easeOut(duration: 0.08),
                 value: isHighlighted
             )
     }

@@ -95,7 +95,8 @@ struct ShumSecuritySettingsView: View {
                         }
                     } icon: {
                         Image(systemName: "externaldrive.badge.plus")
-                            .foregroundStyle(.primary)
+                            .symbolRenderingMode(.monochrome)
+                            .foregroundStyle(Color.primary)
                     }
                 }
             } header: {

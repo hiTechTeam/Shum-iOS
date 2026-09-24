@@ -50,9 +50,6 @@ struct AppCoordinatorView: View {
                     .zIndex(2)
             }
 
-            ShumCapturePrivacyOverlay()
-                .zIndex(10)
-
             if showsAppSwitcherPrivacyCover {
                 ShumPrivacyCover()
                     .zIndex(11)

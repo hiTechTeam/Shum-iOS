@@ -187,6 +187,11 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         profilePhotoViewModel.loadPhotoIfNeeded()
         needsSecuritySetup = true
         UserDefaults.standard.set(true, forKey: Self.restoredPasscodeSetupKey)
+        if chat?.isReady == false {
+            chatObserver?.cancel()
+            chat?.retireForDeletion()
+            chat = nil
+        }
         return prepareRegistrationSecurity()
     }
     var needsRestoredPasscodeSetup: Bool {
