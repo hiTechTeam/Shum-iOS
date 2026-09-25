@@ -7,6 +7,7 @@ enum ShumChatFolder: String, CaseIterable, Hashable, Identifiable {
     case all = "Все", unread = "Непрочитанное", invitations = "Приглашения"
     case nearby = "Рядом", encounters = "Виделись"
     var id: String { rawValue }
+    var localizedTitle: String { rawValue.localized }
     var pinKey: String {
         switch self {
         case .all: "all"
@@ -48,8 +49,15 @@ struct ShumDirectoryEntry: Identifiable {
 
 extension ShumRuntime {
     var directoryEntries: [ShumDirectoryEntry] {
-        ShumChatDirectory.entries(chats: chatPeers, peers: peers, permanent: permanent,
-                                  isNearby: isNearby, unreadCount: unreadCount)
+        var unreadByPeer: [PeerID: Int] = [:]
+        for message in messages where !message.outgoing {
+            if unreadMessageIDs.contains("\(message.peerID.id):\(message.id)") {
+                unreadByPeer[message.peerID, default: 0] += 1
+            }
+        }
+        return ShumChatDirectory.entries(chats: chatPeers, peers: peers, permanent: permanent,
+                                  isNearby: isNearby,
+                                  unreadCount: { unreadByPeer[$0] ?? 0 })
     }
 }
 
@@ -114,12 +122,14 @@ enum ShumChatDirectory {
 struct ShumChatFolderBar: View {
     @Binding var selection: ShumChatFolder
     let entries: [ShumDirectoryEntry]
+    @ObservedObject private var language = ShumLanguageStore.shared
     @ScaledMetric(relativeTo: .subheadline) private var height: CGFloat = 44
 
     var body: some View {
         ShumNativeFolderPicker(
             selection: $selection,
-            counts: ShumChatFolder.visibleFolders.map { folder in entries.filter { $0.belongs(to: folder) }.count }
+            counts: ShumChatFolder.visibleFolders.map { folder in entries.filter { $0.belongs(to: folder) }.count },
+            language: language.selected
         )
         .frame(height: max(44, height))
     }
@@ -129,6 +139,7 @@ struct ShumChatFolderBar: View {
 private struct ShumNativeFolderPicker: UIViewRepresentable {
     @Binding var selection: ShumChatFolder
     let counts: [Int]
+    let language: ShumLanguageStore.Language
     @ObservedObject private var appearance = ShumAppearanceStore.shared
 
     func makeUIView(context: Context) -> FolderViewport { FolderViewport() }
@@ -140,11 +151,12 @@ private struct ShumNativeFolderPicker: UIViewRepresentable {
 
     func updateUIView(_ view: FolderViewport, context: Context) {
         let folders = ShumChatFolder.visibleFolders
+        _ = language // Makes the UIKit titles refresh when the app language changes.
         view.changed = { index in
             guard folders.indices.contains(index) else { return }
             selection = folders[index]
         }
-        view.update(titles: zip(folders, counts).map { "\($0.0.rawValue)  \($0.1)" },
+        view.update(titles: zip(folders, counts).map { "\($0.0.localizedTitle)  \($0.1)" },
                     selected: folders.firstIndex(of: selection) ?? 0,
                     accentColor: appearance.accentUIColor)
     }

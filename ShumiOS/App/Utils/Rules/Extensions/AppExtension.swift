@@ -17,7 +17,24 @@ extension Shum {
 
 extension String {
     var localized: String {
-        NSLocalizedString(self, comment: "")
+        ShumLanguageStore.localizedString(forKey: self)
+    }
+
+    static func localizedFormat(_ format: String, _ arguments: Any...) -> String {
+        let segments = format.components(separatedBy: "%@")
+        guard segments.count > 1 else { return format }
+
+        var result = segments[0]
+        for index in segments.indices.dropFirst() {
+            let argumentIndex = index - 1
+            if arguments.indices.contains(argumentIndex) {
+                result += String(describing: arguments[argumentIndex])
+            } else {
+                result += "%@"
+            }
+            result += segments[index]
+        }
+        return result
     }
 }
 

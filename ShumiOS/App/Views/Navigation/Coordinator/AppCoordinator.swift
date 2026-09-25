@@ -96,6 +96,15 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
                 self?.synchronizeProfile()
             }
         }
+        ShumPushService.shared.configureBackgroundWake { [weak self] eventID, completion in
+            guard let self, self.isRegistered, let chat = self.chat else {
+                completion(.noData)
+                return
+            }
+            chat.fetchRemoteEvents(eventID: eventID) { receivedData in
+                completion(receivedData ? .newData : .noData)
+            }
+        }
     }
     deinit { if let photoObserver { NotificationCenter.default.removeObserver(photoObserver) } }
     func start() -> AnyView {
@@ -211,7 +220,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
               LocalCardStore.shared.ownManifest != nil,
               chat?.isReady == true else {
             invitation = nil
-            invitationError = "Сначала завершите регистрацию в Shum: получите ключи и создайте свой профиль. Затем откройте контакт ещё раз."
+            invitationError = "Сначала завершите регистрацию в Shum: получите ключи и создайте свой профиль. Затем откройте контакт ещё раз.".localized
             return
         }
 
@@ -239,6 +248,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     func deleteAccount() async throws {
         try deletion.begin()
         deletingProfile = true
+        ShumPushService.shared.unregisterCurrentDevice()
         chatObserver?.cancel()
         chat?.retireForDeletion(); chat = nil
         finishDeletion()
@@ -259,7 +269,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             resetNotificationState()
             deletionError = nil; deletingProfile = false
             showsDeletionCeremony = true
-        } catch { deletionError = "Удаление не завершено. Разблокируйте iPhone и повторите. Обмен сообщениями остановлен." }
+        } catch { deletionError = "Удаление не завершено. Разблокируйте iPhone и повторите. Обмен сообщениями остановлен.".localized }
     }
     func completeDeletionCeremony() {
         ShumAppearanceStore.shared.resetToClassic()
@@ -335,6 +345,9 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             && (!active || ShumAppLock.shared.isLocked) {
             for message in incomingMessages where
                 !notifiedIncomingMessageIDs.contains(message.id) {
+                if ShumPushService.shared.consumeRemoteEvent(message.id) {
+                    continue
+                }
                 AppNotificationRouter.shared.scheduleMessage(
                     id: message.id,
                     peerID: message.envelope.sender.peerID.id,
@@ -344,6 +357,12 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             }
             for invitation in invitations where
                 !notifiedInvitationIDs.contains(invitation.id) {
+                if let eventID = permanent.state.invitationStates?[
+                    invitation.id
+                ]?.eventID,
+                   ShumPushService.shared.consumeRemoteEvent(eventID) {
+                    continue
+                }
                 AppNotificationRouter.shared.scheduleInvitation(
                     peerID: invitation.peerID.id,
                     senderName: invitation.name

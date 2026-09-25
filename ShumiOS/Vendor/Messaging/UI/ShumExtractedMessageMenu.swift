@@ -50,8 +50,8 @@ final class ShumExtractedMessageMenu: UIView {
                 UIImage(systemName: name)?.withTintColor(foreground, renderingMode: .alwaysOriginal)
             }
             nativeAnchor.menu = UIMenu(children: [
-                UIAction(title: "Ответить", image: icon("arrowshape.turn.up.left")) { _ in reply() },
-                UIAction(title: "Скопировать", image: icon("doc.on.doc")) { _ in copy() }
+                UIAction(title: "Ответить".localized, image: icon("arrowshape.turn.up.left")) { _ in reply() },
+                UIAction(title: "Скопировать".localized, image: icon("doc.on.doc")) { _ in copy() }
             ])
             nativeAnchor.onDisplay = { [weak self] in
                 self?.nativeMenuIsVisible = true
@@ -66,8 +66,8 @@ final class ShumExtractedMessageMenu: UIView {
             menu.clipsToBounds = true
             menu.alpha = 0
             scroll.addSubview(menu)
-            actions = [makeAction("Ответить", symbol: "arrowshape.turn.up.left", action: reply),
-                       makeAction("Скопировать", symbol: "doc.on.doc", action: copy)]
+            actions = [makeAction("Ответить".localized, symbol: "arrowshape.turn.up.left", action: reply),
+                       makeAction("Скопировать".localized, symbol: "doc.on.doc", action: copy)]
             actions.forEach { menu.contentView.addSubview($0) }
             let separator = UIView()
             separator.backgroundColor = .separator

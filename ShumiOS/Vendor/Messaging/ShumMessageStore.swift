@@ -8,9 +8,9 @@ import Foundation
 final class ShumMessageStore: ObservableObject {
     static let encounterRetention: TimeInterval = 24 * 60 * 60
     static let invitationLifetimeMilliseconds: Int64 = 30 * 86_400_000
-    static let typingLifetimeMilliseconds: Int64 = 5_000
-    static let presenceLifetimeMilliseconds: Int64 = 55_000
-    static let presenceBroadcastInterval: TimeInterval = 20
+    static let typingLifetimeMilliseconds: Int64 = 8_000
+    static let presenceLifetimeMilliseconds: Int64 = 90_000
+    static let presenceBroadcastInterval: TimeInterval = 60
     @Published private(set) var revision = 0
     let store: ShumConversationStore
     let contacts: ShumContactsService
@@ -36,6 +36,10 @@ final class ShumMessageStore: ObservableObject {
     private var presenceDeadlines: [String: Date] = [:]
     private var latestPresenceEvents: [String: (timestamp: Int64, id: String)] = [:]
     private var lastPresenceBroadcast = Date.distantPast
+    private var lastPresenceByContact: [String: Date] = [:]
+    private var backgroundFetchTask: Task<Void, Never>?
+    private var backgroundFetchCompletions:
+        [(eventID: String, completion: (Bool) -> Void)] = []
 
     init(identity: ShumIdentityService, store: ShumConversationStore, transport: Transport,
          wire: ShumSecureTransport, card: ShumContactCard,
@@ -44,6 +48,9 @@ final class ShumMessageStore: ObservableObject {
         self.crypto = ShumCryptoService(wire: wire); self.ownCard = card
         self.contacts = ShumContactsService(store: store); self.internet = internet; self.now = now
         internet?.received = { [weak self] packet, sender in self?.receive(packet, from: nil, nostrSender: sender) }
+        ShumPushService.shared.configure(card: card) { [weak transport] data in
+            transport?.noiseSignData(data)
+        }
     }
     var internetConnected: Bool { internet?.connected == true }
     var state: ShumDatabase { store.state }
@@ -80,6 +87,54 @@ final class ShumMessageStore: ObservableObject {
         return (state.unviewedEncounterIDs ?? []).intersection(visibleIDs)
     }
     func start() { if !retired && foreground { internet?.start() } }
+    func fetchRemoteEvents(
+        eventID: String,
+        completion: @escaping (Bool) -> Void
+    ) {
+        guard !retired, internet != nil else {
+            completion(false)
+            return
+        }
+        if containsRemoteEvent(eventID) {
+            completion(false)
+            return
+        }
+        backgroundFetchCompletions.append((eventID, completion))
+        internet?.start()
+        guard backgroundFetchTask == nil else { return }
+        backgroundFetchTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 20_000_000_000)
+            guard !Task.isCancelled, let self else { return }
+            let completions = self.backgroundFetchCompletions
+            self.backgroundFetchCompletions.removeAll()
+            self.backgroundFetchTask = nil
+            if !self.foreground { self.internet?.stop() }
+            for pending in completions {
+                pending.completion(self.containsRemoteEvent(pending.eventID))
+            }
+        }
+    }
+    private func containsRemoteEvent(_ eventID: String) -> Bool {
+        state.messages.contains { !$0.outgoing && $0.id == eventID }
+            || state.invitationStates?.values.contains {
+                $0.eventID == eventID
+            } == true
+    }
+    private func finishReceivedRemoteEvents() {
+        guard !backgroundFetchCompletions.isEmpty else { return }
+        var remaining: [(eventID: String, completion: (Bool) -> Void)] = []
+        for pending in backgroundFetchCompletions {
+            if containsRemoteEvent(pending.eventID) {
+                pending.completion(true)
+            } else {
+                remaining.append(pending)
+            }
+        }
+        backgroundFetchCompletions = remaining
+        // Keep the relay connection until the bounded wake window ends. The
+        // delivery receipt is sent just after the message is saved, and
+        // closing the socket here can cancel its relay acknowledgement.
+    }
     func setActive(_ active: Bool) {
         guard !retired else { return }
         if !active { broadcastPresence(online: false) }
@@ -89,10 +144,13 @@ final class ShumMessageStore: ObservableObject {
             lastPresenceBroadcast = .distantPast
             markRead()
         }
-        else { internet?.stop() }
+        else if backgroundFetchTask == nil { internet?.stop() }
     }
     func updateProfile(name: String, bio: String) throws {
         ownCard = try identity.card(name: name, bio: bio); helloTimes.removeAll()
+        ShumPushService.shared.configure(card: ownCard) { [weak transport] data in
+            transport?.noiseSignData(data)
+        }
     }
     func card(for peer: PeerID) -> ShumContactCard? {
         state.contacts.first(where: { $0.card.peerID == peer })?.card
@@ -192,7 +250,7 @@ final class ShumMessageStore: ObservableObject {
         let timestamp = now()
         if let last = lastTypingSent[card.id] {
             if last.active == active {
-                if !active || timestamp.timeIntervalSince(last.sentAt) < 1 { return }
+                if !active || timestamp.timeIntervalSince(last.sentAt) < 4 { return }
             }
         } else if !active {
             return
@@ -350,6 +408,13 @@ final class ShumMessageStore: ObservableObject {
                 )
                 return
             }
+            if currentPhase == .outgoingPending,
+               ownCard.id < control.sender.id {
+                // Both people can tap Invite before either request arrives.
+                // The lower stable identity remains the requester on both
+                // devices, so the two states cannot flip to incomingPending.
+                return
+            }
             guard currentPhase == .ready
                     || currentPhase == .outgoingPending
                     || currentPhase == .declinedByPeer else { return }
@@ -366,6 +431,10 @@ final class ShumMessageStore: ObservableObject {
                     updatedAt: control.timestamp,
                     eventID: control.id
                 )
+                state.invitationOutbox?.removeAll {
+                    $0.control.recipient.id == control.sender.id
+                        && $0.control.action == .request
+                }
             }
         case .accept:
             guard currentPhase == .outgoingPending
@@ -421,6 +490,7 @@ final class ShumMessageStore: ObservableObject {
                 try contacts.conversation(with: card, now: now())
                 if state.conversations.count != count { changed() }
             } catch { fail(error) }
+            if foreground { broadcastPresence(online: true) }
         }
         markRead()
     }
@@ -579,7 +649,7 @@ final class ShumMessageStore: ObservableObject {
         guard !isBlocked(card) else { fail(ShumFailure.blocked); return false }
         guard canMessage(card) else { return false }
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, text.utf8.count <= 4096 else { onError?("Сообщение должно быть не длиннее 4096 байт."); return false }
+        guard !text.isEmpty, text.utf8.count <= 4096 else { onError?("Сообщение должно быть не длиннее 4096 байт.".localized); return false }
         do {
             if !state.contacts.contains(where: { $0.id == card.id }) {
                 throw ShumFailure.invalidContact
@@ -764,25 +834,27 @@ final class ShumMessageStore: ObservableObject {
     private func broadcastPresence(online: Bool) {
         guard !retired, internet?.connected == true else { return }
         let timestamp = now()
-        let recipients = state.contacts
-            .map(\.card)
-            .filter { !isBlocked($0) && canMessage($0) }
-        for card in recipients {
-            do {
-                let milliseconds = Int64(timestamp.timeIntervalSince1970 * 1000)
-                var control = ShumPresenceControl(
-                    id: UUID().uuidString,
-                    sender: ownCard,
-                    recipient: card,
-                    isOnline: online,
-                    timestamp: milliseconds,
-                    expiresAt: milliseconds + Self.presenceLifetimeMilliseconds
-                )
-                guard let signature = transport.noiseSignData(try control.signingBytes()) else { continue }
-                control.signature = signature
-                internet?.send(ShumPacket(presence: control), to: card) { _ in }
-            } catch { /* Presence is best effort and never blocks messaging. */ }
-        }
+        guard let activeContact,
+              let card = state.contacts.first(where: { $0.id == activeContact })?.card,
+              !isBlocked(card), canMessage(card) else { return }
+        if online, timestamp.timeIntervalSince(
+            lastPresenceByContact[activeContact] ?? .distantPast
+        ) < Self.presenceBroadcastInterval { return }
+        do {
+            let milliseconds = Int64(timestamp.timeIntervalSince1970 * 1000)
+            var control = ShumPresenceControl(
+                id: UUID().uuidString,
+                sender: ownCard,
+                recipient: card,
+                isOnline: online,
+                timestamp: milliseconds,
+                expiresAt: milliseconds + Self.presenceLifetimeMilliseconds
+            )
+            guard let signature = transport.noiseSignData(try control.signingBytes()) else { return }
+            control.signature = signature
+            internet?.send(ShumPacket(presence: control), to: card) { _ in }
+            if online { lastPresenceByContact[activeContact] = timestamp }
+        } catch { /* Presence is best effort and never blocks messaging. */ }
         lastPresenceBroadcast = timestamp
     }
 
@@ -816,8 +888,13 @@ final class ShumMessageStore: ObservableObject {
         changed()
     }
     private func request(_ card: ShumContactCard) throws {
-        guard invitationPhase(for: card) != .accepted,
-              invitationPhase(for: card) != .declinedLocally else { return }
+        let phase = invitationPhase(for: card)
+        guard phase != .accepted, phase != .declinedLocally else { return }
+        // A legacy card has no action field: it can be a request or the
+        // recipient's acceptance of our request. Never turn our pending
+        // request into an incoming one based on this ambiguous packet.
+        // Current peers settle simultaneous requests with signed controls.
+        if phase == .outgoingPending { return }
         guard !state.requests.contains(where: { $0.id == card.id }), state.requests.count < 20 else { return }
         let timestamp = Int64(now().timeIntervalSince1970 * 1000)
         try store.transaction { state in
@@ -828,6 +905,10 @@ final class ShumMessageStore: ObservableObject {
                 updatedAt: timestamp,
                 eventID: "legacy-\(UUID().uuidString)"
             )
+            state.invitationOutbox?.removeAll {
+                $0.control.recipient.id == card.id
+                    && $0.control.action == .request
+            }
         }
         changed()
     }
@@ -870,6 +951,7 @@ final class ShumMessageStore: ObservableObject {
             deliveryTransport: internet ? "nostr" : (hop > 1 ? "mesh" : "ble"), reply: plain.reply)
         try store.transaction { $0.messages.append(message) }; changed()
         try makeReceipt(for: message, read: visible, force: true)
+        if internet { routeReceipts() }
         // Use an already executing Bluetooth background callback to return the
         // durable delivery ACK immediately; never mark background receipt read.
         if let peer, let receipt = state.receipts.first(where: { $0.receipt.envelopeID == message.id })?.receipt {
@@ -890,7 +972,13 @@ final class ShumMessageStore: ObservableObject {
         if let existing = state.receipts.first(where: { $0.receipt.envelopeID == message.id && $0.receipt.digest == message.envelope.digest }), existing.receipt.read == read || existing.receipt.read {
             if force, now().timeIntervalSince(existing.lastAttempt) > 10 {
                 try store.transaction { state in
-                    if let i = state.receipts.firstIndex(where: { $0.receipt.key == existing.receipt.key }) { state.receipts[i].lastAttempt = .distantPast; state.receipts[i].sentTo.removeAll(); state.receipts[i].nostrAccepted = false }
+                    if let i = state.receipts.firstIndex(where: { $0.receipt.key == existing.receipt.key }) {
+                        state.receipts[i].lastAttempt = .distantPast
+                        state.receipts[i].sentTo.removeAll()
+                        state.receipts[i].nostrAccepted = false
+                        state.receipts[i].lastNostrAttempt = nil
+                        state.receipts[i].nostrAttempts = nil
+                    }
                 }
             }
             return
@@ -979,20 +1067,26 @@ final class ShumMessageStore: ObservableObject {
         for stored in (state.invitationOutbox ?? []).prefix(4) {
             let control = stored.control
             let direct = session(for: control.recipient)
+            let directDelay = min(60.0, 10.0 * pow(2.0, Double(min(max(stored.attempts - 1, 0), 3))))
             let canSendDirect = direct != nil
                 && (control.action == .request || stored.attempts < 6)
+                && now().timeIntervalSince(stored.lastAttempt) >= directDelay
             let canSendInternet = !stored.nostrAccepted && internet?.connected == true
+                && now().timeIntervalSince(stored.lastNostrAttempt ?? .distantPast)
+                    >= nostrRetryDelay(stored.nostrAttempts)
             guard canSendDirect || canSendInternet else { continue }
-
-            let exponent = min(stored.attempts, 5)
-            let retryDelay = min(300.0, 10.0 * pow(2.0, Double(exponent)))
-            guard now().timeIntervalSince(stored.lastAttempt) >= retryDelay else { continue }
 
             do {
                 try store.transaction { state in
                     guard let index = state.invitationOutbox?.firstIndex(where: { $0.id == stored.id }) else { return }
-                    state.invitationOutbox?[index].lastAttempt = now()
-                    state.invitationOutbox?[index].attempts += 1
+                    if canSendDirect {
+                        state.invitationOutbox?[index].lastAttempt = now()
+                        state.invitationOutbox?[index].attempts += 1
+                    }
+                    if canSendInternet {
+                        state.invitationOutbox?[index].lastNostrAttempt = now()
+                        state.invitationOutbox?[index].nostrAttempts = (stored.nostrAttempts ?? 0) + 1
+                    }
                 }
                 let packet = ShumPacket(invitation: control)
                 if let direct, canSendDirect { sendPacket(packet, to: direct) }
@@ -1004,6 +1098,11 @@ final class ShumMessageStore: ObservableObject {
                                 guard let index = state.invitationOutbox?.firstIndex(where: { $0.id == stored.id }) else { return }
                                 state.invitationOutbox?[index].nostrAccepted = true
                             }
+                            ShumPushService.shared.notify(
+                                recipientID: control.recipient.id,
+                                eventID: control.id,
+                                kind: .invitation
+                            )
                             self.changed()
                         } catch { self.fail(error) }
                     }
@@ -1019,29 +1118,62 @@ final class ShumMessageStore: ObservableObject {
             if sent >= 4 { break }
             let direct = session(for: message.envelope.recipient)
             let couriers = nearby.filter { $0.value.id != message.envelope.recipient.id && !message.forwardedTo.contains($0.value.id) }.sorted { $0.key.id < $1.key.id }
-            guard direct != nil || internet?.connected == true || (!couriers.isEmpty && message.forwardedTo.count < 3), now().timeIntervalSince(message.lastAttempt) >= min(60, 10 * Double(max(1, message.attempts))) else { continue }
+            let directDue = now().timeIntervalSince(message.lastAttempt)
+                >= min(60, 10 * Double(max(1, message.attempts)))
+            let canSendDirect = direct != nil && directDue
+            let courier = direct == nil && directDue && message.forwardedTo.count < 3
+                ? couriers.first : nil
+            let canSendInternet = !message.nostrAccepted && internet?.connected == true
+                && now().timeIntervalSince(message.lastNostrAttempt ?? .distantPast)
+                    >= nostrRetryDelay(message.nostrAttempts)
+            guard canSendDirect || courier != nil || canSendInternet else { continue }
             do {
                 sent += 1
-                let courier = direct == nil && message.forwardedTo.count < 3 ? couriers.first : nil
                 try store.transaction { state in
                     guard let i = state.messages.firstIndex(where: { $0.id == message.id }) else { return }
-                    state.messages[i].attempts += 1; state.messages[i].lastAttempt = now()
+                    if canSendDirect || courier != nil {
+                        state.messages[i].attempts += 1
+                        state.messages[i].lastAttempt = now()
+                    }
                     if let courier { state.messages[i].forwardedTo.insert(courier.value.id) }
-                    if direct != nil || courier != nil { state.messages[i].status = .forwarding; state.messages[i].deliveryTransport = direct != nil ? "ble" : "mesh" }
+                    if canSendInternet {
+                        state.messages[i].lastNostrAttempt = now()
+                        state.messages[i].nostrAttempts = (message.nostrAttempts ?? 0) + 1
+                    }
+                    if canSendDirect || courier != nil {
+                        state.messages[i].status = .forwarding
+                        state.messages[i].deliveryTransport = canSendDirect ? "ble" : "mesh"
+                    }
                 }
                 let packet = ShumPacket(envelope: message.envelope, hopCount: 1)
-                if let direct { sendPacket(packet, to: direct) }
-                else {
-                    if let courier { sendPacket(packet, to: courier.key) }
-                    if internet?.connected == true {
-                        internet?.send(packet, to: message.envelope.recipient) { [weak self] accepted in
-                            guard let self, accepted, !self.retired else { return }
-                            do { try self.store.transaction { state in
-                                if let i = state.messages.firstIndex(where: { $0.id == message.id }), [.queued, .forwarding].contains(state.messages[i].status) { state.messages[i].nostrAccepted = true; state.messages[i].status = .forwarding; state.messages[i].deliveryTransport = "nostr" }
-                            }; self.changed() } catch { self.fail(error) }
-                        }
+                if let direct, canSendDirect { sendPacket(packet, to: direct) }
+                if let courier { sendPacket(packet, to: courier.key) }
+                if canSendInternet {
+                    internet?.send(packet, to: message.envelope.recipient) { [weak self] accepted in
+                        guard let self, accepted, !self.retired else { return }
+                        do {
+                            var needsPush = false
+                            try self.store.transaction { state in
+                                guard let i = state.messages.firstIndex(where: { $0.id == message.id }) else { return }
+                                needsPush = [.queued, .forwarding].contains(state.messages[i].status)
+                                state.messages[i].nostrAccepted = true
+                                if needsPush {
+                                    state.messages[i].status = .forwarding
+                                    state.messages[i].deliveryTransport = "nostr"
+                                }
+                            }
+                            if needsPush {
+                                ShumPushService.shared.notify(
+                                    recipientID: message.envelope.recipient.id,
+                                    eventID: message.id,
+                                    kind: .message
+                                )
+                            }
+                            self.changed()
+                        } catch { self.fail(error) }
                     }
-                }; changed()
+                }
+                changed()
             } catch { fail(error); return }
         }
     }
@@ -1068,28 +1200,44 @@ final class ShumMessageStore: ObservableObject {
     private func routeReceipts() {
         guard !retired else { return }
         var sent = 0
-        for stored in state.receipts where now().timeIntervalSince(stored.lastAttempt) >= 30 {
+        for stored in state.receipts {
             if sent >= 8 { break }
             let receipt = stored.receipt
             let direct = session(for: receipt.destination)
             let next = nearby.filter { !stored.sentTo.contains($0.value.id) && $0.key != direct }.prefix(8)
-            let useInternet = receipt.sender.id == ownCard.id && !stored.nostrAccepted && internet?.connected == true
-            guard direct != nil || !next.isEmpty || useInternet else { continue }
+            let directDue = now().timeIntervalSince(stored.lastAttempt) >= 30
+            let useInternet = receipt.sender.id == ownCard.id && !stored.nostrAccepted
+                && internet?.connected == true
+                && now().timeIntervalSince(stored.lastNostrAttempt ?? .distantPast)
+                    >= nostrRetryDelay(stored.nostrAttempts)
+            guard (directDue && (direct != nil || !next.isEmpty)) || useInternet else { continue }
             sent += 1
             do {
                 try store.transaction { state in if let i = state.receipts.firstIndex(where: { $0.receipt.key == receipt.key }) {
-                    state.receipts[i].lastAttempt = now()
-                    for pair in next { state.receipts[i].sentTo.insert(pair.value.id) }
+                    if directDue {
+                        state.receipts[i].lastAttempt = now()
+                        for pair in next { state.receipts[i].sentTo.insert(pair.value.id) }
+                    }
+                    if useInternet {
+                        state.receipts[i].lastNostrAttempt = now()
+                        state.receipts[i].nostrAttempts = (stored.nostrAttempts ?? 0) + 1
+                    }
                 } }
                 let packet = ShumPacket(receipt: receipt)
-                if let direct { sendPacket(packet, to: direct) }
-                for pair in next { sendPacket(packet, to: pair.key) }
+                if directDue {
+                    if let direct { sendPacket(packet, to: direct) }
+                    for pair in next { sendPacket(packet, to: pair.key) }
+                }
                 if useInternet { internet?.send(packet, to: receipt.destination) { [weak self] accepted in
                     guard let self, accepted, !self.retired else { return }
                     do { try self.store.transaction { state in if let i = state.receipts.firstIndex(where: { $0.receipt.key == receipt.key }) { state.receipts[i].nostrAccepted = true } } } catch { self.fail(error) }
                 } }
             } catch { fail(error) }
         }
+    }
+    private func nostrRetryDelay(_ attempts: Int?) -> TimeInterval {
+        guard let attempts, attempts > 0 else { return 0 }
+        return min(60, 5 * pow(2, Double(min(attempts - 1, 4))))
     }
     private func sendPacket(_ packet: ShumPacket, to peer: PeerID) {
         guard !retired, let bytes = try? ShumCoding.encode(packet), bytes.count <= 24_000 else { return }
@@ -1157,12 +1305,26 @@ final class ShumMessageStore: ObservableObject {
     // Prevent all delayed callbacks from saving or sending after profile deletion.
     func retire() {
         broadcastPresence(online: false)
+        ShumPushService.shared.clearIdentity(ownCard.id)
+        backgroundFetchTask?.cancel()
+        backgroundFetchTask = nil
+        let pendingFetches = backgroundFetchCompletions
+        backgroundFetchCompletions.removeAll()
+        for pending in pendingFetches { pending.completion(false) }
         retired = true; foreground = false; activeContact = nil
         internet?.received = nil; internet?.stop()
         nearby.removeAll(); helloTimes.removeAll(); ingressRate.removeAll()
         typingDeadlines.removeAll(); latestTypingEvents.removeAll(); lastTypingSent.removeAll()
         presenceDeadlines.removeAll(); latestPresenceEvents.removeAll()
+        lastPresenceByContact.removeAll()
     }
-    private func changed() { revision &+= 1 }
+    private func changed() {
+        revision &+= 1
+        if !backgroundFetchCompletions.isEmpty {
+            Task { @MainActor [weak self] in
+                self?.finishReceivedRemoteEvents()
+            }
+        }
+    }
     private func fail(_ error: Error) { onError?(error.localizedDescription) }
 }

@@ -9,7 +9,7 @@ struct ShumBackupCreateView: View {
     @State private var isPreparing = false
     @State private var isChoosingDestination = false
     @State private var preparedFile: URL?
-    @State private var didSaveFile = false
+    @State private var pickerCompletion = ShumBackupPickerCompletion()
     @State private var showsProgress = false
     @State private var progress: ShumBackupProgressState = .working
     @State private var completedAt: Date?
@@ -33,9 +33,13 @@ struct ShumBackupCreateView: View {
                 .navigationBarBackButtonHidden()
                 .task {
                     guard progress.isWorking else { return }
-                    // Start the minimum animation time when its view appears,
-                    // after the system Save sheet has finished dismissing.
-                    await ShumBackupProgressState.finishAnimation(since: .now)
+                    // Give the progress view a frame before starting the timer.
+                    // The Save picker may still be finishing its transition.
+                    await Task.yield()
+                    await ShumBackupProgressState.finishAnimation(
+                        since: .now,
+                        minimum: .milliseconds(1_800)
+                    )
                     guard !Task.isCancelled else { return }
                     progress = .success
                 }
@@ -43,18 +47,16 @@ struct ShumBackupCreateView: View {
                 backupForm
             }
         }
+        .toolbar(.hidden, for: .tabBar)
         .interactiveDismissDisabled(isPreparing || showsProgress)
         .sheet(isPresented: $isChoosingDestination, onDismiss: {
-            if let preparedFile {
-                try? FileManager.default.removeItem(at: preparedFile.deletingLastPathComponent())
-            }
-            preparedFile = nil
-            if didSaveFile { finishSaving() }
+            finishSavePicker(ifReady: pickerCompletion.didDismiss())
         }) {
             if let preparedFile {
                 ShumBackupSavePicker(file: preparedFile) { saved in
-                    didSaveFile = saved
+                    let result = pickerCompletion.didComplete(saved: saved)
                     isChoosingDestination = false
+                    finishSavePicker(ifReady: result)
                 }
             }
         }
@@ -63,27 +65,27 @@ struct ShumBackupCreateView: View {
     private var backupForm: some View {
         Form {
             Section {
-                SecureField("Пароль резервной копии", text: $password)
+                SecureField("Пароль резервной копии".localized, text: $password)
                     .textContentType(.newPassword)
-                SecureField("Повторите пароль", text: $confirmation)
+                SecureField("Повторите пароль".localized, text: $confirmation)
                     .textContentType(.newPassword)
             } header: {
-                Text("Защита копии")
+                Text("Защита копии".localized)
             } footer: {
-                Text("Минимум 10 знаков. Этот пароль нигде не хранится, и без него восстановить профиль не получится.")
+                Text("Минимум 10 знаков. Этот пароль нигде не хранится, и без него восстановить профиль не получится.".localized)
             }
 
             Section {
-                backupItem("Ключи профиля и Nostr", systemImage: "key.horizontal")
-                backupItem("Контакты и настройки", systemImage: "person.2")
+                backupItem("Ключи профиля и Nostr".localized, systemImage: "key.horizontal")
+                backupItem("Контакты и настройки".localized, systemImage: "person.2")
                 backupItem(
-                    "Зашифрованная история чатов",
+                    "Зашифрованная история чатов".localized,
                     systemImage: "bubble.left.and.bubble.right"
                 )
             } header: {
-                Text("В резервной копии")
+                Text("В резервной копии".localized)
             } footer: {
-                Text("Face ID и код Shum привязаны к этому устройству и в копию не входят.")
+                Text("Face ID и код Shum привязаны к этому устройству и в копию не входят.".localized)
             }
 
             Section {
@@ -92,9 +94,9 @@ struct ShumBackupCreateView: View {
                         Spacer()
                         if isPreparing {
                             ProgressView()
-                            Text("Подготавливаем файл…")
+                            Text("Подготавливаем файл…".localized)
                         } else {
-                            Text("Создать резервную копию")
+                            Text("Создать резервную копию".localized)
                         }
                         Spacer()
                     }
@@ -104,7 +106,7 @@ struct ShumBackupCreateView: View {
         }
         .shumGroupedScreenBackground()
         .fontWeight(.regular)
-        .navigationTitle("Резервная копия")
+        .navigationTitle("Резервная копия".localized)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isPreparing)
     }
@@ -129,7 +131,7 @@ struct ShumBackupCreateView: View {
     private func prepareBackup() {
         guard validPassword, password == confirmation, !isPreparing, !showsProgress else { return }
         isPreparing = true
-        didSaveFile = false
+        pickerCompletion = ShumBackupPickerCompletion()
         completedAt = nil
         let backupPassword = password
         let filename = defaultFilename
@@ -157,10 +159,17 @@ struct ShumBackupCreateView: View {
         }
     }
 
+    private func finishSavePicker(ifReady saved: Bool?) {
+        guard let saved else { return }
+        if let preparedFile {
+            try? FileManager.default.removeItem(at: preparedFile.deletingLastPathComponent())
+        }
+        preparedFile = nil
+        guard saved else { return }
+        finishSaving()
+    }
+
     private func finishSaving() {
-        // Export completion is the only success signal; opening or cancelling
-        // the destination picker must never record a completed backup.
-        didSaveFile = false
         let date = Date()
         UserDefaults.standard.set(
             date.timeIntervalSince1970,
@@ -171,6 +180,32 @@ struct ShumBackupCreateView: View {
         completedAt = date
         progress = .working
         showsProgress = true
+    }
+}
+
+/// UIKit's export delegate and SwiftUI's onDismiss can arrive in either order.
+/// Report completion exactly once, after both have finished.
+struct ShumBackupPickerCompletion {
+    private var dismissed = false
+    private var outcome: Bool?
+    private var finished = false
+
+    mutating func didComplete(saved: Bool) -> Bool? {
+        guard !finished else { return nil }
+        outcome = saved
+        return takeResultIfReady()
+    }
+
+    mutating func didDismiss() -> Bool? {
+        guard !finished else { return nil }
+        dismissed = true
+        return takeResultIfReady()
+    }
+
+    private mutating func takeResultIfReady() -> Bool? {
+        guard dismissed, let outcome else { return nil }
+        finished = true
+        return outcome
     }
 }
 
@@ -186,7 +221,7 @@ private struct ShumBackupSavePicker: UIViewControllerRepresentable {
         let picker = UIDocumentPickerViewController(forExporting: [file], asCopy: true)
         picker.delegate = context.coordinator
         picker.shouldShowFileExtensions = true
-        picker.title = "Сохранить резервную копию"
+        picker.title = "Сохранить резервную копию".localized
         return picker
     }
 
@@ -244,30 +279,30 @@ struct ShumBackupRestoreView: View {
     private var restoreForm: some View {
         Form {
             Section {
-                LabeledContent("Профиль", value: metadata?.profileName ?? "Неизвестно")
+                LabeledContent("Профиль".localized, value: metadata?.profileName ?? "Неизвестно".localized)
                 if let date = metadata?.createdAt {
-                    LabeledContent("Создана") {
+                    LabeledContent("Создана".localized) {
                         Text(date.formatted(date: .abbreviated, time: .shortened))
                             .foregroundStyle(.secondary)
                     }
                 }
             } header: {
-                Text("Резервная копия Shum")
+                Text("Резервная копия Shum".localized)
             }
 
             Section {
-                SecureField("Пароль резервной копии", text: $password)
+                SecureField("Пароль резервной копии".localized, text: $password)
                     .textContentType(.password)
                     .onSubmit(restore)
             } footer: {
-                Text("Пароль проверяется только на этом устройстве и никуда не отправляется.")
+                Text("Пароль проверяется только на этом устройстве и никуда не отправляется.".localized)
             }
 
             Section {
                 Button(action: restore) {
                     HStack {
                         Spacer()
-                        Text("Восстановить профиль")
+                        Text("Восстановить профиль".localized)
                         Spacer()
                     }
                 }
@@ -279,11 +314,11 @@ struct ShumBackupRestoreView: View {
         }
         .shumGroupedScreenBackground()
         .fontWeight(.regular)
-        .navigationTitle("Восстановление")
+        .navigationTitle("Восстановление".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Отмена") { dismiss() }
+                Button("Отмена".localized) { dismiss() }
             }
         }
     }
@@ -332,10 +367,13 @@ enum ShumBackupProgressState {
         return false
     }
 
-    static func finishAnimation(since startedAt: ContinuousClock.Instant) async {
+    static func finishAnimation(
+        since startedAt: ContinuousClock.Instant,
+        minimum: Duration = .milliseconds(1_250)
+    ) async {
         let elapsed = startedAt.duration(to: .now)
-        if elapsed < .milliseconds(1_250) {
-            try? await Task.sleep(for: .milliseconds(1_250) - elapsed)
+        if elapsed < minimum {
+            try? await Task.sleep(for: minimum - elapsed)
         }
     }
 }
@@ -349,6 +387,7 @@ private struct ShumBackupProgressView: View {
     let state: ShumBackupProgressState
     let onContinue: () -> Void
     @State private var startedAt = Date()
+    @State private var creationStage = 0
 
     var body: some View {
         ZStack {
@@ -377,6 +416,16 @@ private struct ShumBackupProgressView: View {
                 }
                 .accessibilityHidden(true)
 
+                if operation == .create, state.isWorking {
+                    HStack(spacing: 4) {
+                        pipelineStep("Шифрование".localized, index: 0)
+                        pipelineStep("Сохранение".localized, index: 1)
+                        pipelineStep("Готово".localized, index: 2)
+                    }
+                    .frame(maxWidth: 330)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: creationStage)
+                }
+
                 Text(title)
                     .font(.title2.weight(.semibold))
                     .multilineTextAlignment(.center)
@@ -396,16 +445,38 @@ private struct ShumBackupProgressView: View {
             }
             .padding(.horizontal, 24)
         }
+        .task(id: state.isWorking) {
+            guard operation == .create, state.isWorking else { return }
+            creationStage = 0
+            for nextStage in 1...2 {
+                try? await Task.sleep(for: .milliseconds(520))
+                guard !Task.isCancelled else { return }
+                creationStage = nextStage
+            }
+        }
+    }
+
+    private func pipelineStep(_ title: String, index: Int) -> some View {
+        VStack(spacing: 5) {
+            Image(systemName: index <= creationStage ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(index <= creationStage ? palette.accent : Color.secondary)
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(Color.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 
     private var title: String {
         switch state {
         case .working:
-            return operation == .create ? "Завершаем сохранение" : "Восстанавливаем профиль"
+            return operation == .create ? "Завершаем сохранение".localized : "Восстанавливаем профиль".localized
         case .success:
-            return operation == .create ? "Резервная копия создана" : "Резервная копия восстановлена"
+            return operation == .create ? "Резервная копия создана".localized : "Резервная копия восстановлена".localized
         case .failure:
-            return operation == .create ? "Не удалось создать копию" : "Не удалось восстановить копию"
+            return operation == .create ? "Не удалось создать копию".localized : "Не удалось восстановить копию".localized
         }
     }
 
@@ -413,12 +484,12 @@ private struct ShumBackupProgressView: View {
         switch state {
         case .working:
             return operation == .create
-                ? "Резервная копия зашифрована и сохранена в выбранную папку."
-                : "Проверяем пароль и возвращаем ключи и переписку на устройство."
+                ? "Резервная копия зашифрована и сохранена в выбранную папку.".localized
+                : "Проверяем пароль и возвращаем ключи и переписку на устройство.".localized
         case .success:
             return operation == .create
-                ? "Файл сохранён в выбранную папку. Храните его и пароль отдельно."
-                : "Профиль и переписка восстановлены. Продолжите, чтобы настроить код Shum на этом устройстве."
+                ? "Файл сохранён в выбранную папку. Храните его и пароль отдельно.".localized
+                : "Профиль и переписка восстановлены. Продолжите, чтобы настроить код Shum на этом устройстве.".localized
         case .failure(let message):
             return message
         }
@@ -438,7 +509,7 @@ private struct ShumBackupProgressView: View {
     }
 
     private var buttonTitle: String {
-        if operation == .create, case .success = state { return "Отлично" }
-        return "Продолжить"
+        if operation == .create, case .success = state { return "Отлично".localized }
+        return "Продолжить".localized
     }
 }

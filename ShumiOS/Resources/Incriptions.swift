@@ -34,7 +34,7 @@ struct Inc {
         // EN: Nearby
         // RU: Рядом
         
-        static let okey: String = "Ok"
+        static let okey: String = "ok"
         static let close: String = "close"
         static let Shum: String = "Shum"
     }
@@ -144,7 +144,7 @@ struct Inc {
         // EN: Enter the code sent to you by Shum_bot so the app can link your Messenger.
         // RU: Введите код, который отправил вам Shum_bot, чтобы приложение могло привязать ваш Messenger.
         
-        static let localUsername: String = "Имя пользователя Shum"
+        static let localUsername: String = "Имя пользователя Shum".localized
         static let usernamePlaceholder: String = "@_"
     }
     
@@ -413,10 +413,6 @@ struct Inc {
         // EN: Copy and paste into Messenger search
         // RU: Скопируйте и вставьте в поле поиска Messenger
         
-        static let proprietaryLicense = "proprietaryLicense"
-        // EN: Copyright © 2021 - 2026 Ruslan Chukavin. All rights reserved.
-        // RU: © 2021 - 2026 Ruslan Chukavin. Все права защищены.
-
         static let story = "info_story"
 
         static let rulesAndPrivacy = "rulesAndPrivacy"

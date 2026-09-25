@@ -41,9 +41,9 @@ private enum NearbyProfileError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .incomplete:
-            return "Nearby profile is incomplete"
+            return "nearbyProfileIncomplete".localized
         case .mismatchedIdentity:
-            return "Nearby profile identity does not match"
+            return "nearbyProfileIdentityMismatch".localized
         }
     }
 }

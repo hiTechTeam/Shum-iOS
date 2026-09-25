@@ -15,12 +15,12 @@ final class ShumAppIconStore: ObservableObject {
 
         var title: String {
             switch self {
-            case .classicGreen: "Classic Green"
-            case .darkPink: "Dark Pink"
-            case .lightClassic: "Light Classic"
-            case .lightPink: "Light Pink"
-            case .monochromeLight: "Mono Light"
-            case .monochromeDark: "Mono Dark"
+            case .classicGreen: "appIconClassicGreen".localized
+            case .darkPink: "appIconDarkPink".localized
+            case .lightClassic: "appIconLightClassic".localized
+            case .lightPink: "appIconLightPink".localized
+            case .monochromeLight: "appIconMonoLight".localized
+            case .monochromeDark: "appIconMonoDark".localized
             }
         }
 
@@ -77,7 +77,7 @@ final class ShumAppIconStore: ObservableObject {
     func select(_ icon: Icon) {
         guard !isChanging, selected != icon else { return }
         guard UIApplication.shared.supportsAlternateIcons else {
-            errorMessage = "Эта версия iOS не поддерживает смену иконки."
+            errorMessage = "Эта версия iOS не поддерживает смену иконки.".localized
             return
         }
 
@@ -88,7 +88,7 @@ final class ShumAppIconStore: ObservableObject {
                 self.isChanging = false
 
                 if error != nil {
-                    self.errorMessage = "Не удалось изменить иконку. Попробуйте ещё раз."
+                    self.errorMessage = "Не удалось изменить иконку. Попробуйте ещё раз.".localized
                     return
                 }
 

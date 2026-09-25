@@ -28,7 +28,7 @@ struct ProfileDataView: View {
 
     private var profileInformationCard: some View {
         VStack(spacing: 0) {
-            ProfileInformationRow(title: NSLocalizedString("local.profile.name", comment: ""),
+            ProfileInformationRow(title: "local.profile.name".localized,
                 value: authCodeViewModel.localName ?? "—", showsAccentValue: false,
                 position: .single, action: { profileEditor = .name })
         }

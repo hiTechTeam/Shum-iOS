@@ -23,13 +23,13 @@ final class LocalProfileViewModel: ObservableObject {
     }
     @discardableResult func save(name: String, username: String? = nil, photo: Data?, photoEditing: LocalPhotoEditingState? = nil) -> Bool {
         guard let name = ShumProfileValidation.name(name) else {
-            saveError = "Введите короткое имя без служебных символов."; return false
+            saveError = "Введите короткое имя без служебных символов.".localized; return false
         }
         do {
             try store.saveOwn(name: name, bio: bio, photo: photo, photoEditing: photoEditing)
             restoreLocalProfile(); saveError = nil; return true
         } catch {
-            saveError = NSLocalizedString("local.profile.save.error", comment: "")
+            saveError = "local.profile.save.error".localized
             return false
         }
     }

@@ -20,9 +20,9 @@ struct AppCoordinatorView: View {
                     }
                 } else if coordinator.deletingProfile {
                     VStack(spacing: 20) {
-                        Text("Завершение удаления").font(.title2.bold())
-                        Text(coordinator.deletionError ?? "Обмен сообщениями остановлен.").multilineTextAlignment(.center)
-                        RegistrationPrimaryButton(title: "Повторить удаление") { coordinator.finishDeletion() }
+                        Text("Завершение удаления".localized).font(.title2.bold())
+                        Text(coordinator.deletionError ?? "Обмен сообщениями остановлен.".localized).multilineTextAlignment(.center)
+                        RegistrationPrimaryButton(title: "Повторить удаление".localized) { coordinator.finishDeletion() }
                     }.padding(24)
                 } else if coordinator.isRegistered, let chat = coordinator.chat {
                     MainContentView(chat: chat,
@@ -58,8 +58,8 @@ struct AppCoordinatorView: View {
         .onOpenURL { url in
             coordinator.handleInvitationURL(url)
         }
-        .alert("Контакт Shum", isPresented: Binding(get: { coordinator.invitationError != nil }, set: { if !$0 { coordinator.invitationError = nil } })) {
-            Button("Понятно") { coordinator.invitationError = nil }
+        .alert("Контакт Shum".localized, isPresented: Binding(get: { coordinator.invitationError != nil }, set: { if !$0 { coordinator.invitationError = nil } })) {
+            Button("Понятно".localized) { coordinator.invitationError = nil }
         } message: { Text(coordinator.invitationError ?? "") }
         .environmentObject(coordinator)
         .task {
@@ -170,7 +170,7 @@ private struct ShumDeletionCeremonyView: View {
             VStack(spacing: 0) {
                 Spacer()
 
-                Text(completed ? "Данные уничтожены" : "Уничтожаем данные")
+                Text(completed ? "Данные уничтожены".localized : "Уничтожаем данные".localized)
                     .font(.title2.weight(.semibold))
                     .multilineTextAlignment(.center)
                     .contentTransition(.opacity)
@@ -191,8 +191,8 @@ private struct ShumDeletionCeremonyView: View {
                 .padding(.top, 30)
 
                 Text(completed
-                    ? "На устройстве не осталось профиля, ключей и переписки."
-                    : "Личные данные удалены с устройства.")
+                    ? "На устройстве не осталось профиля, ключей и переписки.".localized
+                    : "Личные данные удалены с устройства.".localized)
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -204,7 +204,7 @@ private struct ShumDeletionCeremonyView: View {
 
                 if completed {
                     RegistrationPrimaryButton(
-                        title: "Начать заново",
+                        title: "Начать заново".localized,
                         isEnabled: true,
                         accentColor: palette.accent,
                         action: completion
@@ -458,10 +458,10 @@ private struct ShumLockedView: View {
             ShumLogoMark()
                 .frame(width: 70, height: 70)
 
-            Text("Введите код Shum")
+            Text("Введите код Shum".localized)
                 .font(.title2.weight(.semibold))
 
-            Text("Введите пять цифр, чтобы открыть переписку.")
+            Text("Введите пять цифр, чтобы открыть переписку.".localized)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -474,7 +474,7 @@ private struct ShumLockedView: View {
             }
 
             if appLock.isBiometricsEnabled {
-                Button("Открыть с \(appLock.biometricTitle)") {
+                Button(String.localizedFormat("Открыть с %@".localized, appLock.biometricTitle)) {
                     code = ""
                     showingPasscode = false
                     Task { _ = await appLock.unlockWithBiometrics() }
@@ -501,10 +501,10 @@ private struct ShumLockedView: View {
             ShumLogoMark()
                 .frame(width: 76, height: 76)
 
-            Text("Shum заблокирован")
+            Text("Shum заблокирован".localized)
                 .font(.title2.weight(.semibold))
 
-            Text("Подтвердите владельца устройства, чтобы открыть переписку.")
+            Text("Подтвердите владельца устройства, чтобы открыть переписку.".localized)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -514,7 +514,7 @@ private struct ShumLockedView: View {
                 Button {
                     Task { _ = await appLock.unlockWithBiometrics() }
                 } label: {
-                    Text("Открыть с \(appLock.biometricTitle)")
+                    Text(String.localizedFormat("Открыть с %@".localized, appLock.biometricTitle))
                         .font(.system(size: 17, weight: .regular))
                         .foregroundStyle(palette.accentForeground)
                         .frame(maxWidth: 300)
@@ -526,7 +526,7 @@ private struct ShumLockedView: View {
             }
 
             if appLock.hasPasscode {
-                Button("Ввести код") {
+                Button("Ввести код".localized) {
                     appLock.errorMessage = nil
                     showingPasscode = true
                 }

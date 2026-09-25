@@ -26,7 +26,7 @@ struct ShumPasscodeInput: View {
                 .focused($isFocused)
                 .frame(width: 1, height: 1)
                 .opacity(0.01)
-                .accessibilityLabel("Код Shum")
+                .accessibilityLabel("Код Shum".localized)
                 .accessibilityIdentifier("shum.passcode")
         }
         .onAppear {

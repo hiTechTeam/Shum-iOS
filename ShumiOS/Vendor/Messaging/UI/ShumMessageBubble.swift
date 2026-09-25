@@ -45,22 +45,32 @@ struct ShumMessageBubble: View {
             }
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(message.outgoing ? "Вы" : "Собеседник"): \(message.text), \(message.date.formatted(date: .omitted, time: .shortened))\(message.outgoing ? ", " + statusDescription : "")")
-            .accessibilityAction(named: "Ответить", reply)
-            .accessibilityAction(named: "Скопировать") { UIPasteboard.general.string = message.text }
-            if message.outgoing, let label = message.deliveryLabel, label == "В очереди" || label.hasPrefix("Передаётся") {
+            .accessibilityLabel(
+                Text(
+                    String.localizedFormat(
+                        "%@: %@, %@%@".localized,
+                        message.outgoing ? "Вы".localized : "Собеседник".localized,
+                        message.text,
+                        message.date.formatted(date: .omitted, time: .shortened),
+                        message.outgoing ? ", " + statusDescription : ""
+                    )
+                )
+            )
+            .accessibilityAction(named: "Ответить".localized, reply)
+            .accessibilityAction(named: "Скопировать".localized) { UIPasteboard.general.string = message.text }
+            if message.outgoing, let label = message.deliveryLabel, label == "В очереди".localized || label.hasPrefix("Передаётся".localized) {
                 Text(label).font(.caption).foregroundStyle(.secondary).padding(.top, 2)
             }
             if message.outgoing && message.waitingForConnection {
-                Label("Ожидаем связь", systemImage: "antenna.radiowaves.left.and.right")
+                Label("Ожидаем связь".localized, systemImage: "antenna.radiowaves.left.and.right")
                     .font(.caption).foregroundStyle(.secondary).padding(.vertical, 4)
             }
-            if message.outgoing, message.deliveryLabel == "Отменено" {
-                Text("Отменено после блокировки").font(.caption).foregroundStyle(.secondary)
+            if message.outgoing, message.deliveryLabel == "Отменено".localized {
+                Text("Отменено после блокировки".localized).font(.caption).foregroundStyle(.secondary)
             }
-            if message.outgoing, message.deliveryLabel != "Отменено", case .failed = message.status {
+            if message.outgoing, message.deliveryLabel != "Отменено".localized, case .failed = message.status {
                 Button(action: retry) {
-                    Label("Не доставлено · Повторить", systemImage: "arrow.clockwise")
+                    Label("Не доставлено · Повторить".localized, systemImage: "arrow.clockwise")
                         .font(.system(size: 12)).foregroundStyle(.red).padding(.vertical, 8)
                 }.buttonStyle(.plain)
             }
@@ -91,7 +101,7 @@ struct ShumMessageBubble: View {
                     HStack(spacing: 8) {
                         Capsule().fill(themePalette.accent).frame(width: 3, height: 32)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(replyAuthor ?? "Сообщение")
+                            Text(replyAuthor ?? "Сообщение".localized)
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(themePalette.accent)
                             Text(reference.text)
@@ -204,12 +214,12 @@ struct ShumMessageBubble: View {
         }
     }
     private var statusDescription: String {
-        if message.waitingForConnection { return "Ожидаем связь" }
+        if message.waitingForConnection { return "Ожидаем связь".localized }
         switch message.status {
-        case .read: return "Прочитано"
-        case .delivered: return "Доставлено"
-        case .failed: return "Не доставлено"
-        default: return "Отправляется"
+        case .read: return "Прочитано".localized
+        case .delivered: return "Доставлено".localized
+        case .failed: return "Не доставлено".localized
+        default: return "Отправляется".localized
         }
     }
 }

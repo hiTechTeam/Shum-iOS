@@ -565,8 +565,8 @@ final class AppNotificationRouter: NSObject,
         scheduleChatNotification(
             identifier: "shum.invitation.\(peerID)",
             peerID: peerID,
-            title: "Новое приглашение",
-            body: "\(senderName) хочет начать общение."
+            title: "Новое приглашение".localized,
+            body: String.localizedFormat("%@ хочет начать общение.".localized, senderName)
         )
     }
 

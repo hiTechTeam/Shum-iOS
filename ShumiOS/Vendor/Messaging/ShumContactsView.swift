@@ -31,7 +31,7 @@ struct ShumContactsView: View {
         NavigationStack {
             List {
                 Section {
-                    Button { showScanner = true } label: { Label("Сканировать код", systemImage: "qrcode.viewfinder") }
+                    Button { showScanner = true } label: { Label("Сканировать код".localized, systemImage: "qrcode.viewfinder") }
                     Button {
                         if let showOwnQR {
                             showOwnQR()
@@ -39,18 +39,18 @@ struct ShumContactsView: View {
                             showQR = true
                         }
                     } label: {
-                        Label("Мой QR-код", systemImage: "qrcode")
+                        Label("Мой QR-код".localized, systemImage: "qrcode")
                     }
-                    Button { showPhoneBook = true } label: { Label("Пригласить", systemImage: "person.badge.plus") }
+                    Button { showPhoneBook = true } label: { Label("Пригласить".localized, systemImage: "person.badge.plus") }
                 }
             }
             .listStyle(.insetGrouped)
             .scrollDisabled(true)
-            .navigationTitle("Новый контакт").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Новый контакт".localized).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
-                        .accessibilityLabel("Закрыть")
+                        .accessibilityLabel("Закрыть".localized)
                         .tint(.primary)
                 }
             }
@@ -85,9 +85,9 @@ struct ShumContactsView: View {
                     showPhoneBook = false
                     let name = CNContactFormatter.string(from: contact, style: .fullName) ?? ""
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        let greeting = name.isEmpty ? "Привет!" : "\(name), привет!"
+                        let greeting = name.isEmpty ? "Привет!".localized : String.localizedFormat("%@, привет!".localized, name)
                         if let url = try? service?.ownCard.invitation() {
-                            share = ShumShareItem(text: "\(greeting) Добавь меня в Shum:\n\(url.absoluteString)")
+                            share = ShumShareItem(text: String.localizedFormat("%@ Добавь меня в Shum:\n%@".localized, greeting, url.absoluteString))
                         }
                     }
                 }
@@ -136,7 +136,7 @@ struct ShumContactRequestsView: View {
                         ShumAvatar(name: card.name, size: 48, imageData: runtime.profile(for: card.peerID)?.avatar)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(card.name).font(.body.weight(.semibold)).foregroundStyle(.primary)
-                            Text("Хочет добавить вас").font(.caption).foregroundStyle(.secondary)
+                            Text("Хочет добавить вас".localized).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
                         Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
@@ -146,12 +146,12 @@ struct ShumContactRequestsView: View {
                 .buttonStyle(.plain)
                 .swipeActions {
                     Button { runtime.permanent?.dismissRequest(card) } label: {
-                        Label("Отклонить", systemImage: "xmark")
+                        Label("Отклонить".localized, systemImage: "xmark")
                     }.tint(.red)
                 }
             }
         }
-        .navigationTitle("Приглашения")
+        .navigationTitle("Приглашения".localized)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $invitation) { card in
             ShumContactConfirmation(
@@ -185,7 +185,7 @@ struct ShumContactConfirmation: View {
                 ShumAvatar(name: card.name, size: 202, imageData: imageData)
                     .contentShape(Circle())
                     .onTapGesture(perform: openPhoto)
-                    .accessibilityLabel(imageData == nil ? card.name : "Посмотреть фото")
+                    .accessibilityLabel(imageData == nil ? card.name : "Посмотреть фото".localized)
 
                 Text(card.name)
                     .font(.title2.bold())
@@ -204,12 +204,12 @@ struct ShumContactConfirmation: View {
                         .padding(.top, 4)
                 }
 
-                Text(isExistingContact ? "Уже есть в контактах" : "Сохранить контакт Shum?")
+                Text(isExistingContact ? "Уже есть в контактах".localized : "Сохранить контакт Shum?".localized)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .padding(.top, card.bio.isEmpty ? 6 : 4)
 
-                Button(isExistingContact ? "Написать" : "Добавить контакт") {
+                Button(isExistingContact ? "Написать".localized : "Добавить контакт".localized) {
                     dismiss()
                     accept()
                 }
@@ -218,7 +218,7 @@ struct ShumContactConfirmation: View {
                 .frame(width: contentWidth)
                 .padding(.top, 14)
 
-                Button("Отмена") { dismiss() }
+                Button("Отмена".localized) { dismiss() }
                     .font(.system(size: 16))
                     .frame(minHeight: 36)
                     .padding(.top, 4)
@@ -257,7 +257,7 @@ private struct ShumQRShareToolbar: ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             ShareLink(item: invitationURL)
                 .tint(.primary)
-                .accessibilityLabel("Поделиться контактом Shum")
+                .accessibilityLabel("Поделиться контактом Shum".localized)
         }
     }
 }
@@ -300,7 +300,7 @@ struct ShumQRView: View {
                             profileCard(qrImage: image)
                                 .padding(.top, 54)
 
-                            Text("Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытый идентификатор.")
+                            Text("Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытый идентификатор.".localized)
                                 .font(.system(size: 15, weight: .regular))
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -316,7 +316,7 @@ struct ShumQRView: View {
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             showScanner = true
                         } label: {
-                            Text("Сканировать")
+                            Text("Сканировать".localized)
                         }
                         .buttonStyle(ShumPrimaryButtonStyle())
                         .frame(maxWidth: 342)
@@ -330,7 +330,7 @@ struct ShumQRView: View {
             }
         }
         .shumAllowsScreenshots()
-        .navigationTitle("QR-код")
+        .navigationTitle("QR-код".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let invitationURL {
@@ -368,7 +368,7 @@ struct ShumQRView: View {
                 .lineLimit(1)
                 .padding(.top, 14)
 
-            Text("Контакт Shum")
+            Text("Контакт Shum".localized)
                 .font(.system(size: 14, weight: .regular))
                 .foregroundStyle(.secondary)
                 .padding(.top, 5)
@@ -400,7 +400,7 @@ struct ShumQRView: View {
             .background(.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             .padding(.top, 28)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("QR-код контакта Shum")
+            .accessibilityLabel("QR-код контакта Shum".localized)
         }
         .padding(.bottom, 30)
         .frame(maxWidth: 342)
@@ -421,20 +421,30 @@ struct ShumQRView: View {
 
 struct ShumScanView: View {
     var resolve: ShumContactResolving?
+    var allowsPhotoImport: Bool
     var scanned: (ShumContactCard) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.shumThemePalette) private var palette
     @State private var done = false
     @State private var unavailable = false
     @State private var error: String?
     @State private var torchEnabled = false
     @State private var photoSelection: PhotosPickerItem?
+    @State private var selectedPhoto: UIImage?
+    @State private var photoScale: CGFloat = 1
+    @State private var photoOffset: CGSize = .zero
+    @GestureState private var photoGestureScale: CGFloat = 1
+    @GestureState private var photoGestureOffset: CGSize = .zero
+    @State private var scanningPhoto = false
     @State private var resolving = false
 
     init(
         resolve: ShumContactResolving? = nil,
+        allowsPhotoImport: Bool = true,
         scanned: @escaping (ShumContactCard) -> Void
     ) {
         self.resolve = resolve
+        self.allowsPhotoImport = allowsPhotoImport
         self.scanned = scanned
     }
 
@@ -448,14 +458,12 @@ struct ShumScanView: View {
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
-            scannerOverlay
-                .ignoresSafeArea()
             #else
             if unavailable {
                 VStack(spacing: 16) {
-                    Text("Разрешите доступ к камере в настройках устройства.")
+                    Text("Разрешите доступ к камере в настройках устройства.".localized)
                         .multilineTextAlignment(.center)
-                    Button("Открыть настройки") {
+                    Button("Открыть настройки".localized) {
                         if let url = URL(string: UIApplication.openSettingsURLString) {
                             UIApplication.shared.open(url)
                         }
@@ -466,25 +474,25 @@ struct ShumScanView: View {
                 .padding(32)
             } else {
                 CameraScannerView(
-                    isActive: !done,
+                    isActive: !done && selectedPhoto == nil,
                     torchEnabled: torchEnabled,
                     onUnavailable: { unavailable = true }
                 ) { text in
                     handle(text)
                 }
                 .ignoresSafeArea()
-
-                scannerOverlay
-                    .ignoresSafeArea()
             }
             #endif
+
+            scannerOverlay
+                .ignoresSafeArea()
 
             if resolving {
                 Color.black.opacity(0.52).ignoresSafeArea()
                 VStack(spacing: 14) {
                     ProgressView()
                         .tint(.white)
-                    Text("Получаем контакт…")
+                    Text("Получаем контакт…".localized)
                         .font(.subheadline)
                         .foregroundStyle(.white)
                 }
@@ -506,7 +514,7 @@ struct ShumScanView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Закрыть")
+                    .accessibilityLabel("Закрыть".localized)
 
                     Spacer()
                 }
@@ -518,14 +526,25 @@ struct ShumScanView: View {
         }
         .statusBarHidden(true)
         .toolbar(.hidden, for: .tabBar)
-        .alert("QR-код", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil; done = false } })) {
-            Button("Повторить") { error = nil; done = false }
+        .alert("QR-код".localized, isPresented: Binding(
+            get: { error != nil },
+            set: {
+                if !$0 {
+                    error = nil
+                    if selectedPhoto == nil { done = false }
+                }
+            }
+        )) {
+            Button("Повторить".localized) {
+                error = nil
+                if selectedPhoto == nil { done = false }
+            }
         } message: {
             Text(error ?? "")
         }
         .task(id: photoSelection) {
             guard let photoSelection else { return }
-            await scanPhoto(photoSelection)
+            await loadPhoto(photoSelection)
             self.photoSelection = nil
         }
         .onDisappear { done = true }
@@ -543,8 +562,23 @@ struct ShumScanView: View {
             )
 
             ZStack {
+                if let selectedPhoto {
+                    Image(uiImage: selectedPhoto)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .scaleEffect(effectivePhotoScale)
+                        .offset(effectivePhotoOffset)
+                        .contentShape(Rectangle())
+                        .gesture(photoDragGesture)
+                        .simultaneousGesture(photoMagnificationGesture)
+                        .onTapGesture(count: 2, perform: resetPhotoPosition)
+                        .clipped()
+                }
+
                 ShumScannerShade(cutout: scanRect)
                     .fill(.black.opacity(0.52), style: FillStyle(eoFill: true))
+                    .allowsHitTesting(false)
 
                 ShumScannerCorners()
                     .stroke(
@@ -553,39 +587,85 @@ struct ShumScanView: View {
                     )
                     .frame(width: side, height: side)
                     .position(center)
+                    .allowsHitTesting(false)
 
-                Text("Наведите камеру на QR-код Shum")
+                Text(selectedPhoto == nil
+                     ? "Наведите камеру на QR-код Shum".localized
+                     : "Переместите и масштабируйте фото".localized)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.white)
                     .shadow(color: .black, radius: 4)
                     .position(x: center.x, y: scanRect.maxY + 34)
+                    .allowsHitTesting(false)
 
                 VStack {
                     Spacer()
 
-                    HStack(spacing: 24) {
-                        Button {
-                            torchEnabled.toggle()
-                        } label: {
-                            Label(
-                                torchEnabled ? "Выключить фонарик" : "Включить фонарик",
-                                systemImage: torchEnabled ? "flashlight.on.fill" : "flashlight.off.fill"
-                            )
-                            .labelStyle(.iconOnly)
-                        }
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.large)
-                        .tint(.white)
+                    Group {
+                        if let selectedPhoto {
+                            HStack(spacing: 12) {
+                                Button(action: clearSelectedPhoto) {
+                                    scannerControlIcon("camera")
+                                }
 
-                        PhotosPicker(selection: $photoSelection, matching: .images) {
-                            Label("Выбрать из Фото", systemImage: "photo.on.rectangle")
-                                .labelStyle(.iconOnly)
+                                if allowsPhotoImport {
+                                    PhotosPicker(selection: $photoSelection, matching: .images) {
+                                        scannerControlIcon("photo.on.rectangle")
+                                    }
+                                }
+
+                                Button {
+                                    scanDisplayedPhoto(
+                                        selectedPhoto,
+                                        viewportSize: geometry.size,
+                                        scanRect: scanRect
+                                    )
+                                } label: {
+                                    ZStack {
+                                        Text("Сканировать".localized)
+                                            .opacity(scanningPhoto ? 0 : 1)
+                                        if scanningPhoto {
+                                            ProgressView().tint(palette.accentForeground)
+                                        }
+                                    }
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(palette.accentForeground)
+                                    .frame(width: 144, height: 50)
+                                    .background(palette.accent, in: Capsule())
+                                    .contentShape(Capsule())
+                                }
+                                .disabled(scanningPhoto)
+                            }
+                            .buttonStyle(.plain)
+                            .transaction { $0.animation = nil }
+                        } else {
+                            HStack(spacing: 24) {
+                                Button {
+                                    torchEnabled.toggle()
+                                } label: {
+                                    Label(
+                                        torchEnabled ? "Выключить фонарик".localized : "Включить фонарик".localized,
+                                        systemImage: torchEnabled ? "flashlight.on.fill" : "flashlight.off.fill"
+                                    )
+                                    .labelStyle(.iconOnly)
+                                }
+                                .buttonStyle(.bordered)
+                                .buttonBorderShape(.capsule)
+                                .controlSize(.large)
+                                .tint(.white)
+
+                                if allowsPhotoImport {
+                                    PhotosPicker(selection: $photoSelection, matching: .images) {
+                                        Label("Выбрать из Фото".localized, systemImage: "photo.on.rectangle")
+                                            .labelStyle(.iconOnly)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .buttonBorderShape(.capsule)
+                                    .controlSize(.large)
+                                    .tint(.white)
+                                }
+                            }
                         }
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.large)
-                        .tint(.white)
                     }
                     .font(.title3)
                     .padding(.bottom, 30)
@@ -623,30 +703,192 @@ struct ShumScanView: View {
     }
 
     @MainActor
-    private func scanPhoto(_ item: PhotosPickerItem) async {
+    private func loadPhoto(_ item: PhotosPickerItem) async {
         done = true
         torchEnabled = false
 
         do {
             guard let data = try await item.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data),
-                  let cgImage = image.cgImage else {
+                  let image = UIImage(data: data) else {
                 throw ShumFailure.invalidContact
             }
+            selectedPhoto = image
+            resetPhotoPosition()
+        } catch {
+            self.error = "Не получилось открыть выбранную фотографию.".localized
+        }
+    }
 
-            let request = VNDetectBarcodesRequest()
-            request.symbologies = [.qr]
-            try VNImageRequestHandler(cgImage: cgImage).perform([request])
+    private var effectivePhotoScale: CGFloat {
+        min(max(photoScale * photoGestureScale, 1), 8)
+    }
 
-            guard let text = request.results?.first?.payloadStringValue else {
-                error = "На выбранной фотографии QR-код не найден."
+    private var effectivePhotoOffset: CGSize {
+        CGSize(
+            width: photoOffset.width + photoGestureOffset.width,
+            height: photoOffset.height + photoGestureOffset.height
+        )
+    }
+
+    private var photoDragGesture: some Gesture {
+        DragGesture()
+            .updating($photoGestureOffset) { value, state, _ in
+                state = value.translation
+            }
+            .onEnded { value in
+                photoOffset.width += value.translation.width
+                photoOffset.height += value.translation.height
+            }
+    }
+
+    private var photoMagnificationGesture: some Gesture {
+        MagnificationGesture()
+            .updating($photoGestureScale) { value, state, _ in
+                state = value
+            }
+            .onEnded { value in
+                photoScale = min(max(photoScale * value, 1), 8)
+            }
+    }
+
+    private func resetPhotoPosition() {
+        photoScale = 1
+        photoOffset = .zero
+    }
+
+    private func clearSelectedPhoto() {
+        selectedPhoto = nil
+        scanningPhoto = false
+        resetPhotoPosition()
+        done = false
+    }
+
+    private func scanDisplayedPhoto(
+        _ photo: UIImage,
+        viewportSize: CGSize,
+        scanRect: CGRect
+    ) {
+        guard !scanningPhoto,
+              let originalImage = ShumScannerPhotoRenderer.normalizedCGImage(photo),
+              let rendered = ShumScannerPhotoRenderer.render(
+                photo,
+                viewportSize: viewportSize,
+                scanRect: scanRect,
+                zoom: effectivePhotoScale,
+                offset: effectivePhotoOffset
+              ),
+              let cgImage = rendered.cgImage else {
+            error = "Не получилось подготовить выбранную фотографию.".localized
+            return
+        }
+
+        scanningPhoto = true
+        Task { @MainActor in
+            defer { scanningPhoto = false }
+            await Task.yield()
+            guard let text = ShumQRCodeDetector.payload(in: originalImage)
+                    ?? ShumQRCodeDetector.payload(in: cgImage) else {
+                error = "В рамке QR-код не найден. Переместите или увеличьте фото.".localized
                 return
             }
             done = false
             handle(text)
-        } catch {
-            self.error = "Не получилось прочитать QR-код из выбранной фотографии."
         }
+    }
+
+    private func scannerControlIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 19, weight: .medium))
+            .foregroundStyle(.white)
+            .frame(width: 50, height: 50)
+            .background(.ultraThinMaterial, in: Circle())
+            .overlay {
+                Circle().stroke(.white.opacity(0.35), lineWidth: 0.5)
+            }
+            .contentShape(Circle())
+    }
+}
+
+enum ShumScannerPhotoRenderer {
+    static func normalizedCGImage(_ image: UIImage) -> CGImage? {
+        guard image.size.width > 0, image.size.height > 0 else { return nil }
+        if image.imageOrientation == .up, let cgImage = image.cgImage { return cgImage }
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = max(image.scale, 1)
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: image.size, format: format)
+            .image { context in
+                UIColor.white.setFill()
+                context.fill(CGRect(origin: .zero, size: image.size))
+                image.draw(in: CGRect(origin: .zero, size: image.size))
+            }
+            .cgImage
+    }
+
+    static func render(
+        _ image: UIImage,
+        viewportSize: CGSize,
+        scanRect: CGRect,
+        zoom: CGFloat,
+        offset: CGSize,
+        outputScale: CGFloat = 3
+    ) -> UIImage? {
+        guard image.size.width > 0, image.size.height > 0,
+              viewportSize.width > 0, viewportSize.height > 0,
+              scanRect.width > 0, scanRect.height > 0 else { return nil }
+
+        let aspectFillScale = max(
+            viewportSize.width / image.size.width,
+            viewportSize.height / image.size.height
+        )
+        let displayScale = aspectFillScale * min(max(zoom, 1), 8)
+        let displaySize = CGSize(
+            width: image.size.width * displayScale,
+            height: image.size.height * displayScale
+        )
+        let displayOrigin = CGPoint(
+            x: (viewportSize.width - displaySize.width) / 2 + offset.width,
+            y: (viewportSize.height - displaySize.height) / 2 + offset.height
+        )
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = outputScale
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: scanRect.size, format: format)
+        return renderer.image { context in
+            UIColor.black.setFill()
+            context.fill(CGRect(origin: .zero, size: scanRect.size))
+            image.draw(in: CGRect(
+                x: displayOrigin.x - scanRect.minX,
+                y: displayOrigin.y - scanRect.minY,
+                width: displaySize.width,
+                height: displaySize.height
+            ))
+        }
+    }
+}
+
+enum ShumQRCodeDetector {
+    static func payload(in image: CGImage) -> String? {
+        let request = VNDetectBarcodesRequest()
+        request.symbologies = [.qr]
+        if (try? VNImageRequestHandler(cgImage: image).perform([request])) != nil,
+           let value = request.results?.first?.payloadStringValue {
+            return value
+        }
+
+        // Core Image provides a second decoding path for photographs on which
+        // Vision cannot create an inference context or returns no observation.
+        let options = [CIDetectorAccuracy: CIDetectorAccuracyHigh]
+        guard let detector = CIDetector(
+            ofType: CIDetectorTypeQRCode,
+            context: CIContext(),
+            options: options
+        ) else { return nil }
+        return detector.features(in: CIImage(cgImage: image))
+            .compactMap { ($0 as? CIQRCodeFeature)?.messageString }
+            .first
     }
 }
 

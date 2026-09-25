@@ -23,40 +23,40 @@ struct ShumPeopleScreen: View {
 
             if !coordinator.isScaning {
                 ShumPeopleUnavailable(
-                    title: "Люди рядом скрыты",
-                    message: "Включите видимость, чтобы находить людей поблизости.",
+                    title: "Люди рядом скрыты".localized,
+                    message: "Включите видимость, чтобы находить людей поблизости.".localized,
                     systemImage: "eye.slash",
-                    actionTitle: "Найти людей"
+                    actionTitle: "Найти людей".localized
                 ) {
                     coordinator.setScanning(true)
                 }
             } else if runtime.bluetoothState == .unauthorized {
                 ShumPeopleUnavailable(
-                    title: "Нужен Bluetooth",
-                    message: "Разрешите Bluetooth для Shum в настройках iPhone.",
+                    title: "Нужен Bluetooth".localized,
+                    message: "Разрешите Bluetooth для Shum в настройках iPhone.".localized,
                     systemImage: "antenna.radiowaves.left.and.right.slash",
-                    actionTitle: "Открыть настройки"
+                    actionTitle: "Открыть настройки".localized
                 ) {
                     guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                     UIApplication.shared.open(url)
                 }
             } else if runtime.bluetoothState == .poweredOff {
                 ShumPeopleUnavailable(
-                    title: "Bluetooth выключен",
-                    message: "Включите Bluetooth на iPhone, чтобы увидеть людей рядом.",
+                    title: "Bluetooth выключен".localized,
+                    message: "Включите Bluetooth на iPhone, чтобы увидеть людей рядом.".localized,
                     systemImage: "antenna.radiowaves.left.and.right.slash"
                 )
             } else if runtime.peers.isEmpty {
                 ShumPeopleUnavailable(
-                    title: "Никого рядом",
-                    message: "Откройте Shum на другом iPhone. Человек появится здесь, когда окажется поблизости.",
+                    title: "Никого рядом".localized,
+                    message: "Откройте Shum на другом iPhone. Человек появится здесь, когда окажется поблизости.".localized,
                     systemImage: "wave.3.up"
                 )
             } else {
                 peopleList
             }
         }
-        .navigationTitle("Люди рядом")
+        .navigationTitle("Люди рядом".localized)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedPeer) { peer in
             ShumPeerCard(runtime: runtime, peer: peer) {
@@ -71,7 +71,7 @@ struct ShumPeopleScreen: View {
 
     private var peopleList: some View {
         List {
-            Text("Здесь появляются пользователи Shum поблизости.")
+            Text("Здесь появляются пользователи Shum поблизости.".localized)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)
@@ -124,7 +124,7 @@ struct ShumPeopleScreen: View {
                         Button {
                             togglePinned(card)
                         } label: {
-                            Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill")
+                            Label(pinned ? "Открепить".localized : "Закрепить".localized, systemImage: pinned ? "pin.slash" : "pin.fill")
                         }
                         .tint(pinned ? Color(uiColor: .systemGray) : .accentColor)
                     }
@@ -138,7 +138,7 @@ struct ShumPeopleScreen: View {
                                 waitsForTransientUI: true
                             )
                         } label: {
-                            Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                            Label("Заблокировать".localized, systemImage: "person.crop.circle.badge.xmark")
                         }
                         .tint(.red)
                     }
@@ -163,7 +163,7 @@ struct ShumPeopleScreen: View {
         waitsForTransientUI: Bool
     ) {
         guard let card else {
-            runtime.error = "Дождитесь проверки профиля пользователя."
+            runtime.error = "Дождитесь проверки профиля пользователя.".localized
             return
         }
         blockRequest = ShumProfileBlockRequest(
@@ -306,10 +306,10 @@ private struct ShumDistanceLabel: View {
     var body: some View {
         Group {
             if let meters = runtime.distanceMeters(for: peer.id) {
-                Text("\(meters) м")
-                    .accessibilityLabel("Примерное расстояние: \(meters) метров")
+                Text(String.localizedFormat("%@ м".localized, meters))
+                    .accessibilityLabel(String.localizedFormat("Примерное расстояние: %@ метров".localized, meters))
             } else {
-                Text(runtime.isNearby(peer.id) ? "Рядом" : "Не рядом")
+                Text(runtime.isNearby(peer.id) ? "Рядом".localized : "Не рядом".localized)
             }
         }
         .font(.system(size: 14))
@@ -327,7 +327,6 @@ struct ShumPeerCard: View {
     let profileCard: ShumContactCard?
     var lastMetAt: Date?
     var verifiesIdentity: Bool
-    let sharesCaptureCover: Bool
     let write: () -> Void
 
     @State private var showPhoto = false
@@ -340,7 +339,6 @@ struct ShumPeerCard: View {
         card: ShumContactCard? = nil,
         lastMetAt: Date? = nil,
         verifiesIdentity: Bool = false,
-        sharesCaptureCover: Bool = false,
         write: @escaping () -> Void
     ) {
         self.runtime = runtime
@@ -348,7 +346,6 @@ struct ShumPeerCard: View {
         self.profileCard = card
         self.lastMetAt = lastMetAt
         self.verifiesIdentity = verifiesIdentity
-        self.sharesCaptureCover = sharesCaptureCover
         self.write = write
     }
 
@@ -376,7 +373,7 @@ struct ShumPeerCard: View {
                         }
                             .contentShape(Circle())
                             .onTapGesture(perform: openPhoto)
-                            .accessibilityLabel("Посмотреть фото")
+                            .accessibilityLabel("Посмотреть фото".localized)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                             .offset(y: -10)
                     }
@@ -392,19 +389,19 @@ struct ShumPeerCard: View {
                         if verifiesIdentity {
                             if card != nil {
                                 RegistrationPrimaryButton(
-                                    title: "Сверить ключ",
+                                    title: "Сверить ключ".localized,
                                     trailingSystemImage: "checkmark.shield",
                                     action: { showVerification = true }
                                 )
                                 .frame(width: contentWidth)
                             } else {
-                                Text("Ключ контакта пока недоступен")
+                                Text("Ключ контакта пока недоступен".localized)
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                                     .frame(width: contentWidth)
                             }
                         } else {
-                            RegistrationPrimaryButton(title: "Написать") {
+                            RegistrationPrimaryButton(title: "Написать".localized) {
                                 guard !isOpeningChat else { return }
                                 isOpeningChat = true
                                 write()
@@ -426,7 +423,7 @@ struct ShumPeerCard: View {
                 .padding(.top, 8)
             }
         }
-        .shumProtectFromCapture(protectsCapture, showsCover: !sharesCaptureCover)
+        .shumProtectFromCapture(protectsCapture)
         .fullScreenCover(isPresented: $showPhoto) {
             if let avatar, let image = UIImage(data: avatar) {
                 FullScreenPhotoView(isPresented: $showPhoto) {
@@ -439,8 +436,7 @@ struct ShumPeerCard: View {
             if let card {
                 ShumKeyVerificationView(
                     runtime: runtime,
-                    card: card,
-                    avatar: avatar
+                    peerCard: card
                 )
             }
         }
@@ -449,13 +445,13 @@ struct ShumPeerCard: View {
     private var presenceInfo: some View {
         Group {
             if let lastMetAt, !runtime.isNearby(peer.id) {
-                Text("Виделись \(lastMetAt.shumRelativeDescription)")
+                Text(String.localizedFormat("Виделись %@".localized, lastMetAt.shumRelativeDescription))
             } else {
                 HStack(spacing: 8) {
-                    Text(runtime.isNearby(peer.id) ? "Рядом" : "Не рядом")
+                    Text(runtime.isNearby(peer.id) ? "Рядом".localized : "Не рядом".localized)
                     if let meters = runtime.distanceMeters(for: peer.id) {
-                        Text("\(meters) м")
-                            .accessibilityLabel("Примерное расстояние: \(meters) метров")
+                        Text(String.localizedFormat("%@ м".localized, meters))
+                            .accessibilityLabel(String.localizedFormat("Примерное расстояние: %@ метров".localized, meters))
                     }
                 }
             }
@@ -500,7 +496,7 @@ private struct ShumPersonContextMenuModifier: ViewModifier {
     @ViewBuilder
     private var menu: some View {
         Button(action: writeAction) {
-            Label("Написать", systemImage: "paperplane")
+            Label("Написать".localized, systemImage: "paperplane")
                 .foregroundStyle(.primary)
         }
         .tint(.primary)
@@ -508,7 +504,7 @@ private struct ShumPersonContextMenuModifier: ViewModifier {
         if let deleteAction {
             Divider()
             Button(action: deleteAction) {
-                Label("Удалить", systemImage: "trash")
+                Label("Удалить".localized, systemImage: "trash")
                     .foregroundStyle(.primary)
             }
             .tint(.primary)
@@ -517,7 +513,7 @@ private struct ShumPersonContextMenuModifier: ViewModifier {
         Divider()
 
         Button(role: .destructive, action: blockAction) {
-            Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+            Label("Заблокировать".localized, systemImage: "person.crop.circle.badge.xmark")
                 .foregroundStyle(.red)
         }
         .tint(.red)
@@ -650,7 +646,7 @@ struct ShumEncounterHistoryView: View {
                 encounterList
             }
         }
-        .navigationTitle("Виделись")
+        .navigationTitle("Виделись".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -663,7 +659,7 @@ struct ShumEncounterHistoryView: View {
                         )
                 }
                 .disabled(encounters.isEmpty)
-                .accessibilityLabel("Очистить историю")
+                .accessibilityLabel("Очистить историю".localized)
             }
         }
         .sheet(item: $selectedEncounter) { encounter in
@@ -681,7 +677,7 @@ struct ShumEncounterHistoryView: View {
             .presentationDragIndicator(.visible)
         }
         .alert(
-            "Удалить из «Виделись»?",
+            "Удалить из «Виделись»?".localized,
             isPresented: Binding(
                 get: { pendingDelete != nil },
                 set: { if !$0 { pendingDelete = nil } }
@@ -689,29 +685,29 @@ struct ShumEncounterHistoryView: View {
             presenting: pendingDelete
         ) {
             encounter in
-            Button("Отмена", role: .cancel) { pendingDelete = nil }
-            Button("Очистить", role: .destructive) {
+            Button("Отмена".localized, role: .cancel) { pendingDelete = nil }
+            Button("Очистить".localized, role: .destructive) {
                 runtime.permanent?.deleteEncounter(encounter.card)
                 pendingDelete = nil
             }
         } message: {
             _ in
-            Text("Карточка будет удалена из списка «Виделись».")
+            Text("Карточка будет удалена из списка «Виделись».".localized)
         }
-        .alert("Очистить историю встреч?", isPresented: $showsClearConfirmation) {
-            Button("Отмена", role: .cancel) { }
-            Button("Очистить историю", role: .destructive) {
+        .alert("Очистить историю встреч?".localized, isPresented: $showsClearConfirmation) {
+            Button("Отмена".localized, role: .cancel) { }
+            Button("Очистить историю".localized, role: .destructive) {
                 runtime.permanent?.clearEncounters()
             }
         } message: {
-            Text("Все сохранённые на этом устройстве встречи будут удалены.")
+            Text("Все сохранённые на этом устройстве встречи будут удалены.".localized)
         }
         .shumProfileBlockSheet(runtime: runtime, request: $blockRequest)
     }
 
     private var encounterList: some View {
         List {
-            Text("История хранится только на этом устройстве в зашифрованном виде.")
+            Text("История хранится только на этом устройстве в зашифрованном виде.".localized)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)
@@ -741,22 +737,22 @@ struct ShumEncounterHistoryView: View {
                     )
                     .contextMenu {
                         Button { selectedEncounter = encounter } label: {
-                            Label("Посмотреть профиль", systemImage: "person.crop.circle")
+                            Label("Посмотреть профиль".localized, systemImage: "person.crop.circle")
                                 .foregroundStyle(.primary)
                         }
                         .tint(.primary)
                         Button { openChat(peer) } label: {
-                            Label("Написать", systemImage: "paperplane")
+                            Label("Написать".localized, systemImage: "paperplane")
                                 .foregroundStyle(.primary)
                         }
                         .tint(.primary)
                         Button { togglePinned(encounter) } label: {
-                            Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill")
+                            Label(pinned ? "Открепить".localized : "Закрепить".localized, systemImage: pinned ? "pin.slash" : "pin.fill")
                                 .foregroundStyle(.primary)
                         }
                         .tint(.primary)
                         Button(role: .destructive) { pendingDelete = encounter } label: {
-                            Label("Очистить", systemImage: "trash")
+                            Label("Очистить".localized, systemImage: "trash")
                                 .foregroundStyle(.red)
                         }
                         .tint(.red)
@@ -768,7 +764,7 @@ struct ShumEncounterHistoryView: View {
                                 waitsForTransientUI: false
                             )
                         } label: {
-                            Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                            Label("Заблокировать".localized, systemImage: "person.crop.circle.badge.xmark")
                                 .foregroundStyle(.red)
                         }
                         .tint(.red)
@@ -790,13 +786,13 @@ struct ShumEncounterHistoryView: View {
                 .zIndex(elevatedEncounterIDs.contains(encounter.id) ? 1_000 : (pinned ? 1 : 0))
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
                     Button { togglePinned(encounter) } label: {
-                        Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill")
+                        Label(pinned ? "Открепить".localized : "Закрепить".localized, systemImage: pinned ? "pin.slash" : "pin.fill")
                     }
                     .tint(pinned ? Color(uiColor: .systemGray) : .accentColor)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { pendingDelete = encounter } label: {
-                        Label("Очистить", systemImage: "trash")
+                        Label("Очистить".localized, systemImage: "trash")
                     }
                     .tint(Color(uiColor: .systemGray))
 
@@ -807,7 +803,7 @@ struct ShumEncounterHistoryView: View {
                             waitsForTransientUI: true
                         )
                     } label: {
-                        Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                        Label("Заблокировать".localized, systemImage: "person.crop.circle.badge.xmark")
                     }
                     .tint(.red)
                 }
@@ -881,20 +877,20 @@ private struct ShumEncounterHistoryEmptyState: View {
                 .frame(width: 88, height: 68)
                 .accessibilityHidden(true)
 
-            Text("Пока не встречались")
+            Text("Пока не встречались".localized)
                 .font(.system(size: 23, weight: .semibold))
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.center)
                 .padding(.top, 26)
 
-            Text("Встречи поблизости сохранятся здесь.")
+            Text("Встречи поблизости сохранятся здесь.".localized)
                 .font(.system(size: 16, weight: .regular))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 10)
 
-            Text("Все встречи за 24 часа")
+            Text("Все встречи за 24 часа".localized)
                 .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(.secondary)
                 .padding(.top, 18)
@@ -1007,7 +1003,7 @@ private struct ShumProfileBlockOptionsSheet: View {
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Заблокировать пользователя?")
+                    Text("Заблокировать пользователя?".localized)
                         .font(.system(size: 17, weight: .semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
@@ -1031,7 +1027,7 @@ private struct ShumProfileBlockOptionsSheet: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Закрыть")
+                .accessibilityLabel("Закрыть".localized)
             }
 
             VStack(spacing: 0) {
@@ -1041,7 +1037,7 @@ private struct ShumProfileBlockOptionsSheet: View {
                             .font(.system(size: 20, weight: .regular))
                             .frame(width: 22)
 
-                        Text("Заблокировать")
+                        Text("Заблокировать".localized)
                             .font(.system(size: 16))
 
                         Spacer()

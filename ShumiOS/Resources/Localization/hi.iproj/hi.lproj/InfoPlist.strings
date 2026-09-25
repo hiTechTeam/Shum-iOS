@@ -1,0 +1,4 @@
+"UTTypeDescription" = "Shum बैकअप";
+"NSBluetoothAlwaysUsageDescription" = "Bluetooth से Shum आस-पास के उपयोगकर्ताओं को खोज सकता है और स्कैनिंग चालू होने पर आपकी प्रोफ़ाइल को उनके लिए उपलब्ध कर सकता है।";
+"NSCameraUsageDescription" = "कैमरा एक्सेस से आप Shum QR कोड स्कैन कर सकते हैं और प्रोफ़ाइल फ़ोटो ले सकते हैं।";
+"NSFaceIDUsageDescription" = "Face ID आपकी बातचीत और Shum सेटिंग्स तक पहुँच को सुरक्षित रखता है।";

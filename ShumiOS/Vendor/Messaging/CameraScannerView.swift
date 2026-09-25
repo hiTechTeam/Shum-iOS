@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import Vision
 
 #if os(iOS)
 struct CameraScannerView: UIViewRepresentable {
@@ -83,7 +84,9 @@ struct CameraScannerView: NSViewRepresentable {
 }
 #endif
 
-final class CameraScannerCoordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
+final class CameraScannerCoordinator: NSObject,
+    AVCaptureMetadataOutputObjectsDelegate,
+    AVCaptureVideoDataOutputSampleBufferDelegate {
     private var onCode: ((String) -> Void)?
     private var onUnavailable: (() -> Void)?
     private let session = AVCaptureSession()
@@ -94,6 +97,9 @@ final class CameraScannerCoordinator: NSObject, AVCaptureMetadataOutputObjectsDe
     private weak var previewLayer: AVCaptureVideoPreviewLayer?
     private weak var captureDevice: AVCaptureDevice?
     private var torchEnabled = false
+    private let visionQueue = DispatchQueue(label: "app.shum.qr-vision", qos: .userInitiated)
+    private var lastVisionScan = CFTimeInterval.zero
+    private var visionScanInProgress = false
 
     func setup(
         previewLayer: AVCaptureVideoPreviewLayer,
@@ -149,6 +155,7 @@ final class CameraScannerCoordinator: NSObject, AVCaptureMetadataOutputObjectsDe
         }
         session.addInput(input)
         captureDevice = device
+        configureCamera(device)
         let output = AVCaptureMetadataOutput()
         guard session.canAddOutput(output) else {
             session.commitConfiguration()
@@ -159,10 +166,37 @@ final class CameraScannerCoordinator: NSObject, AVCaptureMetadataOutputObjectsDe
         if output.availableMetadataObjectTypes.contains(.qr) {
             output.metadataObjectTypes = [.qr]
         }
+
+        let videoOutput = AVCaptureVideoDataOutput()
+        videoOutput.alwaysDiscardsLateVideoFrames = true
+        videoOutput.videoSettings = [
+            kCVPixelBufferPixelFormatTypeKey as String:
+                kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+        ]
+        if session.canAddOutput(videoOutput) {
+            session.addOutput(videoOutput)
+            videoOutput.setSampleBufferDelegate(self, queue: visionQueue)
+        }
         session.commitConfiguration()
         previewLayer?.session = session
         didConfigureSession = true
         return true
+    }
+
+    private func configureCamera(_ device: AVCaptureDevice) {
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+            if device.isAutoFocusRangeRestrictionSupported {
+                device.autoFocusRangeRestriction = .near
+            }
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+        } catch { }
     }
 
     func setTorchEnabled(_ enabled: Bool) {
@@ -216,6 +250,33 @@ final class CameraScannerCoordinator: NSObject, AVCaptureMetadataOutputObjectsDe
                   m.type == .qr,
                   let str = m.stringValue else { continue }
             onCode?(str)
+        }
+    }
+
+    func captureOutput(
+        _ output: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from connection: AVCaptureConnection
+    ) {
+        let now = CACurrentMediaTime()
+        guard desiredActive,
+              !visionScanInProgress,
+              now - lastVisionScan >= 0.25,
+              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        lastVisionScan = now
+        visionScanInProgress = true
+
+        let request = VNDetectBarcodesRequest()
+        request.symbologies = [.qr]
+        defer { visionScanInProgress = false }
+        guard (try? VNImageRequestHandler(
+            cvPixelBuffer: pixelBuffer,
+            orientation: .right
+        ).perform([request])) != nil,
+              let value = request.results?.first?.payloadStringValue else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard self?.desiredActive == true else { return }
+            self?.onCode?(value)
         }
     }
 }

@@ -19,10 +19,10 @@ enum ShumChatProtectionState: Equatable {
 
     var title: String {
         switch self {
-        case .encrypted: "Сквозное шифрование"
-        case .preparing: "Подготавливаем защищённый чат…"
-        case .unavailable: "Защищённый чат недоступен"
-        case .archive: "Сохранённая история"
+        case .encrypted: "Сквозное шифрование".localized
+        case .preparing: "Подготавливаем защищённый чат…".localized
+        case .unavailable: "Защищённый чат недоступен".localized
+        case .archive: "Сохранённая история".localized
         }
     }
 
@@ -38,28 +38,26 @@ enum ShumChatProtectionState: Equatable {
     var explanation: String {
         switch self {
         case .encrypted:
-            "Сообщения шифруются на вашем устройстве. Читать переписку могут только её участники, а ретрансляторы не видят текст сообщений."
+            "Сообщения шифруются на вашем устройстве. Читать переписку могут только её участники, а ретрансляторы не видят текст сообщений.".localized
         case .preparing:
-            "Ждём ключ собеседника или завершения защищённого соединения. Сообщения не отправляются открытым текстом."
+            "Ждём ключ собеседника или завершения защищённого соединения. Сообщения не отправляются открытым текстом.".localized
         case .unavailable:
-            "Сейчас не удалось подготовить защиту для отправки сообщений. Незашифрованная отправка не используется."
+            "Сейчас не удалось подготовить защиту для отправки сообщений. Незашифрованная отправка не используется.".localized
         case .archive:
-            "Это сохранённая история старого чата. Новые сообщения в этот чат не отправляются."
+            "Это сохранённая история старого чата. Новые сообщения в этот чат не отправляются.".localized
         }
     }
 }
 
 struct ShumChatProtectionBanner: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let state: ShumChatProtectionState
-    let hasContentUnderneath: Bool
     let open: () -> Void
 
     var body: some View {
         Button(action: open) {
             HStack(spacing: 7) {
                 Image(systemName: state.symbol)
-                Text(state.title + " · Децентрализованная связь")
+                Text(state.title + " · Децентрализованная связь".localized)
                     .multilineTextAlignment(.center)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 8, weight: .semibold))
@@ -72,18 +70,8 @@ struct ShumChatProtectionBanner: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background {
-            if #available(iOS 26.0, *) {
-                Color.clear
-            } else {
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .opacity(hasContentUnderneath ? 1 : 0)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: hasContentUnderneath)
-            }
-        }
-        .accessibilityLabel(state.title + ". Децентрализованная связь")
-        .accessibilityHint("Узнать о защите переписки")
+        .accessibilityLabel(state.title + ". Децентрализованная связь".localized)
+        .accessibilityHint("Узнать о защите переписки".localized)
         .accessibilityIdentifier("shum.chatProtection")
     }
 }
@@ -103,19 +91,19 @@ struct ShumChatProtectionSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     detail(state.title, text: state.explanation, symbol: state.symbol, isActive: state == .encrypted)
-                    detail("Децентрализованная связь", text:
-                        "Рядом сообщения передаются по Bluetooth. Для связи через интернет используются независимые ретрансляторы. Единого центрального сервера переписки нет.",
+                    detail("Децентрализованная связь".localized, text:
+                        "Рядом сообщения передаются по Bluetooth. Для связи через интернет используются независимые ретрансляторы. Единого центрального сервера переписки нет.".localized,
                         symbol: "network")
 
                     VStack(spacing: 12) {
                         RegistrationPrimaryButton(
-                            title: "Сверить ключ",
+                            title: "Сверить ключ".localized,
                             isEnabled: card != nil,
                             trailingSystemImage: "checkmark.shield"
                         ) { showVerification = true }
                         Text(card != nil
-                             ? "Сравните QR-код с собеседником лично или по другому доверенному каналу."
-                             : "Сверка ключа станет доступна после получения профиля собеседника.")
+                             ? "Сравните QR-код с собеседником лично, находясь рядом.".localized
+                             : "Сверка ключа станет доступна после получения профиля собеседника.".localized)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -124,11 +112,11 @@ struct ShumChatProtectionSheet: View {
                 .padding(24)
             }
             .background(ShumThemeCanvas().ignoresSafeArea())
-            .navigationTitle("Защита чата")
+            .navigationTitle("Защита чата".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Готово") { dismiss() }
+                    Button("Готово".localized) { dismiss() }
                 }
             }
         }
@@ -136,11 +124,11 @@ struct ShumChatProtectionSheet: View {
         .presentationDragIndicator(.visible)
         .sheet(isPresented: $showVerification) {
             if let card {
-                ShumKeyVerificationView(runtime: runtime, card: card, avatar: runtime.profile(for: peer.id)?.avatar)
+                ShumKeyVerificationView(runtime: runtime, peerCard: card)
             }
         }
-        // This sheet contains public explanations only. The chat underneath
-        // keeps its own capture protection; the verification QR remains shareable.
+        // This sheet contains public explanations only. The verification
+        // screen presented from it enables capture protection separately.
         .shumAllowsScreenshots()
     }
 

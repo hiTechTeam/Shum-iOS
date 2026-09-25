@@ -1,0 +1,4 @@
+"UTTypeDescription" = "Shumバックアップ";
+"NSBluetoothAlwaysUsageDescription" = "Bluetoothを使用して近くのShumユーザーを見つけ、検索中は自分のプロフィールを周囲に表示します。";
+"NSCameraUsageDescription" = "カメラを使用してShumのQRコードをスキャンし、プロフィール写真を撮影します。";
+"NSFaceIDUsageDescription" = "Face IDで会話とShumの設定へのアクセスを保護します。";

@@ -78,18 +78,18 @@ struct LocalCardDetailsView: View {
             VStack(alignment: .leading, spacing: 24) {
                 if mode == .registration { Text(mode.title).font(.largeTitle.bold()) }
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Имя")
+                    Text("Имя".localized)
                         .font(.system(size: 17, weight: .regular))
-                    TextField("Имя пользователя", text: $name)
+                    TextField("Имя пользователя".localized, text: $name)
                         .textContentType(.nickname).textInputAutocapitalization(.never)
                         .focused($focused).submitLabel(.done).onSubmit { save() }
                         .padding(16)
                         .background(Color.tField, in: Capsule())
                         .accessibilityIdentifier("local.name")
-                    Text("Так вас увидят собеседники.")
+                    Text("Так вас увидят собеседники.".localized)
                         .font(.footnote).foregroundStyle(.secondary)
                     if !name.isEmpty && !valid {
-                        Text("Сократите имя и уберите переносы строки.")
+                        Text("Сократите имя и уберите переносы строки.".localized)
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
@@ -97,7 +97,7 @@ struct LocalCardDetailsView: View {
                 RegistrationPrimaryButton(
                     title: mode == .registration
                         ? Inc.Onboarding.photoNext.localized
-                        : NSLocalizedString("local.profile.save", comment: ""),
+                        : "local.profile.save".localized,
                     isEnabled: valid,
                     action: save
                 )

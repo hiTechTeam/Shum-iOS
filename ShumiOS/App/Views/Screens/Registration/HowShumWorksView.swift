@@ -9,28 +9,28 @@ struct HowShumWorksView: View {
     private let pages: [ShumOnboardingContent] = [
         ShumOnboardingContent(
             illustration: .nearby,
-            title: "Люди рядом",
-            description: "Shum находит людей поблизости по Bluetooth. Можно познакомиться и начать общение напрямую между устройствами."
+            title: "Люди рядом".localized,
+            description: "Shum находит людей поблизости по Bluetooth. Можно познакомиться и начать общение напрямую между устройствами.".localized
         ),
         ShumOnboardingContent(
             illustration: .mesh,
-            title: "Связь без интернета",
-            description: "Если рядом есть другие пользователи Shum, сообщения проходят по mesh-сети от устройства к устройству. Интернет не нужен."
+            title: "Связь без интернета".localized,
+            description: "Если рядом есть другие пользователи Shum, сообщения проходят по mesh-сети от устройства к устройству. Интернет не нужен.".localized
         ),
         ShumOnboardingContent(
             illustration: .courier,
-            title: "Сообщение найдёт путь",
-            description: "Устройство рядом может временно сохранить зашифрованное сообщение и передать его дальше позже. Содержимое видите только вы и получатель."
+            title: "Сообщение найдёт путь".localized,
+            description: "Устройство рядом может временно сохранить зашифрованное сообщение и передать его дальше позже. Содержимое видите только вы и получатель.".localized
         ),
         ShumOnboardingContent(
             illustration: .network,
-            title: "Общайтесь без единого центра",
-            description: "У Shum нет единого сервера, который управляет общением. Сообщения передаются напрямую и через распределённую сеть Nostr."
+            title: "Общайтесь без единого центра".localized,
+            description: "У Shum нет единого сервера, который управляет общением. Сообщения передаются напрямую и через распределённую сеть Nostr.".localized
         ),
         ShumOnboardingContent(
             illustration: .identity,
-            title: "Ваш профиль принадлежит вам",
-            description: "Профиль защищён криптографическими ключами на устройстве. Только вы управляете своей личностью и резервной копией."
+            title: "Ваш профиль принадлежит вам".localized,
+            description: "Профиль защищён криптографическими ключами на устройстве. Только вы управляете своей личностью и резервной копией.".localized
         )
     ]
 
@@ -43,7 +43,7 @@ struct HowShumWorksView: View {
                     description: content.description,
                     pageIndex: index,
                     pageCount: pages.count,
-                    buttonTitle: index == pages.indices.last ? "Создать профиль" : "Продолжить"
+                    buttonTitle: index == pages.indices.last ? "Создать профиль".localized : "Продолжить".localized
                 ) {
                     continueOnboarding(from: index)
                 }
@@ -91,18 +91,18 @@ struct RegistrationSecurityCreationView: View {
     @State private var showError = false
 
     private let stageTitles = [
-        "Криптографические ключи",
-        "Шифрование",
-        "Защищённое хранилище",
-        "Проверка"
+        "Криптографические ключи".localized,
+        "Шифрование".localized,
+        "Защищённое хранилище".localized,
+        "Проверка".localized
     ]
 
     private var activeStageTitle: String {
         switch stage {
-        case 0: "Создаём криптографические ключи"
-        case 1: "Шифруем хранилище"
-        case 2: "Сохраняем ключи на устройстве"
-        default: "Проверяем защиту"
+        case 0: "Создаём криптографические ключи".localized
+        case 1: "Шифруем хранилище".localized
+        case 2: "Сохраняем ключи на устройстве".localized
+        default: "Проверяем защиту".localized
         }
     }
 
@@ -116,12 +116,12 @@ struct RegistrationSecurityCreationView: View {
             .frame(width: 190, height: 174)
             .accessibilityHidden(true)
 
-            Text("Создаём вашу защиту")
+            Text("Создаём вашу защиту".localized)
                 .font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .padding(.top, 28)
 
-            Text("Ключи создаются и сохраняются\nтолько на этом устройстве.")
+            Text("Ключи создаются и сохраняются\nтолько на этом устройстве.".localized)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -181,7 +181,7 @@ struct RegistrationSecurityCreationView: View {
 
             if ceremonyCompleted {
                 RegistrationPrimaryButton(
-                    title: "Продолжить",
+                    title: "Продолжить".localized,
                     isEnabled: true,
                     accentColor: Color.accentColor
                 ) {
@@ -190,7 +190,7 @@ struct RegistrationSecurityCreationView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .padding(.bottom, 20)
             } else {
-                Text("Не закрывайте Shum")
+                Text("Не закрывайте Shum".localized)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 20)
@@ -199,21 +199,21 @@ struct RegistrationSecurityCreationView: View {
         .padding(.horizontal, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(ShumThemeCanvas().ignoresSafeArea())
-        .navigationTitle("Защита")
+        .navigationTitle("Защита".localized)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .navigationDestination(isPresented: $showReady) {
             RegistrationSecurityReadyView()
         }
-        .alert("Не удалось создать защиту", isPresented: $showError) {
-            Button("Повторить") {
+        .alert("Не удалось создать защиту".localized, isPresented: $showError) {
+            Button("Повторить".localized) {
                 Task { await runCreationCeremony() }
             }
-            Button("Назад", role: .cancel) {
+            Button("Назад".localized, role: .cancel) {
                 dismiss()
             }
         } message: {
-            Text("Разблокируйте устройство и попробуйте ещё раз.")
+            Text("Разблокируйте устройство и попробуйте ещё раз.".localized)
         }
         .task {
             await runCreationCeremony()
@@ -583,12 +583,12 @@ struct RegistrationSecurityReadyView: View {
                 .frame(width: 112, height: 92)
                 .accessibilityHidden(true)
 
-            Text("Защита готова")
+            Text("Защита готова".localized)
                 .font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .padding(.top, 34)
 
-            Text("Уникальные ключи защищают ваш профиль и сообщения. Закрытые ключи не передаются Shum и не покидают устройство.")
+            Text("Уникальные ключи защищают ваш профиль и сообщения. Закрытые ключи не передаются Shum и не покидают устройство.".localized)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -597,14 +597,14 @@ struct RegistrationSecurityReadyView: View {
                 .frame(maxWidth: 350)
 
             VStack(spacing: 14) {
-                securityStatus("Ключ профиля создан")
-                securityStatus("Сквозное шифрование включено")
-                securityStatus("Ключи сохранены на устройстве")
+                securityStatus("Ключ профиля создан".localized)
+                securityStatus("Сквозное шифрование включено".localized)
+                securityStatus("Ключи сохранены на устройстве".localized)
             }
             .padding(.top, 30)
 
             if let fingerprint = coordinator.identityFingerprint {
-                Text("Отпечаток \(fingerprint)")
+                Text(String.localizedFormat("Отпечаток %@".localized, fingerprint))
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .padding(.top, 20)
@@ -613,7 +613,7 @@ struct RegistrationSecurityReadyView: View {
             Spacer()
 
             RegistrationPrimaryButton(
-                title: "Продолжить",
+                title: "Продолжить".localized,
                 isEnabled: true,
                 accentColor: Color.accentColor
             ) {
@@ -664,12 +664,12 @@ struct RegistrationPasscodeSetupView: View {
                 .frame(width: 112, height: 92)
                 .accessibilityHidden(true)
 
-            Text(phase == .create ? "Создайте код Shum" : "Повторите код")
+            Text(phase == .create ? "Создайте код Shum".localized : "Повторите код".localized)
                 .font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .padding(.top, 34)
 
-            Text("Пять цифр защитят переписку, если Face ID недоступен.")
+            Text("Пять цифр защитят переписку, если Face ID недоступен.".localized)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -691,7 +691,7 @@ struct RegistrationPasscodeSetupView: View {
             Spacer()
 
             RegistrationPrimaryButton(
-                title: phase == .create ? "Продолжить" : "Сохранить код",
+                title: phase == .create ? "Продолжить".localized : "Сохранить код".localized,
                 isEnabled: code.count == 5 && !isSaving,
                 accentColor: Color.accentColor,
                 action: continueFlow
@@ -719,7 +719,7 @@ struct RegistrationPasscodeSetupView: View {
 
         guard code == firstCode else {
             code = ""
-            message = "Коды не совпадают. Попробуйте ещё раз."
+            message = "Коды не совпадают. Попробуйте ещё раз.".localized
             return
         }
 
@@ -750,12 +750,12 @@ private struct RegistrationFaceIDView: View {
                 .frame(width: 112, height: 92)
                 .accessibilityHidden(true)
 
-            Text("Открывать Shum с \(appLock.biometricTitle)")
+            Text(String.localizedFormat("Открывать Shum с %@".localized, appLock.biometricTitle))
                 .font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .padding(.top, 34)
 
-            Text("Защитите доступ к переписке, если устройство окажется у другого человека.")
+            Text("Защитите доступ к переписке, если устройство окажется у другого человека.".localized)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -775,14 +775,14 @@ private struct RegistrationFaceIDView: View {
 
             VStack(spacing: 10) {
                 RegistrationPrimaryButton(
-                    title: "Включить \(appLock.biometricTitle)",
+                    title: String.localizedFormat("Включить %@".localized, appLock.biometricTitle),
                     isEnabled: !isWorking,
                     accentColor: Color.accentColor
                 ) {
                     enableProtection()
                 }
 
-                Button("Использовать код") {
+                Button("Использовать код".localized) {
                     appLock.usePasscodeByDefault()
                     coordinator.completedRegistration()
                 }
@@ -851,7 +851,7 @@ private struct ShumOnboardingPage: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Экран \(pageIndex + 1) из \(pageCount)")
+            .accessibilityLabel(String.localizedFormat("Экран %@ из %@".localized, pageIndex + 1, pageCount))
             .padding(.bottom, 30)
 
             RegistrationPrimaryButton(

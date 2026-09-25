@@ -44,8 +44,8 @@ struct Welcome: View {
                 Spacer()
                 ShumLogoMark().frame(width: 100, height: 100)
                 Text("Shum").font(.system(size: 46, weight: .bold))
-                Text("Разговор начинается рядом").font(.title2.weight(.semibold)).multilineTextAlignment(.center)
-                Text("Находите людей поблизости и общайтесь по Bluetooth. Даже без интернета.")
+                Text("Разговор начинается рядом".localized).font(.title2.weight(.semibold)).multilineTextAlignment(.center)
+                Text("Находите людей поблизости и общайтесь по Bluetooth. Даже без интернета.".localized)
                     .foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Spacer()
                 Text(legalText)
@@ -63,14 +63,14 @@ struct Welcome: View {
                 }
                 .buttonStyle(.plain)
 
-                Button("Восстановить из резервной копии") {
+                Button("Восстановить из резервной копии".localized) {
                     isImportingBackup = true
                 }
                 .font(.system(size: 16, weight: .regular))
                 .foregroundStyle(.secondary)
                 .frame(height: 36)
 
-                Text("Профиль создаётся на этом устройстве. Номер телефона и внешний аккаунт не нужны.")
+                Text("Профиль создаётся на этом устройстве. Номер телефона и внешний аккаунт не нужны.".localized)
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.bottom, 18)
             }.padding(.horizontal, 28).background(ShumThemeCanvas().ignoresSafeArea())
                 .navigationDestination(isPresented: $showSecuritySetup) {
@@ -137,11 +137,11 @@ struct Welcome: View {
                 .environmentObject(coordinator)
             }
         }
-        .alert("Не удалось открыть копию", isPresented: Binding(
+        .alert("Не удалось открыть копию".localized, isPresented: Binding(
             get: { importError != nil },
             set: { if !$0 { importError = nil } }
         )) {
-            Button("Понятно", role: .cancel) { }
+            Button("Понятно".localized, role: .cancel) { }
         } message: {
             Text(importError ?? "")
         }

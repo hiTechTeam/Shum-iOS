@@ -38,18 +38,15 @@ private struct ShumComposerSurface: ViewModifier {
 
 struct ShumConversationView: View {
     @Environment(\.shumThemePalette) private var palette
-    @Environment(\.shumPresentPeerCard) private var presentPeerCard
+    @Environment(\.shumPresentPeerPhoto) private var presentPeerPhoto
     @ObservedObject var runtime: ShumRuntime
     let peer: ShumPeer
     @State private var draft = ShumComposerDraft()
-    @State private var refocusAfterSend = false
-    @State private var showPeerProfile = false
     @State private var showProtection = false
     @State private var replyingTo: ShumMessage?
     @State private var typingPauseTask: Task<Void, Never>?
     @FocusState private var inputFocused: Bool
     @State private var atBottom = true
-    @State private var hasContentUnderProtectionBanner = false
     @State private var scrollCommand: ShumTimelineCommand?
     private var messages: [ShumMessage] { runtime.conversation(peer.id) }
     private var name: String { runtime.displayName(peer) }
@@ -73,8 +70,15 @@ struct ShumConversationView: View {
                     appearanceKey: "\(palette.accentUIColor)-\(palette.colorScheme)",
                     command: scrollCommand,
                     contentInsets: geometry.safeAreaInsets,
-                    bottomChanged: { atBottom = $0 },
-                    topCoveredChanged: { hasContentUnderProtectionBanner = $0 },
+                    bottomChanged: { bottom in
+                        #if DEBUG && targetEnvironment(simulator)
+                        if ProcessInfo.processInfo.arguments.contains("-ShumPreviewScrollButton") {
+                            atBottom = false
+                            return
+                        }
+                        #endif
+                        atBottom = bottom
+                    },
                     tapped: { inputFocused = false }
                 ) { index, width in
                     messageRow(
@@ -108,8 +112,7 @@ struct ShumConversationView: View {
         .background(ShumChatCanvas().ignoresSafeArea())
         .safeAreaInset(edge: .top, spacing: 0) {
             ShumChatProtectionBanner(
-                state: runtime.chatProtection(for: peer.id),
-                hasContentUnderneath: hasContentUnderProtectionBanner
+                state: runtime.chatProtection(for: peer.id)
             ) {
                 inputFocused = false
                 showProtection = true
@@ -139,74 +142,45 @@ struct ShumConversationView: View {
                     .shumHiddenFromSystemCapture(true)
             }
             ShumAvatarToolbar {
-                Button(action: openPeerProfile) {
+                Button(action: openPhotoPreview) {
                     ShumAvatar(name: name, size: 34, imageData: runtime.profile(for: peer.id)?.avatar)
                         .frame(width: 44, height: 44).contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityLabel("Профиль собеседника")
+                }.buttonStyle(.plain).accessibilityLabel("Посмотреть фото".localized)
+                    .disabled(runtime.profile(for: peer.id)?.avatar == nil)
                     .shumHiddenFromSystemCapture(true)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            composer.overlay(alignment: .top) {
-                if !atBottom && !conversation.isEmpty {
-                    HStack {
-                        Spacer()
-                        Button {
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            scrollCommand = ShumTimelineCommand(target: .bottom)
-                        } label: {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(.primary)
-                                .frame(width: 40, height: 40)
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .modifier(ShumComposerSurface())
-                        .accessibilityLabel("К последнему сообщению")
-                        .accessibilityIdentifier("shum.scrollToBottom")
-                        .padding(.trailing, 3)
-                    }
-                    .frame(maxWidth: 520)
-                    .padding(.horizontal, 20)
-                    .offset(y: -44)
-                }
-            }
+            composer
         }
         .sheet(isPresented: $showProtection) {
             ShumChatProtectionSheet(runtime: runtime, peer: peer)
         }
-        .sheet(isPresented: Binding(
-            get: { showPeerProfile && presentPeerCard == nil },
-            set: { showPeerProfile = $0 }
-        )) {
-            ShumPeerProfileSheet(runtime: runtime, peer: peer)
-        }
-        .onChange(of: showPeerProfile) { visible in
-            runtime.openConversation(!visible && runtime.chatPeers.contains(where: { $0.id == peer.id }) ? peer.id : nil)
-        }
-        // Keep message rows protected even during a navigation pop transition.
+        // Keep message rows protected during a navigation pop transition.
         .shumHiddenFromSystemCapture(true)
         #if DEBUG && targetEnvironment(simulator)
         .task {
-            if ProcessInfo.processInfo.arguments.contains("-ShumPreviewPeerCard") {
-                openPeerProfile()
+            if ProcessInfo.processInfo.arguments.contains("-ShumPreviewScrollButton") {
+                atBottom = false
+            }
+            if ProcessInfo.processInfo.arguments.contains("-ShumPreviewPeerPhoto") {
+                openPhotoPreview()
             }
         }
         #endif
     }
 
-    private func openPeerProfile() {
-        guard !showPeerProfile else { return }
+    private func openPhotoPreview() {
+        guard let avatar = runtime.profile(for: peer.id)?.avatar,
+              let image = UIImage(data: avatar) else { return }
         inputFocused = false
-        showPeerProfile = true
-        presentPeerCard?(peer) { showPeerProfile = false }
+        presentPeerPhoto?(image)
     }
 
     private var presenceText: String {
-        if runtime.isBlocked(peer.id) { return "Заблокирован" }
-        if runtime.isNearby(peer.id) { return "Рядом · в сети" }
-        return runtime.isOnline(peer.id) ? "В сети" : "Не в сети"
+        if runtime.isBlocked(peer.id) { return "Заблокирован".localized }
+        if runtime.isNearby(peer.id) { return "Рядом · в сети".localized }
+        return runtime.isOnline(peer.id) ? "В сети".localized : "Не в сети".localized
     }
 
     @ViewBuilder
@@ -215,43 +189,72 @@ struct ShumConversationView: View {
             if offersAddContact {
                 addContactShortcut
             }
-            if runtime.isLegacyOnly(peer.id) {
-                lockedCapsule(
-                    title: "История сохранена",
-                    icon: "lock.fill"
-                )
-            } else if runtime.isBlocked(peer.id) {
-                lockedCapsule(title: "Контакт заблокирован", icon: "lock.fill")
-            } else {
-                switch invitationPhase {
-                case .ready:
-                    actionCapsule(
-                        title: "Отправить приглашение",
-                        color: Color.accentColor,
-                        foreground: palette.accentForeground
-                    ) {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        _ = runtime.sendInvitation(to: peer.id)
-                    }
-                case .outgoingPending:
-                    lockedCapsule(title: "Дождитесь подтверждения, после чего начинайте общение")
-                case .incomingPending:
-                    invitationDecisionControls
-                case .accepted:
-                    messageComposer
-                case .declinedByPeer:
-                    lockedCapsule(title: "Общение недоступно", icon: "lock.fill")
-                case .declinedLocally:
-                    ShumInvitationRecoverySlider {
-                        runtime.acceptInvitation(from: peer.id)
+            composerControl
+                .overlay(alignment: .topTrailing) {
+                    if !atBottom && !messages.isEmpty {
+                        scrollToBottomButton
+                            .padding(.trailing, 3)
+                            .offset(y: -48)
                     }
                 }
-            }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
-        .padding(.vertical, 8)
+        .padding(.top, 8)
+        // SwiftUI's keyboard safe area moves this inset with the keyboard.
+        // A fixed gap avoids a second, mismatched animation of the composer.
+        .padding(.bottom, 8)
         .animation(.easeOut(duration: 0.2), value: invitationPhase)
+    }
+
+    @ViewBuilder
+    private var composerControl: some View {
+        if runtime.isLegacyOnly(peer.id) {
+            lockedCapsule(title: "История сохранена".localized, icon: "lock.fill")
+        } else if runtime.isBlocked(peer.id) {
+            lockedCapsule(title: "Контакт заблокирован".localized, icon: "lock.fill")
+        } else {
+            switch invitationPhase {
+            case .ready:
+                actionCapsule(
+                    title: "Отправить приглашение".localized,
+                    color: Color.accentColor,
+                    foreground: palette.accentForeground
+                ) {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    _ = runtime.sendInvitation(to: peer.id)
+                }
+            case .outgoingPending:
+                lockedCapsule(title: "Дождитесь подтверждения, после чего начинайте общение".localized)
+            case .incomingPending:
+                invitationDecisionControls
+            case .accepted:
+                messageComposer
+            case .declinedByPeer:
+                lockedCapsule(title: "Общение недоступно".localized, icon: "lock.fill")
+            case .declinedLocally:
+                ShumInvitationRecoverySlider {
+                    runtime.acceptInvitation(from: peer.id)
+                }
+            }
+        }
+    }
+
+    private var scrollToBottomButton: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            scrollCommand = ShumTimelineCommand(target: .bottom)
+        } label: {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 40, height: 40)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .modifier(ShumComposerSurface())
+        .accessibilityLabel("К последнему сообщению".localized)
+        .accessibilityIdentifier("shum.scrollToBottom")
     }
 
     private var addContactShortcut: some View {
@@ -263,11 +266,11 @@ struct ShumConversationView: View {
             HStack(spacing: 5) {
                 Image(systemName: "person.badge.plus")
                     .foregroundStyle(.secondary)
-                Text("Не в контактах")
+                Text("Не в контактах".localized)
                     .foregroundStyle(.secondary)
                 Text("·")
                     .foregroundStyle(.secondary)
-                Text("Добавить")
+                Text("Добавить".localized)
                     .foregroundStyle(Color.accentColor)
             }
             .font(.system(size: 13, weight: .regular))
@@ -275,7 +278,7 @@ struct ShumConversationView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Добавить пользователя в контакты")
+        .accessibilityLabel("Добавить пользователя в контакты".localized)
     }
 
     private var messageComposer: some View {
@@ -286,7 +289,7 @@ struct ShumConversationView: View {
                         .fill(Color.accentColor)
                         .frame(width: 3, height: 34)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(replyingTo.outgoing ? "Ответ себе" : "Ответ пользователю \(name)")
+                        Text(replyingTo.outgoing ? "Ответ себе".localized : String.localizedFormat("Ответ пользователю %@".localized, name))
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(Color.accentColor)
                         Text(replyingTo.text)
@@ -305,7 +308,7 @@ struct ShumConversationView: View {
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Отменить ответ")
+                    .accessibilityLabel("Отменить ответ".localized)
                 }
                 .padding(.leading, 14)
                 .padding(.trailing, 8)
@@ -314,18 +317,13 @@ struct ShumConversationView: View {
             }
 
             HStack(alignment: .bottom, spacing: 4) {
-                TextField("Сообщение", text: draftBinding, prompt: Text("Сообщение").foregroundColor(Color(.secondaryLabel)), axis: .vertical)
+                TextField("Сообщение".localized, text: draftBinding, prompt: Text("Сообщение".localized).foregroundColor(Color(.secondaryLabel)), axis: .vertical)
                     .font(.body).lineLimit(1...5).focused($inputFocused)
                     .textFieldStyle(.plain)
                     .padding(.leading, 16).padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(TapGesture().onEnded { inputFocused = true })
                     .accessibilityIdentifier("shum.messageInput")
-                    .id(draft.revision)
-                    .task(id: draft.revision) {
-                        guard refocusAfterSend else { return }
-                        refocusAfterSend = false
-                        inputFocused = true
-                    }
-                    .transaction { $0.animation = nil }
                     .onChange(of: draft.text) { value in updateTyping(for: value) }
                 Button {
                     guard canSend else { return }
@@ -335,7 +333,6 @@ struct ShumConversationView: View {
                         var transaction = Transaction()
                         transaction.disablesAnimations = true
                         withTransaction(transaction) {
-                            refocusAfterSend = inputFocused
                             draft.clearAfterSending()
                         }
                         scrollCommand = ShumTimelineCommand(target: .bottom)
@@ -353,11 +350,19 @@ struct ShumConversationView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSend)
-                .accessibilityLabel("Отправить сообщение")
+                .accessibilityLabel("Отправить сообщение".localized)
                 .accessibilityIdentifier("shum.sendMessage")
             }
         }
         .frame(maxWidth: 520, minHeight: 46)
+        .background {
+            // The field's transparent padding is not a reliable tap target.
+            // Catch taps on the rest of the capsule underneath its controls.
+            RoundedRectangle(cornerRadius: 23, style: .continuous)
+                .fill(Color.clear)
+                .contentShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
+                .onTapGesture { inputFocused = true }
+        }
         .modifier(ShumComposerSurface())
         .animation(.easeOut(duration: 0.15), value: canSend)
         .animation(.easeOut(duration: 0.18), value: replyingTo?.id)
@@ -374,7 +379,7 @@ struct ShumConversationView: View {
     private var invitationDecisionControls: some View {
         HStack(spacing: 10) {
             actionCapsule(
-                title: "Отклонить",
+                title: "Отклонить".localized,
                 color: Color(uiColor: .systemRed),
                 foreground: .black
             ) {
@@ -382,7 +387,7 @@ struct ShumConversationView: View {
                 _ = runtime.declineInvitation(from: peer.id)
             }
             actionCapsule(
-                title: "Принять",
+                title: "Принять".localized,
                 color: Color(uiColor: .systemGreen),
                 foreground: .black
             ) {
@@ -462,36 +467,36 @@ struct ShumConversationView: View {
     }
 
     private func replyAuthor(_ reference: ShumReplyReference) -> String {
-        if let ownID = runtime.permanent?.ownCard.id, reference.senderID == ownID { return "Вы" }
-        if reference.senderID == "self" { return "Вы" }
+        if let ownID = runtime.permanent?.ownCard.id, reference.senderID == ownID { return "Вы".localized }
+        if reference.senderID == "self" { return "Вы".localized }
         return name
     }
 
     private var emptyTitle: String {
         switch invitationPhase {
-        case .ready: "Начните общение"
-        case .outgoingPending: "Приглашение отправлено"
-        case .incomingPending: "Приглашение в чат"
-        case .accepted: "Можете начинать общение"
-        case .declinedByPeer: "Пользователь \(name) отклонил ваш запрос"
-        case .declinedLocally: "Приглашение отклонено"
+        case .ready: "Начните общение".localized
+        case .outgoingPending: "Приглашение отправлено".localized
+        case .incomingPending: "Приглашение в чат".localized
+        case .accepted: "Можете начинать общение".localized
+        case .declinedByPeer: String.localizedFormat("Пользователь %@ отклонил ваш запрос".localized, name)
+        case .declinedLocally: "Приглашение отклонено".localized
         }
     }
 
     private var emptyMessage: String? {
         switch invitationPhase {
         case .ready:
-            "Сначала отправьте приглашение."
+            "Сначала отправьте приглашение.".localized
         case .outgoingPending:
-            "Ожидаем подтверждения."
+            "Ожидаем подтверждения.".localized
         case .incomingPending:
-            "\(name) хочет начать с вами общение."
+            String.localizedFormat("%@ хочет начать с вами общение.".localized, name)
         case .accepted:
-            "Чат доступен."
+            "Чат доступен.".localized
         case .declinedByPeer:
-            "Общение пока недоступно."
+            "Общение пока недоступно.".localized
         case .declinedLocally:
-            "Проведите стрелку вправо, если передумаете."
+            "Проведите стрелку вправо, если передумаете.".localized
         }
     }
     private func timelineItem(at index: Int, in conversation: [ShumMessage]) -> ShumTimelineItem {
@@ -541,8 +546,8 @@ struct ShumConversationView: View {
     }
 
     private func dayTitle(_ date: Date) -> String {
-        if Calendar.current.isDateInToday(date) { return "Сегодня" }
-        if Calendar.current.isDateInYesterday(date) { return "Вчера" }
+        if Calendar.current.isDateInToday(date) { return "Сегодня".localized }
+        if Calendar.current.isDateInYesterday(date) { return "Вчера".localized }
         return date.formatted(.dateTime.day().month(.wide))
     }
 }

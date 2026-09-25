@@ -23,19 +23,19 @@ enum ShumBackupError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .profileUnavailable:
-            return "Профиль ещё не готов для создания резервной копии."
+            return "Профиль ещё не готов для создания резервной копии.".localized
         case .protectedDataUnavailable:
-            return "Не удалось прочитать защищённые ключи. Разблокируйте устройство и попробуйте ещё раз."
+            return "Не удалось прочитать защищённые ключи. Разблокируйте устройство и попробуйте ещё раз.".localized
         case .invalidPassword:
-            return "Неверный пароль или файл резервной копии повреждён."
+            return "Неверный пароль или файл резервной копии повреждён.".localized
         case .invalidBackup:
-            return "Shum не смог проверить эту резервную копию."
+            return "Shum не смог проверить эту резервную копию.".localized
         case .backupTooLarge:
-            return "Резервная копия слишком большая или повреждена."
+            return "Резервная копия слишком большая или повреждена.".localized
         case .restoreRequiresEmptyProfile:
-            return "Восстановление доступно только до создания нового профиля."
+            return "Восстановление доступно только до создания нового профиля.".localized
         case .couldNotSave:
-            return "Не удалось сохранить восстановленные данные на устройстве."
+            return "Не удалось сохранить восстановленные данные на устройстве.".localized
         }
     }
 }

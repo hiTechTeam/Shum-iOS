@@ -242,12 +242,12 @@ final class ShumAppearanceStore: ObservableObject {
 
         var title: String {
             switch self {
-            case .classic: "Dark Classic"
-            case .darkPink: "Dark Pink"
-            case .lightClassic: "Light Classic"
-            case .lightPink: "Light Pink"
-            case .monochromeLight: "Monochrome Light"
-            case .monochromeDark: "Monochrome Dark"
+            case .classic: "appearanceThemeDarkClassic".localized
+            case .darkPink: "appearanceThemeDarkPink".localized
+            case .lightClassic: "appearanceThemeLightClassic".localized
+            case .lightPink: "appearanceThemeLightPink".localized
+            case .monochromeLight: "appearanceThemeMonochromeLight".localized
+            case .monochromeDark: "appearanceThemeMonochromeDark".localized
             }
         }
 

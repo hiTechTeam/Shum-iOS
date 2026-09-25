@@ -2,6 +2,19 @@ import Combine
 import SwiftUI
 import UIKit
 
+private enum ShumCaptureBackend {
+    case secureTextContainer, redaction
+
+    static var current: Self {
+        #if DEBUG && targetEnvironment(simulator)
+        // Exercise the iOS 16–17 backend on locally available newer runtimes.
+        if ProcessInfo.processInfo.arguments.contains("-ShumLegacyCapture") { return .secureTextContainer }
+        #endif
+        if #available(iOS 18.0, *) { return .redaction }
+        return .secureTextContainer
+    }
+}
+
 /// A neutral surface used for system snapshots and while the scene is captured.
 /// It intentionally contains no profile, notification, or connection state.
 struct ShumPrivacyCover: View {
@@ -17,43 +30,71 @@ struct ShumPrivacyCover: View {
         }
         .ignoresSafeArea()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Содержимое Shum скрыто")
+        .accessibilityLabel("Содержимое Shum скрыто".localized)
     }
 }
 
-/// Keeps the live hierarchy unchanged on screen while replacing it with a
-/// neutral surface in screenshots and recordings. Unlike the former
-/// secure-text-field container, this does not re-parent SwiftUI/UIKit views, so
-/// symbols, Canvas drawings, links and presentation controllers render normally.
+/// Keeps one placeholder behind the protected surface. Both capture backends
+/// rely on undocumented system behavior and require device regression checks.
 struct ShumCaptureProtectedContainer<Content: View>: View {
+    @Environment(\.self) private var environment
     private let content: Content
     let isEnabled: Bool
     let showsCover: Bool
+    let protectsSystemChrome: Bool
 
-    init(isEnabled: Bool = true, showsCover: Bool = true, @ViewBuilder content: () -> Content) {
+    init(isEnabled: Bool = true, showsCover: Bool = true,
+         protectsSystemChrome: Bool = false, @ViewBuilder content: () -> Content) {
         self.isEnabled = isEnabled
         self.showsCover = showsCover
+        self.protectsSystemChrome = protectsSystemChrome
         self.content = content()
     }
 
     var body: some View {
         ZStack {
-            if isEnabled && showsCover {
+            if showsCover && (isEnabled || usesSecureTextContainer) {
                 ShumPrivacyCover()
             }
 
-            content
-                .background {
-                    if isEnabled { ShumThemeCanvas().ignoresSafeArea() }
-                }
-                .shumHiddenFromSystemCapture(isEnabled)
-                .environment(\.shumCaptureProtectionEnabled, isEnabled)
+            protectedContent
 
             if isEnabled && showsCover {
                 ShumCapturePrivacyOverlay()
                     .allowsHitTesting(false)
             }
         }
+    }
+
+    @ViewBuilder
+    private var protectedContent: some View {
+        if usesSecureTextContainer {
+            // Host the complete NavigationStack, not individual rows. This
+            // preserves toolbar preferences, sheets, focus and navigation state.
+            // Keep the same host when protection changes on a public route.
+            ShumSecureCaptureHost(isEnabled: isEnabled) {
+                captureContent.shumHiddenFromSystemCapture(isEnabled)
+                    .environment(\.self, environment)
+                    .environment(\.shumCaptureProtectionEnabled, isEnabled)
+            }
+        } else {
+            captureContent.shumHiddenFromSystemCapture(isEnabled)
+        }
+    }
+
+    private var captureContent: some View {
+        content
+            .background {
+                if isEnabled { ShumThemeCanvas().ignoresSafeArea() }
+            }
+            .environment(\.shumCaptureProtectionEnabled, isEnabled)
+    }
+
+    private var usesSecureTextContainer: Bool {
+        // Re-parenting TabView into the secure text canvas loses the physical
+        // device's top and bottom safe areas. Protect its UIKit chrome with
+        // native redaction while each chat stack keeps its own capture host.
+        !protectsSystemChrome && ShumCaptureBackend.current == .secureTextContainer
     }
 }
 
@@ -69,8 +110,10 @@ extension EnvironmentValues {
 }
 
 extension View {
-    func shumProtectFromCapture(_ isEnabled: Bool = true, showsCover: Bool = true) -> some View {
-        ShumCaptureProtectedContainer(isEnabled: isEnabled, showsCover: showsCover) { self }
+    func shumProtectFromCapture(_ isEnabled: Bool = true, showsCover: Bool = true,
+                                protectsSystemChrome: Bool = false) -> some View {
+        ShumCaptureProtectedContainer(isEnabled: isEnabled, showsCover: showsCover,
+                                      protectsSystemChrome: protectsSystemChrome) { self }
     }
 
     /// Only opts this presentation out. A QR sheet must never disable protection
@@ -84,9 +127,11 @@ extension View {
 extension View {
     @ViewBuilder
     func shumHiddenFromSystemCapture(_ isEnabled: Bool) -> some View {
-        if #available(iOS 18.0, *) {
+        if #available(iOS 18.0, *), ShumCaptureBackend.current == .redaction {
             modifier(ShumCaptureRedactionModifier(isEnabled: isEnabled))
         } else {
+            // iOS 16–17 protection belongs to the enclosing secure host.
+            // Wrapping this leaf would break NavigationStack preferences.
             self
         }
     }

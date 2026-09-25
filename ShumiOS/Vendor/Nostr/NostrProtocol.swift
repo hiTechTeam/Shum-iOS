@@ -745,25 +745,11 @@ struct NostrProtocol {
         return sharedSecretData
     }
     
-    private static func randomizedTimestamp() -> Date {
-        // Add random offset to current time for privacy
-        // This prevents timing correlation attacks while the actual message timestamp
-        // is preserved in the encrypted rumor
-        let offset = TimeInterval.random(in: -900...900) // +/- 15 minutes
-        let now = Date()
-        let randomized = now.addingTimeInterval(offset)
-        
-        // Log with explicit UTC and local time for debugging
-        let formatter = DateFormatter()
-        //
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.timeZone = TimeZone(abbreviation: "UTC")
-        
-        formatter.timeZone = TimeZone.current
-        
-        // Timestamp randomized for privacy
-        
-        return randomized
+    static func randomizedTimestamp() -> Date {
+        // Relays may reject or withhold gift wraps dated in the future.
+        // Keep the seal and wrap timestamps independently randomized in the
+        // recent past while the encrypted rumor retains the true send time.
+        Date().addingTimeInterval(TimeInterval.random(in: -300 ... -1))
     }
 }
 

@@ -7,7 +7,7 @@ struct ShumTypingIndicator: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Text("Печатает")
+            Text("Печатает".localized)
             ForEach(0..<3, id: \.self) { index in
                 Text(".")
                     .opacity(index <= phase ? 1 : 0.22)
@@ -16,7 +16,7 @@ struct ShumTypingIndicator: View {
         .font(.system(size: 11))
         .foregroundStyle(.secondary)
         .onReceive(timer) { _ in phase = (phase + 1) % 3 }
-        .accessibilityLabel("Печатает")
+        .accessibilityLabel("Печатает".localized)
     }
 }
 
@@ -139,13 +139,13 @@ struct ShumInvitationRecoverySlider: View {
         .frame(maxWidth: 520)
         .frame(height: 46)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Принять приглашение")
-        .accessibilityHint("Проведите вправо до конца")
+        .accessibilityLabel("Принять приглашение".localized)
+        .accessibilityHint("Проведите вправо до конца".localized)
         .accessibilityAddTraits(.isButton)
     }
 
     private var recoveryLabel: some View {
-        Text("Проведите, чтобы принять")
+        Text("Проведите, чтобы принять".localized)
             .font(.system(size: 15, weight: .regular))
             .frame(maxWidth: .infinity)
     }

@@ -56,8 +56,8 @@ struct ProfilePhotoView: View {
             .buttonStyle(.plain)
 
             Button(viewModel.uiImage == nil
-                   ? NSLocalizedString("profileAddPhoto", comment: "")
-                   : NSLocalizedString("profileChangePhotoShort", comment: "")) {
+                   ? "profileAddPhoto".localized
+                   : "profileChangePhotoShort".localized) {
                 openPhotoOptions()
             }
             .font(.system(size: 16, weight: .semibold))
@@ -215,7 +215,7 @@ private struct ProfilePhotoOptionsSheet: View {
                         Image(systemName: "square.grid.3x3.fill")
                             .font(.system(size: 20, weight: .regular))
                             .frame(width: 22)
-                        Text("Шумное фото")
+                        Text("Шумное фото".localized)
                             .font(.system(size: 16))
                     }
                     .foregroundStyle(.primary)

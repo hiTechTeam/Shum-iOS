@@ -1,22 +1,39 @@
 # Shum
 
-Shum помогает знакомиться с людьми рядом и оставаться на связи на расстоянии. Для общения не нужны номер телефона и электронная почта: достаточно имени.
+[Русский](#русский) · [English](#english)
 
-## Возможности
+## Русский
 
-- Находите людей поблизости и переписывайтесь по Bluetooth без интернета.
-- Добавляйте контакты по QR-коду и продолжайте общение через интернет.
-- Общайтесь со сквозным шифрованием и сверяйте ключи с собеседником.
-- Сохраняйте зашифрованные резервные копии профиля и переписки.
+В этом репозитории находится исходный код Shum, децентрализованного мессенджера для iOS.
 
-У Shum нет единого центрального сервера переписки. История хранится зашифрованной на вашем устройстве.
+Находите людей поблизости, знакомьтесь и оставайтесь на связи на расстоянии. Номер телефона для этого не нужен.
 
-Приложение находится в разработке. Сейчас доступны текстовые сообщения.
+- Переписка по Bluetooth без интернета с людьми рядом.
+- Общение через интернет с помощью независимых ретрансляторов.
+- Сквозное шифрование сообщений и зашифрованная история на устройстве.
+- Резервные копии профиля и переписки.
 
-## Документы и поддержка
+У Shum нет единого центрального сервера. Приложение развивается, сейчас доступны текстовые сообщения.
 
-- [Политика конфиденциальности](PRIVACY.md)
-- [Правила использования](TERMS.md)
-- [Сообщить об ошибке или предложить улучшение](https://github.com/hiTechTeam/Shum-iOS/issues)
-- [Лицензия](LICENSE.md)
-- [Источники проекта](Upstreams/README.md)
+[Политика конфиденциальности](PRIVACY.md) · [Правила использования](TERMS.md) · [Поддержка и предложения](https://github.com/hiTechTeam/Shum-iOS/issues)
+
+## English
+
+This repository contains the source code for Shum, a decentralized messenger for iOS.
+
+Meet people nearby and stay connected over distance. No phone number is needed.
+
+- Chat with people nearby over Bluetooth without internet access.
+- Stay in touch over the internet through independent relays.
+- End-to-end encrypted messages and encrypted history on your device.
+- Backups of your profile and conversations.
+
+Shum has no single central server. The app is under development and currently supports text messaging.
+
+[Privacy policy](PRIVACY.md) · [Terms of use](TERMS.md) · [Support and suggestions](https://github.com/hiTechTeam/Shum-iOS/issues)
+
+## Лицензия / License
+
+Shum распространяется по лицензии [MIT](LICENSE.md). Авторские права: © 2021–2026 Руслан Чукавин. Сторонние компоненты сохраняют [свои лицензии](Upstreams/README.md), включая [Unlicense для Bluetooth-компонентов](BLUETOOTH-LICENSE).
+
+Shum is licensed under the [MIT License](LICENSE.md). Copyright © 2021–2026 Ruslan Chukavin. Third-party components retain [their own licenses](Upstreams/README.md), including the [Unlicense for Bluetooth components](BLUETOOTH-LICENSE).

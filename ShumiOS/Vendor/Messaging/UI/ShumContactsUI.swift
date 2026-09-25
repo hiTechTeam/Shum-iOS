@@ -71,7 +71,7 @@ struct ShumContactsUI: View {
                 }
             }
         }
-        .navigationTitle("Контакты")
+        .navigationTitle("Контакты".localized)
         .navigationBarTitleDisplayMode(.inline)
         .overlay {
             if contacts.isEmpty {
@@ -81,13 +81,13 @@ struct ShumContactsUI: View {
                         .frame(width: 88, height: 68)
                         .accessibilityHidden(true)
 
-                    Text("Контактов пока нет")
+                    Text("Контактов пока нет".localized)
                         .font(.system(size: 23, weight: .semibold))
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.center)
                         .padding(.top, 26)
 
-                    Text("Добавленные контакты появятся здесь.")
+                    Text("Добавленные контакты появятся здесь.".localized)
                         .font(.system(size: 16, weight: .regular))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -105,19 +105,19 @@ struct ShumContactsUI: View {
             }
         }
         .alert(
-            "Убрать из контактов?",
+            "Убрать из контактов?".localized,
             isPresented: Binding(
                 get: { contactToRemove != nil },
                 set: { if !$0 { contactToRemove = nil } }
             ),
             presenting: contactToRemove
         ) { contact in
-            Button("Отмена", role: .cancel) { contactToRemove = nil }
-            Button("Убрать из контактов", role: .destructive) {
+            Button("Отмена".localized, role: .cancel) { contactToRemove = nil }
+            Button("Убрать из контактов".localized, role: .destructive) {
                 removeFromContacts(contact)
             }
         } message: { _ in
-            Text("Пользователь исчезнет из Контактов. Переписка и возможность общения сохранятся.")
+            Text("Пользователь исчезнет из Контактов. Переписка и возможность общения сохранятся.".localized)
         }
         .alert(
             "Shum",
@@ -126,7 +126,7 @@ struct ShumContactsUI: View {
                 set: { if !$0 { removalError = nil } }
             )
         ) {
-            Button("Понятно") { removalError = nil }
+            Button("Понятно".localized) { removalError = nil }
         } message: {
             Text(removalError ?? "")
         }
@@ -141,7 +141,7 @@ struct ShumContactsUI: View {
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.circle)
             .tint(palette.accent)
-            .accessibilityLabel("Новый контакт")
+            .accessibilityLabel("Новый контакт".localized)
             .accessibilityIdentifier("shum.addContact")
         } else {
             Button { openNewContact() } label: {
@@ -150,7 +150,7 @@ struct ShumContactsUI: View {
                     .background(palette.accent, in: Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Новый контакт")
+            .accessibilityLabel("Новый контакт".localized)
             .accessibilityIdentifier("shum.addContact")
         }
     }
@@ -212,7 +212,7 @@ struct ShumContactsUI: View {
             Button {
                 open(.conversation(peer))
             } label: {
-                Label("Написать", systemImage: "paperplane")
+                Label("Написать".localized, systemImage: "paperplane")
                     .foregroundStyle(.primary)
             }
             .tint(.primary)
@@ -222,7 +222,7 @@ struct ShumContactsUI: View {
             Button(role: .destructive) {
                 contactToRemove = contact
             } label: {
-                Label("Убрать из контактов", systemImage: "person.crop.circle.badge.minus")
+                Label("Убрать из контактов".localized, systemImage: "person.crop.circle.badge.minus")
                     .foregroundStyle(.red)
             }
             .tint(.red)
@@ -254,7 +254,7 @@ struct ShumContactsUI: View {
         .listRowSeparatorTint(Color(uiColor: .separator))
         .alignmentGuide(.listRowSeparatorLeading) { _ in 70 }
         .listRowBackground(ShumThemeCanvas())
-        .accessibilityHint("Открыть чат")
+        .accessibilityHint("Открыть чат".localized)
     }
 
     private func removeFromContacts(_ contact: ShumContact) {
@@ -269,20 +269,20 @@ struct ShumContactsUI: View {
     private func contactStatus(for peer: ShumPeer) -> String {
         let nearby = runtime.isNearby(peer.id)
         let online = runtime.isOnline(peer.id)
-        if nearby && online { return "В сети · Рядом" }
-        if nearby { return "Рядом" }
-        if online { return "В сети" }
+        if nearby && online { return "В сети · Рядом".localized }
+        if nearby { return "Рядом".localized }
+        if online { return "В сети".localized }
         guard let date = runtime.lastActiveAt(peer.id) else {
-            return "Давно не в сети"
+            return "Давно не в сети".localized
         }
         if Date().timeIntervalSince(date) < 60 {
-            return "был(а) только что"
+            return "был(а) только что".localized
         }
         let relativeDate = Self.relativeDateFormatter.localizedString(
             for: date,
             relativeTo: Date()
         )
-        return "был(а) \(relativeDate)"
+        return String.localizedFormat("был(а) %@".localized, relativeDate)
     }
 
     private func contactStatusColor(for peer: ShumPeer) -> Color {
@@ -367,12 +367,12 @@ struct ShumNewMessageSheet: View {
     var body: some View {
         NavigationStack {
             contactList
-            .navigationTitle("Написать сообщение")
+            .navigationTitle("Написать сообщение".localized)
             .navigationBarTitleDisplayMode(.inline)
             .searchable(
                 text: $query,
                 placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Поиск"
+                prompt: "Поиск".localized
             )
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -380,7 +380,7 @@ struct ShumNewMessageSheet: View {
                         Image(systemName: "xmark")
                     }
                     .tint(.primary)
-                    .accessibilityLabel("Закрыть")
+                    .accessibilityLabel("Закрыть".localized)
                 }
             }
         }
@@ -444,7 +444,7 @@ struct ShumNewMessageSheet: View {
                 Image(systemName: hasQuery ? "magnifyingglass" : "person.2")
                     .font(.system(size: 34, weight: .regular))
                     .foregroundStyle(.secondary)
-                Text(hasQuery ? "Ничего не найдено" : "Контактов пока нет")
+                Text(hasQuery ? "Ничего не найдено".localized : "Контактов пока нет".localized)
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(.secondary)
             }
@@ -489,19 +489,19 @@ struct ShumNewMessageSheet: View {
         .listRowSeparatorTint(Color(uiColor: .separator))
         .alignmentGuide(.listRowSeparatorLeading) { _ in 76 }
         .listRowBackground(ShumThemeCanvas())
-        .accessibilityHint("Открыть чат")
+        .accessibilityHint("Открыть чат".localized)
     }
 
     private func contactStatus(for peer: ShumPeer) -> String {
         let nearby = runtime.isNearby(peer.id)
         let online = runtime.isOnline(peer.id)
-        if nearby && online { return "В сети · Рядом" }
-        if nearby { return "Рядом" }
-        if online { return "В сети" }
-        guard let date = runtime.lastActiveAt(peer.id) else { return "Давно не в сети" }
-        if Date().timeIntervalSince(date) < 60 { return "был(а) только что" }
+        if nearby && online { return "В сети · Рядом".localized }
+        if nearby { return "Рядом".localized }
+        if online { return "В сети".localized }
+        guard let date = runtime.lastActiveAt(peer.id) else { return "Давно не в сети".localized }
+        if Date().timeIntervalSince(date) < 60 { return "был(а) только что".localized }
         let relative = Self.relativeDateFormatter.localizedString(for: date, relativeTo: Date())
-        return "был(а) \(relative)"
+        return String.localizedFormat("был(а) %@".localized, relative)
     }
 
     private func contactStatusColor(for peer: ShumPeer) -> Color {
@@ -560,7 +560,7 @@ private struct ContactAlphabetIndex: View {
         }
         .frame(width: 24)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Алфавитный указатель")
+        .accessibilityLabel("Алфавитный указатель".localized)
     }
 
     private var indexHeight: CGFloat {

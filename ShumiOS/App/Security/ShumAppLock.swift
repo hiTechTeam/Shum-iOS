@@ -70,9 +70,9 @@ final class ShumAppLock: ObservableObject {
         case .biometrics where isBiometricsEnabled:
             biometricTitle
         case .none:
-            "Без проверки"
+            "Без проверки".localized
         default:
-            "Код Shum"
+            "Код Shum".localized
         }
     }
 
@@ -87,13 +87,13 @@ final class ShumAppLock: ObservableObject {
 
     func setPasscode(_ passcode: String) async -> Bool {
         guard Self.isValid(passcode) else {
-            errorMessage = "Код должен состоять из пяти цифр."
+            errorMessage = "Код должен состоять из пяти цифр.".localized
             return false
         }
 
         var saltBytes = [UInt8](repeating: 0, count: 16)
         guard SecRandomCopyBytes(kSecRandomDefault, saltBytes.count, &saltBytes) == errSecSuccess else {
-            errorMessage = "Не удалось создать защищённый код. Попробуйте ещё раз."
+            errorMessage = "Не удалось создать защищённый код. Попробуйте ещё раз.".localized
             return false
         }
 
@@ -111,7 +111,7 @@ final class ShumAppLock: ObservableObject {
             errorMessage = nil
             return true
         } catch {
-            errorMessage = "Не удалось сохранить код в защищённом хранилище."
+            errorMessage = "Не удалось сохранить код в защищённом хранилище.".localized
             return false
         }
     }
@@ -126,7 +126,7 @@ final class ShumAppLock: ObservableObject {
         do {
             guard let encoded = try KeychainStore.shared.data(for: passcodeKey) else {
                 hasPasscode = false
-                errorMessage = "Код Shum не найден."
+                errorMessage = "Код Shum не найден.".localized
                 return false
             }
             let record = try JSONDecoder().decode(PasscodeRecord.self, from: encoded)
@@ -138,7 +138,7 @@ final class ShumAppLock: ObservableObject {
                 registerFailedAttempt()
                 errorMessage = isPasscodeTemporarilyLocked
                     ? lockoutMessage
-                    : "Неверный код."
+                    : "Неверный код.".localized
                 return false
             }
 
@@ -147,7 +147,7 @@ final class ShumAppLock: ObservableObject {
             errorMessage = nil
             return true
         } catch {
-            errorMessage = "Не удалось проверить код Shum."
+            errorMessage = "Не удалось проверить код Shum.".localized
             return false
         }
     }
@@ -177,19 +177,19 @@ final class ShumAppLock: ObservableObject {
     func enable() async -> Bool {
         errorMessage = nil
         guard await authenticate(
-            reason: "Подтвердите, что хотите открывать Shum с \(biometricTitle).",
+            reason: String.localizedFormat("Подтвердите, что хотите открывать Shum с %@.".localized, biometricTitle),
             validateEnrollment: false
         ) else { return false }
 
         guard let domainState = latestBiometryDomainState else {
-            errorMessage = "Не удалось проверить настройки биометрии устройства."
+            errorMessage = "Не удалось проверить настройки биометрии устройства.".localized
             return false
         }
 
         do {
             try KeychainStore.shared.set(domainState, for: biometryDomainStateKey)
         } catch {
-            errorMessage = "Не удалось защитить настройку Face ID."
+            errorMessage = "Не удалось защитить настройку Face ID.".localized
             return false
         }
 
@@ -247,7 +247,7 @@ final class ShumAppLock: ObservableObject {
         guard isBiometricsEnabled, isLocked else { return !isLocked }
         errorMessage = nil
         let unlocked = await authenticate(
-            reason: "Откройте Shum, чтобы прочитать сообщения.",
+            reason: "Откройте Shum, чтобы прочитать сообщения.".localized,
             validateEnrollment: true
         )
         if unlocked {
@@ -282,7 +282,7 @@ final class ShumAppLock: ObservableObject {
     private var lockoutMessage: String {
         let until = UserDefaults.standard.double(forKey: lockoutUntilKey)
         let seconds = max(1, Int(ceil(until - Date().timeIntervalSince1970)))
-        return "Слишком много попыток. Повторите через \(seconds) сек."
+        return String.localizedFormat("Слишком много попыток. Повторите через %@ сек.".localized, seconds)
     }
 
     private func registerFailedAttempt() {
@@ -316,7 +316,7 @@ final class ShumAppLock: ObservableObject {
             error: &availabilityError
         ) else {
             errorMessage = availabilityError?.localizedDescription
-                ?? "Биометрическая защита недоступна на этом устройстве."
+                ?? "Биометрическая защита недоступна на этом устройстве.".localized
             return false
         }
 
@@ -325,7 +325,7 @@ final class ShumAppLock: ObservableObject {
            let expectedDomainState = try? KeychainStore.shared.data(for: biometryDomainStateKey),
            expectedDomainState != currentDomainState {
             disable()
-            errorMessage = "Настройки Face ID изменились. Войдите по коду Shum и включите Face ID заново."
+            errorMessage = "Настройки Face ID изменились. Войдите по коду Shum и включите Face ID заново.".localized
             return false
         }
 
@@ -338,7 +338,7 @@ final class ShumAppLock: ObservableObject {
                 localizedReason: reason
             )
             if !success {
-                errorMessage = "Не удалось подтвердить владельца устройства."
+                errorMessage = "Не удалось подтвердить владельца устройства.".localized
             } else {
                 latestBiometryDomainState = context.evaluatedPolicyDomainState
             }

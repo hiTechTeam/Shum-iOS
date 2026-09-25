@@ -134,10 +134,10 @@ final class NostrRelayManager: ObservableObject {
     // Built-in relays carry private-message envelopes, so avoid relays known to
     // reject the kinds they use.
     nonisolated private static let builtInRelays = [
-        "wss://relay.damus.io",
-        "wss://nos.lol",
-        "wss://relay.primal.net",
-        "wss://offchain.pub"
+        "wss://nostr.oxtr.dev",
+        "wss://soloco.nl",
+        "wss://relay.snort.social",
+        "wss://nostr.bitcoiner.social"
         // For local testing, you can add: "ws://localhost:8080"
     ]
     /// Exposed so the relay settings UI can reject re-adding a built-in.

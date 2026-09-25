@@ -141,6 +141,92 @@ struct ShumPermanentTests {
         #expect(b.store.state.messages.last?.text == "Теперь можно")
     }
 
+    @Test func simultaneousInvitationsConvergeToOneRequester() throws {
+        let clock = Clock()
+        let a = try Node("Аня", clock: clock)
+        let b = try Node("Борис", clock: clock)
+        try a.service.add(b.card, source: "QR")
+        try b.service.add(a.card, source: "QR")
+        connect(a, b, clock: clock)
+
+        #expect(a.service.sendInvitation(b.card))
+        #expect(b.service.sendInvitation(a.card))
+        drain([a, b])
+
+        let requester = a.card.id < b.card.id ? a : b
+        let recipient = requester === a ? b : a
+        #expect(requester.service.invitationPhase(for: recipient.card) == .outgoingPending)
+        #expect(recipient.service.invitationPhase(for: requester.card) == .incomingPending)
+        #expect(!requester.store.state.requests.contains { $0.id == recipient.card.id })
+        #expect(recipient.store.state.requests.contains { $0.id == requester.card.id })
+
+        #expect(recipient.service.acceptInvitation(requester.card))
+        drain([a, b])
+        #expect(a.service.invitationPhase(for: b.card) == .accepted)
+        #expect(b.service.invitationPhase(for: a.card) == .accepted)
+    }
+
+    @Test func legacyCardCannotReplaceOutgoingInvitationBeforeSignedAcceptance() throws {
+        let clock = Clock()
+        let a = try Node("Аня", clock: clock)
+        let b = try Node("Борис", clock: clock)
+        try a.service.add(b.card, source: "QR")
+        try b.service.add(a.card, source: "QR")
+        #expect(a.service.sendInvitation(b.card))
+
+        a.service.receive(
+            ShumPacket(card: b.card),
+            from: nil,
+            nostrSender: b.card.nostrKey
+        )
+        #expect(a.service.invitationPhase(for: b.card) == .outgoingPending)
+        #expect(a.store.state.invitationOutbox?.contains {
+            $0.control.recipient.id == b.card.id
+                && $0.control.action == .request
+        } == true)
+
+        let request = try #require(a.store.state.invitationOutbox?.first?.control)
+        b.service.receive(
+            ShumPacket(invitation: request),
+            from: nil,
+            nostrSender: a.card.nostrKey
+        )
+        #expect(b.service.acceptInvitation(a.card))
+        let acceptance = try #require(b.store.state.invitationOutbox?.first?.control)
+        a.service.receive(
+            ShumPacket(invitation: acceptance),
+            from: nil,
+            nostrSender: b.card.nostrKey
+        )
+        #expect(a.service.invitationPhase(for: b.card) == .accepted)
+    }
+
+    @Test func simultaneousLegacyCardsWaitForSignedRequests() throws {
+        let clock = Clock()
+        let a = try Node("Аня", clock: clock)
+        let b = try Node("Борис", clock: clock)
+        try a.service.add(b.card, source: "QR")
+        try b.service.add(a.card, source: "QR")
+        #expect(a.service.sendInvitation(b.card))
+        #expect(b.service.sendInvitation(a.card))
+        a.service.receive(ShumPacket(card: b.card), from: nil,
+                          nostrSender: b.card.nostrKey)
+        b.service.receive(ShumPacket(card: a.card), from: nil,
+                          nostrSender: a.card.nostrKey)
+        #expect(a.service.invitationPhase(for: b.card) == .outgoingPending)
+        #expect(b.service.invitationPhase(for: a.card) == .outgoingPending)
+        let requestA = try #require(a.store.state.invitationOutbox?.first?.control)
+        let requestB = try #require(b.store.state.invitationOutbox?.first?.control)
+        a.service.receive(ShumPacket(invitation: requestB), from: nil,
+                          nostrSender: b.card.nostrKey)
+        b.service.receive(ShumPacket(invitation: requestA), from: nil,
+                          nostrSender: a.card.nostrKey)
+        let requester = a.card.id < b.card.id ? a : b
+        let recipient = requester === a ? b : a
+        #expect(requester.service.invitationPhase(for: recipient.card) == .outgoingPending)
+        #expect(recipient.service.invitationPhase(for: requester.card) == .incomingPending)
+    }
+
     @Test func unsolicitedAcceptanceCannotUnlockAChat() throws {
         let clock = Clock()
         let a = try Node("Аня", clock: clock)

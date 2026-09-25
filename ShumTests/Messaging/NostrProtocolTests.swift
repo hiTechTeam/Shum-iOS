@@ -11,6 +11,16 @@ import BitFoundation
 @preconcurrency @testable import Shum
 
 struct NostrProtocolTests {
+
+    @Test func privateEnvelopeTimestampsNeverPointIntoTheFuture() {
+        for _ in 0..<256 {
+            let before = Date()
+            let randomized = NostrProtocol.randomizedTimestamp()
+            let after = Date()
+            #expect(randomized < before)
+            #expect(randomized >= after.addingTimeInterval(-301))
+        }
+    }
     
     @Test func nip17MessageRoundTrip() throws {
         // Create sender and recipient identities

@@ -4,11 +4,11 @@ struct InfoSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var legalDocument: ShumLegalDocument?
+    @State private var showThirdPartyLicenses = false
 
     private var version: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        return Inc.Info.version.localized + " " + version + (build.map { " (\($0))" } ?? "")
+        return Inc.Info.version.localized + " " + version
     }
 
     var body: some View {
@@ -44,22 +44,26 @@ struct InfoSheetView: View {
                         }
                         .accessibilityIdentifier("shum.about.terms")
                         Divider().padding(.leading, 52)
-                        ProfileMenuButton(position: .bottom, action: {
+                        ProfileMenuButton(position: .middle, action: {
                             if let url = URL(string: Links.supportIssues) { openURL(url) }
                         }) {
                             row("about_support".localized, symbol: "lifepreserver", external: true)
                         }
                         .accessibilityIdentifier("shum.about.support")
                         .accessibilityHint("about_support_hint".localized)
+                        Divider().padding(.leading, 52)
+                        ProfileMenuButton(position: .middle, action: { legalDocument = .license }) {
+                            row("about_license".localized, symbol: "doc.plaintext")
+                        }
+                        .accessibilityIdentifier("shum.about.license")
+                        Divider().padding(.leading, 52)
+                        ProfileMenuButton(position: .bottom, action: { showThirdPartyLicenses = true }) {
+                            row("about_third_party_licenses".localized, symbol: "shippingbox")
+                        }
+                        .accessibilityIdentifier("shum.about.thirdPartyLicenses")
                     }
                     .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("about_delivery_note".localized)
-                        Text("about_credits".localized)
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: 560, alignment: .leading)
                 .frame(maxWidth: .infinity)
@@ -76,6 +80,11 @@ struct InfoSheetView: View {
             .sheet(item: $legalDocument) { document in
                 NavigationStack {
                     ShumLegalDocumentView(document: document)
+                }
+            }
+            .sheet(isPresented: $showThirdPartyLicenses) {
+                NavigationStack {
+                    ShumThirdPartyLicensesView()
                 }
             }
         }

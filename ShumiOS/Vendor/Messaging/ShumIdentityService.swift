@@ -203,13 +203,13 @@ enum ShumFailure: LocalizedError {
     case invalidContact, contactUnavailable, unavailableIdentity, invalidMessage, storage, quota, blocked
     var errorDescription: String? {
         switch self {
-        case .invalidContact: return "Не удалось проверить контакт Shum. Попробуйте обменяться QR-кодами ещё раз."
-        case .contactUnavailable: return "Не удалось получить контакт. Убедитесь, что второе устройство находится рядом или подключено к Nostr."
-        case .unavailableIdentity: return "Ключи профиля недоступны. Разблокируйте iPhone и снова откройте Shum."
-        case .invalidMessage: return "Не удалось проверить сообщение."
-        case .storage: return "Не удалось сохранить данные. Проверьте свободное место на iPhone."
-        case .blocked: return "Контакт заблокирован. Сначала разблокируйте его в настройках профиля."
-        case .quota: return "Очередь заполнена. Дождитесь доставки сообщений."
+        case .invalidContact: return "Не удалось проверить контакт Shum. Попробуйте обменяться QR-кодами ещё раз.".localized
+        case .contactUnavailable: return "Не удалось получить контакт. Убедитесь, что второе устройство находится рядом или подключено к Nostr.".localized
+        case .unavailableIdentity: return "Ключи профиля недоступны. Разблокируйте iPhone и снова откройте Shum.".localized
+        case .invalidMessage: return "Не удалось проверить сообщение.".localized
+        case .storage: return "Не удалось сохранить данные. Проверьте свободное место на iPhone.".localized
+        case .blocked: return "Контакт заблокирован. Сначала разблокируйте его в настройках профиля.".localized
+        case .quota: return "Очередь заполнена. Дождитесь доставки сообщений.".localized
         }
     }
 }

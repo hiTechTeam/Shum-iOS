@@ -1,0 +1,4 @@
+"UTTypeDescription" = "نسخة Shum الاحتياطية";
+"NSBluetoothAlwaysUsageDescription" = "يتيح Bluetooth لتطبيق Shum العثور على المستخدمين القريبين وإظهار ملفك الشخصي لهم أثناء تفعيل البحث.";
+"NSCameraUsageDescription" = "يتيح الوصول إلى الكاميرا مسح رموز QR في Shum والتقاط صورة للملف الشخصي.";
+"NSFaceIDUsageDescription" = "يحمي Face ID الوصول إلى محادثاتك وإعدادات Shum.";

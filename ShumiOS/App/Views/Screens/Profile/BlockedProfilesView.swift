@@ -104,13 +104,13 @@ private struct ShumBlockedProfilesEmptyState: View {
                 .frame(width: 88, height: 68)
                 .accessibilityHidden(true)
 
-            Text("Никого не заблокировано")
+            Text("Никого не заблокировано".localized)
                 .font(.system(size: 23, weight: .semibold))
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.center)
                 .padding(.top, 26)
 
-            Text("Заблокированные пользователи появятся здесь.")
+            Text("Заблокированные пользователи появятся здесь.".localized)
                 .font(.system(size: 16, weight: .regular))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

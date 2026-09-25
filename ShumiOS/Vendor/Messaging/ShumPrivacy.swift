@@ -60,21 +60,21 @@ struct ShumPrivacySettings: View {
     var body: some View {
         List {
             Section {
-                Button("Удалить профиль и данные", role: .destructive) { confirmDelete = true }
+                Button("Удалить профиль и данные".localized, role: .destructive) { confirmDelete = true }
                     .accessibilityIdentifier("shum.deleteProfile")
             } footer: {
-                Text("Удаляет профиль, ключи, контакты, историю и очередь на этом iPhone. Восстановить прежний профиль будет нельзя. Копии у других людей не удаляются.")
+                Text("Удаляет профиль, ключи, контакты, историю и очередь на этом iPhone. Восстановить прежний профиль будет нельзя. Копии у других людей не удаляются.".localized)
             }
         }
         .fontWeight(.regular)
-        .navigationTitle("Настройки").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("Настройки".localized).navigationBarTitleDisplayMode(.inline)
         .alert(
-            NSLocalizedString("local.delete.title", comment: ""),
+            "local.delete.title".localized,
             isPresented: $confirmDelete
         ) {
             Button(Inc.Common.cancel.localized, role: .cancel) { }
             Button(
-                NSLocalizedString("local.delete.action", comment: ""),
+                "local.delete.action".localized,
                 role: .destructive
             ) {
                 // Close the settings sheet before replacing the registered
@@ -87,7 +87,7 @@ struct ShumPrivacySettings: View {
                 }
             }
         } message: {
-            Text(NSLocalizedString("local.delete.message", comment: ""))
+            Text("local.delete.message".localized)
         }
     }
 }
@@ -103,29 +103,29 @@ struct ShumContactActionsMenu: View {
         Menu {
             if blocked {
                 Button { action = "block" } label: {
-                    Label("Разблокировать", systemImage: "hand.raised.slash")
+                    Label("Разблокировать".localized, systemImage: "hand.raised.slash")
                         .foregroundStyle(.primary)
                 }
                 .tint(.primary)
             } else {
                 Button(role: .destructive) { action = "block" } label: {
-                    Label("Заблокировать", systemImage: "hand.raised")
+                    Label("Заблокировать".localized, systemImage: "hand.raised")
                         .foregroundStyle(.red)
                 }
                 .tint(.red)
             }
             Button { action = "chat" } label: {
-                Label("Удалить чат", systemImage: "trash")
+                Label("Удалить чат".localized, systemImage: "trash")
                     .foregroundStyle(.primary)
             }
             .tint(.primary)
             Button { action = "contact" } label: {
-                Label("Убрать из контактов", systemImage: "person.crop.circle.badge.minus")
+                Label("Убрать из контактов".localized, systemImage: "person.crop.circle.badge.minus")
                     .foregroundStyle(.primary)
             }
             .tint(.primary)
         } label: { Image(systemName: "ellipsis.circle").font(.title3).frame(width: 44, height: 44).contentShape(Circle()) }
-        .accessibilityLabel("Действия с контактом")
+        .accessibilityLabel("Действия с контактом".localized)
         .confirmationDialog(title, isPresented: Binding(get: { action != nil }, set: { if !$0 { action = nil } }), titleVisibility: .visible) {
             if let action {
                 Button(title, role: blocked && action == "block" ? nil : .destructive) {
@@ -142,15 +142,15 @@ struct ShumContactActionsMenu: View {
                     self.action = nil
                 }
             }
-            Button("Отмена", role: .cancel) { action = nil }
+            Button("Отмена".localized, role: .cancel) { action = nil }
         } message: {
-            Text(action == "block" ? (blocked ? "Вы снова сможете обмениваться сообщениями." : "Сообщения и приглашения этого пользователя будут отклоняться на вашем iPhone. Неотправленные сообщения будут отменены.") : (action == "contact" ? "Пользователь исчезнет из Контактов. Переписка и возможность общения сохранятся." : "История и очередь будут удалены на этом iPhone. Контакт сохранится, и вы сможете начать новый разговор."))
+            Text(action == "block" ? (blocked ? "Вы снова сможете обмениваться сообщениями.".localized : "Сообщения и приглашения этого пользователя будут отклоняться на вашем iPhone. Неотправленные сообщения будут отменены.".localized) : (action == "contact" ? "Пользователь исчезнет из Контактов. Переписка и возможность общения сохранятся.".localized : "История и очередь будут удалены на этом iPhone. Контакт сохранится, и вы сможете начать новый разговор.".localized))
         }
-        .alert("Shum", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("Понятно") {} } message: { Text(error ?? "") }
+        .alert("Shum", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("Понятно".localized) {} } message: { Text(error ?? "") }
     }
     private var title: String {
-        switch action { case "block": return blocked ? "Разблокировать контакт" : "Заблокировать контакт"
-        case "contact": return "Убрать из контактов"; default: return "Удалить чат" }
+        switch action { case "block": return blocked ? "Разблокировать контакт".localized : "Заблокировать контакт".localized
+        case "contact": return "Убрать из контактов".localized; default: return "Удалить чат".localized }
     }
 }
 #endif

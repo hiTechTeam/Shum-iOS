@@ -32,7 +32,7 @@ final class ShumChatRuntime: ObservableObject, TransportEventDelegate, Transport
     private var activeContact: String?
     private var active = true
     private var enabled = false
-    private var nickname = "Гость"
+    private var nickname = "Гость".localized
     private var timer: AnyCancellable?
     private var storageKey: SymmetricKey?
     private var storageAvailable = false
@@ -77,11 +77,11 @@ final class ShumChatRuntime: ObservableObject, TransportEventDelegate, Transport
                 let saved = try JSONDecoder().decode(Archive.self, from: decoded)
                 contacts = saved.contacts; messages = saved.messages
                 for i in messages.indices where messages[i].outgoing {
-                    if case .sending = messages[i].status { messages[i].status = .failed(reason: "Отправка прервана") }
+                    if case .sending = messages[i].status { messages[i].status = .failed(reason: "Отправка прервана".localized) }
                 }
             }
             storageAvailable = true
-        } catch { self.error = "Не удалось открыть историю чатов. Данные сохранены без изменений." }
+        } catch { self.error = "Не удалось открыть историю чатов. Данные сохранены без изменений.".localized }
         timer = Timer.publish(every: 5, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             self?.expirePendingMessages()
         }
@@ -145,14 +145,14 @@ final class ShumChatRuntime: ObservableObject, TransportEventDelegate, Transport
             (conversation($0.id).last?.date ?? .distantPast) > (conversation($1.id).last?.date ?? .distantPast)
         }
     }
-    func name(_ id: String) -> String { contacts.first { $0.id == id }?.name ?? "Собеседник" }
+    func name(_ id: String) -> String { contacts.first { $0.id == id }?.name ?? "Собеседник".localized }
     @discardableResult func send(_ text: String, to id: String) -> Bool {
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return false }
-        guard content.utf8.count <= 255 else { error = "Пока можно отправить до 255 байт текста. Разделите сообщение на несколько частей."; return false }
+        guard content.utf8.count <= 255 else { error = "Пока можно отправить до 255 байт текста. Разделите сообщение на несколько частей.".localized; return false }
         guard storageAvailable, enabled, let transport, let peer = sessions[id], transport.isPeerReachable(peer),
               let key = transport.noiseSessionPublicKeyData(for: peer), Self.fingerprint(key) == id else {
-            error = "Собеседник сейчас недоступен. Дождитесь подключения по Bluetooth."; return false
+            error = "Собеседник сейчас недоступен. Дождитесь подключения по Bluetooth.".localized; return false
         }
         let message = ShumLegacyMessage(id: UUID().uuidString, contactID: id, text: content, date: Date(), outgoing: true, status: .sending, unread: false)
         messages.append(message)
@@ -182,7 +182,7 @@ final class ShumChatRuntime: ObservableObject, TransportEventDelegate, Transport
             guard let key = transport.noiseSessionPublicKeyData(for: peer) else { return }
             let contactID = Self.fingerprint(key)
             sessions[contactID] = peer; nearbyIDs.insert(contactID)
-            upsert(id: contactID, name: transport.peerNickname(peerID: peer) ?? "Собеседник")
+            upsert(id: contactID, name: transport.peerNickname(peerID: peer) ?? "Собеседник".localized)
             switch type {
             case .privateMessage:
                 guard let packet = PrivateMessagePacket.decode(from: payload), !packet.messageID.isEmpty,
@@ -215,7 +215,7 @@ final class ShumChatRuntime: ObservableObject, TransportEventDelegate, Transport
         var changed = false
         for i in messages.indices where messages[i].outgoing && Date().timeIntervalSince(messages[i].date) > 60 {
             switch messages[i].status {
-            case .sending: messages[i].status = .failed(reason: "Нет подтверждения отправки"); changed = true
+            case .sending: messages[i].status = .failed(reason: "Нет подтверждения отправки".localized); changed = true
             default: break
             }
         }
@@ -230,12 +230,12 @@ final class ShumChatRuntime: ObservableObject, TransportEventDelegate, Transport
             try FileManager.default.createDirectory(at: historyURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try sealed.combined!.write(to: historyURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             return true
-        } catch { self.error = "Не удалось сохранить переписку. Проверьте свободное место."; return false }
+        } catch { self.error = "Не удалось сохранить переписку. Проверьте свободное место.".localized; return false }
     }
     func reset() throws {
         enabled = false; transport?.stopServices()
         if FileManager.default.fileExists(atPath: self.historyURL.path) { try FileManager.default.removeItem(at: historyURL) }
-        (transport as? PanicResettingTransport)?.resetIdentityForPanic(currentNickname: "Гость", restartServices: false)
+        (transport as? PanicResettingTransport)?.resetIdentityForPanic(currentNickname: "Гость".localized, restartServices: false)
         contacts = []; messages = []; sessions = [:]; nearbyIDs = []; activeContact = nil
     }
 }

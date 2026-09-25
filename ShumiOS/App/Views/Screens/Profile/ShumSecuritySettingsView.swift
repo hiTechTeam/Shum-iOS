@@ -22,7 +22,7 @@ struct ShumSecuritySettingsView: View {
             Section {
                 securityMethodRow(
                     title: appLock.biometricTitle,
-                    subtitle: "Системная биометрия устройства",
+                    subtitle: "Системная биометрия устройства".localized,
                     systemImage: "faceid",
                     selected: appLock.preferredMethod == .biometrics
                         && appLock.isBiometricsEnabled,
@@ -30,16 +30,16 @@ struct ShumSecuritySettingsView: View {
                 )
 
                 securityMethodRow(
-                    title: "Код Shum",
-                    subtitle: appLock.hasPasscode ? "Пять цифр" : "Код не создан",
+                    title: "Код Shum".localized,
+                    subtitle: appLock.hasPasscode ? "Пять цифр".localized : "Код не создан".localized,
                     systemImage: "number.square",
                     selected: appLock.preferredMethod == .passcode,
                     action: selectPasscode
                 )
 
                 securityMethodRow(
-                    title: "Без проверки",
-                    subtitle: "Открывать Shum сразу",
+                    title: "Без проверки".localized,
+                    subtitle: "Открывать Shum сразу".localized,
                     systemImage: "lock.open",
                     selected: appLock.preferredMethod == .none,
                     action: appLock.useNoVerification
@@ -52,7 +52,7 @@ struct ShumSecuritySettingsView: View {
                         Image(systemName: "key.horizontal")
                             .frame(width: 24)
                             .foregroundStyle(.primary)
-                        Text(appLock.hasPasscode ? "Изменить код" : "Создать код")
+                        Text(appLock.hasPasscode ? "Изменить код".localized : "Создать код".localized)
                             .foregroundStyle(.primary)
                         Spacer()
                         Image(systemName: "chevron.right")
@@ -62,16 +62,16 @@ struct ShumSecuritySettingsView: View {
                 }
                 .buttonStyle(.plain)
             } header: {
-                Text("Способ входа")
+                Text("Способ входа".localized)
             } footer: {
-                Text("Face ID используется автоматически. Код Shum можно выбрать основным или использовать, если биометрия недоступна. Без проверки открывает приложение сразу.")
+                Text("Face ID используется автоматически. Код Shum можно выбрать основным или использовать, если биометрия недоступна. Без проверки открывает приложение сразу.".localized)
             }
 
-            Section("Ключи профиля") {
-                LabeledContent("Хранилище", value: "Это устройство")
+            Section("Ключи профиля".localized) {
+                LabeledContent("Хранилище".localized, value: "Это устройство".localized)
 
                 if let fingerprint {
-                    LabeledContent("Отпечаток") {
+                    LabeledContent("Отпечаток".localized) {
                         Text(fingerprint)
                             .font(.system(.caption, design: .monospaced))
                             .foregroundStyle(.secondary)
@@ -87,7 +87,7 @@ struct ShumSecuritySettingsView: View {
                 } label: {
                     Label {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Создать резервную копию")
+                            Text("Создать резервную копию".localized)
                                 .foregroundStyle(.primary)
                             Text(backupStatus)
                                 .font(.caption)
@@ -100,19 +100,19 @@ struct ShumSecuritySettingsView: View {
                     }
                 }
             } header: {
-                Text("Восстановление")
+                Text("Восстановление".localized)
             } footer: {
-                Text("Копия хранится только там, куда вы её сохраните. Для восстановления понадобятся файл и его пароль.")
+                Text("Копия хранится только там, куда вы её сохраните. Для восстановления понадобятся файл и его пароль.".localized)
             }
 
-            Section("Конфиденциальность") {
+            Section("Конфиденциальность".localized) {
                 Button {
                     showBlockedProfiles = true
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "person.crop.circle.badge.xmark")
                             .frame(width: 24)
-                        Text("Заблокированные")
+                        Text("Заблокированные".localized)
                         Spacer()
                         Text(String(runtime.permanent?.state.blocked?.count ?? 0))
                             .foregroundStyle(.secondary)
@@ -126,12 +126,12 @@ struct ShumSecuritySettingsView: View {
             }
 
             Section {
-                Button("Удалить профиль и данные", role: .destructive) {
+                Button("Удалить профиль и данные".localized, role: .destructive) {
                     confirmDelete = true
                 }
                 .accessibilityIdentifier("shum.deleteProfile")
             } footer: {
-                Text("Удаляет профиль, ключи, контакты, историю и очередь на этом устройстве. Копии у собеседников не удаляются.")
+                Text("Удаляет профиль, ключи, контакты, историю и очередь на этом устройстве. Копии у собеседников не удаляются.".localized)
             }
 
             if let message = appLock.errorMessage {
@@ -144,7 +144,7 @@ struct ShumSecuritySettingsView: View {
         }
         .shumGroupedScreenBackground()
         .fontWeight(.regular)
-        .navigationTitle("Безопасность и данные")
+        .navigationTitle("Безопасность и данные".localized)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showBlockedProfiles) {
             BlockedProfilesView(runtime: runtime)
@@ -152,12 +152,12 @@ struct ShumSecuritySettingsView: View {
                 .presentationDragIndicator(.visible)
         }
         .alert(
-            NSLocalizedString("local.delete.title", comment: ""),
+            "local.delete.title".localized,
             isPresented: $confirmDelete
         ) {
             Button(Inc.Common.cancel.localized, role: .cancel) { }
             Button(
-                NSLocalizedString("local.delete.action", comment: ""),
+                "local.delete.action".localized,
                 role: .destructive
             ) {
                 // Release the pushed settings host before registration replaces the app tree.
@@ -168,7 +168,7 @@ struct ShumSecuritySettingsView: View {
                 }
             }
         } message: {
-            Text(NSLocalizedString("local.delete.message", comment: ""))
+            Text("local.delete.message".localized)
         }
         .navigationDestination(isPresented: $showChangeCode) {
             ShumChangePasscodeView()
@@ -182,8 +182,8 @@ struct ShumSecuritySettingsView: View {
     }
 
     private var backupStatus: String {
-        guard let lastBackupDate else { return "Копия ещё не создана" }
-        return "Последняя: \(lastBackupDate.formatted(date: .abbreviated, time: .shortened))"
+        guard let lastBackupDate else { return "Копия ещё не создана".localized }
+        return String.localizedFormat("Последняя: %@".localized, lastBackupDate.formatted(date: .abbreviated, time: .shortened))
     }
 
     private func securityMethodRow(
@@ -296,7 +296,7 @@ private struct ShumChangePasscodeView: View {
             Spacer()
 
             RegistrationPrimaryButton(
-                title: phase == .confirm ? "Сохранить код" : "Продолжить",
+                title: phase == .confirm ? "Сохранить код".localized : "Продолжить".localized,
                 isEnabled: code.count == 5 && !isWorking,
                 accentColor: Color.accentColor,
                 action: continueFlow
@@ -305,22 +305,22 @@ private struct ShumChangePasscodeView: View {
         }
         .padding(.horizontal, 24)
         .background(ShumThemeCanvas().ignoresSafeArea())
-        .navigationTitle("Код Shum")
+        .navigationTitle("Код Shum".localized)
         .navigationBarTitleDisplayMode(.inline)
     }
 
     private var title: String {
         switch phase {
-        case .current: return "Введите текущий код"
-        case .new: return "Создайте новый код"
-        case .confirm: return "Повторите новый код"
+        case .current: return "Введите текущий код".localized
+        case .new: return "Создайте новый код".localized
+        case .confirm: return "Повторите новый код".localized
         }
     }
 
     private var description: String {
         phase == .current
-            ? "Это подтверждает, что настройки меняете вы."
-            : "Код должен состоять из пяти цифр."
+            ? "Это подтверждает, что настройки меняете вы.".localized
+            : "Код должен состоять из пяти цифр.".localized
     }
 
     private func continueFlow() {
@@ -347,7 +347,7 @@ private struct ShumChangePasscodeView: View {
         case .confirm:
             guard code == newCode else {
                 code = ""
-                message = "Коды не совпадают. Попробуйте ещё раз."
+                message = "Коды не совпадают. Попробуйте ещё раз.".localized
                 return
             }
             isWorking = true

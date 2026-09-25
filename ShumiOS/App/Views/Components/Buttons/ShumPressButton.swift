@@ -35,8 +35,10 @@ struct ShumRowPressButton<Label: View>: View {
             action()
         } label: {
             label()
+                .foregroundStyle(Color.primary)
         }
-        .buttonStyle(.automatic)
+        // Keep native feedback without letting the button tint color the text.
+        .buttonStyle(.borderless)
         .background(ShumImmediateTouchResponse().allowsHitTesting(false))
     }
 }

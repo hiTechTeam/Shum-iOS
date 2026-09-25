@@ -23,27 +23,33 @@ struct ShumPeerProfileSheet: View {
 struct ShumKeyVerificationView: View {
     @Environment(\.shumThemePalette) private var palette
     @ObservedObject var runtime: ShumRuntime
-    let card: ShumContactCard
-    let avatar: Data?
+    let peerCard: ShumContactCard
 
     @Environment(\.dismiss) private var dismiss
     @State private var showScanner = false
     @State private var matches: Bool?
 
-    private var invitationURL: URL? { try? card.invitation() }
+    private var ownCard: ShumContactCard? { runtime.permanent?.ownCard }
+    private var invitationURL: URL? { try? ownCard?.invitation() }
+    private var ownAvatar: Data? {
+        guard let manifest = LocalCardStore.shared.ownManifest else { return nil }
+        return LocalCardStore.shared.photo(manifest.body.photoHash)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 0) {
-                    ShumAvatar(name: card.name, size: 72, imageData: avatar)
+                    if let ownCard {
+                        ShumAvatar(name: ownCard.name, size: 72, imageData: ownAvatar)
 
-                    Text(card.name)
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 14)
+                        Text(ownCard.name)
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 14)
+                    }
 
                     if let invitationURL,
                        let image = qr(invitationURL.absoluteString) {
@@ -74,15 +80,15 @@ struct ShumKeyVerificationView: View {
                         .background(.white, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                         .padding(.top, 24)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("QR-код ключа контакта")
+                        .accessibilityLabel("Ваш QR-код для сверки ключа".localized)
                     }
 
                     VStack(spacing: 9) {
-                        Text("Отпечаток ключа")
+                        Text("Ваш отпечаток ключа".localized)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
-                        Text(formattedFingerprint)
+                        Text(formattedOwnFingerprint)
                             .font(.system(.footnote, design: .monospaced).weight(.medium))
                             .foregroundStyle(.primary)
                             .multilineTextAlignment(.center)
@@ -91,7 +97,7 @@ struct ShumKeyVerificationView: View {
                     }
                     .padding(.top, 22)
 
-                    Text("Откройте QR-код Shum на устройстве собеседника и отсканируйте его. Совпадение подтверждает, что ключ контакта не изменился.")
+                    Text("Покажите этот QR-код собеседнику. Затем отсканируйте его код, чтобы подтвердить сохранённый ключ контакта.".localized)
                         .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -101,7 +107,7 @@ struct ShumKeyVerificationView: View {
 
                     if let matches {
                         Label(
-                            matches ? "Ключ совпадает" : "Ключ не совпадает",
+                            matches ? "Ключ собеседника совпадает".localized : "Ключ собеседника не совпадает".localized,
                             systemImage: matches ? "checkmark.shield.fill" : "xmark.shield.fill"
                         )
                         .font(.headline)
@@ -114,7 +120,7 @@ struct ShumKeyVerificationView: View {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         showScanner = true
                     } label: {
-                        Text("Сканировать код собеседника")
+                        Text("Сканировать код собеседника".localized)
                     }
                     .buttonStyle(ShumPrimaryButtonStyle())
                     .padding(.horizontal, 24)
@@ -125,11 +131,11 @@ struct ShumKeyVerificationView: View {
                 .padding(.top, 24)
             }
             .background(ShumThemeCanvas().ignoresSafeArea())
-            .navigationTitle("Сверить ключ")
+            .navigationTitle("Сверить ключ".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Готово") { dismiss() }
+                    Button("Готово".localized) { dismiss() }
                 }
             }
         }
@@ -137,17 +143,18 @@ struct ShumKeyVerificationView: View {
             ShumScanView(
                 resolve: { locator, completion in
                     runtime.resolveContact(locator, completion: completion)
-                }
+                },
+                allowsPhotoImport: false
             ) { scannedCard in
                 showScanner = false
                 verify(scannedCard)
             }
         }
-        .shumAllowsScreenshots()
+        .shumProtectFromCapture()
     }
 
-    private var formattedFingerprint: String {
-        let characters = Array(card.id.uppercased())
+    private var formattedOwnFingerprint: String {
+        let characters = Array((ownCard?.id ?? "").uppercased())
         let groups = stride(from: 0, to: characters.count, by: 4).map { start in
             String(characters[start ..< min(start + 4, characters.count)])
         }
@@ -169,9 +176,9 @@ struct ShumKeyVerificationView: View {
     }
 
     private func verify(_ scannedCard: ShumContactCard) {
-        let result = scannedCard.id == card.id
-            && scannedCard.signingKey == card.signingKey
-            && scannedCard.nostrKey == card.nostrKey
+        let result = scannedCard.id == peerCard.id
+            && scannedCard.signingKey == peerCard.signingKey
+            && scannedCard.nostrKey == peerCard.nostrKey
         matches = result
         UINotificationFeedbackGenerator().notificationOccurred(
             result ? .success : .error
@@ -191,13 +198,13 @@ struct ShumPhotoViewer: View {
                     .scaleEffect(zoom)
                     .gesture(MagnificationGesture().onChanged { zoom = min(3, max(1, $0)) }.onEnded { _ in withAnimation { zoom = 1 } })
                     .onTapGesture(count: 2) { withAnimation { zoom = zoom > 1 ? 1 : 2 } }
-                    .accessibilityLabel("Фото профиля")
+                    .accessibilityLabel("Фото профиля".localized)
             }
         }.overlay(alignment: .topTrailing) {
             Button { dismiss() } label: {
                 Image(systemName: "xmark").font(.body.weight(.semibold)).foregroundStyle(.white)
                     .frame(width: 44, height: 44).background(.ultraThinMaterial, in: Circle())
-            }.padding().accessibilityLabel("Закрыть фото")
+            }.padding().accessibilityLabel("Закрыть фото".localized)
         }
     }
 }

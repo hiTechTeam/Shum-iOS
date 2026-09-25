@@ -23,11 +23,13 @@ struct ProfileOverviewView: View {
     @ObservedObject private var photoVM: ProfilePhotoViewModel
     let open: (ShumProfileRoute) -> Void
     @ObservedObject private var appearance = ShumAppearanceStore.shared
+    @ObservedObject private var language = ShumLanguageStore.shared
 
     @State private var showScanningSettings = false
     @State private var showInfoSheet = false
-    @State private var showSecurity = false
+    @Binding var showSecurity: Bool
     @State private var showAppearance = false
+    @State private var showLanguage = false
     @State private var showPhotoPreview = false
     #if DEBUG && targetEnvironment(simulator)
     @State private var showPhotoEditorPreview = false
@@ -39,11 +41,13 @@ struct ProfileOverviewView: View {
         chat: ShumRuntime,
         authCodeViewModel: LocalProfileViewModel,
         photoViewModel: ProfilePhotoViewModel,
+        showSecurity: Binding<Bool>,
         open: @escaping (ShumProfileRoute) -> Void
     ) {
         self.chat = chat
         self.authCodeViewModel = authCodeViewModel
         self.photoVM = photoViewModel
+        _showSecurity = showSecurity
         self.open = open
     }
 
@@ -73,8 +77,8 @@ struct ProfileOverviewView: View {
 
             ScrollView {
                 VStack(spacing: 20) {
-                    profileSection("Общение") { communicationCard }
-                    profileSection("Приложение") { applicationCard }
+                    profileSection("Общение".localized) { communicationCard }
+                    profileSection("Приложение".localized) { applicationCard }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 30)
@@ -117,7 +121,7 @@ struct ProfileOverviewView: View {
 
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button { open(.ownQR) } label: { Image(systemName: "qrcode") }
-                    .accessibilityLabel("Мой QR-код")
+                    .accessibilityLabel("Мой QR-код".localized)
 
                 NavigationLink {
                     ProfileDataView(
@@ -153,6 +157,9 @@ struct ProfileOverviewView: View {
         }
         .navigationDestination(isPresented: $showAppearance) {
             ShumAppearanceSettingsView()
+        }
+        .navigationDestination(isPresented: $showLanguage) {
+            ShumLanguageSettingsView()
         }
         .fullScreenCover(isPresented: $showPhotoPreview) {
             if let image = photoVM.uiImage {
@@ -249,7 +256,7 @@ struct ProfileOverviewView: View {
     private var applicationCard: some View {
         VStack(spacing: 0) {
             ProfileOverviewRow(
-                title: "Безопасность и данные",
+                title: "Безопасность и данные".localized,
                 systemImage: "checkmark.shield",
                 position: .top
             ) {
@@ -257,12 +264,21 @@ struct ProfileOverviewView: View {
             }
             Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(
-                title: "Оформление",
+                title: "Оформление".localized,
                 systemImage: "paintpalette",
                 theme: appearance.theme,
                 position: .middle
             ) {
                 showAppearance = true
+            }
+            Divider().padding(.leading, 60).padding(.trailing, 20)
+            ProfileOverviewRow(
+                title: "Язык".localized,
+                systemImage: "globe",
+                value: language.selectedTitle,
+                position: .middle
+            ) {
+                showLanguage = true
             }
             Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(
@@ -331,6 +347,41 @@ struct ProfileOverviewView: View {
 
 }
 
+private struct ShumLanguageSettingsView: View {
+    @ObservedObject private var language = ShumLanguageStore.shared
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(ShumLanguageStore.Language.allCases) { option in
+                    Button {
+                        language.select(option)
+                    } label: {
+                        HStack {
+                            Text(option.nativeTitle)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if language.selected == option {
+                                Image(systemName: "checkmark")
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            } footer: {
+                Text("Язык интерфейса меняется сразу и сохраняется на этом устройстве.".localized)
+                    .textCase(nil)
+            }
+        }
+        .shumGroupedScreenBackground()
+        .navigationTitle("Язык".localized)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 private struct ShumAppearanceSettingsView: View {
     @ObservedObject private var appearance = ShumAppearanceStore.shared
     @ObservedObject private var appIcons = ShumAppIconStore.shared
@@ -338,12 +389,12 @@ private struct ShumAppearanceSettingsView: View {
     var body: some View {
         List {
             Section {
-                Toggle("Системная", isOn: Binding(
+                Toggle("Системная".localized, isOn: Binding(
                     get: { appearance.followsSystem },
                     set: { appearance.setFollowsSystem($0) }
                 ))
             } footer: {
-                Text("Светлая или тёмная тема Classic выбирается по оформлению устройства. Выбор темы ниже отключает системный режим.")
+                Text("Светлая или тёмная тема Classic выбирается по оформлению устройства. Выбор темы ниже отключает системный режим.".localized)
                     .font(.system(size: 13, weight: .regular))
                     .textCase(nil)
             }
@@ -370,9 +421,9 @@ private struct ShumAppearanceSettingsView: View {
                 }
                 .padding(.vertical, 8)
             } header: {
-                ShumAppearanceSectionTitle("Тема приложения")
+                ShumAppearanceSectionTitle("Тема приложения".localized)
             } footer: {
-                Text("Тема меняет цвет кнопок, выбранных элементов и пиксельных иконок Shum.")
+                Text("Тема меняет цвет кнопок, выбранных элементов и пиксельных иконок Shum.".localized)
                     .font(.system(size: 13, weight: .regular))
                     .textCase(nil)
             }
@@ -400,24 +451,24 @@ private struct ShumAppearanceSettingsView: View {
                 }
                 .padding(.vertical, 8)
             } header: {
-                ShumAppearanceSectionTitle("Иконка приложения")
+                ShumAppearanceSectionTitle("Иконка приложения".localized)
             } footer: {
-                Text("Иконка выбирается отдельно от темы приложения.")
+                Text("Иконка выбирается отдельно от темы приложения.".localized)
                     .font(.system(size: 13, weight: .regular))
                     .textCase(nil)
             }
         }
         .shumGroupedScreenBackground()
-        .navigationTitle("Оформление")
+        .navigationTitle("Оформление".localized)
         .navigationBarTitleDisplayMode(.inline)
         .alert(
-            "Не удалось изменить иконку",
+            "Не удалось изменить иконку".localized,
             isPresented: Binding(
                 get: { appIcons.errorMessage != nil },
                 set: { if !$0 { appIcons.errorMessage = nil } }
             )
         ) {
-            Button("Понятно", role: .cancel) {
+            Button("Понятно".localized, role: .cancel) {
                 appIcons.errorMessage = nil
             }
         } message: {
@@ -627,7 +678,7 @@ private struct ProfileOverviewRow: View {
             if let theme {
                 ShumThemeSwatch(theme: theme)
                     .frame(width: 24, height: 24)
-                    .accessibilityLabel("Выбрана тема \(theme.title)")
+                    .accessibilityLabel(String.localizedFormat("Выбрана тема %@".localized, theme.title))
             }
 
             if showsDisclosureIndicator {

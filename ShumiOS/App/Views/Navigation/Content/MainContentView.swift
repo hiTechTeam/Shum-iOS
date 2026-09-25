@@ -9,6 +9,7 @@ struct MainContentView: View {
     @State private var contactsPath: [ShumUIRoute] = []
     @State private var chatsPath: [ShumUIRoute] = []
     @State private var profilePath: [ShumProfileRoute] = []
+    @State private var showSecurity = false
     @State private var showContacts = false
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -21,10 +22,10 @@ struct MainContentView: View {
                     ShumDestinationUI(runtime: chat, route: route) { contactsPath.push($0) }
                 }
             }
-            .modifier(ShumPeerCardPresentationHost(runtime: chat))
+            .modifier(ShumPeerPhotoPresentationHost())
             .shumProtectFromCapture(contactsPath.last?.containsMessages == true)
             .toolbar(contactsPath.isEmpty ? .visible : .hidden, for: .tabBar)
-            .tabItem { tabLabel("Контакты", image: "PixelPeople", tab: 0) }.tag(0)
+            .tabItem { tabLabel("Контакты".localized, image: "PixelPeople", tab: 0) }.tag(0)
 
             NavigationStack(path: $chatsPath) {
                 ShumChatsUI(runtime: chat) { route in
@@ -35,10 +36,10 @@ struct MainContentView: View {
                     ShumDestinationUI(runtime: chat, route: route) { chatsPath.push($0) }
                 }
             }
-            .modifier(ShumPeerCardPresentationHost(runtime: chat))
-            .shumProtectFromCapture(chatsPath.last?.containsMessages ?? true)
+            .modifier(ShumPeerPhotoPresentationHost())
+            .shumProtectFromCapture()
             .toolbar(chatsPath.isEmpty ? .visible : .hidden, for: .tabBar)
-            .tabItem { tabLabel("Чаты", image: "PixelChats", tab: 1) }
+            .tabItem { tabLabel("Чаты".localized, image: "PixelChats", tab: 1) }
                 .badge(chat.directoryEntries.reduce(0) {
                     $0 + max($1.unread, $1.invitationAwaitingResponse ? 1 : 0)
                 }).tag(1)
@@ -47,29 +48,34 @@ struct MainContentView: View {
                     chat: chat,
                     authCodeViewModel: coordinator.authCodeViewModel,
                     photoViewModel: profilePhotoViewModel,
+                    showSecurity: $showSecurity,
                     open: { profilePath.push($0) }
                 )
                 .navigationDestination(for: ShumProfileRoute.self) { route in
                     profileDestination(route)
                 }
             }
-            .modifier(ShumPeerCardPresentationHost(runtime: chat))
+            .modifier(ShumPeerPhotoPresentationHost())
             .shumProtectFromCapture(protectsProfileConversation)
             .toolbar(
-                profilePath.last?.hidesTabBar == true ? .hidden : .visible,
+                showSecurity || profilePath.last?.hidesTabBar == true ? .hidden : .visible,
                 for: .tabBar
             )
-            .tabItem { tabLabel("Профиль", image: "PixelProfile", tab: 2) }.tag(2)
+            .tabItem { tabLabel("Профиль".localized, image: "PixelProfile", tab: 2) }.tag(2)
         }
         .tint(palette.accent)
         .safeAreaInset(edge: .top, spacing: 0) {
             if !chat.isReady {
                 Button { coordinator.retryMessaging() } label: {
-                    Label("Не удалось открыть сообщения. Повторить", systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+                    Label("Не удалось открыть сообщения. Повторить".localized, systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
                         .font(.footnote).padding(12).frame(maxWidth: .infinity).background(.thinMaterial)
                 }
             }
         }
+        // The tab bar belongs to TabView, outside each NavigationStack. Host
+        // the complete surface in the capture-protected canvas so a chat-list
+        // screenshot cannot expose the bar beneath the privacy cover.
+        .shumProtectFromCapture(protectsVisibleContent, protectsSystemChrome: true)
         .sheet(isPresented: $showContacts) {
             ShumContactsView(runtime: chat, showOwnQR: {
                 let sourceTab = selectedTab
@@ -98,7 +104,7 @@ struct MainContentView: View {
             .shumAllowsScreenshots()
         }
         .alert("Shum", isPresented: Binding(get: { chat.error != nil }, set: { if !$0 { chat.error = nil } })) {
-            Button("Понятно") { chat.error = nil }
+            Button("Понятно".localized) { chat.error = nil }
         } message: { Text(chat.error ?? "") }
         .shumOnChange(of: coordinator.nearbyNotificationNavigationRequest) {
             _, _ in
@@ -117,7 +123,10 @@ struct MainContentView: View {
             let arguments = ProcessInfo.processInfo.arguments
             if arguments.contains("-ShumPreviewPeople") { selectedTab = 1 }
             else if arguments.contains("-ShumPreviewProfile") { selectedTab = 2 }
-            else if arguments.contains("-ShumPreviewChat"), let peer = chat.chatPeers.first {
+            else if arguments.contains("-ShumPreviewChat"),
+                    let peer = chat.chatPeers.first ?? chat.messages.first.map({
+                        ShumPeer(id: $0.peerID, name: "Аня", lastConnected: Date())
+                    }) {
                 chatsPath = [.conversation(peer)]
             }
         }
@@ -127,6 +136,15 @@ struct MainContentView: View {
     private var protectsProfileConversation: Bool {
         if case .conversation = profilePath.last { return true }
         return false
+    }
+
+    private var protectsVisibleContent: Bool {
+        switch selectedTab {
+        case 0: contactsPath.last?.containsMessages == true
+        case 1: true // Message previews are visible in the chat directory.
+        case 2: protectsProfileConversation
+        default: false
+        }
     }
 
     private func tabLabel(_ title: String, image name: String, tab: Int) -> some View {

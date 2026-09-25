@@ -96,6 +96,8 @@ struct ShumStoredInvitationControl: Codable, Equatable, Identifiable {
     var lastAttempt: Date = .distantPast
     var attempts = 0
     var nostrAccepted = false
+    var lastNostrAttempt: Date?
+    var nostrAttempts: Int?
     var id: String { control.id }
 }
 struct ShumTypingControl: Codable, Equatable, Identifiable {
@@ -170,12 +172,12 @@ enum ShumDelivery: String, Codable {
     case queued, forwarding, delivered, read, expired, cancelled
     var label: String {
         switch self {
-        case .queued: return "В очереди"
-        case .forwarding: return "Передаётся"
-        case .delivered: return "Доставлено"
-        case .read: return "Прочитано"
-        case .expired: return "Срок доставки истёк"
-        case .cancelled: return "Отменено"
+        case .queued: return "В очереди".localized
+        case .forwarding: return "Передаётся".localized
+        case .delivered: return "Доставлено".localized
+        case .read: return "Прочитано".localized
+        case .expired: return "Срок доставки истёк".localized
+        case .cancelled: return "Отменено".localized
         }
     }
 }
@@ -235,6 +237,8 @@ struct ShumStoredMessage: Codable, Identifiable {
     var lastAttempt: Date = .distantPast
     var forwardedTo: Set<String> = []
     var nostrAccepted = false
+    var lastNostrAttempt: Date?
+    var nostrAttempts: Int?
     var deliveredAt: Date?
     var readAt: Date?
     var reply: ShumReplyReference? = nil
@@ -274,6 +278,8 @@ struct ShumStoredReceipt: Codable {
     var lastAttempt: Date = .distantPast
     var sentTo: Set<String> = []
     var nostrAccepted = false
+    var lastNostrAttempt: Date?
+    var nostrAttempts: Int?
 }
 struct ShumPacket: Codable {
     var version = 1

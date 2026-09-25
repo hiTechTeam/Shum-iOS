@@ -3,6 +3,24 @@ import Testing
 @testable import Shum
 
 struct ShumBackupFileWriterTests {
+    @Test func savedExportStartsCompletionRegardlessOfCallbackOrder() {
+        var delegateFirst = ShumBackupPickerCompletion()
+        #expect(delegateFirst.didComplete(saved: true) == nil)
+        #expect(delegateFirst.didDismiss() == true)
+        #expect(delegateFirst.didDismiss() == nil)
+
+        var dismissalFirst = ShumBackupPickerCompletion()
+        #expect(dismissalFirst.didDismiss() == nil)
+        #expect(dismissalFirst.didComplete(saved: true) == true)
+        #expect(dismissalFirst.didComplete(saved: true) == nil)
+    }
+
+    @Test func cancelledExportNeverReportsSuccess() {
+        var completion = ShumBackupPickerCompletion()
+        #expect(completion.didDismiss() == nil)
+        #expect(completion.didComplete(saved: false) == false)
+    }
+
     @Test func repeatedBackupsPreserveEarlierFiles() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

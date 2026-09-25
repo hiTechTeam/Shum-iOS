@@ -33,7 +33,7 @@ struct ScanToggle: View {
                 }
             }
             .alert(Inc.Alerts.turnOnBLE.localized, isPresented: $showBluetoothAlert) {
-                Button(Inc.Common.okey) { }
+                Button(Inc.Common.okey.localized) { }
             }
     }
     

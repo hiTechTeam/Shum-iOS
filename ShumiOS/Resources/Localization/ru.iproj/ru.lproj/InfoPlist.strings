@@ -1,2 +1,4 @@
+"UTTypeDescription" = "Резервная копия Shum";
 "NSBluetoothAlwaysUsageDescription" = "Bluetooth позволяет Shum находить пользователей рядом и показывать им ваш профиль, пока сканирование включено.";
 "NSCameraUsageDescription" = "Камера нужна для сканирования QR-кодов Shum и фотографии профиля.";
+"NSFaceIDUsageDescription" = "Face ID защищает доступ к переписке и настройкам Shum.";

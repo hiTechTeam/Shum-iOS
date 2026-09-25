@@ -35,7 +35,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     @Published private(set) var peers: [ShumPeer] = []
     @Published private var nearbyDistances: [PeerID: Int] = [:]
     @Published private(set) var messages: [ShumMessage] = []
-    @Published private var unreadMessageIDs: Set<String> = []
+    @Published private(set) var unreadMessageIDs: Set<String> = []
     @Published private(set) var nickname: String
     @Published private(set) var bluetoothState: CBManagerState = .unknown
     @Published var error: String?
@@ -199,7 +199,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             defaults.set(storedName, forKey: Self.nicknameKey)
         }
         var initialName = storedName
-            .flatMap(InputValidator.validateNickname) ?? "Гость \(transport.myPeerID.id.prefix(4))"
+            .flatMap(InputValidator.validateNickname) ?? String.localizedFormat("Гость %@".localized, String(transport.myPeerID.id.prefix(4)))
         #if DEBUG
         if let testName = defaults.string(forKey: "ShumSelfTestName"),
            let run = defaults.string(forKey: "ShumSelfTestRun") {
@@ -289,9 +289,17 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         #endif
     }
 
+    func fetchRemoteEvents(eventID: String, completion: @escaping (Bool) -> Void) {
+        guard !retired, !setupFailed, let permanent else {
+            completion(false)
+            return
+        }
+        permanent.fetchRemoteEvents(eventID: eventID, completion: completion)
+    }
+
     func saveNickname(_ name: String) -> Bool {
         guard let valid = InputValidator.validateNickname(name), valid.utf8.count <= 64 else {
-            error = "Введите короткое имя без служебных символов."
+            error = "Введите короткое имя без служебных символов.".localized
             return false
         }
         return saveProfile(name: valid, bio: profiles.own.bio, avatar: profiles.own.avatar)
@@ -300,12 +308,12 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     func saveProfile(name: String, bio: String, avatar: Data?) -> Bool {
         guard !retired else { return false }
         guard let valid = InputValidator.validateNickname(name), valid.utf8.count <= 64 else {
-            error = "Введите короткое имя без служебных символов."; return false
+            error = "Введите короткое имя без служебных символов.".localized; return false
         }
         let profile = ShumProfile(name: valid, bio: bio.trimmingCharacters(in: .whitespacesAndNewlines), avatar: avatar)
-        guard profile.valid else { error = "Описание — до \(ShumProfile.maxBioCharacters) символов. Попробуйте выбрать фото ещё раз."; return false }
+        guard profile.valid else { error = String.localizedFormat("Описание — до %@ символов. Попробуйте выбрать фото ещё раз.".localized, ShumProfile.maxBioCharacters); return false }
         do { try profiles.save(profile) }
-        catch { self.error = "Не удалось сохранить профиль. Попробуйте ещё раз."; return false }
+        catch { self.error = "Не удалось сохранить профиль. Попробуйте ещё раз.".localized; return false }
         do { try permanent?.updateProfile(name: valid, bio: profile.bio) }
         catch { self.error = error.localizedDescription; return false }
         nickname = valid
@@ -324,16 +332,29 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
 
     var chatPeers: [ShumPeer] {
         guard let permanent else { return peers }
-        let current: [ShumPeer] = permanent.state.conversations.sorted { a, b in
-            let aTime = permanent.state.messages.last(where: { $0.envelope.conversationID == a.id })?.envelope.timestamp ?? Int64(a.createdAt.timeIntervalSince1970 * 1000)
-            let bTime = permanent.state.messages.last(where: { $0.envelope.conversationID == b.id })?.envelope.timestamp ?? Int64(b.createdAt.timeIntervalSince1970 * 1000)
+        let state = permanent.state
+        var lastMessageTime: [String: Int64] = [:]
+        for message in state.messages {
+            let conversationID = message.envelope.conversationID
+            lastMessageTime[conversationID] = max(
+                lastMessageTime[conversationID] ?? .min,
+                message.envelope.timestamp
+            )
+        }
+        var contactsByID: [String: (card: ShumContactCard, addedAt: Date)] = [:]
+        for contact in state.contacts where contactsByID[contact.id] == nil {
+            contactsByID[contact.id] = (contact.card, contact.addedAt)
+        }
+        let current: [ShumPeer] = state.conversations.sorted { a, b in
+            let aTime = lastMessageTime[a.id] ?? Int64(a.createdAt.timeIntervalSince1970 * 1000)
+            let bTime = lastMessageTime[b.id] ?? Int64(b.createdAt.timeIntervalSince1970 * 1000)
             return aTime > bTime
         }.compactMap { conversation in
-            guard let contact = permanent.state.contacts.first(where: { $0.id == conversation.contactID }) else { return nil }
+            guard let contact = contactsByID[conversation.contactID] else { return nil }
             return ShumPeer(id: contact.card.peerID, name: contact.card.name, lastConnected: contact.addedAt)
         }
-        let legacy = (permanent.state.legacyHistory?.contacts ?? []).filter { old in
-            !permanent.state.contacts.contains { $0.id == old.id }
+        let legacy = (state.legacyHistory?.contacts ?? []).filter { old in
+            contactsByID[old.id] == nil
         }.map { old in ShumPeer(id: ShumLegacyArchive.peerID(old.id), name: old.name, lastConnected: .distantPast) }
         return current + legacy
     }
@@ -412,20 +433,20 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             case .forwarding: status = .sent
             case .delivered: status = .delivered(to: card.name, at: stored.deliveredAt ?? Date())
             case .read: status = .read(by: card.name, at: stored.readAt ?? Date())
-            case .expired: status = .failed(reason: "Срок доставки истёк")
-            case .cancelled: status = .failed(reason: "Отменено после блокировки")
+            case .expired: status = .failed(reason: "Срок доставки истёк".localized)
+            case .cancelled: status = .failed(reason: "Отменено после блокировки".localized)
             }
             return ShumMessage(id: stored.id, peerID: card.peerID, text: stored.text,
                 date: Date(timeIntervalSince1970: Double(stored.envelope.timestamp) / 1000), outgoing: stored.outgoing,
                 status: status, attempts: stored.attempts,
-                deliveryLabel: stored.status == .forwarding && stored.deliveryTransport == "mesh" ? "Передаётся через mesh" : stored.status.label,
+                deliveryLabel: stored.status == .forwarding && stored.deliveryTransport == "mesh" ? "Передаётся через mesh".localized : stored.status.label,
                 reply: stored.reply)
         }
         if let history = permanent.state.legacyHistory {
             messages += history.messages.map { old in
                 let peer = permanent.state.contacts.first { $0.id == old.contactID }?.card.peerID ?? ShumLegacyArchive.peerID(old.contactID)
                 return ShumMessage(id: "legacy-" + old.id, peerID: peer, text: old.text, date: old.date,
-                    outgoing: old.outgoing, status: old.status, deliveryLabel: "История")
+                    outgoing: old.outgoing, status: old.status, deliveryLabel: "История".localized)
             }
             messages.sort { $0.date < $1.date }
         }
@@ -480,7 +501,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     @discardableResult
     func sendInvitation(to peer: PeerID) -> Bool {
         guard let permanent, let card = permanent.card(for: peer) else {
-            error = "Дождитесь проверки профиля собеседника."
+            error = "Дождитесь проверки профиля собеседника.".localized
             return false
         }
         return permanent.sendInvitation(card)
@@ -539,7 +560,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     func send(_ text: String, to peer: PeerID, replyingTo original: ShumMessage? = nil) -> Bool {
         guard !setupFailed else { return false }
         if let permanent {
-            guard let card = permanent.card(for: peer) else { error = "Дождитесь проверки профиля собеседника."; return false }
+            guard let card = permanent.card(for: peer) else { error = "Дождитесь проверки профиля собеседника.".localized; return false }
             let reply = original.map {
                 ShumReplyReference(messageID: $0.id,
                     senderID: $0.outgoing ? permanent.ownCard.id : card.id,
@@ -552,11 +573,11 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         // Upstream private-message TLV has a one-byte length. Reject visibly
         // rather than silently dropping Cyrillic/emoji payloads above 255 bytes.
         guard content.utf8.count <= 255 else {
-            error = "Для этой тестовой версии сократите сообщение или отправьте его частями."
+            error = "Для этой тестовой версии сократите сообщение или отправьте его частями.".localized
             return false
         }
         guard isNearby(peer) else {
-            error = "Собеседник сейчас недоступен. Подойдите ближе и попробуйте снова."
+            error = "Собеседник сейчас недоступен. Подойдите ближе и попробуйте снова.".localized
             return false
         }
         let reply = original.map {
@@ -595,7 +616,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         messages[index].waitingForConnection = false
         let message = messages[index]
         transport.sendPrivateMessage(message.text, to: message.peerID,
-                                     recipientNickname: knownPeers[message.peerID]?.name ?? "Гость",
+                                     recipientNickname: knownPeers[message.peerID]?.name ?? "Гость".localized,
                                      messageID: message.id)
     }
 
@@ -643,7 +664,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                 messages[index].waitingForConnection = true
                 if messages[index].disconnectedWait >= Self.connectionWaitLimit {
                     messages[index].waitingForConnection = false
-                    messages[index].status = .failed(reason: "Связь не восстановилась")
+                    messages[index].status = .failed(reason: "Связь не восстановилась".localized)
                 }
                 continue
             }
@@ -659,7 +680,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                 if messages[index].attempts < Self.maxAttempts {
                     transmit(id: messages[index].id)
                 } else {
-                    messages[index].status = .failed(reason: "Нет подтверждения")
+                    messages[index].status = .failed(reason: "Нет подтверждения".localized)
                 }
             }
         }
@@ -762,7 +783,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                 guard let id = String(data: data, encoding: .utf8),
                       let index = messages.firstIndex(where: { $0.id == id && $0.outgoing && $0.peerID == peer }) else { return }
                 if case .read = messages[index].status { return }
-                let name = knownPeers[peer]?.name ?? "Собеседник"
+                let name = knownPeers[peer]?.name ?? "Собеседник".localized
                 messages[index].waitingForConnection = false
                 messages[index].status = type == .readReceipt
                     ? .read(by: name, at: now()) : .delivered(to: name, at: now())

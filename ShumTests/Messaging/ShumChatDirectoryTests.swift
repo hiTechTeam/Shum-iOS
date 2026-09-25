@@ -69,10 +69,18 @@ struct ShumChatDirectoryTests {
         let row = try #require(rows(owner).first)
         #expect(row.belongs(to: .invitations) && row.belongs(to: .unread))
         #expect(!row.hasChat && row.unread == 0)
-        try owner.service.add(person.card, source: "invitation")
+
+        try #require(owner.service.declineInvitation(person.card))
+        let declined = try #require(rows(owner).first)
+        #expect(declined.belongs(to: .invitations) && !declined.belongs(to: .unread))
+        #expect(declined.invitationPhase == .declinedLocally)
+
+        try #require(owner.service.acceptInvitation(person.card))
         let accepted = try #require(rows(owner, chats: [peer(person)]).first)
         #expect(!accepted.belongs(to: .invitations) && !accepted.belongs(to: .unread))
         #expect(accepted.hasChat)
+        #expect(owner.service.invitationPhase(for: person.card) == .accepted)
+        #expect(!owner.service.isAddressBookContact(person.card))
     }
 
     @Test func blockedPeopleDoNotLeakBackThroughAnotherSource() throws {

@@ -1,0 +1,4 @@
+"UTTypeDescription" = "Cópia de segurança do Shum";
+"NSBluetoothAlwaysUsageDescription" = "O Bluetooth permite que o Shum encontre usuários próximos e torne seu perfil visível enquanto a busca estiver ativada.";
+"NSCameraUsageDescription" = "O acesso à câmera permite escanear códigos QR do Shum e tirar uma foto de perfil.";
+"NSFaceIDUsageDescription" = "O Face ID protege o acesso às suas conversas e às configurações do Shum.";

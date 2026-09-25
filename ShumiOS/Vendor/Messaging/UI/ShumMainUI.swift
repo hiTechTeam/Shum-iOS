@@ -98,15 +98,15 @@ struct ShumChatsUI: View {
             HStack(spacing: 6) {
                 Image(systemName: "lock.fill")
                 Text(runtime.internetConnected
-                     ? "Сквозное шифрование · Nostr подключён"
-                     : "Сквозное шифрование · Ожидаем сеть")
+                     ? "Сквозное шифрование · Nostr подключён".localized
+                     : "Сквозное шифрование · Ожидаем сеть".localized)
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
             .padding(8)
         }
         .background(ShumThemeCanvas().ignoresSafeArea())
-        .navigationTitle("Чаты")
+        .navigationTitle("Чаты".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -117,7 +117,7 @@ struct ShumChatsUI: View {
                     newMessageIcon
                 }
                 .tint(.primary)
-                .accessibilityLabel("Написать сообщение")
+                .accessibilityLabel("Написать сообщение".localized)
                 .accessibilityIdentifier("shum.newMessage")
             }
         }
@@ -228,38 +228,38 @@ private struct ShumChatEmptyState: View {
 
     private var title: String {
         switch folder {
-        case .all: "Пока тихо"
-        case .nearby: visibilityEnabled ? "Никого рядом" : "Видимость выключена"
-        case .unread: "Всё прочитано"
-        case .invitations: "Нет приглашений"
-        case .encounters: "Пока не встречались"
+        case .all: "Пока тихо".localized
+        case .nearby: visibilityEnabled ? "Никого рядом".localized : "Видимость выключена".localized
+        case .unread: "Всё прочитано".localized
+        case .invitations: "Нет приглашений".localized
+        case .encounters: "Пока не встречались".localized
         }
     }
 
     private var message: String {
         switch folder {
-        case .all: "Новые разговоры появятся здесь."
+        case .all: "Новые разговоры появятся здесь.".localized
         case .nearby:
             visibilityEnabled
-                ? "Видимость по Bluetooth работает автоматически."
-                : "Включите видимость в профиле, чтобы находить людей рядом через Bluetooth."
-        case .unread: "Новых сообщений пока нет."
-        case .invitations: "Новые приглашения появятся здесь."
-        case .encounters: "Встречи поблизости сохранятся здесь."
+                ? "Видимость по Bluetooth работает автоматически.".localized
+                : "Включите видимость в профиле, чтобы находить людей рядом через Bluetooth.".localized
+        case .unread: "Новых сообщений пока нет.".localized
+        case .invitations: "Новые приглашения появятся здесь.".localized
+        case .encounters: "Встречи поблизости сохранятся здесь.".localized
         }
     }
 
     private var actionTitle: String? {
         switch folder {
-        case .all, .invitations: "Добавить контакт"
-        case .unread: "Все чаты"
+        case .all, .invitations: "Добавить контакт".localized
+        case .unread: "Все чаты".localized
         case .nearby, .encounters: nil
         }
     }
 
     private var status: String? {
         switch folder {
-        case .encounters: "Все встречи за 24 часа"
+        case .encounters: "Все встречи за 24 часа".localized
         default: nil
         }
     }
@@ -406,7 +406,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         .alert(pendingAction?.title ?? "", isPresented: Binding(
             get: { pendingAction != nil }, set: { if !$0 { pendingAction = nil } }
         ), presenting: pendingAction) { action in
-            Button("Отмена", role: .cancel) { pendingAction = nil }
+            Button("Отмена".localized, role: .cancel) { pendingAction = nil }
             Button(action.buttonTitle, role: .destructive) { confirm(action); pendingAction = nil }
         } message: { action in Text(action.message) }
     }
@@ -494,7 +494,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             if entry.card != nil {
                 Button { togglePinned(entry) } label: {
-                    Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill")
+                    Label(pinned ? "Открепить".localized : "Закрепить".localized, systemImage: pinned ? "pin.slash" : "pin.fill")
                 }.tint(Color(uiColor: .systemGray))
             }
         }
@@ -507,23 +507,23 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         if let card = entry.card {
             if entry.isInvitation && entry.invitationPhase == .incomingPending {
                 Button { pendingAction = .decline(card) } label: {
-                    Label("Отклонить", systemImage: "xmark")
+                    Label("Отклонить".localized, systemImage: "xmark")
                 }
                 .tint(.red)
 
                 Button { requestBlock(entry, afterSwipe: true) } label: {
-                    Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                    Label("Заблокировать".localized, systemImage: "person.crop.circle.badge.xmark")
                 }
                 .tint(.red)
             } else {
                 Button { requestBlock(entry, afterSwipe: true) } label: {
-                    Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark")
+                    Label("Заблокировать".localized, systemImage: "person.crop.circle.badge.xmark")
                 }
                 .tint(.red)
 
                 if canClear(entry) {
                     Button { pendingAction = .clear(card) } label: {
-                        Label("Очистить", systemImage: "trash")
+                        Label("Очистить".localized, systemImage: "trash")
                     }
                     .tint(Color(uiColor: .systemGray))
                 }
@@ -537,7 +537,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 _ = runtime.addContact(card, source: "chat-menu")
             } label: {
-                Label("Добавить в контакты", systemImage: "person.badge.plus")
+                Label("Добавить в контакты".localized, systemImage: "person.badge.plus")
                     .foregroundStyle(.primary)
             }
             .tint(.primary)
@@ -545,30 +545,30 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
             Divider()
         }
         Button { selectedPeer = entry.peer } label: {
-            Label("Посмотреть профиль", systemImage: "person.crop.circle").foregroundStyle(.primary)
+            Label("Посмотреть профиль".localized, systemImage: "person.crop.circle").foregroundStyle(.primary)
         }.tint(.primary)
         Button { activate(entry) } label: {
-            Label(entry.isInvitation ? "Открыть приглашение" : "Написать", systemImage: "paperplane").foregroundStyle(.primary)
+            Label(entry.isInvitation ? "Открыть приглашение".localized : "Написать".localized, systemImage: "paperplane").foregroundStyle(.primary)
         }.tint(.primary)
         if let card = entry.card {
             let pinned = isPinned(entry)
             Button { togglePinned(entry) } label: {
-                Label(pinned ? "Открепить" : "Закрепить", systemImage: pinned ? "pin.slash" : "pin.fill").foregroundStyle(.primary)
+                Label(pinned ? "Открепить".localized : "Закрепить".localized, systemImage: pinned ? "pin.slash" : "pin.fill").foregroundStyle(.primary)
             }.tint(.primary)
             if entry.isInvitation, entry.invitationPhase == .incomingPending {
                 Button(role: .destructive) { pendingAction = .decline(card) } label: {
-                    Label("Отклонить приглашение", systemImage: "xmark").foregroundStyle(.red)
+                    Label("Отклонить приглашение".localized, systemImage: "xmark").foregroundStyle(.red)
                 }
                 .tint(.red)
             } else if canClear(entry) {
                 Button(role: .destructive) { pendingAction = .clear(card) } label: {
-                    Label("Очистить", systemImage: "trash").foregroundStyle(.red)
+                    Label("Очистить".localized, systemImage: "trash").foregroundStyle(.red)
                 }
                 .tint(.red)
             }
             Divider()
             Button(role: .destructive) { requestBlock(entry, afterSwipe: false) } label: {
-                Label("Заблокировать", systemImage: "person.crop.circle.badge.xmark").foregroundStyle(.red)
+                Label("Заблокировать".localized, systemImage: "person.crop.circle.badge.xmark").foregroundStyle(.red)
             }.tint(.red)
         }
     }
@@ -742,22 +742,22 @@ private enum DirectoryConfirmation {
     case clear(ShumContactCard), decline(ShumContactCard)
     var title: String {
         switch self {
-        case .clear: "Очистить чат?"
-        case .decline: "Отклонить приглашение?"
+        case .clear: "Очистить чат?".localized
+        case .decline: "Отклонить приглашение?".localized
         }
     }
     var buttonTitle: String {
         switch self {
-        case .clear: "Очистить"
-        case .decline: "Отклонить"
+        case .clear: "Очистить".localized
+        case .decline: "Отклонить".localized
         }
     }
     var message: String {
         switch self {
         case .clear:
-            "История чата будет удалена только на этом устройстве. У собеседника сообщения сохранятся."
+            "История чата будет удалена только на этом устройстве. У собеседника сообщения сохранятся.".localized
         case .decline:
-            "Запрос будет отклонён. Вы сможете принять его позднее в этом чате."
+            "Запрос будет отклонён. Вы сможете принять его позднее в этом чате.".localized
         }
     }
 }
@@ -800,22 +800,22 @@ struct ShumDirectoryRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 8) {
                     Text(runtime.displayName(entry.peer))
-                        .font(.system(size: 17, weight: .semibold)).foregroundStyle(.primary).lineLimit(1)
+                        .font(.system(size: 17, weight: .semibold)).foregroundStyle(Color.primary).lineLimit(1)
                     if entry.isNearby && showsNearbyIndicator {
                         HStack(spacing: 4) {
                             Circle()
                                 .fill(Color.secondary)
                                 .frame(width: 4, height: 4)
-                            Text("Рядом")
+                            Text("Рядом".localized)
                                 .font(.system(size: 11, weight: .regular))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.secondary)
                         }
                         .fixedSize()
-                        .accessibilityLabel("Рядом")
+                        .accessibilityLabel("Рядом".localized)
                     }
                     Spacer(minLength: 4)
                     if let last {
-                        Text(last.date, style: .time).font(.system(size: 13)).foregroundStyle(.secondary)
+                        Text(last.date, style: .time).font(.system(size: 13)).foregroundStyle(Color.secondary)
                     }
                 }
                 HStack(spacing: 8) {
@@ -827,9 +827,9 @@ struct ShumDirectoryRow: View {
                             if let last, last.outgoing, !entry.isInvitation {
                                 ShumChatReceipt(status: last.status)
                             }
-                            Text(invitationSummary ?? last?.text ?? "Начать чат")
+                            Text(invitationSummary ?? last?.text ?? "Начать чат".localized)
                                 .font(.system(size: 15))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.secondary)
                                 .lineLimit(1)
                         }
                         .transition(.opacity)
@@ -845,11 +845,12 @@ struct ShumDirectoryRow: View {
                         Image(systemName: "pin.fill")
                             .font(.system(size: 12, weight: .regular))
                             .rotationEffect(.degrees(40))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondary)
                             .frame(width: 21, height: 21)
-                            .accessibilityLabel("Закреплён")
+                            .accessibilityLabel("Закреплён".localized)
                     }
                 }
+                .frame(minHeight: 21)
                 .animation(.easeInOut(duration: 0.18), value: typing)
             }
         }
@@ -859,14 +860,14 @@ struct ShumDirectoryRow: View {
         .padding(.vertical, 10)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityHint(entry.isInvitation ? "Открыть приглашение" : "Открыть чат")
+        .accessibilityHint(entry.isInvitation ? "Открыть приглашение".localized : "Открыть чат".localized)
     }
 
     private var invitationSummary: String? {
         guard entry.isInvitation else { return nil }
         return entry.invitationPhase == .declinedLocally
-            ? "Приглашение отклонено"
-            : "Приглашение в чат"
+            ? "Приглашение отклонено".localized
+            : "Приглашение в чат".localized
     }
 }
 
@@ -878,7 +879,7 @@ private struct ShumChatListTypingIndicator: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Text("Печатает")
+            Text("Печатает".localized)
             ForEach(0..<3, id: \.self) { index in
                 Text(".")
                     .opacity(index <= phase ? 1 : 0.22)
@@ -888,7 +889,7 @@ private struct ShumChatListTypingIndicator: View {
         .foregroundStyle(Color.accentColor)
         .lineLimit(1)
         .onReceive(timer) { _ in phase = (phase + 1) % 3 }
-        .accessibilityLabel("Печатает")
+        .accessibilityLabel("Печатает".localized)
     }
 }
 
@@ -896,11 +897,11 @@ private struct ShumChatReceipt: View {
     let status: DeliveryStatus
     private var receiptDescription: String {
         switch status {
-        case .read: "Прочитано"
-        case .delivered: "Доставлено"
-        case .sent: "Отправлено"
-        case .failed: "Не доставлено"
-        default: "Отправляется"
+        case .read: "Прочитано".localized
+        case .delivered: "Доставлено".localized
+        case .sent: "Отправлено".localized
+        case .failed: "Не доставлено".localized
+        default: "Отправляется".localized
         }
     }
     var body: some View {
