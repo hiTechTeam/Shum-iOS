@@ -153,26 +153,11 @@
 "nearbyProfileMessengerTransitionContinue" = "Continue";
 "nearbyProfileMessengerTransitionAlways" = "Always Continue";
 "nearbyProfileNoInformation" = "Message on Shum";
-"nearbyProfileReport" = "Report user";
 "nearbyProfileBlock" = "Block user";
 "nearbyProfileSavedBlockAction" = "Unavailable";
 "nearbyProfileSavedBlockTitle" = "Blocking unavailable";
 "nearbyProfileSavedBlockMessage" = "To block this person, remove them from Saved first.";
 "nearbyProfileSavedBlockOK" = "OK";
-"nearbyProfileReportTitle" = "Why are you reporting this user?";
-"nearbyProfileReportMessage" = "Choose the reason that best describes the problem.";
-"nearbyProfileReportSpam" = "Spam";
-"nearbyProfileReportHarassment" = "Harassment or bullying";
-"nearbyProfileReportInappropriate" = "Inappropriate content";
-"nearbyProfileReportImpersonation" = "Impersonation";
-"nearbyProfileReportOther" = "Other";
-"nearbyProfileReportConfirmTitle" = "Report and block?";
-"nearbyProfileReportConfirmMessage" = "Reason: %@. You can add optional context to the report before blocking.";
-"nearbyProfileReportDetailsPlaceholder" = "Comment (optional)";
-"nearbyProfileReportDetailsMessage" = "The comment is optional. The user will be blocked after you submit the report.";
-"nearbyProfileReportSend" = "Report and block";
-"nearbyProfileReportSentTitle" = "Report sent";
-"nearbyProfileReportSentMessage" = "Thank you. The report has been saved for moderation.";
 "nearbyProfileBlockTitle" = "Block this user?";
 "nearbyProfileBlockMessage" = "This profile will be hidden on this phone. Blocking does not delete copies of your profile from other devices.";
 "nearbyProfileBlockConfirm" = "Block";
@@ -712,3 +697,12 @@
 "Системный язык" = "System language";
 "Язык интерфейса меняется сразу и сохраняется на этом устройстве." = "The interface language changes immediately and is saved on this device.";
 "PUSH_NEW_MESSAGE_BODY" = "New message";
+
+/* Privacy policy: notifications */
+"Обновлено 26 сентября 2026 года" = "Updated September 26, 2026";
+"Уведомления" = "Notifications";
+"Чтобы сообщать о новых сообщениях и приглашениях, когда приложение закрыто, Shum использует сервер уведомлений, которым управляют разработчики Shum, и службу Apple Push Notification service." = "To tell you about new messages and invitations while the app is closed, Shum uses a notification server operated by the Shum developers and the Apple Push Notification service.";
+"При запуске приложение регистрирует устройство на сервере уведомлений, в том числе если показ уведомлений отключён в настройках iOS. Сервер получает подписанную карточку профиля (имя, описание профиля и публичные ключи), токен push-уведомлений устройства и версию приложения. Хранится только связь между идентификатором профиля и токеном устройства." = "When the app starts, it registers the device with the notification server, even if notifications are turned off in iOS Settings. The server receives your signed profile card (name, profile description, and public keys), the device push token, and the app version. Only the link between the profile identifier and the device token is stored.";
+"Когда вы отправляете сообщение или приглашение, приложение передаёт серверу вашу карточку, идентификатор получателя и тип события. Поэтому при обработке запроса сервер знает, какому профилю вы отправили уведомление. Эти сведения не сохраняются. Получатель видит уведомление без текста сообщения. Сервер не получает текст сообщений, фотографии и список контактов." = "When you send a message or an invitation, the app sends the server your card, the recipient's identifier, and the event type. While processing the request, the server therefore knows which profile you notified. This information is not stored. The recipient sees a notification without the message text. The server does not receive message text, photos, or your contact list.";
+"Сервер использует IP-адрес запроса только для ограничения частоты запросов и не сохраняет его. Инфраструктура хостинга может вести технические журналы соединений." = "The server uses the request's IP address only to limit the request rate and does not store it. The hosting infrastructure may keep technical connection logs.";
+"При удалении профиля приложение также просит сервер уведомлений удалить токен устройства." = "When you delete your profile, the app also asks the notification server to remove the device token.";

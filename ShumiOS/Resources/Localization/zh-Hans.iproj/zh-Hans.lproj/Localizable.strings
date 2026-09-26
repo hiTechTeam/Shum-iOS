@@ -152,26 +152,11 @@
 "nearbyProfileMessengerTransitionContinue" = "继续";
 "nearbyProfileMessengerTransitionAlways" = "始终继续";
 "nearbyProfileNoInformation" = "在 Shum 中发消息";
-"nearbyProfileReport" = "举报用户";
 "nearbyProfileBlock" = "屏蔽用户";
 "nearbyProfileSavedBlockAction" = "不可用";
 "nearbyProfileSavedBlockTitle" = "无法屏蔽";
 "nearbyProfileSavedBlockMessage" = "要屏蔽此人，请先将其从“已保存”中移除。";
 "nearbyProfileSavedBlockOK" = "好";
-"nearbyProfileReportTitle" = "为什么举报此用户？";
-"nearbyProfileReportMessage" = "请选择最能描述问题的原因。";
-"nearbyProfileReportSpam" = "垃圾信息";
-"nearbyProfileReportHarassment" = "骚扰或欺凌";
-"nearbyProfileReportInappropriate" = "不当内容";
-"nearbyProfileReportImpersonation" = "冒充他人";
-"nearbyProfileReportOther" = "其他";
-"nearbyProfileReportConfirmTitle" = "举报并屏蔽？";
-"nearbyProfileReportConfirmMessage" = "原因：%@。屏蔽前，你可以选择补充说明。";
-"nearbyProfileReportDetailsPlaceholder" = "备注（可选）";
-"nearbyProfileReportDetailsMessage" = "备注为可选内容。提交举报后，此用户将被屏蔽。";
-"nearbyProfileReportSend" = "举报并屏蔽";
-"nearbyProfileReportSentTitle" = "举报已发送";
-"nearbyProfileReportSentMessage" = "谢谢。举报已保存，等待审核。";
 "nearbyProfileBlockTitle" = "屏蔽此用户？";
 "nearbyProfileBlockMessage" = "此个人资料将在本手机上隐藏。屏蔽不会删除其他设备上的个人资料副本。";
 "nearbyProfileBlockConfirm" = "屏蔽";
@@ -710,3 +695,12 @@
 "Системный язык" = "系统语言";
 "Язык интерфейса меняется сразу и сохраняется на этом устройстве." = "界面语言会立即更改并保存在此设备上。";
 "PUSH_NEW_MESSAGE_BODY" = "新消息";
+
+/* Privacy policy: notifications */
+"Обновлено 26 сентября 2026 года" = "更新于 2026 年 9 月 26 日";
+"Уведомления" = "通知";
+"Чтобы сообщать о новых сообщениях и приглашениях, когда приложение закрыто, Shum использует сервер уведомлений, которым управляют разработчики Shum, и службу Apple Push Notification service." = "为了在应用关闭时提醒你新消息和邀请，Shum 使用由 Shum 开发者运营的通知服务器以及 Apple Push Notification service。";
+"При запуске приложение регистрирует устройство на сервере уведомлений, в том числе если показ уведомлений отключён в настройках iOS. Сервер получает подписанную карточку профиля (имя, описание профиля и публичные ключи), токен push-уведомлений устройства и версию приложения. Хранится только связь между идентификатором профиля и токеном устройства." = "应用启动时会在通知服务器上注册设备，即使你在 iOS 设置中关闭了通知也是如此。服务器会收到你已签名的个人资料卡（名称、个人简介和公钥）、设备的推送通知令牌以及应用版本。服务器只保存个人资料标识符与设备令牌之间的关联。";
+"Когда вы отправляете сообщение или приглашение, приложение передаёт серверу вашу карточку, идентификатор получателя и тип события. Поэтому при обработке запроса сервер знает, какому профилю вы отправили уведомление. Эти сведения не сохраняются. Получатель видит уведомление без текста сообщения. Сервер не получает текст сообщений, фотографии и список контактов." = "当你发送消息或邀请时，应用会将你的资料卡、收件人标识符和事件类型发送给服务器。因此，在处理请求时，服务器知道你向哪个个人资料发送了通知。这些信息不会被保存。收件人看到的通知不包含消息内容。服务器不会收到消息内容、照片或你的联系人列表。";
+"Сервер использует IP-адрес запроса только для ограничения частоты запросов и не сохраняет его. Инфраструктура хостинга может вести технические журналы соединений." = "服务器仅将请求的 IP 地址用于限制请求频率，不会保存。托管基础设施可能会保留技术性连接日志。";
+"При удалении профиля приложение также просит сервер уведомлений удалить токен устройства." = "删除个人资料时，应用还会请求通知服务器删除设备令牌。";

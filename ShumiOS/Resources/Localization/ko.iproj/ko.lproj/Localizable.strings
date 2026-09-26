@@ -153,26 +153,11 @@
 "nearbyProfileMessengerTransitionContinue" = "계속하기";
 "nearbyProfileMessengerTransitionAlways" = "항상 계속";
 "nearbyProfileNoInformation" = "Shum의 메시지";
-"nearbyProfileReport" = "자주 묻는 질문";
 "nearbyProfileBlock" = "블록 사용자";
 "nearbyProfileSavedBlockAction" = "이용안내";
 "nearbyProfileSavedBlockTitle" = "차단 해제";
 "nearbyProfileSavedBlockMessage" = "이 사람을 막기 위해 Saved에서 제거하십시오.";
 "nearbyProfileSavedBlockOK" = "이름 *";
-"nearbyProfileReportTitle" = "왜 이 사용자를보고?";
-"nearbyProfileReportMessage" = "가장 좋은 이유를 선택하십시오.";
-"nearbyProfileReportSpam" = "스낵 바";
-"nearbyProfileReportHarassment" = "Harassment 또는 주먹질";
-"nearbyProfileReportInappropriate" = "관심상품";
-"nearbyProfileReportImpersonation" = "이름 *";
-"nearbyProfileReportOther" = "이름 *";
-"nearbyProfileReportConfirmTitle" = "보고서 및 블록?";
-"nearbyProfileReportConfirmMessage" = "이유:%@. 당신은 차단하기 전에 보고서에 선택적인 맥락을 추가할 수 있습니다.";
-"nearbyProfileReportDetailsPlaceholder" = "댓글 (선택 사항)";
-"nearbyProfileReportDetailsMessage" = "코멘트는 선택 사항입니다. 사용자가 보고서를 제출한 후 차단됩니다.";
-"nearbyProfileReportSend" = "보고서 및 블록";
-"nearbyProfileReportSentTitle" = "견적 요청";
-"nearbyProfileReportSentMessage" = "감사합니다. 보고서는 변조에 저장되었습니다.";
 "nearbyProfileBlockTitle" = "이 사용자를 차단?";
 "nearbyProfileBlockMessage" = "이 프로필은 이 전화에 숨겨져 있습니다. 차단은 다른 장치에서 프로필의 사본을 삭제하지 않습니다.";
 "nearbyProfileBlockConfirm" = "제품정보";
@@ -712,3 +697,12 @@
 "Системный язык" = "시스템 언어";
 "Язык интерфейса меняется сразу и сохраняется на этом устройстве." = "인터페이스 언어는 즉시 변경되며 이 기기에 저장됩니다.";
 "PUSH_NEW_MESSAGE_BODY" = "새 메시지";
+
+/* Privacy policy: notifications */
+"Обновлено 26 сентября 2026 года" = "2026년 9월 26일 업데이트";
+"Уведомления" = "알림";
+"Чтобы сообщать о новых сообщениях и приглашениях, когда приложение закрыто, Shum использует сервер уведомлений, которым управляют разработчики Shum, и службу Apple Push Notification service." = "앱이 닫혀 있을 때 새 메시지와 초대를 알려 드리기 위해 Shum은 Shum 개발자가 운영하는 알림 서버와 Apple Push Notification service를 사용합니다.";
+"При запуске приложение регистрирует устройство на сервере уведомлений, в том числе если показ уведомлений отключён в настройках iOS. Сервер получает подписанную карточку профиля (имя, описание профиля и публичные ключи), токен push-уведомлений устройства и версию приложения. Хранится только связь между идентификатором профиля и токеном устройства." = "앱은 실행될 때 iOS 설정에서 알림이 꺼져 있더라도 기기를 알림 서버에 등록합니다. 서버는 서명된 프로필 카드(이름, 프로필 설명, 공개 키), 기기의 푸시 알림 토큰, 앱 버전을 받습니다. 저장되는 것은 프로필 식별자와 기기 토큰 간의 연결뿐입니다.";
+"Когда вы отправляете сообщение или приглашение, приложение передаёт серверу вашу карточку, идентификатор получателя и тип события. Поэтому при обработке запроса сервер знает, какому профилю вы отправили уведомление. Эти сведения не сохраняются. Получатель видит уведомление без текста сообщения. Сервер не получает текст сообщений, фотографии и список контактов." = "메시지나 초대를 보내면 앱은 사용자의 카드, 받는 사람의 식별자, 이벤트 유형을 서버로 전송합니다. 따라서 서버는 요청을 처리하는 동안 사용자가 어떤 프로필에 알림을 보냈는지 알 수 있습니다. 이 정보는 저장되지 않습니다. 받는 사람에게는 메시지 내용 없이 알림이 표시됩니다. 서버는 메시지 내용, 사진, 연락처 목록을 받지 않습니다.";
+"Сервер использует IP-адрес запроса только для ограничения частоты запросов и не сохраняет его. Инфраструктура хостинга может вести технические журналы соединений." = "서버는 요청의 IP 주소를 요청 빈도 제한에만 사용하며 저장하지 않습니다. 호스팅 인프라는 기술적인 연결 기록을 보관할 수 있습니다.";
+"При удалении профиля приложение также просит сервер уведомлений удалить токен устройства." = "프로필을 삭제하면 앱은 알림 서버에 기기 토큰 삭제도 요청합니다.";

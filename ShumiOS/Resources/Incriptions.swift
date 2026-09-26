@@ -274,7 +274,6 @@ struct Inc {
         static let messengerTransitionAlways: String =
             "nearbyProfileMessengerTransitionAlways"
         static let noInformation: String = "nearbyProfileNoInformation"
-        static let report: String = "nearbyProfileReport"
         static let block: String = "nearbyProfileBlock"
         static let savedBlockAction: String =
             "nearbyProfileSavedBlockAction"
@@ -282,23 +281,6 @@ struct Inc {
         static let savedBlockMessage: String =
             "nearbyProfileSavedBlockMessage"
         static let savedBlockOK: String = "nearbyProfileSavedBlockOK"
-
-        static let reportTitle: String = "nearbyProfileReportTitle"
-        static let reportMessage: String = "nearbyProfileReportMessage"
-        static let reportSpam: String = "nearbyProfileReportSpam"
-        static let reportHarassment: String = "nearbyProfileReportHarassment"
-        static let reportInappropriate: String = "nearbyProfileReportInappropriate"
-        static let reportImpersonation: String = "nearbyProfileReportImpersonation"
-        static let reportOther: String = "nearbyProfileReportOther"
-        static let reportConfirmTitle: String = "nearbyProfileReportConfirmTitle"
-        static let reportConfirmMessage: String = "nearbyProfileReportConfirmMessage"
-        static let reportDetailsPlaceholder: String =
-            "nearbyProfileReportDetailsPlaceholder"
-        static let reportDetailsMessage: String =
-            "nearbyProfileReportDetailsMessage"
-        static let reportSend: String = "nearbyProfileReportSend"
-        static let reportSentTitle: String = "nearbyProfileReportSentTitle"
-        static let reportSentMessage: String = "nearbyProfileReportSentMessage"
 
         static let blockTitle: String = "nearbyProfileBlockTitle"
         static let blockMessage: String = "nearbyProfileBlockMessage"

@@ -13,7 +13,7 @@
 - Сквозное шифрование сообщений и зашифрованная история на устройстве.
 - Резервные копии профиля и переписки.
 
-У Shum нет единого центрального сервера. Приложение развивается, сейчас доступны текстовые сообщения.
+Сообщения не проходят через центральный сервер: они идут напрямую по Bluetooth или через независимые релеи. Для push-уведомлений используется сервер разработчиков, который не получает текст сообщений. Приложение развивается, сейчас доступны текстовые сообщения.
 
 [Политика конфиденциальности](PRIVACY.md) · [Правила использования](TERMS.md) · [Поддержка и предложения](https://github.com/hiTechTeam/Shum-iOS/issues)
 
@@ -28,7 +28,7 @@ Meet people nearby and stay connected over distance. No phone number is needed.
 - End-to-end encrypted messages and encrypted history on your device.
 - Backups of your profile and conversations.
 
-Shum has no single central server. The app is under development and currently supports text messaging.
+Messages do not pass through a central server: they travel directly over Bluetooth or through independent relays. Push notifications use a developer-operated server that never receives message text. The app is under development and currently supports text messaging.
 
 [Privacy policy](PRIVACY.md) · [Terms of use](TERMS.md) · [Support and suggestions](https://github.com/hiTechTeam/Shum-iOS/issues)
 

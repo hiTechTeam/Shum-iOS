@@ -152,26 +152,11 @@
 "nearbyProfileMessengerTransitionContinue" = "Continuar";
 "nearbyProfileMessengerTransitionAlways" = "Continuar siempre";
 "nearbyProfileNoInformation" = "Escribir en Shum";
-"nearbyProfileReport" = "Denunciar usuario";
 "nearbyProfileBlock" = "Bloquear usuario";
 "nearbyProfileSavedBlockAction" = "No disponible";
 "nearbyProfileSavedBlockTitle" = "Bloqueo no disponible";
 "nearbyProfileSavedBlockMessage" = "Para bloquear a esta persona, quítala primero de Guardados.";
 "nearbyProfileSavedBlockOK" = "Aceptar";
-"nearbyProfileReportTitle" = "¿Por qué denuncias a este usuario?";
-"nearbyProfileReportMessage" = "Elige el motivo que mejor describe el problema.";
-"nearbyProfileReportSpam" = "Spam";
-"nearbyProfileReportHarassment" = "Acoso o intimidación";
-"nearbyProfileReportInappropriate" = "Contenido inapropiado";
-"nearbyProfileReportImpersonation" = "Suplantación de identidad";
-"nearbyProfileReportOther" = "Otro";
-"nearbyProfileReportConfirmTitle" = "¿Denunciar y bloquear?";
-"nearbyProfileReportConfirmMessage" = "Motivo: %@. Puedes añadir contexto opcional antes de bloquear.";
-"nearbyProfileReportDetailsPlaceholder" = "Comentario (opcional)";
-"nearbyProfileReportDetailsMessage" = "El comentario es opcional. El usuario se bloqueará después de enviar la denuncia.";
-"nearbyProfileReportSend" = "Denunciar y bloquear";
-"nearbyProfileReportSentTitle" = "Denuncia enviada";
-"nearbyProfileReportSentMessage" = "Gracias. La denuncia se ha guardado para su revisión.";
 "nearbyProfileBlockTitle" = "¿Bloquear a este usuario?";
 "nearbyProfileBlockMessage" = "Este perfil se ocultará en este teléfono. El bloqueo no elimina copias de tu perfil de otros dispositivos.";
 "nearbyProfileBlockConfirm" = "Bloquear";
@@ -710,3 +695,12 @@
 "Системный язык" = "Idioma del sistema";
 "Язык интерфейса меняется сразу и сохраняется на этом устройстве." = "El idioma de la interfaz cambia de inmediato y se guarda en este dispositivo.";
 "PUSH_NEW_MESSAGE_BODY" = "Nuevo mensaje";
+
+/* Privacy policy: notifications */
+"Обновлено 26 сентября 2026 года" = "Actualizado el 26 de septiembre de 2026";
+"Уведомления" = "Notificaciones";
+"Чтобы сообщать о новых сообщениях и приглашениях, когда приложение закрыто, Shum использует сервер уведомлений, которым управляют разработчики Shum, и службу Apple Push Notification service." = "Para avisarte de nuevos mensajes e invitaciones cuando la app está cerrada, Shum utiliza un servidor de notificaciones gestionado por los desarrolladores de Shum y el servicio Apple Push Notification service.";
+"При запуске приложение регистрирует устройство на сервере уведомлений, в том числе если показ уведомлений отключён в настройках iOS. Сервер получает подписанную карточку профиля (имя, описание профиля и публичные ключи), токен push-уведомлений устройства и версию приложения. Хранится только связь между идентификатором профиля и токеном устройства." = "Al iniciarse, la app registra el dispositivo en el servidor de notificaciones, incluso si las notificaciones están desactivadas en los Ajustes de iOS. El servidor recibe tu tarjeta de perfil firmada (nombre, descripción del perfil y claves públicas), el token de notificaciones push del dispositivo y la versión de la app. Solo se almacena el vínculo entre el identificador del perfil y el token del dispositivo.";
+"Когда вы отправляете сообщение или приглашение, приложение передаёт серверу вашу карточку, идентификатор получателя и тип события. Поэтому при обработке запроса сервер знает, какому профилю вы отправили уведомление. Эти сведения не сохраняются. Получатель видит уведомление без текста сообщения. Сервер не получает текст сообщений, фотографии и список контактов." = "Cuando envías un mensaje o una invitación, la app envía al servidor tu tarjeta, el identificador del destinatario y el tipo de evento. Por ello, mientras procesa la solicitud, el servidor sabe a qué perfil has enviado la notificación. Esta información no se almacena. El destinatario ve una notificación sin el texto del mensaje. El servidor no recibe el texto de los mensajes, las fotos ni tu lista de contactos.";
+"Сервер использует IP-адрес запроса только для ограничения частоты запросов и не сохраняет его. Инфраструктура хостинга может вести технические журналы соединений." = "El servidor usa la dirección IP de la solicitud solo para limitar la frecuencia de solicitudes y no la almacena. La infraestructura de alojamiento puede conservar registros técnicos de conexión.";
+"При удалении профиля приложение также просит сервер уведомлений удалить токен устройства." = "Al eliminar tu perfil, la app también pide al servidor de notificaciones que elimine el token del dispositivo.";

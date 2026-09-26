@@ -153,26 +153,11 @@
 "nearbyProfileMessengerTransitionContinue" = "Continuer";
 "nearbyProfileMessengerTransitionAlways" = "Toujours continuer";
 "nearbyProfileNoInformation" = "Message sur Shum";
-"nearbyProfileReport" = "Utilisateur du rapport";
 "nearbyProfileBlock" = "Bloquer l' utilisateur";
 "nearbyProfileSavedBlockAction" = "Indisponible";
 "nearbyProfileSavedBlockTitle" = "Blocage non disponible";
 "nearbyProfileSavedBlockMessage" = "Pour bloquer cette personne, retirez-les de Saved d'abord.";
 "nearbyProfileSavedBlockOK" = "Très bien.";
-"nearbyProfileReportTitle" = "Pourquoi déclarez-vous cet utilisateur?";
-"nearbyProfileReportMessage" = "Choisissez la raison qui décrit le mieux le problème.";
-"nearbyProfileReportSpam" = "Pourriel";
-"nearbyProfileReportHarassment" = "Harcèlement ou intimidation";
-"nearbyProfileReportInappropriate" = "Contenu inapproprié";
-"nearbyProfileReportImpersonation" = "Impersonnation";
-"nearbyProfileReportOther" = "Autres";
-"nearbyProfileReportConfirmTitle" = "Rapport et bloc ?";
-"nearbyProfileReportConfirmMessage" = "Raison:%@. Vous pouvez ajouter un contexte optionnel au rapport avant de le bloquer.";
-"nearbyProfileReportDetailsPlaceholder" = "Commentaire (facultatif)";
-"nearbyProfileReportDetailsMessage" = "Le commentaire est facultatif. L'utilisateur sera bloqué après avoir soumis le rapport.";
-"nearbyProfileReportSend" = "Rapport et bloc";
-"nearbyProfileReportSentTitle" = "Rapport envoyé";
-"nearbyProfileReportSentMessage" = "Je vous remercie. Le rapport a été gardé pour modération.";
 "nearbyProfileBlockTitle" = "Bloquer cet utilisateur ?";
 "nearbyProfileBlockMessage" = "Ce profil sera caché sur ce téléphone. Le blocage ne supprime pas des copies de votre profil d'autres appareils.";
 "nearbyProfileBlockConfirm" = "Bloc";
@@ -712,3 +697,12 @@
 "Системный язык" = "Langue du système";
 "Язык интерфейса меняется сразу и сохраняется на этом устройстве." = "La langue de l’interface change immédiatement et reste enregistrée sur cet appareil.";
 "PUSH_NEW_MESSAGE_BODY" = "Nouveau message";
+
+/* Privacy policy: notifications */
+"Обновлено 26 сентября 2026 года" = "Mis à jour le 26 septembre 2026";
+"Уведомления" = "Notifications";
+"Чтобы сообщать о новых сообщениях и приглашениях, когда приложение закрыто, Shum использует сервер уведомлений, которым управляют разработчики Shum, и службу Apple Push Notification service." = "Pour vous informer des nouveaux messages et invitations lorsque l'app est fermée, Shum utilise un serveur de notifications géré par les développeurs de Shum ainsi que le service Apple Push Notification service.";
+"При запуске приложение регистрирует устройство на сервере уведомлений, в том числе если показ уведомлений отключён в настройках iOS. Сервер получает подписанную карточку профиля (имя, описание профиля и публичные ключи), токен push-уведомлений устройства и версию приложения. Хранится только связь между идентификатором профиля и токеном устройства." = "Au démarrage, l'app enregistre l'appareil auprès du serveur de notifications, même si les notifications sont désactivées dans les Réglages iOS. Le serveur reçoit votre carte de profil signée (nom, description du profil et clés publiques), le jeton de notifications push de l'appareil et la version de l'app. Seul le lien entre l'identifiant du profil et le jeton de l'appareil est conservé.";
+"Когда вы отправляете сообщение или приглашение, приложение передаёт серверу вашу карточку, идентификатор получателя и тип события. Поэтому при обработке запроса сервер знает, какому профилю вы отправили уведомление. Эти сведения не сохраняются. Получатель видит уведомление без текста сообщения. Сервер не получает текст сообщений, фотографии и список контактов." = "Lorsque vous envoyez un message ou une invitation, l'app transmet au serveur votre carte, l'identifiant du destinataire et le type d'événement. Pendant le traitement de la requête, le serveur sait donc à quel profil vous avez envoyé une notification. Ces informations ne sont pas conservées. Le destinataire voit une notification sans le texte du message. Le serveur ne reçoit ni le texte des messages, ni les photos, ni votre liste de contacts.";
+"Сервер использует IP-адрес запроса только для ограничения частоты запросов и не сохраняет его. Инфраструктура хостинга может вести технические журналы соединений." = "Le serveur utilise l'adresse IP de la requête uniquement pour limiter la fréquence des requêtes et ne la conserve pas. L'infrastructure d'hébergement peut conserver des journaux techniques de connexion.";
+"При удалении профиля приложение также просит сервер уведомлений удалить токен устройства." = "Lorsque vous supprimez votre profil, l'app demande également au serveur de notifications de supprimer le jeton de l'appareil.";
