@@ -410,6 +410,13 @@ final class ShumMessageStore: ObservableObject {
             $0.control.recipient.id == control.sender.id
                 && $0.control.action == .request
         }
+        // Repair a reversal already saved by an older build, but only when
+        // the local contact record proves that we initiated the invitation.
+        let reversedLegacyRequest = currentPhase == .incomingPending
+            && state.invitationStates?[control.sender.id]?.eventID.hasPrefix("legacy-") == true
+            && state.contacts.contains {
+                $0.id == control.sender.id && $0.metadata["source"] == "chat-invitation"
+            }
         switch control.action {
         case .request:
             // A previous build could erase only this device's accepted state
@@ -462,7 +469,8 @@ final class ShumMessageStore: ObservableObject {
             guard currentPhase == .outgoingPending
                     || currentPhase == .declinedByPeer
                     || currentPhase == .accepted
-                    || (currentPhase == .incomingPending && hasOutgoingRequest) else { return }
+                    || (currentPhase == .incomingPending && hasOutgoingRequest)
+                    || reversedLegacyRequest else { return }
             try contacts.add(
                 control.sender,
                 source: "invitation-accepted",
@@ -916,12 +924,11 @@ final class ShumMessageStore: ObservableObject {
     }
     private func request(_ card: ShumContactCard) throws {
         let phase = invitationPhase(for: card)
-        guard phase != .accepted, phase != .declinedLocally else { return }
         // A legacy card has no action field: it can be a request or the
-        // recipient's acceptance of our request. Never turn our pending
-        // request into an incoming one based on this ambiguous packet.
-        // Current peers settle simultaneous requests with signed controls.
-        if phase == .outgoingPending { return }
+        // recipient's acceptance after previously declining our request.
+        // It may introduce a new person, but must never replace a decision
+        // made with signed controls or reverse the invitation's direction.
+        guard phase == .ready else { return }
         guard !state.requests.contains(where: { $0.id == card.id }), state.requests.count < 20 else { return }
         let timestamp = Int64(now().timeIntervalSince1970 * 1000)
         try store.transaction { state in

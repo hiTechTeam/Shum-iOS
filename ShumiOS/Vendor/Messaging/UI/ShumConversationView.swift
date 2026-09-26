@@ -9,11 +9,14 @@ private struct ShumAvatarToolbar<Content: View>: ToolbarContent {
     var body: some ToolbarContent {
         if #available(iOS 26.0, *) {
             ToolbarItem(placement: .navigationBarTrailing) {
-                content.frame(width: 44, height: 44)
-                    .glassEffect(.regular, in: Circle())
+                content
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
             }.sharedBackgroundVisibility(.hidden)
         } else {
-            ToolbarItem(placement: .navigationBarTrailing) { content }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                content.buttonStyle(.plain).frame(width: 44, height: 44)
+            }
         }
     }
 }
@@ -90,7 +93,13 @@ struct ShumConversationView: View {
                 .ignoresSafeArea(.container, edges: .vertical)
                 if conversation.isEmpty {
                     VStack(spacing: 12) {
-                        ShumAvatar(name: name, size: 70, imageData: runtime.profile(for: peer.id)?.avatar)
+                        Button(action: openPhotoPreview) {
+                            ShumAvatar(name: name, size: 70, imageData: runtime.profile(for: peer.id)?.avatar)
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Посмотреть фото".localized)
+                        .accessibilityIdentifier("shum.invitation.avatar")
                         Text(emptyTitle).font(.headline)
                         if let emptyMessage {
                             Text(emptyMessage).font(.subheadline).foregroundStyle(.secondary)
@@ -144,9 +153,10 @@ struct ShumConversationView: View {
             ShumAvatarToolbar {
                 Button(action: openPhotoPreview) {
                     ShumAvatar(name: name, size: 34, imageData: runtime.profile(for: peer.id)?.avatar)
-                        .frame(width: 44, height: 44).contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityLabel("Посмотреть фото".localized)
-                    .disabled(runtime.profile(for: peer.id)?.avatar == nil)
+                        .contentShape(Circle())
+                }.foregroundStyle(.primary)
+                    .accessibilityLabel("Посмотреть фото".localized)
+                    .accessibilityIdentifier("shum.chat.avatar")
                     .shumHiddenFromSystemCapture(true)
             }
         }

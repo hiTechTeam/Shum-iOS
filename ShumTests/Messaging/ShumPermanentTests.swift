@@ -295,6 +295,91 @@ struct ShumPermanentTests {
         #expect(b.store.state.messages.last?.text == "Теперь можно")
     }
 
+    @Test(arguments: [true, false])
+    func declineThenAcceptDoesNotReverseInvitationAfterRestart(legacyCardFirst: Bool) throws {
+        let clock = Clock()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let a = try Node("iPhone 14", clock: clock, url: url)
+        let b = try Node("iPhone 11", clock: clock)
+        #expect(a.service.sendInvitation(b.card))
+        let request = try #require(a.store.state.invitationOutbox?.first?.control)
+        b.service.receive(ShumPacket(invitation: request), from: nil, nostrSender: a.card.nostrKey)
+        #expect(b.service.declineInvitation(a.card))
+        let decline = try #require(b.store.state.invitationOutbox?.first?.control)
+        a.service.receive(ShumPacket(invitation: decline), from: nil, nostrSender: b.card.nostrKey)
+        #expect(a.service.invitationPhase(for: b.card) == .declinedByPeer)
+        #expect(a.store.state.invitationOutbox?.isEmpty == true)
+        a.service.setActive(false)
+        #expect(b.service.acceptInvitation(a.card))
+        let acceptance = try #require(b.store.state.invitationOutbox?.first?.control)
+
+        // Reconnect after the reply was published; either relay event may arrive first.
+        a.service.retire()
+        a.store = try ShumConversationStore(ownerID: a.card.id, key: a.identity.storageKey, url: url)
+        a.service = ShumMessageStore(identity: a.identity, store: a.store, transport: a.wire, wire: a.wire,
+            card: a.card, internet: nil, now: { clock.date })
+        a.service.setActive(true)
+        let legacy = ShumPacket(card: b.card)
+        if legacyCardFirst {
+            a.service.receive(legacy, from: nil, nostrSender: b.card.nostrKey)
+            #expect(a.service.invitationPhase(for: b.card) == .declinedByPeer)
+            #expect(a.store.state.requests.isEmpty)
+        }
+        a.service.receive(ShumPacket(invitation: acceptance), from: nil, nostrSender: b.card.nostrKey)
+        a.service.receive(legacy, from: nil, nostrSender: b.card.nostrKey)
+        // Duplicates and an old refusal must not undo the confirmed acceptance.
+        a.service.receive(ShumPacket(invitation: decline), from: nil, nostrSender: b.card.nostrKey)
+        a.service.receive(ShumPacket(invitation: acceptance), from: nil, nostrSender: b.card.nostrKey)
+        #expect(a.service.invitationPhase(for: b.card) == .accepted)
+        #expect(b.service.invitationPhase(for: a.card) == .accepted)
+        #expect(a.store.state.requests.isEmpty)
+        #expect(a.service.send("Теперь можно писать", to: b.card))
+        let restored = try ShumConversationStore(ownerID: a.card.id, key: a.identity.storageKey, url: url)
+        #expect(restored.state.invitationStates?[b.card.id]?.phase == .accepted)
+    }
+
+    @Test(arguments: [true, false])
+    func oldReversedLegacyInvitationRequiresEvidenceOfOurRequest(weInvited: Bool) throws {
+        let clock = Clock()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let a = try Node("Аня", clock: clock, url: url), b = try Node("Борис", clock: clock)
+        if weInvited {
+            #expect(a.service.sendInvitation(b.card))
+        } else {
+            try a.service.add(b.card, source: "QR")
+        }
+        // Persist the state produced by build 12 when the legacy card won the race.
+        try a.store.transaction { state in
+            state.requests = [b.card]
+            state.invitationOutbox = []
+            state.invitationStates?[b.card.id] = ShumInvitationState(
+                phase: .incomingPending, updatedAt: 1, eventID: "legacy-\(UUID().uuidString)")
+        }
+        a.service.retire()
+        a.store = try ShumConversationStore(ownerID: a.card.id, key: a.identity.storageKey, url: url)
+        a.service = ShumMessageStore(identity: a.identity, store: a.store, transport: a.wire, wire: a.wire,
+            card: a.card, internet: nil, now: { clock.date })
+        let timestamp = Int64(clock.date.timeIntervalSince1970 * 1000)
+        var acceptance = ShumInvitationControl(id: UUID().uuidString, sender: b.card, recipient: a.card,
+            action: .accept, timestamp: timestamp, expiresAt: timestamp + 60_000)
+        acceptance.signature = try #require(b.wire.noiseSignData(acceptance.signingBytes()))
+        a.service.receive(ShumPacket(invitation: acceptance), from: nil, nostrSender: b.card.nostrKey)
+        #expect(a.service.invitationPhase(for: b.card) == (weInvited ? .accepted : .incomingPending))
+        #expect(a.service.canMessage(b.card) == weInvited)
+        #expect(a.store.state.requests.isEmpty == weInvited)
+    }
+
+    @Test func legacyInvitationStillIntroducesAnUnknownPerson() throws {
+        let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
+        a.service.receive(ShumPacket(card: b.card), from: nil, nostrSender: b.card.nostrKey)
+        #expect(a.service.invitationPhase(for: b.card) == .incomingPending)
+        #expect(a.store.state.requests.map(\.id) == [b.card.id])
+        a.service.receive(ShumPacket(card: b.card), from: nil, nostrSender: b.card.nostrKey)
+        #expect(a.store.state.requests.count == 1)
+    }
+
     @Test func simultaneousInvitationsConvergeToOneRequester() throws {
         let clock = Clock()
         let a = try Node("Аня", clock: clock)
