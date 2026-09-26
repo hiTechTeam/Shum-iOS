@@ -224,7 +224,11 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         let travel = beginTop - endTop
         guard abs(travel) > 0.5 else { return }
         let start = table.layer.presentation()?.bounds.origin.y ?? table.contentOffset.y
-        let insets = resolvedViewportInsets()
+        // SwiftUI may already have supplied the destination safe area while
+        // the table still has its starting frame. Use the table's matching
+        // starting insets; mixing the two subtracts the home-indicator inset
+        // twice and makes the history lag behind the composer by 34 points.
+        let insets = table.contentInset
         // Short conversations may still fit above the keyboard. Moving them
         // by the full keyboard height overshoots the actual bottom offset,
         // then snaps back when keyboardDidChangeFrame clamps the scroll view.

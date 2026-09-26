@@ -139,4 +139,87 @@ struct ShumTimelinePerformanceTests {
         #expect(abs(table.contentOffset.y - initialOffset) < 2)
     }
 
+    @Test func historyKeepsItsGapToComposerDuringRealKeyboardAnimation() async throws {
+        let key = "test.timeline.keyboard.\(UUID())"
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let originalKeyWindow = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        let input = UITextField()
+        input.placeholder = "Message"
+        let host = UIHostingController(rootView: KeyboardTimelineFixture(key: key, input: input))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            input.resignFirstResponder()
+            window.isHidden = true
+            window.rootViewController = nil
+            originalKeyWindow?.makeKey()
+        }
+        host.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(300))
+        func findTable(_ view: UIView) -> UITableView? {
+            if let table = view as? UITableView { return table }
+            return view.subviews.lazy.compactMap { findTable($0) }.first
+        }
+        let table = try #require(findTable(host.view))
+        func gap() -> CGFloat {
+            let target = window.layer.presentation() ?? window.layer
+            let inputLayer = input.layer.presentation() ?? input.layer
+            let tableLayer = table.layer.presentation() ?? table.layer
+            let inputTop = inputLayer.convert(CGPoint(x: 0, y: inputLayer.bounds.minY), to: target).y
+            let messageBottom = tableLayer.convert(CGPoint(x: 0, y: table.contentSize.height), to: target).y
+            return inputTop - messageBottom
+        }
+        let restingGap = gap()
+        let initialInputTop = input.convert(input.bounds, to: window).minY
+        for cycle in 0..<2 {
+            for opening in [true, false] {
+                if opening { #expect(input.becomeFirstResponder()) }
+                else { #expect(input.resignFirstResponder()) }
+                var gaps: [CGFloat] = []
+                for _ in 0..<40 {
+                    try await Task.sleep(for: .milliseconds(16))
+                    gaps.append(gap())
+                }
+                let displacement = initialInputTop - input.convert(input.bounds, to: window).minY
+                if opening {
+                    #expect(displacement > 100, "This check requires a visible software keyboard")
+                } else {
+                    #expect(abs(displacement) < 2)
+                }
+                let maximumDrift = gaps.map { abs($0 - restingGap) }.max() ?? 0
+                #expect(maximumDrift < 4,
+                        "Cycle \(cycle), opening \(opening): gap drifted by \(maximumDrift) points: \(gaps)")
+            }
+        }
+    }
+
+}
+
+
+private struct KeyboardTimelineFixture: View {
+    let key: String
+    let input: UITextField
+    var body: some View {
+        GeometryReader { geometry in
+            ShumConversationTimeline(
+                items: (0..<100).map { ShumTimelineItem(id: "\($0)", revision: 0) },
+                storageKey: key, appearanceKey: "test", command: nil,
+                contentInsets: geometry.safeAreaInsets, bottomChanged: { _ in }, tapped: {}
+            ) { index, width in
+                Text("Message \(index)").frame(width: width, height: 44)
+            }
+            .ignoresSafeArea(.container, edges: .vertical)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            KeyboardTestInput(input: input).frame(height: 46).padding(.vertical, 8)
+        }
+    }
+}
+
+private struct KeyboardTestInput: UIViewRepresentable {
+    let input: UITextField
+    func makeUIView(context: Context) -> UITextField { input }
+    func updateUIView(_ uiView: UITextField, context: Context) {}
 }
