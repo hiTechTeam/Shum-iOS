@@ -20,7 +20,6 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     @Published var deletingProfile = false
     @Published private(set) var showsDeletionCeremony = false
     let authCodeViewModel: LocalProfileViewModel
-    let peopleViewModel: PeopleViewModel
     let profilePhotoViewModel: ProfilePhotoViewModel
     private let deletion = ShumDeletionService.live()
     private let nearbyPeopleNotifier = NearbyPeopleNotifier()
@@ -42,10 +41,6 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         #endif
         authCodeViewModel = LocalProfileViewModel()
         profilePhotoViewModel = ProfilePhotoViewModel()
-        peopleViewModel = PeopleViewModel(
-            bleManager: ShumInactiveCardRadio(),
-            nearbyPeopleNotifier: ShumInactiveNearbyPeopleNotifier()
-        )
         #if DEBUG
         if TestEnvironment.isRunningTests { return }
         #endif
@@ -109,7 +104,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     deinit { if let photoObserver { NotificationCenter.default.removeObserver(photoObserver) } }
     func start() -> AnyView {
         AnyView(AppCoordinatorView().environmentObject(self)
-            .environmentObject(authCodeViewModel).environmentObject(peopleViewModel))
+            .environmentObject(authCodeViewModel))
     }
     private func prepareMessaging() {
         guard !deletingProfile, isRegistered else { return }
@@ -259,7 +254,6 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             try deletion.finish()
             try LocalCardStore.shared.reset()
             AccountSessionGeneration.shared.advance()
-            peopleViewModel.resetAccountScopedState()
             authCodeViewModel.clearProfile(); profilePhotoViewModel.resetAccountScopedState()
             SavedPeopleStateStore.shared.removeAll(); QuickActionsSettingsStore.shared.reset()
             ShumAppLock.shared.reset()
