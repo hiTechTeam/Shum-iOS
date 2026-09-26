@@ -1,26 +1,5 @@
 import SwiftUI
 
-struct Description: View {
-    
-    // MARK: - Inputs
-    var text: String
-    
-    private let topPadding: CGFloat = 32
-    
-    private var content: some View {
-        Text(text)
-            .shumDescriptionStyle()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .multilineTextAlignment(.leading)
-            .padding(.top, topPadding)
-    }
-    
-    // MARK: - Body
-    var body: some View {
-        content
-    }
-}
-
 private struct ShumDescriptionTextStyle: ViewModifier {
     func body(content: Content) -> some View {
         content

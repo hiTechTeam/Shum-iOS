@@ -82,19 +82,6 @@ final class NearbyNotificationStateStore: NearbyNotificationStateStoring {
     }
 }
 
-final class InMemoryNearbyNotificationStateStore:
-    NearbyNotificationStateStoring {
-    private(set) var state: NearbyNotificationState?
-
-    func save(_ state: NearbyNotificationState) {
-        self.state = state
-    }
-
-    func remove() {
-        state = nil
-    }
-}
-
 struct NearbyEncounterAggregator {
     private(set) var encounteredIDs: Set<String> = []
     private(set) var nearbyIDs: Set<String> = []
@@ -262,16 +249,6 @@ protocol NearbyPeopleNotifying: AnyObject {
 
 extension NearbyPeopleNotifying {
     func setApplicationIconBadgeCount(_ count: Int) { }
-}
-
-@MainActor
-final class ShumInactiveNearbyPeopleNotifier: NearbyPeopleNotifying {
-    func setScanningEnabled(_ enabled: Bool) { }
-    func setApplicationActive(_ isActive: Bool) { }
-    func synchronizeNearby(ids: Set<String>) { }
-    func detect(id: String) { }
-    func lose(id: String) { }
-    func reset() { }
 }
 
 @MainActor

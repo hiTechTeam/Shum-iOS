@@ -406,23 +406,12 @@ struct Inc {
     }
 }
 
-struct IncLogos {
-    static let shareplay = "shareplay"
-    static let personFillViewwfinder = "person.fill.viewfinder"
-}
-
 struct Links {
     static let supportIssues = "https://github.com/hiTechTeam/Shum-iOS/issues"
     
     
     static let privacyPolicy = "https://github.com/hiTechTeam/Shum-iOS/blob/main/PRIVACY.md"
     static let termsOfService = "https://github.com/hiTechTeam/Shum-iOS/blob/main/TERMS.md"
-}
-
-enum SelectedTab: Int {
-    case near = 0
-    case profile = 1
-    case met = 2
 }
 
 enum Keys: String {
@@ -433,21 +422,4 @@ enum Keys: String {
     case photoS3URLKey = "photoS3Url"
     case isScaning = "isScaning"
     case isReg = "isReg"
-}
-
-enum HTTPStatus: Int {
-    case okey = 200
-    case created = 201
-    case badRequest = 400
-    case unauthorized = 401
-    case forbidden = 403
-    case notFound = 404
-    case serverError = 500
-}
-
-enum HTTPMethods: String {
-    case get = "GET"
-    case post = "POST"
-    case put = "PUT"
-    case delete = "DELETE"
 }

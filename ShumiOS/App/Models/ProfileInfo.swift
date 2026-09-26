@@ -1,18 +1,5 @@
 import Foundation
 
-enum EncounterHistoryPolicy {
-    static let retention: TimeInterval = 24 * 60 * 60
-}
-
-struct ProfileInfo: Codable, Identifiable {
-    let id: UUID
-    let name: String?
-    let username: String
-    let bio: String?
-    let photoURL: String?
-    var cachedLocalPhotoPath: String?
-}
-
 struct NearbyUser: Identifiable, Codable, Equatable {
     let id: UUID
     let name: String

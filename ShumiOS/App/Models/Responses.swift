@@ -30,13 +30,3 @@ struct ShumProfileResponse: Codable, Equatable {
         self.messengerLinked = messengerLinked
     }
 }
-
-struct BlockedProfileResponse: Codable, Equatable, Identifiable {
-    let shumId: UUID
-    let name: String?
-    let username: String?
-    let photoUrl: String?
-    let blockedAt: String
-
-    var id: UUID { shumId }
-}

@@ -52,22 +52,6 @@ struct RegistrationPrimaryButton: View {
     }
 }
 
-struct StartButton: View {
-
-    let title: String
-    let accentColor: Color
-    let onStart: () -> Void
-
-    var body: some View {
-        RegistrationPrimaryButton(
-            title: title,
-            accentColor: accentColor,
-            action: onStart
-        )
-        .accessibilityHint(Inc.Onboarding.continueHint.localized)
-    }
-}
-
 struct ShumPrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
     @Environment(\.colorScheme) private var colorScheme
