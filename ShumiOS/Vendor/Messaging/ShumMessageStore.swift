@@ -400,20 +400,35 @@ final class ShumMessageStore: ObservableObject {
             throw ShumFailure.invalidMessage
         }
 
+        let currentPhase = invitationPhase(for: control.sender)
+        let receivedAvatar = attachment.flatMap { $0.valid(for: control) ? $0.data : nil }
+        // The compatibility card may arrive before the signed request. Its
+        // missing photo must not become permanent, even if the recipient has
+        // already accepted or declined by the time the full request arrives.
+        if control.action == .request,
+           [.incomingPending, .declinedLocally, .accepted].contains(currentPhase),
+           avatar(for: control.sender) == nil, let receivedAvatar {
+            try store.transaction { state in
+                state.invitationStates?[control.sender.id]?.avatar = receivedAvatar
+                if let index = state.contacts.firstIndex(where: { $0.id == control.sender.id }) {
+                    state.contacts[index].avatar = receivedAvatar
+                }
+            }
+            changed()
+        }
         if state.invitationStates?[control.sender.id]?.eventID == control.id {
             return
         }
-        let avatar = attachment.flatMap { $0.valid(for: control) ? $0.data : nil }
-            ?? state.invitationStates?[control.sender.id]?.avatar
-        let currentPhase = invitationPhase(for: control.sender)
+        let avatar = receivedAvatar ?? state.invitationStates?[control.sender.id]?.avatar
+        let legacyIncomingRequest = currentPhase == .incomingPending
+            && state.invitationStates?[control.sender.id]?.eventID.hasPrefix("legacy-") == true
         let hasOutgoingRequest = (state.invitationOutbox ?? []).contains {
             $0.control.recipient.id == control.sender.id
                 && $0.control.action == .request
         }
         // Repair a reversal already saved by an older build, but only when
         // the local contact record proves that we initiated the invitation.
-        let reversedLegacyRequest = currentPhase == .incomingPending
-            && state.invitationStates?[control.sender.id]?.eventID.hasPrefix("legacy-") == true
+        let reversedLegacyRequest = legacyIncomingRequest
             && state.contacts.contains {
                 $0.id == control.sender.id && $0.metadata["source"] == "chat-invitation"
             }
@@ -445,7 +460,8 @@ final class ShumMessageStore: ObservableObject {
             }
             guard currentPhase == .ready
                     || currentPhase == .outgoingPending
-                    || currentPhase == .declinedByPeer else { return }
+                    || currentPhase == .declinedByPeer
+                    || legacyIncomingRequest else { return }
             try store.transaction { state in
                 if let index = state.requests.firstIndex(where: { $0.id == control.sender.id }) {
                     state.requests[index] = control.sender

@@ -224,7 +224,12 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         let travel = beginTop - endTop
         guard abs(travel) > 0.5 else { return }
         let start = table.layer.presentation()?.bounds.origin.y ?? table.contentOffset.y
-        let target = start + travel
+        let insets = resolvedViewportInsets()
+        // Short conversations may still fit above the keyboard. Moving them
+        // by the full keyboard height overshoots the actual bottom offset,
+        // then snaps back when keyboardDidChangeFrame clamps the scroll view.
+        let target = max(-insets.top,
+                         table.contentSize.height + insets.bottom - table.bounds.height + travel)
         let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
         let curve = (notification.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? NSNumber)?.uintValue ?? 7
         movingWithKeyboard = true

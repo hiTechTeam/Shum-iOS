@@ -132,7 +132,8 @@ struct ShumPermanentTests {
         #expect(throws: (any Error).self) { try a.card.sharingInvitation(baseURL: insecure) }
     }
 
-    @Test func invitationPhotoArrivesOverInternetWithoutLookupAndSurvivesRestart() throws {
+    @Test(arguments: [true, false])
+    func invitationPhotoArrivesOverInternetWithoutLookupAndSurvivesRestart(legacyCardFirst: Bool) throws {
         let clock = Clock()
         let senderURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let receiverURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -163,7 +164,13 @@ struct ShumPermanentTests {
         a.service.retire()
         let decoded = try NostrProtocol.decryptPrivateMessage(giftWrap: event, recipientIdentity: b.identity.nostr)
         let receivedBytes = try #require(Data(base64Encoded: String(decoded.content.dropFirst(ShumWireProtocol.relayPrefix.count))))
+        if legacyCardFirst {
+            b.service.receive(ShumPacket(card: a.card), from: nil, nostrSender: a.card.nostrKey)
+            #expect(b.service.invitationPhase(for: a.card) == .incomingPending)
+            #expect(b.service.avatar(for: a.card) == nil)
+        }
         b.service.receive(try JSONDecoder().decode(ShumPacket.self, from: receivedBytes), from: nil, nostrSender: decoded.senderPubkey)
+        b.service.receive(ShumPacket(card: a.card), from: nil, nostrSender: a.card.nostrKey)
         #expect(b.service.invitationPhase(for: a.card) == .incomingPending)
         #expect(b.service.avatar(for: a.card) == photo.data)
         #expect(b.service.nearby.isEmpty)
@@ -177,6 +184,35 @@ struct ShumPermanentTests {
         #expect(b.service.acceptInvitation(a.card))
         #expect(b.store.state.contacts.first?.avatar == photo.data)
         #expect(b.service.avatar(for: a.card) == photo.data)
+    }
+
+    @Test(arguments: [ShumInvitationPhase.accepted, .declinedLocally])
+    func delayedInvitationPhotoPreservesRecipientsDecision(phase: ShumInvitationPhase) throws {
+        let clock = Clock(), a = try Node("Аня", clock: clock)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let b = try Node("Борис", clock: clock, url: url)
+        let photo = try #require(ShumAvatarCodec.diagnosticPhoto(seed: 71))
+        a.service.configureContactLookup { ShumProfile(name: a.card.name, avatar: photo) }
+        #expect(a.service.sendInvitation(b.card))
+        let pending = try #require(a.store.state.invitationOutbox?.first)
+        let attachment = try #require(pending.avatar)
+        b.service.receive(ShumPacket(card: a.card), from: nil, nostrSender: a.card.nostrKey)
+        if phase == .accepted { #expect(b.service.acceptInvitation(a.card)) }
+        else { #expect(b.service.declineInvitation(a.card)) }
+        let decision = try #require(b.store.state.invitationStates?[a.card.id])
+        let response = b.store.state.invitationOutbox?.first?.control
+        let packet = ShumPacket(invitation: pending.control, invitationAvatar: attachment)
+        b.service.receive(packet, from: nil, nostrSender: a.card.nostrKey)
+        b.service.receive(packet, from: nil, nostrSender: a.card.nostrKey)
+        #expect(b.service.invitationPhase(for: a.card) == phase)
+        #expect(b.store.state.invitationStates?[a.card.id]?.eventID == decision.eventID)
+        #expect(b.store.state.invitationOutbox?.first?.control == response)
+        #expect(b.service.avatar(for: a.card) == attachment.data)
+        #expect(b.service.canMessage(a.card) == (phase == .accepted))
+        let restored = try ShumConversationStore(ownerID: b.card.id, key: b.identity.storageKey, url: url)
+        #expect(restored.state.invitationStates?[a.card.id]?.avatar == attachment.data)
+        if phase == .accepted { #expect(restored.state.contacts.first?.avatar == attachment.data) }
     }
 
     @Test func invitationPhotosTravelOverBluetoothAndSurviveDeclineThenAcceptance() throws {

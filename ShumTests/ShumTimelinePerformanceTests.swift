@@ -58,7 +58,8 @@ struct ShumTimelinePerformanceTests {
         window.isHidden = true
     }
 
-    @Test func bottomMessagesMoveWithKeyboardInBothDirections() async throws {
+    @Test(arguments: [3, 12, 18, 100])
+    func bottomMessagesMoveWithKeyboardInBothDirections(rowCount: Int) async throws {
         let key = "test.timeline.\(UUID())"
         defer { UserDefaults.standard.removeObject(forKey: key) }
         let controller = ShumTimelineController(storageKey: key)
@@ -73,7 +74,7 @@ struct ShumTimelinePerformanceTests {
             window.rootViewController = nil
             originalKeyWindow?.makeKey()
         }
-        controller.update(items: (0..<100).map { ShumTimelineItem(id: "\($0)", revision: 0) },
+        controller.update(items: (0..<rowCount).map { ShumTimelineItem(id: "\($0)", revision: 0) },
                           appearanceKey: "test", command: nil) { index, width in
             AnyView(Text("Message \(index)").frame(width: width, height: 44))
         }
@@ -86,6 +87,9 @@ struct ShumTimelinePerformanceTests {
         let shown = CGRect(x: 0, y: 544, width: 390, height: 300)
         let restingBottom = window.safeAreaLayoutGuide.layoutFrame.maxY
         let travel = min(hidden.minY, restingBottom) - min(shown.minY, restingBottom)
+        let shownOffset = max(-table.contentInset.top,
+                              table.contentSize.height + table.contentInset.bottom - (844 - travel))
+        let visibleTravel = shownOffset - initialOffset
         func moveKeyboard(from begin: CGRect, to end: CGRect) {
             NotificationCenter.default.post(name: UIResponder.keyboardWillChangeFrameNotification, object: nil,
                                             userInfo: [UIResponder.keyboardFrameBeginUserInfoKey: begin,
@@ -105,15 +109,18 @@ struct ShumTimelinePerformanceTests {
         controller.view.frame.size.height = 844 - travel
         controller.view.setNeedsLayout()
         controller.view.layoutIfNeeded()
-        #expect(abs(table.contentOffset.y - initialOffset - travel) < 2)
+        #expect(abs(table.contentOffset.y - shownOffset) < 2)
         try await Task.sleep(for: .milliseconds(80))
         let rising = try #require(table.layer.presentation()?.bounds.origin.y)
-        if sampledDuringAnimation(since: animationStart) {
-            #expect(rising < initialOffset + travel - 20, "History should already move before the keyboard finishes")
+        if visibleTravel > 40, sampledDuringAnimation(since: animationStart) {
+            #expect(rising < shownOffset - 20, "History should already move before the keyboard finishes")
         }
         try await Task.sleep(for: .milliseconds(500))
+        let beforeKeyboardSettles = table.contentOffset.y
         NotificationCenter.default.post(name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
-        #expect(abs(table.contentOffset.y - initialOffset - travel) < 2)
+        #expect(abs(table.contentOffset.y - beforeKeyboardSettles) < 2,
+                "Finishing the keyboard animation must not snap the history to another offset")
+        #expect(abs(table.contentOffset.y - shownOffset) < 2)
 
         animationStart = ContinuousClock.now
         moveKeyboard(from: shown, to: hidden)
@@ -123,7 +130,7 @@ struct ShumTimelinePerformanceTests {
         #expect(abs(table.contentOffset.y - initialOffset) < 2)
         try await Task.sleep(for: .milliseconds(80))
         let falling = try #require(table.layer.presentation()?.bounds.origin.y)
-        if sampledDuringAnimation(since: animationStart) {
+        if visibleTravel > 40, sampledDuringAnimation(since: animationStart) {
             #expect(falling > initialOffset + 20,
                     "History should still be moving down while the keyboard closes")
         }
