@@ -77,6 +77,17 @@ final class ShumLanguageStore: ObservableObject {
         UISelectionFeedbackGenerator().selectionChanged()
     }
 
+    /// Locale of the text the app currently shows: the language chosen in Shum,
+    /// or the system language that Shum is localized for. Matches `localizedString`.
+    nonisolated static var contentLocale: Locale { contentLocale(defaults: .standard) }
+
+    nonisolated static func contentLocale(defaults: UserDefaults) -> Locale {
+        let code = defaults.string(forKey: defaultsKey)
+            ?? Bundle.main.preferredLocalizations.first
+            ?? "en"
+        return Locale(identifier: code)
+    }
+
     nonisolated static func localizedString(forKey key: String) -> String {
         guard let code = UserDefaults.standard.string(forKey: defaultsKey),
               let path = Bundle.main.path(forResource: code, ofType: "lproj"),

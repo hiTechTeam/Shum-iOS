@@ -291,13 +291,14 @@ struct ShumContactsUI: View {
             : .secondary
     }
 
-    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
+    // Built per use so a language change in Settings applies immediately.
+    private static var relativeDateFormatter: RelativeDateTimeFormatter {
         let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.locale = ShumLanguageStore.contentLocale
         formatter.unitsStyle = .full
         formatter.dateTimeStyle = .numeric
         return formatter
-    }()
+    }
 
 }
 
@@ -510,13 +511,14 @@ struct ShumNewMessageSheet: View {
             : .secondary
     }
 
-    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
+    // Built per use so a language change in Settings applies immediately.
+    private static var relativeDateFormatter: RelativeDateTimeFormatter {
         let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.locale = ShumLanguageStore.contentLocale
         formatter.unitsStyle = .full
         formatter.dateTimeStyle = .numeric
         return formatter
-    }()
+    }
 }
 
 private struct ContactAlphabetIndex: View {

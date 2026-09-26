@@ -328,7 +328,7 @@ private struct ShumPersonContextPreview: View {
 extension Date {
     fileprivate var shumRelativeDescription: String {
         let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.locale = ShumLanguageStore.contentLocale
         formatter.unitsStyle = .full
         return formatter.localizedString(for: self, relativeTo: Date())
     }
