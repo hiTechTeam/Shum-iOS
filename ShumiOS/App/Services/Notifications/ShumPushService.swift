@@ -87,13 +87,20 @@ final class ShumPushService {
     private var pendingWakes:
         [(eventID: String, completion: (UIBackgroundFetchResult) -> Void)] = []
     private var pendingWakeTimeoutTask: Task<Void, Never>?
+    private let baseURLOverride: URL?
 
-    private init() {
+    private convenience init() {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 20
         configuration.waitsForConnectivity = false
-        session = URLSession(configuration: configuration)
+        self.init(session: URLSession(configuration: configuration), baseURL: nil)
+    }
+
+    /// Tests pass a stubbed session and relay URL; the app always uses `shared`.
+    init(session: URLSession, baseURL: URL?) {
+        self.session = session
+        baseURLOverride = baseURL
         encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
     }
@@ -338,6 +345,7 @@ final class ShumPushService {
     }
 
     private var baseURL: URL? {
+        if let baseURLOverride { return baseURLOverride }
         guard let value = Bundle.main.object(
             forInfoDictionaryKey: "ShumPushAPIBaseURL"
         ) as? String,
