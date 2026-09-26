@@ -61,6 +61,11 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
         controller.update(items: items, appearanceKey: "\(appearanceKey)-\(environment.dynamicTypeSize)-\(environment.locale.identifier)", command: command) { index, width in
             AnyView(row(index, width).environment(\.self, environment))
         }
+        // Apply the inset and scroll offset inside the current system layout
+        // transaction, shared with the composer. A separate keyboard animation
+        // races this update and causes a second correction when it finishes.
+        controller.view.setNeedsLayout()
+        controller.view.layoutIfNeeded()
     }
 }
 
@@ -83,7 +88,6 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     private var scrollingToBottom = false
     private var saveWork: DispatchWorkItem?
     private var backgroundObserver: NSObjectProtocol?
-    private var movingWithKeyboard = false
     var viewportInsets = UIEdgeInsets(top: 0, left: 0, bottom: 10, right: 0)
     var bottomChanged: (Bool) -> Void = { _ in }
     var tapped: () -> Void = {}
@@ -123,22 +127,12 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         backgroundObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in self?.persistPosition() }
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(keyboardWillChangeFrame(_:)),
-            name: UIResponder.keyboardWillChangeFrameNotification, object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(keyboardDidChangeFrame(_:)),
-            name: UIResponder.keyboardDidChangeFrameNotification, object: nil
-        )
     }
 
     deinit {
         saveWork?.cancel()
         highlightWork?.cancel()
         if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
-        NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -154,7 +148,6 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         // Capture before the navigation bar/tab bar/keyboard change the safe area.
         persistPosition()
         leaving = true
-        movingWithKeyboard = false
         table.setContentOffset(table.contentOffset, animated: false)
         super.viewWillDisappear(animated)
     }
@@ -168,21 +161,10 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         let effectiveInsets = resolvedViewportInsets()
         let changedSize = table.frame.size != view.bounds.size
         let changedInsets = table.contentInset != effectiveInsets
+        let previousVisibleHeight = table.bounds.height - table.contentInset.bottom
+        let previousOffset = table.contentOffset.y
         let changedWidth = table.frame.width != view.bounds.width
         if changedWidth { heights.removeAll() }
-        if movingWithKeyboard, !changedWidth {
-            // The animation starts with the keyboard notification. During a
-            // later SwiftUI layout pass, retain enough inset so an expanding
-            // viewport cannot clamp the animated offset prematurely.
-            var trackingInsets = effectiveInsets
-            trackingInsets.bottom = max(trackingInsets.bottom, table.contentInset.bottom,
-                                        table.contentOffset.y + view.bounds.height - table.contentSize.height)
-            table.contentInset = trackingInsets
-            table.verticalScrollIndicatorInsets = effectiveInsets
-            table.frame = view.bounds
-            performPendingCommand()
-            return
-        }
         table.frame = view.bounds
         table.contentInset = effectiveInsets
         table.verticalScrollIndicatorInsets = effectiveInsets
@@ -201,73 +183,22 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
                     table.contentSize.height + table.contentInset.bottom - table.bounds.height,
                     animated: false
                 )
-            } else {
-                // A keyboard or composer resize keeps the same reading position.
+            } else if changedWidth {
                 restore(position)
+            } else {
+                // Preserve the distance from the viewport's bottom while
+                // reading history, without jumping to the newest message.
+                let visibleHeight = table.bounds.height - table.contentInset.bottom
+                setOffset(previousOffset + previousVisibleHeight - visibleHeight, animated: false)
             }
         }
         performPendingCommand()
-        if !movingWithKeyboard { reportScrollEdges() }
-    }
-
-    @objc private func keyboardWillChangeFrame(_ notification: Notification) {
-        guard !leaving, restored, !items.isEmpty, let window = viewIfLoaded?.window,
-              let begin = notification.userInfo?[UIResponder.keyboardFrameBeginUserInfoKey] as? CGRect,
-              let end = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
-              followsBottom || distanceFromBottom < 40 else { return }
-        // With the keyboard hidden, SwiftUI stops at the window's bottom safe
-        // area, not at the screen edge. Counting the home-indicator area made
-        // the history overshoot on opening and undershoot on dismissal.
-        let restingBottom = window.safeAreaLayoutGuide.layoutFrame.maxY
-        let beginTop = min(window.convert(begin, from: nil).minY, restingBottom)
-        let endTop = min(window.convert(end, from: nil).minY, restingBottom)
-        let travel = beginTop - endTop
-        guard abs(travel) > 0.5 else { return }
-        let start = table.layer.presentation()?.bounds.origin.y ?? table.contentOffset.y
-        // SwiftUI may already have supplied the destination safe area while
-        // the table still has its starting frame. Use the table's matching
-        // starting insets; mixing the two subtracts the home-indicator inset
-        // twice and makes the history lag behind the composer by 34 points.
-        let insets = table.contentInset
-        // Short conversations may still fit above the keyboard. Moving them
-        // by the full keyboard height overshoots the actual bottom offset,
-        // then snaps back when keyboardDidChangeFrame clamps the scroll view.
-        let target = max(-insets.top,
-                         table.contentSize.height + insets.bottom - table.bounds.height + travel)
-        let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-        let curve = (notification.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? NSNumber)?.uintValue ?? 7
-        movingWithKeyboard = true
-        // Begin in the same UIKit transaction as the keyboard. Extra inset
-        // keeps the old offset valid when SwiftUI later expands the viewport.
-        var holdingInsets = resolvedViewportInsets()
-        holdingInsets.bottom = max(holdingInsets.bottom,
-                                   max(start, target) + window.bounds.height - table.contentSize.height)
-        table.contentInset = holdingInsets
-        table.setContentOffset(CGPoint(x: 0, y: start), animated: false)
-        UIView.animate(withDuration: duration, delay: 0,
-                       options: [UIView.AnimationOptions(rawValue: curve << 16),
-                                 .beginFromCurrentState, .allowUserInteraction]) {
-            self.table.contentOffset = CGPoint(x: 0, y: target)
-        }
-    }
-
-    @objc private func keyboardDidChangeFrame(_ notification: Notification) {
-        guard movingWithKeyboard else { return }
-        movingWithKeyboard = false
-        guard !leaving else { return }
-        table.contentInset = resolvedViewportInsets()
-        table.verticalScrollIndicatorInsets = table.contentInset
-        followsBottom = true
-        setOffset(table.contentSize.height + table.contentInset.bottom - table.bounds.height,
-                  animated: false)
         reportScrollEdges()
     }
 
-    /// SwiftUI already shortens this controller when the keyboard is visible.
-    /// Its reported safe-area bottom still contains the keyboard height, so
-    /// applying that value unchanged would create a second, scrollable keyboard
-    /// sized gap below the final message. Keep only the part that actually
-    /// overlaps this controller (composer and any remaining system safe area).
+    /// The timeline spans the keyboard safe area, so its insets describe the
+    /// entire overlap with the composer and keyboard. Subtract any portion
+    /// outside the controller when a parent constrains its frame.
     private func resolvedViewportInsets() -> UIEdgeInsets {
         var insets = viewportInsets
         guard let window = view.window else { return insets }
@@ -365,7 +296,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard restored, !adjusting, !leaving, !movingWithKeyboard else { return }
+        guard restored, !adjusting, !leaving else { return }
         followsBottom = distanceFromBottom < 4
         reportScrollEdges()
         saveWork?.cancel()
@@ -391,7 +322,6 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         scrollingToBottom = false
-        movingWithKeyboard = false
     }
 
     private var distanceFromBottom: CGFloat {

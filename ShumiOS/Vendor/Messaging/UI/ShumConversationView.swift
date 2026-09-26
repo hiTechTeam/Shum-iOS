@@ -90,7 +90,9 @@ struct ShumConversationView: View {
                         width: width
                     )
                 }
-                .ignoresSafeArea(.container, edges: .vertical)
+                // Keep one stable viewport; keyboard avoidance is represented
+                // only by the timeline's insets, not a simultaneous frame resize.
+                .ignoresSafeArea(.all, edges: .vertical)
                 if conversation.isEmpty {
                     VStack(spacing: 12) {
                         Button(action: openPhotoPreview) {

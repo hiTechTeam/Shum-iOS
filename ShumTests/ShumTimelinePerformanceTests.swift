@@ -43,7 +43,7 @@ struct ShumTimelinePerformanceTests {
         window.isHidden = false
         controller.update(items: (0..<1000).map { ShumTimelineItem(id: "\($0)", revision: 0) },
                           appearanceKey: "test", command: nil) { index, width in
-            AnyView(Text("Message \(index)").frame(width: width, height: index % 3 == 0 ? 140 : 44))
+            AnyView(Text("Message \(index)").frame(width: width, height: (index % 3 == 0 ? 140 : 44) * 390 / max(1, width)))
         }
         controller.view.frame = window.bounds
         for _ in 0..<3 {
@@ -55,99 +55,36 @@ struct ShumTimelinePerformanceTests {
         #expect(table.indexPathsForVisibleRows?.contains(anchor) == true)
         let offset = table.rectForRow(at: anchor).minY - table.contentOffset.y - table.contentInset.top
         #expect(abs(offset + 20) < 2)
+        // A width change reflows rows; it must still preserve the message being
+        // read rather than treating the height difference as keyboard movement.
+        controller.view.frame.size.width = 300
+        controller.view.setNeedsLayout()
+        controller.view.layoutIfNeeded()
+        let reflowedOffset = table.rectForRow(at: anchor).minY - table.contentOffset.y - table.contentInset.top
+        #expect(abs(reflowedOffset + 20) < 2)
         window.isHidden = true
     }
 
-    @Test(arguments: [3, 12, 18, 100])
-    func bottomMessagesMoveWithKeyboardInBothDirections(rowCount: Int) async throws {
-        let key = "test.timeline.\(UUID())"
-        defer { UserDefaults.standard.removeObject(forKey: key) }
-        let controller = ShumTimelineController(storageKey: key)
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-        let originalKeyWindow = scene.windows.first(where: \.isKeyWindow)
-        let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
-        window.rootViewController = controller
-        window.makeKeyAndVisible()
-        defer {
-            window.isHidden = true
-            window.rootViewController = nil
-            originalKeyWindow?.makeKey()
-        }
-        controller.update(items: (0..<rowCount).map { ShumTimelineItem(id: "\($0)", revision: 0) },
-                          appearanceKey: "test", command: nil) { index, width in
-            AnyView(Text("Message \(index)").frame(width: width, height: 44))
-        }
-        controller.view.frame = window.bounds
-        controller.view.layoutIfNeeded()
-        let table = try #require(controller.view.subviews.compactMap { $0 as? UITableView }.first)
-        let initialOffset = table.contentOffset.y
-
-        let hidden = CGRect(x: 0, y: 844, width: 390, height: 300)
-        let shown = CGRect(x: 0, y: 544, width: 390, height: 300)
-        let restingBottom = window.safeAreaLayoutGuide.layoutFrame.maxY
-        let travel = min(hidden.minY, restingBottom) - min(shown.minY, restingBottom)
-        let shownOffset = max(-table.contentInset.top,
-                              table.contentSize.height + table.contentInset.bottom - (844 - travel))
-        let visibleTravel = shownOffset - initialOffset
-        func moveKeyboard(from begin: CGRect, to end: CGRect) {
-            NotificationCenter.default.post(name: UIResponder.keyboardWillChangeFrameNotification, object: nil,
-                                            userInfo: [UIResponder.keyboardFrameBeginUserInfoKey: begin,
-                                                       UIResponder.keyboardFrameEndUserInfoKey: end,
-                                                       UIResponder.keyboardAnimationDurationUserInfoKey: 0.5,
-                                                       UIResponder.keyboardAnimationCurveUserInfoKey: 7])
-        }
-
-        // The mid-animation samples are only meaningful while the 0.5 s keyboard
-        // animation is still running; a loaded machine can resume the task later.
-        func sampledDuringAnimation(since start: ContinuousClock.Instant) -> Bool {
-            ContinuousClock.now - start < .milliseconds(400)
-        }
-
-        var animationStart = ContinuousClock.now
-        moveKeyboard(from: hidden, to: shown)
-        controller.view.frame.size.height = 844 - travel
-        controller.view.setNeedsLayout()
-        controller.view.layoutIfNeeded()
-        #expect(abs(table.contentOffset.y - shownOffset) < 2)
-        try await Task.sleep(for: .milliseconds(80))
-        let rising = try #require(table.layer.presentation()?.bounds.origin.y)
-        if visibleTravel > 40, sampledDuringAnimation(since: animationStart) {
-            #expect(rising < shownOffset - 20, "History should already move before the keyboard finishes")
-        }
-        try await Task.sleep(for: .milliseconds(500))
-        let beforeKeyboardSettles = table.contentOffset.y
-        NotificationCenter.default.post(name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
-        #expect(abs(table.contentOffset.y - beforeKeyboardSettles) < 2,
-                "Finishing the keyboard animation must not snap the history to another offset")
-        #expect(abs(table.contentOffset.y - shownOffset) < 2)
-
-        animationStart = ContinuousClock.now
-        moveKeyboard(from: shown, to: hidden)
-        controller.view.frame.size.height = 844
-        controller.view.setNeedsLayout()
-        controller.view.layoutIfNeeded()
-        #expect(abs(table.contentOffset.y - initialOffset) < 2)
-        try await Task.sleep(for: .milliseconds(80))
-        let falling = try #require(table.layer.presentation()?.bounds.origin.y)
-        if visibleTravel > 40, sampledDuringAnimation(since: animationStart) {
-            #expect(falling > initialOffset + 20,
-                    "History should still be moving down while the keyboard closes")
-        }
-        try await Task.sleep(for: .milliseconds(500))
-        NotificationCenter.default.post(name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
-        #expect(abs(table.contentOffset.y - initialOffset) < 2)
+    @Test(arguments: [3, 8, 12, 100])
+    func shortAndLongHistoryMoveInSyncWithKeyboard(rowCount: Int) async throws {
+        try await checkKeyboardMotion(rowCount: rowCount, readingHistory: false)
     }
 
-    @Test func historyKeepsItsGapToComposerDuringRealKeyboardAnimation() async throws {
+    @Test func readingOlderMessagesMovesWithKeyboardWithoutJumpingToBottom() async throws {
+        try await checkKeyboardMotion(rowCount: 100, readingHistory: true)
+    }
+
+    private func checkKeyboardMotion(rowCount: Int, readingHistory: Bool) async throws {
         let key = "test.timeline.keyboard.\(UUID())"
         defer { UserDefaults.standard.removeObject(forKey: key) }
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let originalKeyWindow = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
+        window.frame = scene.coordinateSpace.bounds
+        window.windowLevel = UIWindow.Level(rawValue: (originalKeyWindow?.windowLevel.rawValue ?? 0) + 1)
         let input = UITextField()
         input.placeholder = "Message"
-        let host = UIHostingController(rootView: KeyboardTimelineFixture(key: key, input: input))
+        let host = UIHostingController(rootView: KeyboardTimelineFixture(key: key, input: input, rowCount: rowCount))
         window.rootViewController = host
         window.makeKeyAndVisible()
         defer {
@@ -163,24 +100,47 @@ struct ShumTimelinePerformanceTests {
             return view.subviews.lazy.compactMap { findTable($0) }.first
         }
         let table = try #require(findTable(host.view))
-        func gap() -> CGFloat {
+        if readingHistory {
+            table.setContentOffset(CGPoint(x: 0, y: 400), animated: false)
+            table.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let readingAnchor = table.indexPathsForVisibleRows?.sorted().dropFirst(5).first
+        func positions() -> (input: CGFloat, messages: CGFloat) {
             let target = window.layer.presentation() ?? window.layer
             let inputLayer = input.layer.presentation() ?? input.layer
             let tableLayer = table.layer.presentation() ?? table.layer
             let inputTop = inputLayer.convert(CGPoint(x: 0, y: inputLayer.bounds.minY), to: target).y
-            let messageBottom = tableLayer.convert(CGPoint(x: 0, y: table.contentSize.height), to: target).y
-            return inputTop - messageBottom
+            let marker = readingHistory ? table.rectForRow(at: readingAnchor!).minY : table.contentSize.height
+            let messageBottom = tableLayer.convert(CGPoint(x: 0, y: marker), to: target).y
+            return (inputTop, messageBottom)
         }
-        let restingGap = gap()
+        let resting = positions()
         let initialInputTop = input.convert(input.bounds, to: window).minY
         for cycle in 0..<2 {
             for opening in [true, false] {
+                let start = positions()
                 if opening { #expect(input.becomeFirstResponder()) }
                 else { #expect(input.resignFirstResponder()) }
-                var gaps: [CGFloat] = []
+                var samples: [(input: CGFloat, messages: CGFloat)] = []
                 for _ in 0..<40 {
                     try await Task.sleep(for: .milliseconds(16))
-                    gaps.append(gap())
+                    samples.append(positions())
+                }
+                let end = positions()
+                // UIKit's keyboard transaction must drive the whole movement.
+                // A partially fitting history moves only by its overflow; a
+                // fully fitting history stays at the top throughout.
+                let travel = end.input - start.input
+                let messageTravel = end.messages - start.messages
+                let errors = samples.map { sample in
+                    let progress = abs(travel) > 1 ? (sample.input - start.input) / travel : 0
+                    return sample.messages - (start.messages + messageTravel * progress)
+                }
+                if readingHistory {
+                    #expect(abs(messageTravel - travel) < 2)
+                } else {
+                    #expect(abs(end.messages - min(resting.messages, end.input - 18)) < 2)
                 }
                 let displacement = initialInputTop - input.convert(input.bounds, to: window).minY
                 if opening {
@@ -188,29 +148,42 @@ struct ShumTimelinePerformanceTests {
                 } else {
                     #expect(abs(displacement) < 2)
                 }
-                let maximumDrift = gaps.map { abs($0 - restingGap) }.max() ?? 0
+                let maximumDrift = errors.map { abs($0) }.max() ?? 0
                 #expect(maximumDrift < 4,
-                        "Cycle \(cycle), opening \(opening): gap drifted by \(maximumDrift) points: \(gaps)")
+                        "Cycle \(cycle), opening \(opening): gap drifted by \(maximumDrift) points: \(errors)")
             }
         }
+        if rowCount == 100, !readingHistory {
+            // Reverse a keyboard transition before it finishes. There must be
+            // no delayed final-offset correction from the interrupted opening.
+            #expect(input.becomeFirstResponder())
+            try await Task.sleep(for: .milliseconds(80))
+            #expect(input.resignFirstResponder())
+            var drift: CGFloat = 0
+            for _ in 0..<40 {
+                try await Task.sleep(for: .milliseconds(16))
+                let current = positions()
+                drift = max(drift, abs(current.input - current.messages - 18))
+            }
+            #expect(drift < 4, "Interrupted keyboard transition drifted by \(drift) points")
+        }
     }
-
 }
-
 
 private struct KeyboardTimelineFixture: View {
     let key: String
     let input: UITextField
+    let rowCount: Int
     var body: some View {
         GeometryReader { geometry in
             ShumConversationTimeline(
-                items: (0..<100).map { ShumTimelineItem(id: "\($0)", revision: 0) },
+                items: (0..<rowCount).map { ShumTimelineItem(id: "\($0)", revision: 0) },
                 storageKey: key, appearanceKey: "test", command: nil,
                 contentInsets: geometry.safeAreaInsets, bottomChanged: { _ in }, tapped: {}
             ) { index, width in
-                Text("Message \(index)").frame(width: width, height: 44)
+                Text("Message \(index)").frame(width: width, height: CGFloat(44 + (index % 3) * 20))
             }
-            .ignoresSafeArea(.container, edges: .vertical)
+            .ignoresSafeArea(.all, edges: .vertical)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             KeyboardTestInput(input: input).frame(height: 46).padding(.vertical, 8)
