@@ -4,6 +4,25 @@ import UIKit
 
 @MainActor
 enum ShumAvatarCodec {
+    /// Keep the entire invitation below the 24 KB Bluetooth/Nostr packet limit.
+    static func invitationThumbnail(_ data: Data) -> Data? {
+        guard ShumProfile.validAvatar(data) else { return nil }
+        if data.count <= ShumInvitationAvatar.maxBytes { return data }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        for size in [240, 160, 96] {
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: size
+            ] as CFDictionary) else { return nil }
+            for quality in [0.75, 0.5, 0.3] {
+                if let jpeg = UIImage(cgImage: image).jpegData(compressionQuality: quality),
+                   jpeg.count <= ShumInvitationAvatar.maxBytes { return jpeg }
+            }
+        }
+        return nil
+    }
+
     static func prepare(_ data: Data) throws -> Data {
         guard data.count <= 30 * 1024 * 1024,
               let source = CGImageSourceCreateWithData(data as CFData, nil),

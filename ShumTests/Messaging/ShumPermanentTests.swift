@@ -132,6 +132,139 @@ struct ShumPermanentTests {
         #expect(throws: (any Error).self) { try a.card.sharingInvitation(baseURL: insecure) }
     }
 
+    @Test func invitationPhotoArrivesOverInternetWithoutLookupAndSurvivesRestart() throws {
+        let clock = Clock()
+        let senderURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let receiverURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer {
+            try? FileManager.default.removeItem(at: senderURL)
+            try? FileManager.default.removeItem(at: receiverURL)
+        }
+        let a = try Node("Аня", clock: clock, url: senderURL)
+        let b = try Node("Борис", clock: clock, url: receiverURL)
+        var original = try #require(ShumAvatarCodec.diagnosticPhoto(seed: 64))
+        original.append(Data(count: ShumProfile.maxAvatarBytes - original.count))
+        #expect(ShumProfile.validAvatar(original))
+        a.service.configureContactLookup { ShumProfile(name: a.card.name, avatar: original) }
+        #expect(a.service.sendInvitation(b.card))
+
+        // The queued photo is durable even if the sender closes the app.
+        let restoredOutbox = try ShumConversationStore(ownerID: a.card.id, key: a.identity.storageKey, url: senderURL)
+        let pending = try #require(restoredOutbox.state.invitationOutbox?.first)
+        let photo = try #require(pending.avatar)
+        #expect(photo.data.count <= ShumInvitationAvatar.maxBytes)
+        #expect(photo.valid(for: pending.control))
+        let packet = ShumPacket(invitation: pending.control, invitationAvatar: photo)
+        let bytes = try ShumCoding.encode(packet)
+        #expect(bytes.count <= 24_000)
+        let event = try NostrProtocol.createPrivateMessage(
+            content: ShumWireProtocol.relayPrefix + bytes.base64EncodedString(),
+            recipientPubkey: b.card.nostrKey, senderIdentity: a.identity.nostr)
+        a.service.retire()
+        let decoded = try NostrProtocol.decryptPrivateMessage(giftWrap: event, recipientIdentity: b.identity.nostr)
+        let receivedBytes = try #require(Data(base64Encoded: String(decoded.content.dropFirst(ShumWireProtocol.relayPrefix.count))))
+        b.service.receive(try JSONDecoder().decode(ShumPacket.self, from: receivedBytes), from: nil, nostrSender: decoded.senderPubkey)
+        #expect(b.service.invitationPhase(for: a.card) == .incomingPending)
+        #expect(b.service.avatar(for: a.card) == photo.data)
+        #expect(b.service.nearby.isEmpty)
+        #expect(b.store.state.contacts.isEmpty)
+        #expect(try Data(contentsOf: receiverURL).range(of: photo.data) == nil)
+
+        b.store = try ShumConversationStore(ownerID: b.card.id, key: b.identity.storageKey, url: receiverURL)
+        b.service = ShumMessageStore(identity: b.identity, store: b.store, transport: b.wire, wire: b.wire,
+            card: b.card, internet: nil, now: { clock.date })
+        #expect(b.service.avatar(for: a.card) == photo.data)
+        #expect(b.service.acceptInvitation(a.card))
+        #expect(b.store.state.contacts.first?.avatar == photo.data)
+        #expect(b.service.avatar(for: a.card) == photo.data)
+    }
+
+    @Test func invitationPhotosTravelOverBluetoothAndSurviveDeclineThenAcceptance() throws {
+        let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
+        let aPhoto = try #require(ShumAvatarCodec.diagnosticPhoto(seed: 12))
+        let bPhoto = try #require(ShumAvatarCodec.diagnosticPhoto(seed: 45))
+        a.service.configureContactLookup { ShumProfile(name: a.card.name, avatar: aPhoto) }
+        b.service.configureContactLookup { ShumProfile(name: b.card.name, avatar: bPhoto) }
+        connect(a, b, clock: clock)
+        #expect(a.service.sendInvitation(b.card))
+        drain([a, b])
+        #expect(b.service.avatar(for: a.card) == ShumAvatarCodec.invitationThumbnail(aPhoto))
+        #expect(b.service.declineInvitation(a.card))
+        drain([a, b])
+        #expect(b.service.avatar(for: a.card) != nil)
+        #expect(b.store.state.invitationOutbox?.first?.avatar == nil)
+        #expect(b.service.acceptInvitation(a.card))
+        drain([a, b])
+        #expect(a.service.invitationPhase(for: b.card) == .accepted)
+        #expect(a.service.avatar(for: b.card) == ShumAvatarCodec.invitationThumbnail(bPhoto))
+        #expect(b.service.avatar(for: a.card) == ShumAvatarCodec.invitationThumbnail(aPhoto))
+        // A subsequent full profile replaces the thumbnail, including photo removal.
+        b.service.updateAvatar(bPhoto, for: a.wire.myPeerID)
+        #expect(b.service.avatar(for: a.card) == bPhoto)
+        b.service.updateAvatar(nil, for: a.wire.myPeerID)
+        #expect(b.service.avatar(for: a.card) == nil)
+    }
+
+    @Test func invitationPhotoRejectsTamperingOversizeAndRebindingWithoutLosingRequest() throws {
+        let clock = Clock(), a = try Node("Аня", clock: clock), b = try Node("Борис", clock: clock)
+        let photo = try #require(ShumAvatarCodec.diagnosticPhoto(seed: 16))
+        a.service.configureContactLookup { ShumProfile(name: a.card.name, avatar: photo) }
+        #expect(a.service.sendInvitation(b.card))
+        let pending = try #require(a.store.state.invitationOutbox?.first)
+        let attachment = try #require(pending.avatar)
+        var changed = attachment
+        changed.data.append(0)
+        var oversized = attachment
+        oversized.data.append(Data(count: ShumInvitationAvatar.maxBytes + 1 - oversized.data.count))
+        oversized.signature = try #require(a.wire.noiseSignData(oversized.signingBytes(for: pending.control)))
+        var invalidImage = ShumInvitationAvatar(data: Data([1, 2, 3]))
+        invalidImage.signature = try #require(a.wire.noiseSignData(invalidImage.signingBytes(for: pending.control)))
+        var anotherControl = pending.control
+        anotherControl.id = UUID().uuidString
+        anotherControl.signature = try #require(a.wire.noiseSignData(anotherControl.signingBytes()))
+        let packets = [
+            ShumPacket(invitation: pending.control, invitationAvatar: changed),
+            ShumPacket(invitation: pending.control, invitationAvatar: oversized),
+            ShumPacket(invitation: pending.control, invitationAvatar: invalidImage),
+            ShumPacket(invitation: anotherControl, invitationAvatar: attachment)
+        ]
+        for packet in packets {
+            let store = try ShumConversationStore(ownerID: b.card.id, key: b.identity.storageKey, url: nil)
+            let receiver = ShumMessageStore(identity: b.identity, store: store, transport: b.wire, wire: b.wire,
+                card: b.card, internet: nil, now: { clock.date })
+            receiver.receive(packet, from: nil, nostrSender: a.card.nostrKey)
+            #expect(receiver.invitationPhase(for: a.card) == .incomingPending)
+            #expect(receiver.avatar(for: a.card) == nil)
+        }
+    }
+
+    @Test func invitationPhotoFitsEncryptedEnvelopeAndKeepsLegacyControlSignature() throws {
+        let clock = Clock(), a = try Node(String(repeating: "a", count: 64), clock: clock)
+        let b = try Node(String(repeating: "b", count: 64), clock: clock)
+        a.service.ownCard = try a.identity.card(name: a.card.name, bio: String(repeating: "😀", count: 72))
+        let recipient = try b.identity.card(name: b.card.name, bio: String(repeating: "😀", count: 72))
+        let sourceImage = try #require(ShumAvatarCodec.diagnosticPhoto(seed: 1))
+        var image = try #require(ShumAvatarCodec.invitationThumbnail(sourceImage))
+        image.append(Data(count: ShumInvitationAvatar.maxBytes - image.count))
+        a.service.configureContactLookup { ShumProfile(name: a.card.name, avatar: image) }
+        #expect(a.service.sendInvitation(recipient))
+        let pending = try #require(a.store.state.invitationOutbox?.first)
+        let packet = ShumPacket(invitation: pending.control, invitationAvatar: pending.avatar)
+        let bytes = try ShumCoding.encode(packet)
+        #expect(pending.avatar?.data.count == ShumInvitationAvatar.maxBytes)
+        #expect(bytes.count <= 24_000)
+        let event = try NostrProtocol.createPrivateMessage(content: ShumWireProtocol.relayPrefix + bytes.base64EncodedString(),
+            recipientPubkey: b.card.nostrKey, senderIdentity: a.identity.nostr)
+        #expect(event.content.utf8.count <= NostrProtocol.maximumPrivateEnvelopeCiphertextBytes)
+        _ = try NostrProtocol.decryptPrivateMessage(giftWrap: event, recipientIdentity: b.identity.nostr)
+        struct LegacyPacket: Decodable { var invitation: ShumInvitationControl }
+        let legacy = try JSONDecoder().decode(LegacyPacket.self, from: bytes)
+        try legacy.invitation.validate(at: clock.date)
+        #expect(legacy.invitation == pending.control)
+        let oldState = Data("{\"phase\":\"incomingPending\",\"updatedAt\":1,\"eventID\":\"old\"}".utf8)
+        #expect(try JSONDecoder().decode(ShumInvitationState.self, from: oldState).avatar == nil)
+    }
+
     @Test func invitationCanBeDeclinedAndAcceptedLater() throws {
         let clock = Clock()
         let a = try Node("Аня", clock: clock)

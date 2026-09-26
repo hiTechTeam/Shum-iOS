@@ -51,6 +51,7 @@ struct ShumInvitationState: Codable, Equatable {
     var phase: ShumInvitationPhase
     var updatedAt: Int64
     var eventID: String
+    var avatar: Data?
 }
 enum ShumInvitationAction: String, Codable {
     case request
@@ -91,8 +92,29 @@ struct ShumInvitationControl: Codable, Equatable, Identifiable {
         }
     }
 }
+/// Separate from the control so older builds can still verify its signature.
+struct ShumInvitationAvatar: Codable, Equatable {
+    static let maxBytes = 8 * 1024
+    var data: Data
+    var signature = Data()
+
+    func signingBytes(for control: ShumInvitationControl) -> Data {
+        var bytes = Data("shum.invitation-avatar.v1\0".utf8)
+        bytes.append(control.signature)
+        bytes.append(data)
+        return bytes
+    }
+
+    func valid(for control: ShumInvitationControl) -> Bool {
+        control.action != .decline && data.count <= Self.maxBytes
+            && ShumProfile.validAvatar(data)
+            && (try? Curve25519.Signing.PublicKey(rawRepresentation: control.sender.signingKey)
+                .isValidSignature(signature, for: signingBytes(for: control))) == true
+    }
+}
 struct ShumStoredInvitationControl: Codable, Equatable, Identifiable {
     var control: ShumInvitationControl
+    var avatar: ShumInvitationAvatar?
     var lastAttempt: Date = .distantPast
     var attempts = 0
     var nostrAccepted = false
@@ -288,6 +310,7 @@ struct ShumPacket: Codable {
     var hopCount: Int?
     var receipt: ShumReceipt?
     var invitation: ShumInvitationControl?
+    var invitationAvatar: ShumInvitationAvatar?
     var typing: ShumTypingControl?
     var presence: ShumPresenceControl?
 }

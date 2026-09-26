@@ -361,8 +361,8 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     func profile(for peer: PeerID) -> ShumProfile? {
         if let permanent, let card = permanent.card(for: peer) {
             let avatar = permanent.session(for: card).flatMap { profiles.remote[$0]?.avatar }
-                ?? permanent.state.contacts.first(where: { $0.id == card.id })?.avatar
-                ?? permanent.state.encounters?.first(where: { $0.id == card.id })?.avatar
+                ?? profiles.remote[card.peerID]?.avatar
+                ?? permanent.avatar(for: card)
             return ShumProfile(name: card.name, bio: card.bio, avatar: avatar)
         }
         if let encounter = permanent?.state.encounters?.first(where: { $0.card.peerID == peer }) {
@@ -375,6 +375,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             guard let permanent else { throw ShumFailure.unavailableIdentity }
             let avatar = permanent.session(for: card).flatMap { profiles.remote[$0]?.avatar }
                 ?? profiles.remote[card.peerID]?.avatar
+                ?? permanent.avatar(for: card)
             try permanent.add(card, source: source, avatar: avatar)
             return ShumPeer(id: card.peerID, name: card.name, lastConnected: Date())
         } catch { self.error = error.localizedDescription; return nil }
@@ -637,7 +638,10 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                 active: true
             )
             for peer in peers {
-                if let profile = profiles.remote[peer.id] {
+                // A manifest can arrive before its photo. Keep the invitation
+                // thumbnail until the full profile has loaded successfully.
+                if let profile = profiles.remote[peer.id],
+                   !profiles.loading.contains(peer.id), !profiles.failed.contains(peer.id) {
                     permanent.updateAvatar(profile.avatar, for: peer.id)
                 }
             }

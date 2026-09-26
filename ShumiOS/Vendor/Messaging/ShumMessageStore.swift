@@ -20,6 +20,7 @@ final class ShumMessageStore: ObservableObject {
     private let wire: ShumSecureTransport
     private let internet: ShumNostrService?
     private let now: () -> Date
+    private var profileProvider: (() -> ShumProfile?)?
     var ownCard: ShumContactCard
     var onError: ((String) -> Void)?
     private(set) var nearby: [PeerID: ShumContactCard] = [:]
@@ -56,6 +57,7 @@ final class ShumMessageStore: ObservableObject {
     var state: ShumDatabase { store.state }
 
     func configureContactLookup(profile: @escaping () -> ShumProfile?) {
+        profileProvider = profile
         internet?.configureContactLookup(
             card: { [weak self] in self?.ownCard },
             profile: profile
@@ -161,6 +163,11 @@ final class ShumMessageStore: ObservableObject {
     }
     func session(for card: ShumContactCard) -> PeerID? {
         nearby.first(where: { $0.value.id == card.id && transport.isPeerConnected($0.key) && transport.noiseSessionPublicKeyData(for: $0.key) == card.noiseKey })?.key
+    }
+    func avatar(for card: ShumContactCard) -> Data? {
+        state.invitationStates?[card.id]?.avatar
+            ?? state.contacts.first(where: { $0.id == card.id })?.avatar
+            ?? state.encounters?.first(where: { $0.id == card.id })?.avatar
     }
     func add(_ card: ShumContactCard, source: String, avatar: Data? = nil) throws {
         guard !retired else { throw ShumFailure.unavailableIdentity }
@@ -296,6 +303,7 @@ final class ShumMessageStore: ObservableObject {
             try contacts.add(
                 card,
                 source: "accepted-invitation",
+                avatar: avatar(for: card),
                 now: now(),
                 includeInAddressBook: false
             )
@@ -338,19 +346,30 @@ final class ShumMessageStore: ObservableObject {
             throw ShumFailure.unavailableIdentity
         }
         control.signature = signature
+        var attachment: ShumInvitationAvatar?
+        if action != .decline, let photo = profileProvider?()?.avatar,
+           let thumbnail = ShumAvatarCodec.invitationThumbnail(photo) {
+            var value = ShumInvitationAvatar(data: thumbnail)
+            if let signature = transport.noiseSignData(value.signingBytes(for: control)) {
+                value.signature = signature
+                attachment = value
+            }
+        }
         try store.transaction { state in
             if state.invitationStates == nil { state.invitationStates = [:] }
             if state.invitationOutbox == nil { state.invitationOutbox = [] }
+            let previousAvatar = state.invitationStates?[card.id]?.avatar
             state.invitationStates?[card.id] = ShumInvitationState(
                 phase: phase,
                 updatedAt: timestamp,
-                eventID: control.id
+                eventID: control.id,
+                avatar: previousAvatar
             )
             state.invitationOutbox?.removeAll {
                 $0.control.recipient.id == card.id
             }
             state.invitationOutbox?.append(
-                ShumStoredInvitationControl(control: control)
+                ShumStoredInvitationControl(control: control, avatar: attachment)
             )
             if removesRequest {
                 state.requests.removeAll { $0.id == card.id }
@@ -372,7 +391,7 @@ final class ShumMessageStore: ObservableObject {
         }
     }
 
-    private func receiveInvitation(_ control: ShumInvitationControl) throws {
+    private func receiveInvitation(_ control: ShumInvitationControl, avatar attachment: ShumInvitationAvatar?) throws {
         try control.validate(at: now())
         guard control.recipient.noiseKey == ownCard.noiseKey,
               control.recipient.signingKey == ownCard.signingKey,
@@ -384,6 +403,8 @@ final class ShumMessageStore: ObservableObject {
         if state.invitationStates?[control.sender.id]?.eventID == control.id {
             return
         }
+        let avatar = attachment.flatMap { $0.valid(for: control) ? $0.data : nil }
+            ?? state.invitationStates?[control.sender.id]?.avatar
         let currentPhase = invitationPhase(for: control.sender)
         let hasOutgoingRequest = (state.invitationOutbox ?? []).contains {
             $0.control.recipient.id == control.sender.id
@@ -429,7 +450,8 @@ final class ShumMessageStore: ObservableObject {
                 state.invitationStates?[control.sender.id] = ShumInvitationState(
                     phase: .incomingPending,
                     updatedAt: control.timestamp,
-                    eventID: control.id
+                    eventID: control.id,
+                    avatar: avatar
                 )
                 state.invitationOutbox?.removeAll {
                     $0.control.recipient.id == control.sender.id
@@ -444,6 +466,7 @@ final class ShumMessageStore: ObservableObject {
             try contacts.add(
                 control.sender,
                 source: "invitation-accepted",
+                avatar: avatar,
                 now: now(),
                 includeInAddressBook: false
             )
@@ -453,7 +476,8 @@ final class ShumMessageStore: ObservableObject {
                 state.invitationStates?[control.sender.id] = ShumInvitationState(
                     phase: .accepted,
                     updatedAt: control.timestamp,
-                    eventID: control.id
+                    eventID: control.id,
+                    avatar: avatar
                 )
                 state.requests.removeAll { $0.id == control.sender.id }
                 state.invitationOutbox?.removeAll {
@@ -470,7 +494,8 @@ final class ShumMessageStore: ObservableObject {
                 state.invitationStates?[control.sender.id] = ShumInvitationState(
                     phase: .declinedByPeer,
                     updatedAt: control.timestamp,
-                    eventID: control.id
+                    eventID: control.id,
+                    avatar: avatar
                 )
                 state.requests.removeAll { $0.id == control.sender.id }
                 state.invitationOutbox?.removeAll {
@@ -499,7 +524,8 @@ final class ShumMessageStore: ObservableObject {
         guard (avatar?.count ?? 0) <= 40_960, let card = nearby[peer] else { return }
         let contactNeedsUpdate = state.contacts.first(where: { $0.id == card.id })?.avatar != avatar
         let encounterNeedsUpdate = state.encounters?.first(where: { $0.id == card.id })?.avatar != avatar
-        guard contactNeedsUpdate || encounterNeedsUpdate else { return }
+        let invitationNeedsUpdate = state.invitationStates?[card.id].map { $0.avatar != avatar } ?? false
+        guard contactNeedsUpdate || encounterNeedsUpdate || invitationNeedsUpdate else { return }
         do {
             try store.transaction { state in
                 if let index = state.contacts.firstIndex(where: { $0.id == card.id }) {
@@ -508,6 +534,7 @@ final class ShumMessageStore: ObservableObject {
                 if let index = state.encounters?.firstIndex(where: { $0.id == card.id }) {
                     state.encounters?[index].avatar = avatar
                 }
+                state.invitationStates?[card.id]?.avatar = avatar
             }
             changed()
         } catch { fail(error) }
@@ -791,7 +818,7 @@ final class ShumMessageStore: ObservableObject {
                     guard transport.noiseSessionPublicKeyData(for: peer) == invitation.sender.noiseKey else { return }
                 }
                 if let nostrSender, nostrSender != invitation.sender.nostrKey { return }
-                try receiveInvitation(invitation)
+                try receiveInvitation(invitation, avatar: packet.invitationAvatar)
             } else if let typing = packet.typing {
                 try receiveTyping(typing, from: peer, nostrSender: nostrSender)
             } else if let presence = packet.presence {
@@ -1088,7 +1115,7 @@ final class ShumMessageStore: ObservableObject {
                         state.invitationOutbox?[index].nostrAttempts = (stored.nostrAttempts ?? 0) + 1
                     }
                 }
-                let packet = ShumPacket(invitation: control)
+                let packet = ShumPacket(invitation: control, invitationAvatar: stored.avatar)
                 if let direct, canSendDirect { sendPacket(packet, to: direct) }
                 if canSendInternet {
                     internet?.send(packet, to: control.recipient) { [weak self] accepted in
