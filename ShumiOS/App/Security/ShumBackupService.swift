@@ -605,11 +605,11 @@ final class ShumBackupService {
         files.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     }
 
-    nonisolated private static func validPassword(_ password: String) -> Bool {
+    nonisolated static func validPassword(_ password: String) -> Bool {
         password.count >= minimumPasswordLength && password.utf8.count <= 256
     }
 
-    nonisolated private static func allowedPath(_ path: String) -> Bool {
+    nonisolated static func allowedPath(_ path: String) -> Bool {
         let components = path.split(separator: "/", omittingEmptySubsequences: false)
         guard !path.hasPrefix("/"), !path.contains("..") else { return false }
         if components.count == 1 {
@@ -635,7 +635,7 @@ final class ShumBackupService {
         return LocalCardPhoto.validHash(String(name.dropLast(4)))
     }
 
-    nonisolated private static func encrypt(
+    nonisolated static func encrypt(
         _ plaintext: Data,
         password: String,
         createdAt: Date,
@@ -656,7 +656,7 @@ final class ShumBackupService {
         return magic + (try JSONEncoder().encode(envelope))
     }
 
-    nonisolated private static func decrypt(_ data: Data, password: String) throws -> Data {
+    nonisolated static func decrypt(_ data: Data, password: String) throws -> Data {
         let envelope = try decodeEnvelope(data)
         guard envelope.version == 1,
               (100_000...1_000_000).contains(envelope.iterations),
@@ -698,7 +698,7 @@ final class ShumBackupService {
         return Data(bytes)
     }
 
-    nonisolated private static func deriveKey(
+    nonisolated static func deriveKey(
         password: String,
         salt: Data,
         iterations: Int
