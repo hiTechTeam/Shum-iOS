@@ -1,7 +1,7 @@
 import Foundation
 
 /// Retains the original profile view-model environment without starting a second radio.
-/// Shum nearby discovery and messaging are owned exclusively by ShumChatRuntime.
+/// Shum nearby discovery and messaging are owned exclusively by ShumRuntime.
 final class ShumInactiveCardRadio: BLEManagerProtocol {
     weak var delegate: BLEManagerDelegate?
     var isBluetoothAvailable: Bool { false }
