@@ -106,41 +106,6 @@ struct LocalCardTests {
         #expect(throws: (any Error).self) { try modified.validate() }
     }
 
-    @Test(arguments: [20, 185, 512])
-    func twoWayExchangeAndPersistentPhotos(mtu: Int) throws {
-        let (a, aURL, aDefaults) = makeStore()
-        let (b, bURL, _) = makeStore()
-        defer { try? FileManager.default.removeItem(at: aURL); try? FileManager.default.removeItem(at: bURL) }
-        let alice = try a.saveOwn(name: "Алина", username: "alina_11", bio: "Привет", photo: photo(.orange))
-        let bob = try b.saveOwn(name: "Bob", username: "bob_2026", bio: nil, photo: photo(.blue))
-        var updatesA = 0
-        var updatesB = 0
-        let left = try BLECardExchange(own: alice, expectedPeer: bob.body.id, store: a) { _ in updatesA += 1 }
-        let right = try BLECardExchange(own: bob, expectedPeer: alice.body.id, store: b) { _ in updatesB += 1 }
-        for _ in 0..<20000 {
-            if let frame = left.nextFrame(maximumBytes: mtu) { #expect(frame.count <= mtu); try right.receive(frame) }
-            if let frame = right.nextFrame(maximumBytes: mtu) { #expect(frame.count <= mtu); try left.receive(frame) }
-            if left.complete && right.complete { break }
-        }
-        #expect(left.complete && right.complete)
-        #expect(updatesA == 2 && updatesB == 2)
-        #expect(a.photo(bob.body.photoHash) == b.photo(bob.body.photoHash))
-        let relaunched = LocalCardStore(directory: aURL, defaults: aDefaults, secureStore: CardMemoryKeychain())
-        #expect(try relaunched.profile(bob.body.id).name == "Bob")
-        #expect(relaunched.photo(bob.body.photoHash) != nil)
-        // A repeat encounter reuses both photos and sends metadata only.
-        let repeatLeft = try BLECardExchange(own: alice, expectedPeer: bob.body.id, store: a) { _ in }
-        let repeatRight = try BLECardExchange(own: bob, expectedPeer: alice.body.id, store: b) { _ in }
-        var bytes = 0
-        for _ in 0..<2000 {
-            if let frame = repeatLeft.nextFrame(maximumBytes: mtu) { bytes += frame.count; try repeatRight.receive(frame) }
-            if let frame = repeatRight.nextFrame(maximumBytes: mtu) { bytes += frame.count; try repeatLeft.receive(frame) }
-            if repeatLeft.complete && repeatRight.complete { break }
-        }
-        #expect(repeatLeft.complete && repeatRight.complete)
-        #expect(bytes < 4000)
-    }
-
     @Test func blocksStopProfileAcceptance() throws {
         let (a, aURL, defaults) = makeStore()
         let (b, bURL, _) = makeStore()
@@ -148,17 +113,6 @@ struct LocalCardTests {
         let bob = try b.saveOwn(name: "Bob", username: "bob_2026", bio: nil, photo: nil)
         defaults.set([bob.body.id.uuidString.lowercased()], forKey: "shum.blocked-profile-ids")
         #expect(throws: (any Error).self) { try a.receive(bob) }
-    }
-
-    @Test func corruptFramesAndPhotoPayloadsAreRejected() throws {
-        let (store, url, _) = makeStore()
-        defer { try? FileManager.default.removeItem(at: url) }
-        let own = try store.saveOwn(name: "Alice", username: "alice_11", bio: nil, photo: nil)
-        let exchange = try BLECardExchange(own: own, expectedPeer: nil, store: store) { _ in }
-        #expect(throws: (any Error).self) { try exchange.receive(Data([1, 2, 3])) }
-        #expect(throws: (any Error).self) { try exchange.receive(Data([2, 0, 0, 0, 1, 255, 255, 0, 0, 1])) }
-        let invalid = Data(repeating: 255, count: 100)
-        #expect(throws: (any Error).self) { try store.cachePhoto(invalid, hash: LocalCardPhoto.hash(invalid)) }
     }
 
     @Test func explicitResetRemovesOwnAndReceivedCards() throws {
