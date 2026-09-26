@@ -111,6 +111,27 @@ struct ShumPermanentTests {
         a.wire.mockKeychain.simulatedReadError = .deviceLocked
         #expect(throws: (any Error).self) { _ = try ShumIdentityService(transport: a.wire, keychain: a.wire.mockKeychain, bridge: NostrIdentityBridge(keychain: a.wire.mockKeychain)) }
     }
+    @Test func sharedInvitationUsesHTTPSWithoutSendingContactToServer() throws {
+        let a = try Node("Аня", clock: Clock())
+        let base = try #require(URL(string: "https://example.test/old?ignored=1#old"))
+        let shared = try a.card.sharingInvitation(baseURL: base)
+        #expect(shared.scheme == "https")
+        #expect(shared.host == "example.test")
+        #expect(shared.path == "/invite")
+        #expect(shared.query == nil)
+        let fragment = try #require(shared.fragment)
+        let direct = try #require(URL(string: "shum://" + fragment))
+        #expect(direct == (try a.card.invitation()))
+        guard case let .locator(locator) = try ShumInvitationPayload.parse(direct) else {
+            Issue.record("Shared invitation must open the original contact")
+            return
+        }
+        #expect(locator.nostrKey == a.card.nostrKey)
+        #expect(!shared.absoluteString.contains(a.card.name))
+        let insecure = try #require(URL(string: "http://example.test"))
+        #expect(throws: (any Error).self) { try a.card.sharingInvitation(baseURL: insecure) }
+    }
+
     @Test func invitationCanBeDeclinedAndAcceptedLater() throws {
         let clock = Clock()
         let a = try Node("Аня", clock: clock)

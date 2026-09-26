@@ -85,7 +85,7 @@ struct ShumContactsView: View {
                     let name = CNContactFormatter.string(from: contact, style: .fullName) ?? ""
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                         let greeting = name.isEmpty ? "Привет!".localized : String.localizedFormat("%@, привет!".localized, name)
-                        if let url = try? service?.ownCard.invitation() {
+                        if let url = try? service?.ownCard.sharingInvitation() {
                             share = ShumShareItem(text: String.localizedFormat("%@ Добавь меня в Shum:\n%@".localized, greeting, url.absoluteString))
                         }
                     }

@@ -47,6 +47,26 @@ struct ShumContactCard: Codable, Equatable {
         return result
     }
 
+    /// HTTPS links are recognized by messengers. Keep the locator in the
+    /// fragment so opening the landing page does not send it to the server.
+    /// QR codes continue using the compact scheme, including when offline.
+    func sharingInvitation(baseURL: URL? = nil) throws -> URL {
+        let configuredURL = (Bundle.main.object(forInfoDictionaryKey: "ShumPushAPIBaseURL") as? String)
+            .flatMap(URL.init(string:))
+        guard let baseURL = baseURL ?? configuredURL,
+              var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false),
+              components.scheme == "https", components.host?.isEmpty == false,
+              components.user == nil, components.password == nil else {
+            throw ShumFailure.invalidContact
+        }
+        let directURL = try invitation()
+        components.path = "/invite"
+        components.query = nil
+        components.fragment = "c2/" + directURL.lastPathComponent
+        guard let url = components.url else { throw ShumFailure.invalidContact }
+        return url
+    }
+
     /// Legacy self-contained invitation retained so QR codes created by older
     /// Shum builds continue to scan after the compact locator format ships.
     func legacyInvitation() throws -> URL {

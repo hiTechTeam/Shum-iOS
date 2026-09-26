@@ -89,7 +89,7 @@ struct ShumQRView: View {
         .navigationTitle("QR-код".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let invitationURL {
+            if let invitationURL = try? card.sharingInvitation() {
                 ShumQRShareToolbar(invitationURL: invitationURL)
             }
         }
