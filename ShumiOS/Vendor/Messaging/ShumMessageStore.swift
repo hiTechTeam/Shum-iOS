@@ -703,7 +703,7 @@ final class ShumMessageStore: ObservableObject {
         }
         do {
             let ms = Int64(now().timeIntervalSince1970 * 1000)
-            if state.relay.contains(where: { $0.envelope.expiresAt <= ms }) || state.receipts.contains(where: { $0.receipt.expiresAt <= ms }) || state.messages.contains(where: { $0.outgoing && [.queued, .forwarding].contains($0.status) && $0.envelope.expiresAt <= ms }) || (state.invitationOutbox ?? []).contains(where: { $0.control.expiresAt <= ms || $0.nostrAccepted || ($0.control.action != .request && $0.attempts >= 6) }) || (tickNumber % 30 == 0 && (!state.seenRelay.isEmpty || !(state.deletedMessageIDs ?? [:]).isEmpty)) {
+            if state.relay.contains(where: { $0.envelope.expiresAt <= ms }) || state.receipts.contains(where: { $0.receipt.expiresAt <= ms }) || state.messages.contains(where: { $0.outgoing && [.queued, .forwarding].contains($0.status) && $0.envelope.expiresAt <= ms }) || (state.invitationOutbox ?? []).contains(where: { $0.control.expiresAt <= ms || $0.nostrAccepted || ($0.control.action != .request && $0.attempts >= 6) }) || (tickNumber % 30 == 0 && (state.seenRelay.values.contains(where: { $0 <= now() }) || (state.deletedMessageIDs ?? [:]).values.contains(where: { $0 <= now() }))) {
                 try store.transaction { state in
                     state.relay.removeAll { $0.envelope.expiresAt <= ms }
                     state.receipts.removeAll { $0.receipt.expiresAt <= ms }
