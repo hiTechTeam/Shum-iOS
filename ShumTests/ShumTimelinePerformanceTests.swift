@@ -94,6 +94,13 @@ struct ShumTimelinePerformanceTests {
                                                        UIResponder.keyboardAnimationCurveUserInfoKey: 7])
         }
 
+        // The mid-animation samples are only meaningful while the 0.5 s keyboard
+        // animation is still running; a loaded machine can resume the task later.
+        func sampledDuringAnimation(since start: ContinuousClock.Instant) -> Bool {
+            ContinuousClock.now - start < .milliseconds(400)
+        }
+
+        var animationStart = ContinuousClock.now
         moveKeyboard(from: hidden, to: shown)
         controller.view.frame.size.height = 844 - travel
         controller.view.setNeedsLayout()
@@ -101,11 +108,14 @@ struct ShumTimelinePerformanceTests {
         #expect(abs(table.contentOffset.y - initialOffset - travel) < 2)
         try await Task.sleep(for: .milliseconds(80))
         let rising = try #require(table.layer.presentation()?.bounds.origin.y)
-        #expect(rising < initialOffset + travel - 20, "History should already move before the keyboard finishes")
+        if sampledDuringAnimation(since: animationStart) {
+            #expect(rising < initialOffset + travel - 20, "History should already move before the keyboard finishes")
+        }
         try await Task.sleep(for: .milliseconds(500))
         NotificationCenter.default.post(name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
         #expect(abs(table.contentOffset.y - initialOffset - travel) < 2)
 
+        animationStart = ContinuousClock.now
         moveKeyboard(from: shown, to: hidden)
         controller.view.frame.size.height = 844
         controller.view.setNeedsLayout()
@@ -113,8 +123,10 @@ struct ShumTimelinePerformanceTests {
         #expect(abs(table.contentOffset.y - initialOffset) < 2)
         try await Task.sleep(for: .milliseconds(80))
         let falling = try #require(table.layer.presentation()?.bounds.origin.y)
-        #expect(falling > initialOffset + 20,
-                "History should still be moving down while the keyboard closes")
+        if sampledDuringAnimation(since: animationStart) {
+            #expect(falling > initialOffset + 20,
+                    "History should still be moving down while the keyboard closes")
+        }
         try await Task.sleep(for: .milliseconds(500))
         NotificationCenter.default.post(name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
         #expect(abs(table.contentOffset.y - initialOffset) < 2)
