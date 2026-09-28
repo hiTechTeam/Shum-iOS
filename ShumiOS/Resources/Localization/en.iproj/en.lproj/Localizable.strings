@@ -227,7 +227,7 @@
 "local.profile.save" = "Save";
 "local.profile.save.error" = "Check your name and Shum username, then try again.";
 "local.sharing.explanation" = "Your profile is stored on this device. Enable nearby visibility to chat.";
-"local.photo.save.error" = "Couldn't save this photo. Please choose another image.";
+"local.photo.save.error" = "Couldn't save the avatar. Please try again.";
 "local.delete.title" = "Delete profile?";
 "local.delete.action" = "Delete profile";
 "local.delete.message" = "Your profile and chat history will be removed from this iPhone. Messages on other people’s devices will remain.";
@@ -310,7 +310,7 @@
 "Вчера" = "Yesterday";
 "Вы" = "You";
 "Вы можете прекратить использование Shum и удалить локальный профиль в настройках приложения. Удаление с устройства не удаляет данные, которые ранее были переданы другим людям или сторонним релеям." = "You can stop using Shum and delete your local profile in Settings. Deleting it from your device does not delete data previously sent to other people or third-party relays.";
-"Вы отвечаете за имя, фотографию, сообщения и другие данные, которыми делитесь через Shum." = "You are responsible for the name, photo, messages, and other information you share through Shum.";
+"Вы отвечаете за имя, аватар, сообщения и другие данные, которыми делитесь через Shum." = "You are responsible for the name, avatar, messages, and other information you share through Shum.";
 "Вы снова сможете обмениваться сообщениями." = "You will be able to exchange messages again.";
 "Выбрана тема %@" = "Theme %@ selected";
 "Выбрать из Фото" = "Choose from Photos";
@@ -374,7 +374,7 @@
 "История чата будет удалена только на этом устройстве. У собеседника сообщения сохранятся." = "Chat history will be deleted only from this device. The other person will keep the messages.";
 "К последнему сообщению" = "To latest message";
 "Какие данные использует Shum" = "Data used by Shum";
-"Камера используется только для создания фотографии профиля и сканирования QR-кодов. Выбранные фотографии обрабатываются на устройстве. Системный выбор контакта передаёт Shum только выбранные пользователем данные; приложение не загружает адресную книгу." = "The camera is used only for profile photos and QR scanning. Selected photos are processed on the device. The system contact picker gives Shum only the information you choose; the app does not upload your address book.";
+"Камера используется для сканирования QR-кодов. Выбранное изображение QR-кода обрабатывается на устройстве. Системный выбор контакта передаёт Shum только выбранные пользователем данные; приложение не загружает адресную книгу." = "The camera is used to scan QR codes. A selected image containing a QR code is processed on the device. The system contact picker gives Shum only the information you choose; the app does not upload your address book.";
 "Карточка будет удалена из списка «Виделись»." = "The card will be removed from the Met list.";
 "Ключ контакта пока недоступен" = "The contact key is not available yet";
 "Ключ профиля создан" = "Profile key created";
@@ -385,7 +385,7 @@
 "Ключи профиля недоступны. Разблокируйте iPhone и снова откройте Shum." = "Profile keys are unavailable. Unlock your iPhone and open Shum again.";
 "Ключи создаются и сохраняются\\nтолько на этом устройстве." = "Keys are created and stored\nonly on this device.";
 "Ключи сохранены на устройстве" = "Keys saved on device";
-"Когда обнаружение включено, Shum использует Bluetooth, чтобы находить другие устройства рядом. Людям рядом может передаваться подписанная карточка профиля с именем и фотографией, если она добавлена. Shum не определяет и не сохраняет точные координаты устройства." = "When discovery is enabled, Shum uses Bluetooth to find nearby devices. A signed profile card containing your name and photo, if provided, may be shared with nearby people. Shum does not determine or store your precise location.";
+"Когда обнаружение включено, Shum использует Bluetooth, чтобы находить другие устройства рядом. Людям рядом может передаваться подписанная карточка профиля с именем и кодом пиксельного аватара. Shum не определяет и не сохраняет точные координаты устройства." = "When discovery is enabled, Shum uses Bluetooth to find nearby devices. A signed profile card containing your name and pixel avatar seed may be shared with nearby people. Shum does not determine or store your precise location.";
 "Код Shum" = "Shum passcode";
 "Код Shum не найден." = "Shum passcode not found.";
 "Код должен состоять из пяти цифр." = "The passcode must contain five digits.";
@@ -411,7 +411,7 @@
 "Можете начинать общение" = "You can start chatting";
 "Мой QR-код" = "My QR code";
 "На устройстве не осталось профиля, ключей и переписки." = "No profile, keys, or conversations remain on the device.";
-"На устройстве хранятся имя и необязательная фотография профиля, криптографические ключи, контакты, сообщения, сведения о встречах с людьми рядом, список блокировок и настройки приложения." = "Your device stores your name and optional profile photo, cryptographic keys, contacts, messages, nearby encounter history, blocked profiles, and app settings.";
+"На устройстве хранятся имя и код пиксельного аватара, криптографические ключи, контакты, сообщения, сведения о встречах с людьми рядом, список блокировок и настройки приложения." = "Your device stores your name and pixel avatar seed, cryptographic keys, contacts, messages, nearby encounter history, blocked profiles, and app settings.";
 "Наведите камеру на QR-код Shum" = "Point the camera at a Shum QR code";
 "Назад" = "Back";
 "Найти людей" = "Find people";

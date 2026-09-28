@@ -117,16 +117,16 @@ private extension ShumLegalDocument {
         case (.privacy, true):
             return ShumLegalContent(
                 title: "Политика конфиденциальности".localized,
-                updatedAt: "Обновлено 26 сентября 2026 года".localized,
+                updatedAt: "Обновлено 28 сентября 2026 года".localized,
                 introduction: "Shum — мессенджер без центрального сервера учётных записей. Для работы не нужны номер телефона, адрес электронной почты или внешний аккаунт.".localized,
                 sections: [
                     ShumLegalSection(
                         title: "Какие данные использует Shum".localized,
                         paragraphs: [
-                            "На устройстве хранятся имя и необязательная фотография профиля, криптографические ключи, контакты, сообщения, сведения о встречах с людьми рядом, список блокировок и настройки приложения.".localized,
-                            "Когда обнаружение включено, Shum использует Bluetooth, чтобы находить другие устройства рядом. Людям рядом может передаваться подписанная карточка профиля с именем и фотографией, если она добавлена. Shum не определяет и не сохраняет точные координаты устройства.".localized,
+                            "На устройстве хранятся имя и код пиксельного аватара, криптографические ключи, контакты, сообщения, сведения о встречах с людьми рядом, список блокировок и настройки приложения.".localized,
+                            "Когда обнаружение включено, Shum использует Bluetooth, чтобы находить другие устройства рядом. Людям рядом может передаваться подписанная карточка профиля с именем и кодом пиксельного аватара. Shum не определяет и не сохраняет точные координаты устройства.".localized,
                             "Для доставки сообщений через интернет Shum подключается к общедоступным Nostr-релеям. Релеи получают зашифрованные пакеты и технические данные, необходимые для доставки. Они не получают открытый текст сообщений, но могут видеть IP-адрес, время соединения и другие сетевые данные. Каждый релей работает по собственным правилам, которые Shum не контролирует.".localized,
-                            "Камера используется только для создания фотографии профиля и сканирования QR-кодов. Выбранные фотографии обрабатываются на устройстве. Системный выбор контакта передаёт Shum только выбранные пользователем данные; приложение не загружает адресную книгу.".localized,
+                            "Камера используется для сканирования QR-кодов. Выбранное изображение QR-кода обрабатывается на устройстве. Системный выбор контакта передаёт Shum только выбранные пользователем данные; приложение не загружает адресную книгу.".localized,
                             "Shum не содержит рекламы, аналитики и средств отслеживания. Разработчики Shum не продают персональные данные.".localized
                         ]
                     ),
@@ -182,7 +182,7 @@ private extension ShumLegalDocument {
                     ShumLegalSection(
                         title: "Ответственность пользователя".localized,
                         paragraphs: [
-                            "Вы отвечаете за имя, фотографию, сообщения и другие данные, которыми делитесь через Shum.".localized
+                            "Вы отвечаете за имя, аватар, сообщения и другие данные, которыми делитесь через Shum.".localized
                         ]
                     ),
                     ShumLegalSection(
@@ -210,16 +210,16 @@ private extension ShumLegalDocument {
         case (.privacy, false):
             return ShumLegalContent(
                 title: "Privacy Policy",
-                updatedAt: "Updated September 26, 2026",
+                updatedAt: "Updated September 28, 2026",
                 introduction: "Shum is a messenger without a central account server. It does not require a phone number, email address, or external account.",
                 sections: [
                     ShumLegalSection(
                         title: "Data used by Shum",
                         paragraphs: [
-                            "Your device stores your name and optional profile photo, cryptographic keys, contacts, messages, nearby encounter history, blocked profiles, and app settings.",
-                            "When discovery is enabled, Shum uses Bluetooth to find nearby devices. A signed profile card containing your name and photo, if provided, may be shared with nearby people. Shum does not determine or store your precise location.",
+                            "Your device stores your name and pixel avatar seed, cryptographic keys, contacts, messages, nearby encounter history, blocked profiles, and app settings.",
+                            "When discovery is enabled, Shum uses Bluetooth to find nearby devices. A signed profile card containing your name and pixel avatar seed may be shared with nearby people. Shum does not determine or store your precise location.",
                             "For internet delivery, Shum connects to public Nostr relays. Relays receive encrypted packets and technical data needed for delivery. They cannot read message text, but may see your IP address, connection time, and other network metadata. Each relay follows rules outside Shum's control.",
-                            "The camera is used only for profile photos and QR scanning. Selected photos are processed on the device. The system contact picker gives Shum only the information you choose; the app does not upload your address book.",
+                            "The camera is used to scan QR codes. A selected image containing a QR code is processed on the device. The system contact picker gives Shum only the information you choose; the app does not upload your address book.",
                             "Shum contains no advertising, analytics, or tracking, and its developers do not sell personal data."
                         ]
                     ),
@@ -273,7 +273,7 @@ private extension ShumLegalDocument {
                     ShumLegalSection(
                         title: "Your responsibility",
                         paragraphs: [
-                            "You are responsible for the name, photo, messages, and other information you share through Shum."
+                            "You are responsible for the name, avatar, messages, and other information you share through Shum."
                         ]
                     ),
                     ShumLegalSection(

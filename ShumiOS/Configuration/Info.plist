@@ -41,7 +41,7 @@
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Bluetooth нужен для поиска людей рядом и зашифрованной переписки без интернета.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Камера нужна для фото профиля и сканирования QR-кода контакта Shum.</string>
+	<string>Камера нужна для сканирования QR-кодов Shum.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Face ID защищает доступ к переписке и настройкам Shum.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
