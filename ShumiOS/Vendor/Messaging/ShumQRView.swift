@@ -1,10 +1,6 @@
 #if os(iOS)
-import BitFoundation
-import Contacts
-import ContactsUI
 import CoreImage.CIFilterBuiltins
 import SwiftUI
-import Vision
 
 private struct ShumQRShareToolbar: ToolbarContent {
     let invitationURL: URL

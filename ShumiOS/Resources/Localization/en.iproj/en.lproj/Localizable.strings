@@ -534,7 +534,6 @@
 "Пока можно отправить до 255 байт текста. Разделите сообщение на несколько частей." = "Messages can currently contain up to 255 bytes of text. Split the message into several parts.";
 "Пока не встречались" = "No encounters yet";
 "Пока тихо" = "Quiet for now";
-"Покажите QR-код, чтобы вас добавили в Shum. Имя и аватар появятся даже без интернета." = "Show your QR code to connect on Shum. Your name and avatar appear even without internet.";
 "Покажите этот QR-код собеседнику. Затем отсканируйте его код, чтобы подтвердить сохранённый ключ контакта." = "Show this QR code to the other person. Then scan their code to verify the saved contact key.";
 "Политика конфиденциальности" = "Privacy Policy";
 "Полные тексты лицензий компонентов, входящих в приложение, доступны в разделе «Сторонние лицензии» на экране «О приложении»." = "The complete license texts for components included in the app are available under Third-Party Licenses on the About screen.";
