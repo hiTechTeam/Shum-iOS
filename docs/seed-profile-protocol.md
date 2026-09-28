@@ -43,12 +43,15 @@ renders the avatar locally and asks the user whether to save the contact.
 Saving a contact does not accept a chat invitation.
 
 Shared links use `/invite#c4/<same-payload>` on the configured HTTPS gateway.
-The fragment does not reach the web server. The landing page needs the matching
-`feature/seed-avatar-invitations` server change before releasing shared links.
-The browser page itself requires connectivity; scanning a QR or importing its
-payload does not. Legacy `c`, `c3`, `contact` and `c2` inputs are still read. Old `c2`
-locators still need the former online lookup because they have no profile data.
-An already shared QR is an immutable snapshot, never a live pointer to a new avatar.
+The fragment does not reach the web server. The push server's invitation page
+accepts c4 links; deploying that server version is required before distributing
+links from this app version.
+The browser page itself requires connectivity. Once the c4 payload reaches the
+app, importing it needs no network lookup. The short c2 QR still requires an
+online lookup because it has no profile data. Legacy `c`, `c3`, `contact` and
+`c2` inputs are still read.
+An already shared c4 link is an immutable profile snapshot. The short c2 QR is
+a locator and resolves the currently available profile through the network.
 
 ## Delivery
 

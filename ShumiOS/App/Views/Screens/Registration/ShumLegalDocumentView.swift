@@ -164,7 +164,7 @@ private extension ShumLegalDocument {
         case (.terms, true):
             return ShumLegalContent(
                 title: "Правила использования".localized,
-                updatedAt: "Обновлено 13 сентября 2026 года".localized,
+                updatedAt: "Обновлено 28 сентября 2026 года".localized,
                 introduction: "Shum позволяет находить людей рядом по Bluetooth и обмениваться зашифрованными сообщениями напрямую или через общедоступные Nostr-релеи.".localized,
                 sections: [
                     ShumLegalSection(
