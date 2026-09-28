@@ -109,7 +109,9 @@ struct ShumQRView: View {
     }
 
     private func profileCard(qrImage: UIImage) -> some View {
-        VStack(spacing: 0) {
+        let qrFrameSize = qrFrameSize(for: qrImage)
+
+        return VStack(spacing: 0) {
             ShumAvatar(
                 name: card.name,
                 size: 62,
@@ -136,7 +138,7 @@ struct ShumQRView: View {
                     .interpolation(.none)
                     .resizable()
                     .scaledToFit()
-                    .padding(20)
+                    .padding(12)
 
                 Image.shumLogo
                     .renderingMode(.template)
@@ -154,7 +156,7 @@ struct ShumQRView: View {
                     .foregroundStyle(.black)
                     .frame(width: 30, height: 30)
             }
-            .frame(width: 252, height: 252)
+            .frame(width: qrFrameSize, height: qrFrameSize)
             .background(.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             .padding(.top, 28)
             .accessibilityElement(children: .ignore)
@@ -170,8 +172,17 @@ struct ShumQRView: View {
         .padding(.horizontal, 30)
     }
 
+    private func qrFrameSize(for image: UIImage) -> CGFloat {
+        // The generator is rendered at 6 px per matrix module below. Preserve
+        // the large physical module size of the original compact Shum QR while
+        // allowing the self-contained profile matrix to use more modules.
+        let moduleCount = image.size.width / 6
+        let quietZone: CGFloat = 24
+        return min(max(moduleCount * 5.15 + quietZone, 252), 306)
+    }
+
     private func qr(_ text: String) -> UIImage? {
-        let filter = CIFilter.qrCodeGenerator(); filter.message = Data(text.utf8); filter.correctionLevel = "M"
+        let filter = CIFilter.qrCodeGenerator(); filter.message = Data(text.utf8); filter.correctionLevel = "L"
         guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 6, y: 6)), let image = CIContext().createCGImage(output, from: output.extent) else { return nil }
         return UIImage(cgImage: image)
     }
