@@ -53,19 +53,23 @@ struct LocalCardTests {
         #expect(jpegFiles.isEmpty)
     }
 
-    @Test func registrationPreviewUsesTheSeedSavedWithTheNewIdentity() throws {
+    @Test func registrationPreviewUsesThePreparedIdentitySeed() throws {
         let (store, url, _) = makeStore()
         defer { try? FileManager.default.removeItem(at: url) }
+        try store.prepareSigningKey()
+        #expect(store.ownManifest == nil)
         let model = ProfilePhotoViewModel(store: store)
-        model.prepareRegistrationAvatar()
+        let identityPublicKey = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+        let identitySeed = ShumPixelAvatarGenerator.seed(for: identityPublicKey)
+        model.prepareRegistrationAvatar(seed: identitySeed)
         let previewSeed = try #require(model.avatarSeed)
         #expect(model.uiImage != nil)
-        #expect(previewSeed == (try store.defaultAvatarSeed()))
+        #expect(previewSeed == identitySeed)
 
         let saved = try store.saveOwn(name: "Аня", bio: nil, photo: nil,
             avatarSeed: previewSeed)
         #expect(saved.body.avatarSeed == previewSeed)
-        #expect(previewSeed == ShumPixelAvatarGenerator.seed(for: saved.publicKey))
+        #expect(previewSeed == ShumPixelAvatarGenerator.seed(for: identityPublicKey))
     }
 
     @Test func identitySurvivesNameAndUsernameEdits() throws {

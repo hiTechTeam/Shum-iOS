@@ -28,7 +28,9 @@ struct LocalCardRegistration: View {
 private struct LocalCardPhotoRegistration: View {
     let name: String
     @ObservedObject var photoViewModel: ProfilePhotoViewModel
-    @State private var showSecurityCreation = false
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @State private var showSecurityReady = false
+    @State private var showSaveError = false
 
     var body: some View {
         VStack(spacing: 28) {
@@ -42,18 +44,31 @@ private struct LocalCardPhotoRegistration: View {
             )
             Spacer()
             RegistrationPrimaryButton(title: Inc.Onboarding.photoNext.localized,
-                isEnabled: true, accentColor: .accentColor) { showSecurityCreation = true }
+                isEnabled: photoViewModel.avatarSeed != nil, accentColor: .accentColor) {
+                    continueRegistration()
+                }
                 .padding(.bottom, 20)
         }
         .padding(.horizontal, 24).background(ShumThemeCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { photoViewModel.prepareRegistrationAvatar() }
-        .navigationDestination(isPresented: $showSecurityCreation) {
-            RegistrationSecurityCreationView(
-                name: name,
-                avatarSeed: photoViewModel.avatarSeed
-            )
+        .navigationDestination(isPresented: $showSecurityReady) {
+            RegistrationSecurityReadyView()
         }
+        .alert("Не удалось создать защиту".localized, isPresented: $showSaveError) {
+            Button("Понятно".localized, role: .cancel) { }
+        } message: {
+            Text("Разблокируйте устройство и попробуйте ещё раз.".localized)
+        }
+    }
+
+    private func continueRegistration() {
+        guard let seed = photoViewModel.avatarSeed,
+              coordinator.authCodeViewModel.save(name: name, photo: nil, avatarSeed: seed),
+              coordinator.prepareRegistrationSecurity() else {
+            showSaveError = true
+            return
+        }
+        showSecurityReady = true
     }
 }
 

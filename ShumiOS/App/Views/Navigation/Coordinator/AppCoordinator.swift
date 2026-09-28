@@ -128,13 +128,31 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         synchronizeProfile()
     }
     @discardableResult
+    func prepareInitialRegistrationIdentity() -> Bool {
+        guard !deletingProfile, !isRegistered, LocalCardStore.shared.ownManifest == nil else {
+            return false
+        }
+        do { try LocalCardStore.shared.prepareSigningKey() }
+        catch { return false }
+        createMessaging(bluetoothEnabled: false)
+        guard chat?.isReady == true, let card = chat?.permanent?.ownCard else {
+            return false
+        }
+        let seed = ShumPixelAvatarGenerator.seed(for: card.noiseKey)
+        profilePhotoViewModel.prepareRegistrationAvatar(seed: seed)
+        return profilePhotoViewModel.avatarSeed != nil
+    }
+    @discardableResult
     func prepareRegistrationSecurity() -> Bool {
         guard !deletingProfile, LocalCardStore.shared.ownManifest != nil else {
             return false
         }
         createMessaging(bluetoothEnabled: false)
         synchronizeProfile()
-        return chat?.isReady == true && chat?.permanent?.ownCard.id.isEmpty == false
+        guard let own = LocalCardStore.shared.ownManifest else { return false }
+        return chat?.isReady == true
+            && chat?.permanent?.ownCard.name == own.body.name
+            && chat?.permanent?.ownCard.avatarSeed == own.body.avatarSeed
     }
     var identityFingerprint: String? {
         guard let value = chat?.permanent?.ownCard.id, !value.isEmpty else {

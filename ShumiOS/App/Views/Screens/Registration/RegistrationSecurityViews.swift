@@ -5,9 +5,6 @@ struct RegistrationSecurityCreationView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var coordinator: AppCoordinator
 
-    let name: String
-    let avatarSeed: UInt64?
-
     @State private var stage = 0
     @State private var animationStartedAt = Date()
     @State private var isRunning = false
@@ -128,7 +125,7 @@ struct RegistrationSecurityCreationView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .navigationDestination(isPresented: $showReady) {
-            RegistrationSecurityReadyView()
+            LocalCardRegistration(photoViewModel: coordinator.profilePhotoViewModel)
         }
         .alert("Не удалось создать защиту".localized, isPresented: $showError) {
             Button("Повторить".localized) {
@@ -168,12 +165,7 @@ struct RegistrationSecurityCreationView: View {
             guard !Task.isCancelled else { return }
             softFeedback.impactOccurred(intensity: 0.65)
 
-            let saved = coordinator.authCodeViewModel.save(
-                name: name,
-                photo: nil,
-                avatarSeed: avatarSeed
-            )
-            let prepared = saved && coordinator.prepareRegistrationSecurity()
+            let prepared = coordinator.prepareInitialRegistrationIdentity()
 
             try await Task.sleep(nanoseconds: 1_150_000_000)
             guard !Task.isCancelled else { return }

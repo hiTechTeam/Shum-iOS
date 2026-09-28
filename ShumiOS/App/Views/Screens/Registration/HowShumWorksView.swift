@@ -55,7 +55,7 @@ struct HowShumWorksView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .animation(.easeInOut(duration: 0.25), value: page)
         .navigationDestination(isPresented: $showRegistration) {
-            LocalCardRegistration(photoViewModel: coordinator.profilePhotoViewModel)
+            RegistrationSecurityCreationView()
         }
     }
 

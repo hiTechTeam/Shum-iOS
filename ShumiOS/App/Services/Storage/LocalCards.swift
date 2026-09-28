@@ -190,9 +190,9 @@ final class LocalCardStore: @unchecked Sendable {
 
     var ownManifest: LocalCardManifest? { lock.withLock { own } }
 
-    func defaultAvatarSeed() throws -> UInt64 {
+    func prepareSigningKey() throws {
         try lock.withLock {
-            ShumPixelAvatarGenerator.seed(for: try signingKey().publicKey.rawRepresentation)
+            _ = try signingKey()
         }
     }
 
