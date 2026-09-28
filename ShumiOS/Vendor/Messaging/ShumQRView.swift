@@ -6,17 +6,6 @@ import CoreImage.CIFilterBuiltins
 import SwiftUI
 import Vision
 
-private struct ShumQRShareToolbar: ToolbarContent {
-    let invitationURL: URL
-
-    var body: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            ShareLink(item: invitationURL)
-                .tint(.primary)
-                .accessibilityLabel("Поделиться контактом Shum".localized)
-        }
-    }
-}
 struct ShumQRView: View {
     let card: ShumContactCard
     var resolve: ShumContactResolving?
@@ -88,12 +77,18 @@ struct ShumQRView: View {
             }
         }
         .shumAllowsScreenshots()
-        .navigationTitle("QR-код".localized)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if let invitationURL = try? card.sharingInvitation() {
-                ShumQRShareToolbar(invitationURL: invitationURL)
-            }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { gesture in
+                    guard gesture.startLocation.x < 24,
+                          gesture.translation.width > 80,
+                          abs(gesture.translation.height) < 60 else { return }
+                    dismiss()
+                }
+        )
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            navigationHeader
         }
         .fullScreenCover(isPresented: $showScanner) {
             ShumScanView(resolve: resolve) { scannedCard in
@@ -106,6 +101,51 @@ struct ShumQRView: View {
                 }
             }
         }
+    }
+
+    // Keep the original flat, 44-point navigation row on every iOS version.
+    // The system bar adds glass capsules and a taller row on iOS 26.
+    private var navigationHeader: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Text("QR-код".localized)
+                    .font(.system(size: 17, weight: .semibold))
+                    .accessibilityAddTraits(.isHeader)
+
+                HStack(spacing: 0) {
+                    Button { dismiss() } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 20, weight: .semibold))
+                            Text(card.name)
+                                .font(.system(size: 17))
+                                .lineLimit(1)
+                        }
+                        .frame(height: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .frame(maxWidth: max(44, (geometry.size.width - 120) / 2), alignment: .leading)
+                    .accessibilityLabel("Назад".localized)
+
+                    Spacer(minLength: 0)
+
+                    if let invitationURL = try? card.sharingInvitation() {
+                        ShareLink(item: invitationURL) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 24, weight: .regular))
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("Поделиться контактом Shum".localized)
+                    }
+                }
+                .padding(.horizontal, 8)
+            }
+            .foregroundStyle(.primary)
+            .buttonStyle(.plain)
+        }
+        .frame(height: 44)
+        .background(ShumThemeCanvas())
     }
 
     private func profileCard(qrImage: UIImage) -> some View {
