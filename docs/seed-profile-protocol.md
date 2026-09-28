@@ -26,7 +26,7 @@ Historical message envelopes retain their original signed snapshots.
 
 ## QR and links
 
-New QR payloads are `shum://c4/<base64url>`. The compact binary payload contains:
+Self-contained invitation payloads are `shum://c4/<base64url>`. The compact binary payload contains:
 
 - format byte 4, contact-card version byte
 - 32-byte Noise, signing and Nostr public keys
@@ -36,7 +36,9 @@ New QR payloads are `shum://c4/<base64url>`. The compact binary payload contains
 - little-endian UInt64 profile revision
 - one 64-byte signature over the complete public profile
 
-There is no image and no network lookup. The receiver verifies the payload,
+The profile QR screen uses the original short `shum://c2/<base64url-nostr-key>` locator and original 252-point layout. It uses the existing internet lookup and requires the owner to be reachable. It does not carry the avatar seed itself.
+
+The full c4 invitation remains in shared links. It contains no image and needs no network lookup once its payload reaches Shum. The receiver verifies the payload,
 renders the avatar locally and asks the user whether to save the contact.
 Saving a contact does not accept a chat invitation.
 

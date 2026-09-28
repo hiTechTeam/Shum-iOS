@@ -35,7 +35,7 @@ struct ShumQRView: View {
     }
 
     private var invitationURL: URL? {
-        try? card.invitation()
+        try? card.compactQRInvitation()
     }
 
     private var avatarData: Data? {
@@ -58,7 +58,7 @@ struct ShumQRView: View {
                             profileCard(qrImage: image)
                                 .padding(.top, 54)
 
-                            Text("Покажите QR-код, чтобы вас добавили в Shum. Имя и аватар появятся даже без интернета.".localized)
+                            Text("Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытый идентификатор.".localized)
                                 .font(.system(size: 15, weight: .regular))
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -92,7 +92,7 @@ struct ShumQRView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let invitationURL = try? card.sharingInvitation() {
-                ShumQRShareToolbar(invitationURL: (try? card.sharingInvitation()) ?? invitationURL)
+                ShumQRShareToolbar(invitationURL: invitationURL)
             }
         }
         .fullScreenCover(isPresented: $showScanner) {
@@ -109,9 +109,7 @@ struct ShumQRView: View {
     }
 
     private func profileCard(qrImage: UIImage) -> some View {
-        let qrFrameSize = qrFrameSize(for: qrImage)
-
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             ShumAvatar(
                 name: card.name,
                 size: 62,
@@ -138,7 +136,7 @@ struct ShumQRView: View {
                     .interpolation(.none)
                     .resizable()
                     .scaledToFit()
-                    .padding(12)
+                    .padding(20)
 
                 Image.shumLogo
                     .renderingMode(.template)
@@ -156,7 +154,7 @@ struct ShumQRView: View {
                     .foregroundStyle(.black)
                     .frame(width: 30, height: 30)
             }
-            .frame(width: qrFrameSize, height: qrFrameSize)
+            .frame(width: 252, height: 252)
             .background(.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             .padding(.top, 28)
             .accessibilityElement(children: .ignore)
@@ -172,17 +170,8 @@ struct ShumQRView: View {
         .padding(.horizontal, 30)
     }
 
-    private func qrFrameSize(for image: UIImage) -> CGFloat {
-        // The generator is rendered at 6 px per matrix module below. Preserve
-        // the large physical module size of the original compact Shum QR while
-        // allowing the self-contained profile matrix to use more modules.
-        let moduleCount = image.size.width / 6
-        let quietZone: CGFloat = 24
-        return min(max(moduleCount * 5.15 + quietZone, 252), 306)
-    }
-
     private func qr(_ text: String) -> UIImage? {
-        let filter = CIFilter.qrCodeGenerator(); filter.message = Data(text.utf8); filter.correctionLevel = "L"
+        let filter = CIFilter.qrCodeGenerator(); filter.message = Data(text.utf8); filter.correctionLevel = "H"
         guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 6, y: 6)), let image = CIContext().createCGImage(output, from: output.extent) else { return nil }
         return UIImage(cgImage: image)
     }

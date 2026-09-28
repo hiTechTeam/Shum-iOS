@@ -118,6 +118,22 @@ struct ShumContactCard: Codable, Equatable {
             }
         }
     }
+    /// Short locator for the original sparse QR; profile resolution requires the existing internet lookup.
+    func compactQRInvitation() throws -> URL {
+        try validate()
+        guard let nostrKey = Data(hexString: nostrKey), nostrKey.count == 32 else {
+            throw ShumFailure.invalidContact
+        }
+        let encoded = nostrKey.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        guard let result = URL(string: "shum://c2/\(encoded)") else {
+            throw ShumFailure.invalidContact
+        }
+        return result
+    }
+
     func invitation() throws -> URL {
         try validate()
         guard let seed = avatarSeed, let avatarVersion, let profileRevision,
@@ -150,7 +166,7 @@ struct ShumContactCard: Codable, Equatable {
 
     /// HTTPS links are recognized by messengers. Keep the public profile in the
     /// fragment so opening the landing page does not send it to the server.
-    /// The same signed payload is used by QR codes and links.
+    /// Shared links carry the full signed profile; the displayed QR uses a short locator.
     func sharingInvitation(baseURL: URL? = nil) throws -> URL {
         let configuredURL = (Bundle.main.object(forInfoDictionaryKey: "ShumPushAPIBaseURL") as? String)
             .flatMap(URL.init(string:))
