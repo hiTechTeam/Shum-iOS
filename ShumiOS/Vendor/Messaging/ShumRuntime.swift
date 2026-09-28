@@ -146,7 +146,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewEmptyChat") { model.messages = [] }
         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewLongBio") {
             let bio = String(String(repeating: "Люблю прогулки, новые знакомства и разговоры о том, что вдохновляет. ", count: 3).prefix(ShumProfile.maxBioCharacters))
-            model.profiles.seedPreview(ShumProfile(name: "Аня", bio: bio, avatar: ShumAvatarCodec.diagnosticPhoto(seed: 64)), for: peer)
+            model.profiles.seedPreview(ShumProfile(name: "Аня", bio: bio, avatarSeed: 64), for: peer)
         }
         return model
     }
@@ -221,8 +221,8 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         profileChanges = profiles.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         #if DEBUG && os(iOS)
         if let run = defaults.string(forKey: "ShumSelfTestRun") {
-            let seed = nickname.utf8.reduce(0) { ($0 + Int($1)) % 255 }
-            try? profiles.save(ShumProfile(name: nickname, bio: "Проверка профиля \(run)", avatar: ShumAvatarCodec.diagnosticPhoto(seed: seed)))
+            let seed = ShumPixelAvatarGenerator.seed(for: Data(nickname.utf8))
+            try? profiles.save(ShumProfile(name: nickname, bio: "Проверка профиля \(run)", avatarSeed: seed))
         }
         #endif
     }
@@ -302,24 +302,28 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             error = "Введите короткое имя без служебных символов.".localized
             return false
         }
-        return saveProfile(name: valid, bio: profiles.own.bio, avatar: profiles.own.avatar)
+        let seed = profiles.own.avatarSeed
+            ?? permanent?.ownCard.avatarSeed
+            ?? ShumPixelAvatarGenerator.seed(for: transport.noiseStaticPublicKeyData())
+        return saveProfile(name: valid, bio: profiles.own.bio, avatarSeed: seed)
     }
 
-    func saveProfile(name: String, bio: String, avatar: Data?) -> Bool {
-        guard !retired else { return false }
-        guard let valid = InputValidator.validateNickname(name), valid.utf8.count <= 64 else {
-            error = "Введите короткое имя без служебных символов.".localized; return false
-        }
-        let profile = ShumProfile(name: valid, bio: bio.trimmingCharacters(in: .whitespacesAndNewlines), avatar: avatar)
-        guard profile.valid else { error = String.localizedFormat("Описание — до %@ символов. Попробуйте выбрать фото ещё раз.".localized, ShumProfile.maxBioCharacters); return false }
-        do { try profiles.save(profile) }
-        catch { self.error = "Не удалось сохранить профиль. Попробуйте ещё раз.".localized; return false }
-        do { try permanent?.updateProfile(name: valid, bio: profile.bio) }
-        catch { self.error = error.localizedDescription; return false }
-        nickname = valid
-        defaults.set(valid, forKey: Self.nicknameKey)
-        transport.setNickname(valid)
-        return true
+    func saveProfile(name: String, bio: String, avatarSeed: UInt64) -> Bool {
+        guard !retired, let valid = InputValidator.validateNickname(name),
+              valid.utf8.count <= 64 else { return false }
+        let profile = ShumProfile(name: valid,
+            bio: bio.trimmingCharacters(in: .whitespacesAndNewlines),
+            avatarSeed: avatarSeed).rendered()
+        guard profile.valid else { return false }
+        do {
+            try profiles.save(profile)
+            try permanent?.updateProfile(name: profile.name, bio: profile.bio,
+                avatarSeed: avatarSeed)
+            nickname = valid
+            defaults.set(valid, forKey: Self.nicknameKey)
+            transport.setNickname(valid)
+            return true
+        } catch { return false }
     }
 
     func displayName(_ peer: ShumPeer) -> String {
@@ -360,23 +364,30 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     }
     func profile(for peer: PeerID) -> ShumProfile? {
         if let permanent, let card = permanent.card(for: peer) {
-            let avatar = permanent.session(for: card).flatMap { profiles.remote[$0]?.avatar }
-                ?? profiles.remote[card.peerID]?.avatar
-                ?? permanent.avatar(for: card)
-            return ShumProfile(name: card.name, bio: card.bio, avatar: avatar)
+            let remote = permanent.session(for: card).flatMap { profiles.remote[$0] }
+                ?? profiles.remote[card.peerID]
+            let seed = remote?.avatarSeed ?? card.avatarSeed
+                ?? ShumPixelAvatarGenerator.seed(for: card.noiseKey)
+            return ShumProfile(name: card.name, bio: card.bio,
+                avatarSeed: seed).rendered()
         }
         if let encounter = permanent?.state.encounters?.first(where: { $0.card.peerID == peer }) {
-            return ShumProfile(name: encounter.card.name, bio: encounter.card.bio, avatar: encounter.avatar)
+            let seed = encounter.card.avatarSeed
+                ?? ShumPixelAvatarGenerator.seed(for: encounter.card.noiseKey)
+            return ShumProfile(name: encounter.card.name, bio: encounter.card.bio,
+                avatarSeed: seed).rendered()
         }
-        return profiles.remote[peer]
+        if let remote = profiles.remote[peer] {
+            let seed = remote.avatarSeed ?? ShumPixelAvatarGenerator.seed(for: Data(peer.id.utf8))
+            return ShumProfile(name: remote.name, bio: remote.bio,
+                avatarSeed: seed).rendered()
+        }
+        return nil
     }
     func addContact(_ card: ShumContactCard, source: String) -> ShumPeer? {
         do {
             guard let permanent else { throw ShumFailure.unavailableIdentity }
-            let avatar = permanent.session(for: card).flatMap { profiles.remote[$0]?.avatar }
-                ?? profiles.remote[card.peerID]?.avatar
-                ?? permanent.avatar(for: card)
-            try permanent.add(card, source: source, avatar: avatar)
+            try permanent.add(card, source: source, avatar: nil)
             return ShumPeer(id: card.peerID, name: card.name, lastConnected: Date())
         } catch { self.error = error.localizedDescription; return nil }
     }
@@ -637,14 +648,6 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                 }.map(\.id)),
                 active: true
             )
-            for peer in peers {
-                // A manifest can arrive before its photo. Keep the invitation
-                // thumbnail until the full profile has loaded successfully.
-                if let profile = profiles.remote[peer.id],
-                   !profiles.loading.contains(peer.id), !profiles.failed.contains(peer.id) {
-                    permanent.updateAvatar(profile.avatar, for: peer.id)
-                }
-            }
         } else if permanent == nil, appActive {
             advancePendingMessages()
         }

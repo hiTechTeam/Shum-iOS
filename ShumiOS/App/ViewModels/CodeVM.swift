@@ -21,12 +21,13 @@ final class LocalProfileViewModel: ObservableObject {
         localUsername = profile.username.map { "@" + $0 }
         bio = profile.bio; localPhotoURL = profile.photoUrl; isUsernameConfirmed = true
     }
-    @discardableResult func save(name: String, username: String? = nil, photo: Data?, photoEditing: LocalPhotoEditingState? = nil) -> Bool {
+    @discardableResult func save(name: String, username: String? = nil, photo: Data?, avatarSeed: UInt64? = nil, photoEditing: LocalPhotoEditingState? = nil) -> Bool {
         guard let name = ShumProfileValidation.name(name) else {
             saveError = "Введите короткое имя без служебных символов.".localized; return false
         }
         do {
-            try store.saveOwn(name: name, bio: bio, photo: photo, photoEditing: photoEditing)
+            try store.saveOwn(name: name, bio: bio, photo: photo,
+                avatarSeed: avatarSeed, photoEditing: photoEditing)
             restoreLocalProfile(); saveError = nil; return true
         } catch {
             saveError = "local.profile.save.error".localized

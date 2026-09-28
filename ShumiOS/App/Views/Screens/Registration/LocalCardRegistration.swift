@@ -33,8 +33,9 @@ private struct LocalCardPhotoRegistration: View {
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
-            Text("local.onboarding.photo.title").font(.largeTitle.bold()).multilineTextAlignment(.center)
-            Text("local.onboarding.photo.description").foregroundStyle(.secondary).multilineTextAlignment(.center)
+            Text("Пиксельный аватар".localized).font(.largeTitle.bold()).multilineTextAlignment(.center)
+            Text("Люди, звери, пришельцы и роботы. Перебирайте варианты, пока не найдёте своего.".localized)
+                .foregroundStyle(.secondary).multilineTextAlignment(.center)
             ProfilePhotoView(
                 viewModel: photoViewModel,
                 name: name
@@ -46,11 +47,11 @@ private struct LocalCardPhotoRegistration: View {
         }
         .padding(.horizontal, 24).background(ShumThemeCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { photoViewModel.prepareRegistrationAvatar() }
         .navigationDestination(isPresented: $showSecurityCreation) {
             RegistrationSecurityCreationView(
                 name: name,
-                photo: photoViewModel.preparedPhoto,
-                photoEditing: photoViewModel.photoEditing
+                avatarSeed: photoViewModel.avatarSeed
             )
         }
     }

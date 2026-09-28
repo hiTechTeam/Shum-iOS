@@ -667,6 +667,12 @@
 "Шифрование" = "Encryption";
 "Шифруем хранилище" = "Encrypting storage";
 "Шумное фото" = "Noise photo";
+"Пиксельный аватар" = "Pixel avatar";
+"Предпросмотр пиксельного аватара" = "Pixel avatar preview";
+"Создайте аватар без своего фото. Нажимайте, пока не найдёте подходящий." = "Create an avatar without using your photo. Keep trying until you find one you like.";
+"Люди, звери, пришельцы и роботы. Перебирайте варианты, пока не найдёте своего." = "People, animals, aliens and robots. Keep trying until you find your favourite.";
+"Другой вариант" = "Try another";
+"Поставить на аватар" = "Use this avatar";
 "Экран %@ из %@" = "Screen %@ of %@";
 "Эта версия iOS не поддерживает смену иконки." = "This iOS version does not support changing the app icon.";
 "Это подтверждает, что настройки меняете вы." = "This confirms that you are changing the settings.";

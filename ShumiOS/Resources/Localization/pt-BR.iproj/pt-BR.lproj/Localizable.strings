@@ -706,3 +706,8 @@
 "Когда вы отправляете сообщение или приглашение, приложение передаёт серверу вашу карточку, идентификатор получателя и тип события. Поэтому при обработке запроса сервер знает, какому профилю вы отправили уведомление. Эти сведения не сохраняются. Получатель видит уведомление без текста сообщения. Сервер не получает текст сообщений, фотографии и список контактов." = "Quando você envia uma mensagem ou um convite, o app envia ao servidor seu cartão, o identificador do destinatário e o tipo de evento. Por isso, ao processar a solicitação, o servidor sabe para qual perfil você enviou a notificação. Essas informações não são armazenadas. O destinatário vê uma notificação sem o texto da mensagem. O servidor não recebe o texto das mensagens, fotos nem sua lista de contatos.";
 "Сервер использует IP-адрес запроса только для ограничения частоты запросов и не сохраняет его. Инфраструктура хостинга может вести технические журналы соединений." = "O servidor usa o endereço IP da solicitação apenas para limitar a frequência de solicitações e não o armazena. A infraestrutura de hospedagem pode manter registros técnicos de conexão.";
 "При удалении профиля приложение также просит сервер уведомлений удалить токен устройства." = "Ao excluir seu perfil, o app também pede ao servidor de notificações que remova o token do dispositivo.";
+"Пиксельный аватар" = "Avatar em pixel art";
+"Предпросмотр пиксельного аватара" = "Prévia do avatar em pixel art";
+"Люди, звери, пришельцы и роботы. Перебирайте варианты, пока не найдёте своего." = "Pessoas, animais, alienígenas e robôs. Experimente até encontrar o seu favorito.";
+"Другой вариант" = "Tentar outro";
+"Поставить на аватар" = "Usar este avatar";

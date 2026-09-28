@@ -15,6 +15,7 @@ struct LocalCardBody: Codable, Equatable {
     let bio: String?
     let photoHash: String?
     let photoBytes: Int
+    var avatarSeed: UInt64?
 }
 
 struct LocalCardManifest: Codable, Equatable {
@@ -35,7 +36,7 @@ struct LocalCardManifest: Codable, Equatable {
     }
 
     func validate() throws {
-        guard [1, 2].contains(body.version), body.id == Self.identity(for: publicKey),
+        guard [1, 2, 3].contains(body.version), body.id == Self.identity(for: publicKey),
               (body.version == 1 ? Self.username(body.username) == body.username : body.username.isEmpty),
               !body.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               body.name.count <= 64, body.name.utf8.count <= 256,
@@ -44,6 +45,8 @@ struct LocalCardManifest: Codable, Equatable {
               body.photoBytes >= 0, body.photoBytes <= LocalCardPhoto.maximumBytes,
               body.photoHash.map({ LocalCardPhoto.validHash($0) && body.photoBytes > 0 })
                 ?? (body.photoBytes == 0),
+              (body.version == 3) == (body.avatarSeed != nil),
+              body.avatarSeed == nil || body.photoHash == nil,
               publicKey.count == 32, signature.count == 64 else {
             throw LocalCardError.invalidProfile
         }
@@ -186,6 +189,21 @@ final class LocalCardStore: @unchecked Sendable {
     }
 
     var ownManifest: LocalCardManifest? { lock.withLock { own } }
+
+    func defaultAvatarSeed() throws -> UInt64 {
+        try lock.withLock {
+            ShumPixelAvatarGenerator.seed(for: try signingKey().publicKey.rawRepresentation)
+        }
+    }
+
+    private func signingKey() throws -> Curve25519.Signing.PrivateKey {
+        if let bytes = try secureStore.data(for: keyName) {
+            return try Curve25519.Signing.PrivateKey(rawRepresentation: bytes)
+        }
+        let key = Curve25519.Signing.PrivateKey()
+        try secureStore.set(key.rawRepresentation, for: keyName)
+        return key
+    }
     var ownPhotoEditing: LocalPhotoEditingState? { lock.withLock { photoEditing } }
     func photoURL(_ hash: String?) -> URL? {
         lock.withLock {
@@ -213,28 +231,27 @@ final class LocalCardStore: @unchecked Sendable {
         }
     }
     @discardableResult
-    func saveOwn(name: String, username: String? = nil, bio: String?, photo: Data?, photoEditing newEditing: LocalPhotoEditingState? = nil, preservePhotoEditing: Bool = true) throws -> LocalCardManifest {
+    func saveOwn(name: String, username: String? = nil, bio: String?, photo: Data?, avatarSeed: UInt64? = nil, photoEditing newEditing: LocalPhotoEditingState? = nil, preservePhotoEditing: Bool = true) throws -> LocalCardManifest {
         try lock.withLock {
             let normalizedUsername = username.flatMap(LocalCardManifest.username)
             if username != nil && normalizedUsername == nil { throw LocalCardError.invalidProfile }
-            let key: Curve25519.Signing.PrivateKey
-            if let bytes = try secureStore.data(for: keyName) {
-                key = try Curve25519.Signing.PrivateKey(rawRepresentation: bytes)
-            } else {
-                key = Curve25519.Signing.PrivateKey()
-                try secureStore.set(key.rawRepresentation, for: keyName)
-            }
+            let key = try signingKey()
             let publicKey = key.publicKey.rawRepresentation
-            let body = LocalCardBody(version: username == nil ? 2 : 1, id: LocalCardManifest.identity(for: publicKey),
+            let selectedSeed = avatarSeed ?? (photo == nil && username == nil
+                ? own?.body.avatarSeed ?? ShumPixelAvatarGenerator.seed(for: publicKey)
+                : nil)
+            let publishedPhoto = selectedSeed == nil ? photo : nil
+            let body = LocalCardBody(version: selectedSeed == nil ? (username == nil ? 2 : 1) : 3, id: LocalCardManifest.identity(for: publicKey),
                 name: name.trimmingCharacters(in: .whitespacesAndNewlines), username: normalizedUsername ?? "",
                 bio: bio.flatMap { $0.isEmpty ? nil : String($0.prefix(36)) },
-                photoHash: photo.map(LocalCardPhoto.hash), photoBytes: photo?.count ?? 0)
+                photoHash: publishedPhoto.map(LocalCardPhoto.hash), photoBytes: publishedPhoto?.count ?? 0,
+                avatarSeed: selectedSeed)
             let result = LocalCardManifest(body: body, publicKey: publicKey,
                 signature: try key.signature(for: LocalCardManifest.encodedBody(body)))
             try result.validate()
             if let newEditing, !newEditing.isValid(for: body.photoHash) { throw LocalCardError.invalidPhoto }
             let editing = newEditing ?? (preservePhotoEditing ? photoEditing.flatMap { $0.isValid(for: body.photoHash) ? $0 : nil } : nil)
-            if let photo { try cachePhoto(photo, hash: body.photoHash!) }
+            if let publishedPhoto { try cachePhoto(publishedPhoto, hash: body.photoHash!) }
             try write(LocalOwnCardRecord(manifest: result, photoEditing: editing), name: "own.json")
             own = result
             photoEditing = editing

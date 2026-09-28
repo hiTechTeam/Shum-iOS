@@ -417,7 +417,7 @@ A100000000000000000000003,
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "The app uses Bluetooth to detect nearby devices.";
 				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "We need Bluetooth to discover and connect to nearby mesh peers";
-				INFOPLIST_KEY_NSCameraUsageDescription = "We use the camera to select your profile photo.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "We use the camera to scan Shum QR codes.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -463,7 +463,7 @@ A100000000000000000000003,
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "The app uses Bluetooth to detect nearby devices.";
 				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "We need Bluetooth to discover and connect to nearby mesh peers";
-				INFOPLIST_KEY_NSCameraUsageDescription = "We use the camera to select your profile photo.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "We use the camera to scan Shum QR codes.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

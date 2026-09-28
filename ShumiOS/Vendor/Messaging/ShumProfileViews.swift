@@ -1,6 +1,5 @@
 #if os(iOS)
 import CoreImage.CIFilterBuiltins
-import PhotosUI
 import SwiftUI
 
 struct ShumKeyVerificationView: View {
@@ -16,6 +15,9 @@ struct ShumKeyVerificationView: View {
     private var invitationURL: URL? { try? ownCard?.invitation() }
     private var ownAvatar: Data? {
         guard let manifest = LocalCardStore.shared.ownManifest else { return nil }
+        if let seed = manifest.body.avatarSeed {
+            return ShumPixelAvatarGenerator.data(seed: seed)
+        }
         return LocalCardStore.shared.photo(manifest.body.photoHash)
     }
 

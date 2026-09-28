@@ -13,6 +13,7 @@ struct ShumProfile: Codable, Equatable {
     var name: String
     var bio: String = ""
     var avatar: Data?
+    var avatarSeed: UInt64?
     static let maxBioCharacters = 72
     static let maxAvatarBytes = 40 * 1024
 
@@ -32,6 +33,14 @@ struct ShumProfile: Codable, Equatable {
         !bio.unicodeScalars.contains { CharacterSet.controlCharacters.subtracting(.newlines).contains($0) } &&
         (avatar.map(Self.validAvatar) ?? true)
     }
+
+    @MainActor
+    func rendered() -> ShumProfile {
+        guard let avatarSeed else { return self }
+        var result = self
+        result.avatar = ShumPixelAvatarGenerator.data(seed: avatarSeed)
+        return result
+    }
 }
 
 struct ShumProfileManifest: Codable, Equatable {
@@ -39,14 +48,21 @@ struct ShumProfileManifest: Codable, Equatable {
     let bio: String
     let avatarHash: String?
     let avatarBytes: Int
-    var revision: String { ShumProfile.digest(Data((name + "\0" + bio + "\0" + (avatarHash ?? "")).utf8)) }
+    let avatarSeed: UInt64?
+    let avatarVersion: Int?
+    var revision: String { ShumProfile.digest(Data((name + "\0" + bio + "\0" + (avatarHash ?? "") + "\0" + (avatarSeed.map(String.init) ?? "") + "\0" + (avatarVersion.map(String.init) ?? "")).utf8)) }
     init(_ profile: ShumProfile) {
         name = profile.name; bio = profile.bio
-        avatarHash = profile.avatar.map(ShumProfile.digest); avatarBytes = profile.avatar?.count ?? 0
+        avatarSeed = profile.avatarSeed
+        avatarVersion = profile.avatarSeed.map { _ in ShumPixelAvatarGenerator.version }
+        avatarHash = avatarSeed == nil ? profile.avatar.map(ShumProfile.digest) : nil
+        avatarBytes = avatarSeed == nil ? profile.avatar?.count ?? 0 : 0
     }
     var valid: Bool {
         ShumProfile(name: name, bio: bio).valid && avatarBytes >= 0 && avatarBytes <= ShumProfile.maxAvatarBytes &&
-        (avatarHash.map { Self.validHash($0) && avatarBytes > 0 } ?? (avatarBytes == 0))
+        (avatarSeed == nil
+            ? avatarVersion == nil && (avatarHash.map { Self.validHash($0) && avatarBytes > 0 } ?? (avatarBytes == 0))
+            : avatarVersion == ShumPixelAvatarGenerator.version && avatarHash == nil && avatarBytes == 0)
     }
     static func validHash(_ hash: String) -> Bool { hash.count == 64 && hash.allSatisfy { "0123456789abcdef".contains($0) } }
 }
@@ -64,9 +80,8 @@ struct ShumProfilePacket: Codable {
     static let maxWireBytes = 6144
 }
 
-/// Own profile is persistent; remote identity-to-profile bindings are accepted from
-/// an encrypted BLE session or a cryptographically authenticated Nostr lookup.
-/// Only content-addressed images survive a restart.
+/// Own profile is persistent; remote profiles arrive through an encrypted BLE
+/// session or an authenticated Nostr lookup. Avatar pixels are regenerated locally.
 final class ShumProfileStore {
     private let directory: URL?
     init(directory: URL? = nil) { self.directory = directory }
@@ -84,25 +99,9 @@ final class ShumProfileStore {
     func saveOwn(_ profile: ShumProfile) throws {
         guard let directory else { return }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try JSONEncoder().encode(profile).write(to: directory.appendingPathComponent("own.json"), options: .atomic)
-    }
-    func avatar(_ hash: String) -> Data? {
-        guard ShumProfileManifest.validHash(hash), let directory,
-              let data = try? Data(contentsOf: directory.appendingPathComponent(hash + ".jpg")),
-              ShumProfile.digest(data) == hash, ShumProfile.validAvatar(data) else { return nil }
-        return data
-    }
-    func cache(_ data: Data, hash: String) {
-        guard ShumProfileManifest.validHash(hash), ShumProfile.digest(data) == hash,
-              ShumProfile.validAvatar(data), let directory else { return }
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try? data.write(to: directory.appendingPathComponent(hash + ".jpg"), options: .atomic)
-        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
-        let images = files.filter { $0.pathExtension == "jpg" }.sorted {
-            ((try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) >
-            ((try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast)
-        }
-        for file in images.dropFirst(60) { try? FileManager.default.removeItem(at: file) }
+        var stored = profile
+        stored.avatar = nil
+        try JSONEncoder().encode(stored).write(to: directory.appendingPathComponent("own.json"), options: .atomic)
     }
 }
 
@@ -114,8 +113,6 @@ final class ShumProfiles: ObservableObject {
     @Published private(set) var failed: Set<PeerID> = []
     private struct Pending {
         let request: String
-        var manifest: ShumProfileManifest?
-        var bytes = Data()
         var lastSent = Date.distantPast
         var attempts = 0
         var started: Date
@@ -137,7 +134,7 @@ final class ShumProfiles: ObservableObject {
          now: @escaping () -> Date = Date.init, connected: @escaping (PeerID) -> Bool,
          send: @escaping (Data, PeerID) -> Void) {
         self.store = store; self.now = now; self.connected = connected; self.send = send
-        own = store.loadOwn() ?? ShumProfile(name: name)
+        own = (store.loadOwn() ?? ShumProfile(name: name)).rendered()
     }
     func retire() {
         retired = true; appActive = false
@@ -147,8 +144,9 @@ final class ShumProfiles: ObservableObject {
     func save(_ profile: ShumProfile) throws {
         guard !retired else { throw ShumFailure.unavailableIdentity }
         guard profile.valid else { throw CocoaError(.validationMissingMandatoryProperty) }
-        try store.saveOwn(profile)
-        own = profile
+        let displayed = profile.rendered()
+        try store.saveOwn(displayed)
+        own = displayed
         for peer in peers where connected(peer) { emit(.init(kind: .changed), to: peer) }
     }
     func updatePeers(_ ids: Set<PeerID>) {
@@ -163,10 +161,7 @@ final class ShumProfiles: ObservableObject {
     }
     func acceptResolved(_ profile: ShumProfile, for peer: PeerID) {
         guard !retired, profile.valid else { return }
-        remote[peer] = profile
-        if let avatar = profile.avatar {
-            store.cache(avatar, hash: ShumProfile.digest(avatar))
-        }
+        remote[peer] = profile.rendered()
         loading.remove(peer)
         failed.remove(peer)
     }
@@ -202,9 +197,7 @@ final class ShumProfiles: ObservableObject {
     private func requestNext(_ peer: PeerID) {
         guard var item = pending[peer] else { return }
         item.lastSent = now(); item.attempts += 1; pending[peer] = item
-        if let manifest = item.manifest {
-            emit(.init(kind: .chunkRequest, request: item.request, hash: manifest.avatarHash, offset: item.bytes.count), to: peer)
-        } else { emit(.init(kind: .query, request: item.request), to: peer) }
+        emit(.init(kind: .query, request: item.request), to: peer)
     }
     func receive(_ data: Data, from peer: PeerID) {
         guard !retired else { return }
@@ -224,40 +217,21 @@ final class ShumProfiles: ObservableObject {
             guard now().timeIntervalSince(hints[peer] ?? .distantPast) >= 2 else { return }
             hints[peer] = now(); refresh(peer)
         case .manifest:
-            guard var item = pending[peer], item.request == packet.request,
-                  item.manifest == nil, let manifest = packet.manifest, manifest.valid else { return }
+            guard let item = pending[peer], item.request == packet.request,
+                  let manifest = packet.manifest, manifest.valid else { return }
             failed.remove(peer)
-            let previous = remote[peer]?.avatar
-            let cached = manifest.avatarHash.flatMap { hash in
-                previous.flatMap { ShumProfile.digest($0) == hash ? $0 : nil } ?? store.avatar(hash)
-            }
-            remote[peer] = ShumProfile(name: manifest.name, bio: manifest.bio, avatar: cached)
-            if manifest.avatarHash == nil || cached != nil {
+            if let seed = manifest.avatarSeed {
+                remote[peer] = ShumProfile(name: manifest.name, bio: manifest.bio,
+                    avatarSeed: seed).rendered()
                 finish(peer)
-            } else {
-                item.manifest = manifest; item.attempts = 0; item.bytes = Data(); pending[peer] = item
-                loading.insert(peer); requestNext(peer)
+                return
             }
+            remote[peer] = ShumProfile(name: manifest.name, bio: manifest.bio)
+            finish(peer)
         case .chunkRequest:
-            guard !packet.request.isEmpty, let avatar = own.avatar, let hash = packet.hash,
-                  hash == ShumProfile.digest(avatar), let offset = packet.offset,
-                  offset >= 0, offset < avatar.count, offset % ShumProfilePacket.chunkSize == 0 else { return }
-            let end = min(avatar.count, offset + ShumProfilePacket.chunkSize)
-            emit(.init(kind: .chunk, request: packet.request, hash: hash, offset: offset, data: avatar.subdata(in: offset..<end)), to: peer)
+            return
         case .chunk:
-            guard var item = pending[peer], item.request == packet.request,
-                  let manifest = item.manifest, packet.hash == manifest.avatarHash,
-                  packet.offset == item.bytes.count, let bytes = packet.data,
-                  bytes.count == min(ShumProfilePacket.chunkSize, manifest.avatarBytes - item.bytes.count), !bytes.isEmpty else { return }
-            item.bytes.append(bytes); item.attempts = 0; pending[peer] = item
-            if item.bytes.count == manifest.avatarBytes {
-                guard ShumProfile.digest(item.bytes) == manifest.avatarHash, ShumProfile.validAvatar(item.bytes) else {
-                    pending[peer] = nil; checked[peer] = now(); loading.remove(peer); failed.insert(peer); return
-                }
-                remote[peer] = ShumProfile(name: manifest.name, bio: manifest.bio, avatar: item.bytes)
-                store.cache(item.bytes, hash: manifest.avatarHash!)
-                finish(peer)
-            } else { requestNext(peer) }
+            return
         }
     }
     private func finish(_ peer: PeerID) {

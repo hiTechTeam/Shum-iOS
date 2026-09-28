@@ -6,8 +6,7 @@ struct RegistrationSecurityCreationView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
 
     let name: String
-    let photo: Data?
-    var photoEditing: LocalPhotoEditingState? = nil
+    let avatarSeed: UInt64?
 
     @State private var stage = 0
     @State private var animationStartedAt = Date()
@@ -171,8 +170,8 @@ struct RegistrationSecurityCreationView: View {
 
             let saved = coordinator.authCodeViewModel.save(
                 name: name,
-                photo: photo,
-                photoEditing: photoEditing
+                photo: nil,
+                avatarSeed: avatarSeed
             )
             let prepared = saved && coordinator.prepareRegistrationSecurity()
 

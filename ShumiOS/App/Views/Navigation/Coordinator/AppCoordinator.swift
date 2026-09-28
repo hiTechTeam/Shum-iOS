@@ -155,15 +155,25 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         updateApplicationState(isActive: active)
     }
     private func synchronizeProfile() {
-        guard !deletingProfile, let own = LocalCardStore.shared.ownManifest, let chat, chat.isReady else { return }
-        let avatar = LocalCardStore.shared.photo(own.body.photoHash)
-        let profile = ShumProfile(name: own.body.name, bio: own.body.bio ?? "", avatar: avatar)
-        if chat.profiles.own != profile { _ = chat.saveProfile(name: profile.name, bio: profile.bio, avatar: profile.avatar) }
+        guard !deletingProfile, var own = LocalCardStore.shared.ownManifest, let chat, chat.isReady else { return }
+        if own.body.avatarSeed == nil,
+           let migrated = try? LocalCardStore.shared.saveOwn(name: own.body.name,
+               bio: own.body.bio, photo: nil) {
+            own = migrated
+            profilePhotoViewModel.loadPhotoIfNeeded()
+        }
+        guard let seed = own.body.avatarSeed else { return }
+        let profile = ShumProfile(name: own.body.name, bio: own.body.bio ?? "",
+            avatarSeed: seed).rendered()
+        if chat.profiles.own != profile {
+            _ = chat.saveProfile(name: profile.name, bio: profile.bio, avatarSeed: seed)
+        }
     }
     func completedRegistration() {
         guard LocalCardStore.shared.ownManifest != nil else { return }
         UserDefaults.standard.set(false, forKey: Self.restoredPasscodeSetupKey)
         authCodeViewModel.restoreLocalProfile()
+        profilePhotoViewModel.loadPhotoIfNeeded()
         needsSecuritySetup = false
         isRegistered = true
         UserDefaults.standard.set(true, forKey: Keys.isReg.rawValue)

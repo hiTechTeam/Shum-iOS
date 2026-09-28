@@ -20,7 +20,6 @@ final class ShumMessageStore: ObservableObject {
     private let wire: ShumSecureTransport
     private let internet: ShumNostrService?
     private let now: () -> Date
-    private var profileProvider: (() -> ShumProfile?)?
     var ownCard: ShumContactCard
     var onError: ((String) -> Void)?
     private(set) var nearby: [PeerID: ShumContactCard] = [:]
@@ -57,7 +56,6 @@ final class ShumMessageStore: ObservableObject {
     var state: ShumDatabase { store.state }
 
     func configureContactLookup(profile: @escaping () -> ShumProfile?) {
-        profileProvider = profile
         internet?.configureContactLookup(
             card: { [weak self] in self?.ownCard },
             profile: profile
@@ -148,8 +146,9 @@ final class ShumMessageStore: ObservableObject {
         }
         else if backgroundFetchTask == nil { internet?.stop() }
     }
-    func updateProfile(name: String, bio: String) throws {
-        ownCard = try identity.card(name: name, bio: bio); helloTimes.removeAll()
+    func updateProfile(name: String, bio: String, avatarSeed: UInt64? = nil) throws {
+        ownCard = try identity.card(name: name, bio: bio, avatarSeed: avatarSeed)
+        helloTimes.removeAll()
         ShumPushService.shared.configure(card: ownCard) { [weak transport] data in
             transport?.noiseSignData(data)
         }
@@ -346,15 +345,6 @@ final class ShumMessageStore: ObservableObject {
             throw ShumFailure.unavailableIdentity
         }
         control.signature = signature
-        var attachment: ShumInvitationAvatar?
-        if action != .decline, let photo = profileProvider?()?.avatar,
-           let thumbnail = ShumAvatarCodec.invitationThumbnail(photo) {
-            var value = ShumInvitationAvatar(data: thumbnail)
-            if let signature = transport.noiseSignData(value.signingBytes(for: control)) {
-                value.signature = signature
-                attachment = value
-            }
-        }
         try store.transaction { state in
             if state.invitationStates == nil { state.invitationStates = [:] }
             if state.invitationOutbox == nil { state.invitationOutbox = [] }
@@ -369,7 +359,7 @@ final class ShumMessageStore: ObservableObject {
                 $0.control.recipient.id == card.id
             }
             state.invitationOutbox?.append(
-                ShumStoredInvitationControl(control: control, avatar: attachment)
+                ShumStoredInvitationControl(control: control, avatar: nil)
             )
             if removesRequest {
                 state.requests.removeAll { $0.id == card.id }
@@ -391,7 +381,7 @@ final class ShumMessageStore: ObservableObject {
         }
     }
 
-    private func receiveInvitation(_ control: ShumInvitationControl, avatar attachment: ShumInvitationAvatar?) throws {
+    private func receiveInvitation(_ control: ShumInvitationControl, avatar _: ShumInvitationAvatar?) throws {
         try control.validate(at: now())
         guard control.recipient.noiseKey == ownCard.noiseKey,
               control.recipient.signingKey == ownCard.signingKey,
@@ -401,25 +391,10 @@ final class ShumMessageStore: ObservableObject {
         }
 
         let currentPhase = invitationPhase(for: control.sender)
-        let receivedAvatar = attachment.flatMap { $0.valid(for: control) ? $0.data : nil }
-        // The compatibility card may arrive before the signed request. Its
-        // missing photo must not become permanent, even if the recipient has
-        // already accepted or declined by the time the full request arrives.
-        if control.action == .request,
-           [.incomingPending, .declinedLocally, .accepted].contains(currentPhase),
-           avatar(for: control.sender) == nil, let receivedAvatar {
-            try store.transaction { state in
-                state.invitationStates?[control.sender.id]?.avatar = receivedAvatar
-                if let index = state.contacts.firstIndex(where: { $0.id == control.sender.id }) {
-                    state.contacts[index].avatar = receivedAvatar
-                }
-            }
-            changed()
-        }
         if state.invitationStates?[control.sender.id]?.eventID == control.id {
             return
         }
-        let avatar = receivedAvatar ?? state.invitationStates?[control.sender.id]?.avatar
+        let avatar: Data? = nil
         let legacyIncomingRequest = currentPhase == .incomingPending
             && state.invitationStates?[control.sender.id]?.eventID.hasPrefix("legacy-") == true
         let hasOutgoingRequest = (state.invitationOutbox ?? []).contains {
@@ -1138,7 +1113,7 @@ final class ShumMessageStore: ObservableObject {
                         state.invitationOutbox?[index].nostrAttempts = (stored.nostrAttempts ?? 0) + 1
                     }
                 }
-                let packet = ShumPacket(invitation: control, invitationAvatar: stored.avatar)
+                let packet = ShumPacket(invitation: control)
                 if let direct, canSendDirect { sendPacket(packet, to: direct) }
                 if canSendInternet {
                     internet?.send(packet, to: control.recipient) { [weak self] accepted in

@@ -1,296 +1,119 @@
 import SwiftUI
-import PhotosUI
 
 struct ProfilePhotoView: View {
     @ObservedObject var viewModel: ProfilePhotoViewModel
     let name: String
-    
-    @State private var selectedItem: PhotosPickerItem?
-    @State private var showPhotoOptions: Bool = false
-    @State private var showCameraPicker: Bool = false
-    @State private var showGalleryPicker: Bool = false
-    @State private var showPhotoPreview: Bool = false
-    @State private var tempCameraImage: UIImage?
-    
+    @State private var showPixelAvatarGenerator = false
     private let imageSize: CGFloat = 132
-
-    private func openPhotoOptions() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        showPhotoOptions = true
-    }
-
-    private func openPhotoPreview() {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-
-        withTransaction(transaction) {
-            showPhotoPreview = true
-        }
-    }
-
-    private func profilePhoto(_ uiImage: UIImage) -> some View {
-        Image(uiImage: uiImage)
-            .resizable()
-            .interpolation(viewModel.isNoisyPhoto ? .none : .high)
-            .scaledToFill()
-            .frame(width: imageSize, height: imageSize)
-            .clipShape(Circle())
-            .contentShape(Circle())
-    }
 
     var body: some View {
         VStack(spacing: 14) {
             Button {
-                if viewModel.uiImage != nil {
-                    openPhotoPreview()
-                } else {
-                    openPhotoOptions()
-                }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                showPixelAvatarGenerator = true
             } label: {
                 if let uiImage = viewModel.uiImage {
-                    profilePhoto(uiImage)
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .interpolation(.none)
+                        .scaledToFill()
+                        .frame(width: imageSize, height: imageSize)
+                        .clipShape(Circle())
                 } else {
                     ShumInitialsAvatar(name: name, size: imageSize)
                 }
             }
             .buttonStyle(.plain)
 
-            Button(viewModel.uiImage == nil
-                   ? "profileAddPhoto".localized
-                   : "profileChangePhotoShort".localized) {
-                openPhotoOptions()
+            Button("Пиксельный аватар".localized) {
+                showPixelAvatarGenerator = true
             }
             .font(.system(size: 16, weight: .semibold))
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
         }
-        .sheet(isPresented: $showPhotoOptions) {
-            ProfilePhotoOptionsSheet(
-                image: viewModel.uiImage,
-                name: name,
-                isNoisyPhoto: Binding(get: { viewModel.isNoisyPhoto }, set: viewModel.setNoisyPhoto),
-                onClose: { showPhotoOptions = false },
-                onCamera: openCamera,
-                onGallery: openGallery,
-                onDelete: deletePhoto
-            )
-            .presentationDetents([
-                .height(viewModel.uiImage == nil ? 304 : 364)
-            ])
-            .presentationDragIndicator(.hidden)
-        }
-        .fullScreenCover(isPresented: $showCameraPicker) {
-            ZStack {
-                Color.black
-                    .ignoresSafeArea()
-
-                CameraPicker(image: $tempCameraImage)
-                    .ignoresSafeArea()
-                    .onDisappear {
-                        if let selected = tempCameraImage {
-                            viewModel.updateProfileImage(with: selected)
-                        }
-                        tempCameraImage = nil
-                    }
-            }
-            .background(Color.black.ignoresSafeArea())
-            .shumPresentationBackground(.black)
-        }
-        .fullScreenCover(isPresented: $showPhotoPreview) {
-            if let uiImage = viewModel.uiImage {
-                FullScreenPhotoView(isPresented: $showPhotoPreview) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .interpolation(viewModel.isNoisyPhoto ? .none : .high)
-                        .scaledToFit()
+        .sheet(isPresented: $showPixelAvatarGenerator) {
+            PixelAvatarGeneratorSheet(currentSeed: viewModel.avatarSeed) { seed in
+                if viewModel.usePixelAvatar(seed: seed) {
+                    showPixelAvatarGenerator = false
                 }
             }
+            .presentationDetents([.height(470)])
+            .presentationDragIndicator(.visible)
         }
-        .photosPicker(isPresented: $showGalleryPicker, selection: $selectedItem, matching: .images)
         .alert("local.photo.save.error", isPresented: $viewModel.saveFailed) {
             Button(Inc.Common.okey.localized, role: .cancel) { }
         }
-        .shumOnChange(of: selectedItem) { _, newItem in
-            Task {
-                if let data = try? await newItem?.loadTransferable(type: Data.self),
-                   let uiImg = UIImage(data: data) {
-                    viewModel.updateProfileImage(with: uiImg)
-                }
-            }
-        }
-        #if DEBUG && targetEnvironment(simulator)
-        .task {
-            if ProcessInfo.processInfo.arguments.contains("-ShumPreviewNoisyPhoto") {
-                if viewModel.uiImage == nil,
-                   let data = ShumAvatarCodec.diagnosticPhoto(seed: 64),
-                   let image = UIImage(data: data) {
-                    viewModel.updateProfileImage(with: image)
-                }
-                showPhotoOptions = true
-            }
-        }
-        #endif
-    }
-
-    private func openCamera() {
-        showPhotoOptions = false
-        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-            return
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            showCameraPicker = true
-        }
-    }
-
-    private func openGallery() {
-        showPhotoOptions = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            showGalleryPicker = true
-        }
-    }
-
-    private func deletePhoto() {
-        showPhotoOptions = false
-        viewModel.updateProfileImage(with: nil)
     }
 }
 
-private struct ProfilePhotoOptionsSheet: View {
-    let image: UIImage?
-    let name: String
-    @Binding var isNoisyPhoto: Bool
-    let onClose: () -> Void
-    let onCamera: () -> Void
-    let onGallery: () -> Void
-    let onDelete: () -> Void
+private struct PixelAvatarGeneratorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let currentSeed: UInt64?
+    let onUse: (UInt64) -> Void
+    @State private var seed = UInt64.random(in: UInt64.min...UInt64.max)
+
+    init(currentSeed: UInt64?, onUse: @escaping (UInt64) -> Void) {
+        self.currentSeed = currentSeed
+        self.onUse = onUse
+        _seed = State(initialValue: currentSeed ?? UInt64.random(in: UInt64.min...UInt64.max))
+    }
 
     var body: some View {
-        VStack(spacing: 18) {
-            HStack(spacing: 12) {
-                thumbnail
-
-                Text(Inc.Profile.changePhotoTitle.localized)
-                    .font(.system(size: 17, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-                    .allowsTightening(true)
-
-                Spacer(minLength: 8)
-
-                Button(action: onClose) {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Пиксельный аватар".localized)
+                    .font(.system(size: 20, weight: .semibold))
+                Spacer()
+                Button { dismiss() } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.primary)
-                        .frame(width: 42, height: 42)
-                        .background(
-                            Color(uiColor: .tertiarySystemFill),
-                            in: Circle()
-                        )
+                        .frame(width: 36, height: 36)
+                        .background(Color(uiColor: .tertiarySystemFill), in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Inc.Common.close.localized)
             }
 
-            VStack(spacing: 0) {
-                ProfilePhotoOptionRow(
-                    title: Inc.Profile.takePhoto.localized,
-                    systemImage: "camera",
-                    role: nil,
-                    action: onCamera
-                )
-
-                optionDivider
-
-                ProfilePhotoOptionRow(
-                    title: Inc.Profile.galleryPhoto.localized,
-                    systemImage: "photo",
-                    role: nil,
-                    action: onGallery
-                )
-
-                optionDivider
-
-                Toggle(isOn: $isNoisyPhoto) {
-                    HStack(spacing: 18) {
-                        Image(systemName: "square.grid.3x3.fill")
-                            .font(.system(size: 20, weight: .regular))
-                            .frame(width: 22)
-                        Text("Шумное фото".localized)
-                            .font(.system(size: 16))
-                    }
-                    .foregroundStyle(.primary)
-                }
-                .toggleStyle(.switch)
-                .padding(.horizontal, 18)
-                .frame(height: 54)
-                .disabled(image == nil)
-                .accessibilityIdentifier("profile.noisyPhoto")
-
-                if image != nil {
-                    optionDivider
-
-                    ProfilePhotoOptionRow(
-                        title: Inc.Profile.deletePhoto.localized,
-                        systemImage: "trash",
-                        role: .destructive,
-                        action: onDelete
-                    )
-                }
-            }
-            .background(
-                Color(uiColor: .secondarySystemBackground),
-                in: RoundedRectangle(cornerRadius: 20)
-            )
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 14)
-        .padding(.bottom, 18)
-    }
-
-    @ViewBuilder
-    private var thumbnail: some View {
-        if let image {
-            Image(uiImage: image)
+            Image(uiImage: ShumPixelAvatarGenerator.image(seed: seed))
                 .resizable()
-                .interpolation(isNoisyPhoto ? .none : .high)
-                .scaledToFill()
-                .frame(width: 44, height: 44)
+                .interpolation(.none)
+                .frame(width: 184, height: 184)
                 .clipShape(Circle())
-        } else {
-            ShumInitialsAvatar(name: name, size: 44)
-        }
-    }
+                .accessibilityLabel("Предпросмотр пиксельного аватара".localized)
 
-    private var optionDivider: some View {
-        Divider()
-            .padding(.leading, 58)
-    }
-}
+            Text("Люди, звери, пришельцы и роботы. Перебирайте варианты, пока не найдёте своего.".localized)
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
-private struct ProfilePhotoOptionRow: View {
-    let title: String
-    let systemImage: String
-    let role: ButtonRole?
-    let action: () -> Void
-
-    var body: some View {
-        Button(role: role, action: action) {
-            HStack(spacing: 18) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 20, weight: .regular))
-                    .frame(width: 22)
-
-                Text(title)
-                    .font(.system(size: 16))
-
-                Spacer()
+            Button {
+                var next = UInt64.random(in: UInt64.min...UInt64.max)
+                if next == seed { next &+= 1 }
+                seed = next
+            } label: {
+                Label("Другой вариант".localized, systemImage: "arrow.clockwise")
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
             }
-            .foregroundStyle(role == .destructive ? Color.red : Color.primary)
-            .padding(.horizontal, 18)
-            .frame(height: 54)
-            .contentShape(Rectangle())
+            .buttonStyle(.bordered)
+
+            Button { onUse(seed) } label: {
+                Text("Поставить на аватар".localized)
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+            }
+            .buttonStyle(.borderedProminent)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 24)
+        .padding(.top, 20)
+        .padding(.bottom, 24)
+        .onAppear {
+            seed = currentSeed ?? UInt64.random(in: UInt64.min...UInt64.max)
+        }
     }
 }
 

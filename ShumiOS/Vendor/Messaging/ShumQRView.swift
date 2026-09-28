@@ -3,7 +3,6 @@ import BitFoundation
 import Contacts
 import ContactsUI
 import CoreImage.CIFilterBuiltins
-import PhotosUI
 import SwiftUI
 import Vision
 
@@ -41,6 +40,9 @@ struct ShumQRView: View {
 
     private var avatarData: Data? {
         guard let manifest = LocalCardStore.shared.ownManifest else { return nil }
+        if let seed = manifest.body.avatarSeed {
+            return ShumPixelAvatarGenerator.data(seed: seed)
+        }
         return LocalCardStore.shared.photo(manifest.body.photoHash)
     }
 

@@ -37,7 +37,6 @@ final class ShumNostrService {
         let completion: (Result<ShumResolvedContact, Error>) -> Void
         var card: ShumContactCard?
         var profile: ShumProfileManifest?
-        var chunks: [Int: Data] = [:]
     }
 
     let manager: NostrRelayManager
@@ -168,8 +167,8 @@ final class ShumNostrService {
             respond(to: request, sender: sender)
         case .contactManifest(let manifest, let sender):
             accept(manifest, sender: sender)
-        case .contactChunk(let chunk, let sender):
-            accept(chunk, sender: sender)
+        case .contactChunk:
+            break
         }
     }
 
@@ -184,17 +183,12 @@ final class ShumNostrService {
               card.nostrKey == identity.publicKeyHex, (try? card.validate()) != nil else { return }
         responseRate[sender] = Date()
 
-        let avatar = ownProfile.avatar.flatMap { ShumProfile.validAvatar($0) ? $0 : nil }
-        let profile = ShumProfile(name: card.name, bio: card.bio, avatar: avatar)
+        let seed = ownProfile.avatarSeed ?? card.avatarSeed
+            ?? ShumPixelAvatarGenerator.seed(for: card.noiseKey)
+        let profile = ShumProfile(name: card.name, bio: card.bio,
+            avatarSeed: seed)
         let manifest = ContactManifest(id: request.id, card: card, profile: ShumProfileManifest(profile))
-        guard send(manifest, prefix: Self.manifestPrefix, recipient: sender), let avatar else { return }
-
-        let hash = ShumProfile.digest(avatar)
-        for offset in stride(from: 0, to: avatar.count, by: ShumProfilePacket.chunkSize) {
-            let end = min(avatar.count, offset + ShumProfilePacket.chunkSize)
-            let chunk = ContactChunk(id: request.id, hash: hash, offset: offset, data: avatar.subdata(in: offset ..< end))
-            _ = send(chunk, prefix: Self.chunkPrefix, recipient: sender)
-        }
+        _ = send(manifest, prefix: Self.manifestPrefix, recipient: sender)
     }
 
     private func accept(_ response: ContactManifest, sender: String) {
@@ -209,41 +203,14 @@ final class ShumNostrService {
         finishIfComplete(response.id)
     }
 
-    private func accept(_ chunk: ContactChunk, sender: String) {
-        guard Self.validRequestID(chunk.id), var lookup = lookups[chunk.id],
-              lookup.target == sender, ShumProfileManifest.validHash(chunk.hash),
-              chunk.offset >= 0, chunk.offset < ShumProfile.maxAvatarBytes,
-              chunk.offset % ShumProfilePacket.chunkSize == 0,
-              !chunk.data.isEmpty, chunk.data.count <= ShumProfilePacket.chunkSize,
-              chunk.offset + chunk.data.count <= ShumProfile.maxAvatarBytes else { return }
-        lookup.chunks[chunk.offset] = chunk.data
-        lookups[chunk.id] = lookup
-        finishIfComplete(chunk.id)
-    }
-
     private func finishIfComplete(_ id: String) {
         guard let lookup = lookups[id], let card = lookup.card, let manifest = lookup.profile else { return }
-        if manifest.avatarBytes == 0 {
-            lookups.removeValue(forKey: id)
-            lookup.completion(.success(ShumResolvedContact(
-                card: card,
-                profile: ShumProfile(name: manifest.name, bio: manifest.bio)
-            )))
-            return
-        }
-        guard let expectedHash = manifest.avatarHash else { return }
-        var avatar = Data()
-        while avatar.count < manifest.avatarBytes {
-            guard let chunk = lookup.chunks[avatar.count] else { return }
-            avatar.append(chunk)
-        }
-        guard avatar.count == manifest.avatarBytes,
-              ShumProfile.digest(avatar) == expectedHash,
-              ShumProfile.validAvatar(avatar) else { return }
         lookups.removeValue(forKey: id)
         lookup.completion(.success(ShumResolvedContact(
             card: card,
-            profile: ShumProfile(name: manifest.name, bio: manifest.bio, avatar: avatar)
+            profile: ShumProfile(name: manifest.name, bio: manifest.bio,
+                avatarSeed: manifest.avatarSeed ?? card.avatarSeed
+                    ?? ShumPixelAvatarGenerator.seed(for: card.noiseKey)).rendered()
         )))
     }
 

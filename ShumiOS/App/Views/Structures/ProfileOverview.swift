@@ -31,9 +31,6 @@ struct ProfileOverviewView: View {
     @State private var showAppearance = false
     @State private var showLanguage = false
     @State private var showPhotoPreview = false
-    #if DEBUG && targetEnvironment(simulator)
-    @State private var showPhotoEditorPreview = false
-    #endif
     @State private var notificationAuthorizationStatus:
         UNAuthorizationStatus = .notDetermined
 
@@ -102,18 +99,6 @@ struct ProfileOverviewView: View {
         .task {
             await refreshNotificationAuthorizationStatus()
         }
-        #if DEBUG && targetEnvironment(simulator)
-        .onAppear {
-            if ProcessInfo.processInfo.arguments.contains("-ShumPreviewNoisyPhoto") {
-                showPhotoEditorPreview = true
-            }
-        }
-        .navigationDestination(isPresented: $showPhotoEditorPreview) {
-            ProfileDataView(authCodeViewModel: authCodeViewModel, photoViewModel: photoVM)
-                .navigationTitle(Inc.Tabs.profile.localized)
-                .navigationBarTitleDisplayMode(.inline)
-        }
-        #endif
         .toolbar {
             ProfileAvatarToolbarItem {
                 profileAvatarButton

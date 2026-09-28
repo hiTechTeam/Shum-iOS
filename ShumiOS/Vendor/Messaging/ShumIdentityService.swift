@@ -16,12 +16,28 @@ struct ShumContactCard: Codable, Equatable {
     var name: String
     var bio: String
     var signature = Data()
+    var avatarSeed: UInt64?
+    var avatarVersion: Int?
+    var avatarSeedSignature: Data?
     var id: String { Self.userID(noiseKey) }
     var peerID: PeerID { PeerID(hexData: noiseKey) }
     static func userID(_ key: Data) -> String { SHA256.hash(data: key).map { String(format: "%02x", $0) }.joined() }
     func signedBytes() throws -> Data {
-        var unsigned = self; unsigned.signature = Data()
+        var unsigned = self
+        unsigned.signature = Data()
+        // Keep the original card signature valid for older Shum versions.
+        unsigned.avatarSeed = nil
+        unsigned.avatarVersion = nil
+        unsigned.avatarSeedSignature = nil
         return try ShumCoding.encode(unsigned)
+    }
+    func avatarSeedBytes() -> Data? {
+        guard let avatarSeed, avatarVersion == ShumPixelAvatarGenerator.version else { return nil }
+        var bytes = Data("shum.avatar-seed.v1\0".utf8)
+        bytes.append(noiseKey)
+        var littleEndianSeed = avatarSeed.littleEndian
+        withUnsafeBytes(of: &littleEndianSeed) { bytes.append(contentsOf: $0) }
+        return bytes
     }
     func validate() throws {
         guard version == 1, noiseKey.count == 32, signingKey.count == 32,
@@ -31,6 +47,16 @@ struct ShumContactCard: Codable, Equatable {
               name.utf8.count <= 64, bio.count <= 72,
               try Curve25519.Signing.PublicKey(rawRepresentation: signingKey)
                 .isValidSignature(signature, for: signedBytes()) else { throw ShumFailure.invalidContact }
+        if avatarSeed != nil {
+            guard let signedSeed = avatarSeedBytes(), let avatarSeedSignature,
+                  avatarSeedSignature.count == 64,
+                  try Curve25519.Signing.PublicKey(rawRepresentation: signingKey)
+                    .isValidSignature(avatarSeedSignature, for: signedSeed) else {
+                throw ShumFailure.invalidContact
+            }
+        } else if avatarVersion != nil || avatarSeedSignature != nil {
+            throw ShumFailure.invalidContact
+        }
     }
     func invitation() throws -> URL {
         try validate()
@@ -300,10 +326,19 @@ final class ShumIdentityService {
         }
         storageKey = SymmetricKey(data: storageBytes)
     }
-    func card(name: String, bio: String) throws -> ShumContactCard {
+    func card(name: String, bio: String, avatarSeed: UInt64? = nil) throws -> ShumContactCard {
         var card = ShumContactCard(noiseKey: transport.noiseStaticPublicKeyData(), signingKey: transport.noiseSigningPublicKeyData(), nostrKey: nostr.publicKeyHex, name: name, bio: String(bio.prefix(72)))
         guard let signature = transport.noiseSignData(try card.signedBytes()) else { throw ShumFailure.unavailableIdentity }
-        card.signature = signature; try card.validate(); return card
+        card.signature = signature
+        card.avatarSeed = avatarSeed ?? ShumPixelAvatarGenerator.seed(for: card.noiseKey)
+        card.avatarVersion = ShumPixelAvatarGenerator.version
+        guard let signedSeed = card.avatarSeedBytes(),
+              let seedSignature = transport.noiseSignData(signedSeed) else {
+            throw ShumFailure.unavailableIdentity
+        }
+        card.avatarSeedSignature = seedSignature
+        try card.validate()
+        return card
     }
 }
 

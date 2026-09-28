@@ -5,37 +5,28 @@ final class ProfilePhotoViewModel: ObservableObject {
     @Published var profileImage: Image = .noPhoto
     @Published var uiImage: UIImage?
     @Published var saveFailed = false
-    @Published private(set) var isNoisyPhoto = false
-    private(set) var preparedPhoto: Data?
-    private(set) var photoEditing: LocalPhotoEditingState?
-    private var originalPhoto: Data?
+    private(set) var avatarSeed: UInt64?
     private let store: LocalCardStore
-    private let usesLegacyCache: Bool
 
-    init(store: LocalCardStore = .shared, usesLegacyCache: Bool = true) {
+    init(store: LocalCardStore = .shared) {
         self.store = store
-        self.usesLegacyCache = usesLegacyCache
         loadPhotoIfNeeded()
     }
 
     func resetAccountScopedState() {
-        uiImage = nil; preparedPhoto = nil; profileImage = .noPhoto
-        originalPhoto = nil; photoEditing = nil; isNoisyPhoto = false
-        if usesLegacyCache { ProfileImageStorage.delete() }
+        avatarSeed = nil
+        uiImage = nil
+        profileImage = .noPhoto
     }
 
     func loadPhotoIfNeeded() {
-        if let own = store.ownManifest {
-            preparedPhoto = store.photo(own.body.photoHash)
-            photoEditing = store.ownPhotoEditing
-            originalPhoto = photoEditing?.original ?? preparedPhoto
-            isNoisyPhoto = photoEditing != nil
-        } else if usesLegacyCache, let image = ProfileImageStorage.load() {
-            preparedPhoto = try? LocalCardPhoto.prepare(image)
-            originalPhoto = preparedPhoto
-        }
-        uiImage = preparedPhoto.flatMap { UIImage(data: $0) }
-        profileImage = uiImage.map { Image(uiImage: $0) } ?? .noPhoto
+        guard let own = store.ownManifest else { return }
+        let seed = own.body.avatarSeed
+            ?? ShumPixelAvatarGenerator.seed(for: own.publicKey)
+        avatarSeed = seed
+        let image = ShumPixelAvatarGenerator.image(seed: seed)
+        uiImage = image
+        profileImage = Image(uiImage: image)
     }
 
     func loadPhotoFromURL(_ value: String?) {
@@ -43,38 +34,33 @@ final class ProfilePhotoViewModel: ObservableObject {
         loadPhotoIfNeeded()
     }
 
-    func updateProfileImage(with image: UIImage?) {
+    func prepareRegistrationAvatar() {
+        guard store.ownManifest == nil, avatarSeed == nil,
+              let seed = try? store.defaultAvatarSeed() else { return }
+        avatarSeed = seed
+        let image = ShumPixelAvatarGenerator.image(seed: seed)
+        uiImage = image
+        profileImage = Image(uiImage: image)
+    }
+
+    @discardableResult
+    func usePixelAvatar(seed: UInt64) -> Bool {
         do {
-            let original = try image.map { try LocalCardPhoto.prepare($0) }
-            try save(original: original, noisy: original != nil && isNoisyPhoto)
-        } catch { saveFailed = true }
-    }
-
-    func setNoisyPhoto(_ enabled: Bool) {
-        guard enabled != isNoisyPhoto, let originalPhoto else { return }
-        do { try save(original: originalPhoto, noisy: enabled) }
-        catch { saveFailed = true }
-    }
-
-    private func save(original: Data?, noisy: Bool) throws {
-        let data = try original.map { noisy ? try LocalCardPhoto.noisy($0) : $0 }
-        let editing = noisy ? data.flatMap { data in
-            original.map { LocalPhotoEditingState(original: $0, noisyPhotoHash: LocalCardPhoto.hash(data)) }
-        } : nil
-        if let own = store.ownManifest {
-            try store.saveOwn(name: own.body.name, bio: own.body.bio, photo: data, photoEditing: editing, preservePhotoEditing: false)
+            if let own = store.ownManifest {
+                try store.saveOwn(name: own.body.name, bio: own.body.bio,
+                    photo: nil, avatarSeed: seed, preservePhotoEditing: false)
+            }
+            avatarSeed = seed
+            let image = ShumPixelAvatarGenerator.image(seed: seed)
+            uiImage = image
+            profileImage = Image(uiImage: image)
+            saveFailed = false
+            NotificationCenter.default.post(name: .localCardChanged, object: nil)
+            return true
+        } catch {
+            saveFailed = true
+            return false
         }
-        originalPhoto = original
-        photoEditing = editing
-        isNoisyPhoto = noisy
-        preparedPhoto = data
-        uiImage = data.flatMap { UIImage(data: $0) }
-        profileImage = uiImage.map { Image(uiImage: $0) } ?? .noPhoto
-        if usesLegacyCache {
-            if let uiImage { ProfileImageStorage.save(uiImage) } else { ProfileImageStorage.delete() }
-        }
-        saveFailed = false
-        NotificationCenter.default.post(name: .localCardChanged, object: nil)
     }
 }
 
