@@ -95,7 +95,7 @@ struct MainContentView: View {
         }
         .sheet(item: $coordinator.invitation) { card in
             ShumContactConfirmation(
-                card: card,
+                card: chat.currentProfileCard(card),
                 imageData: chat.profile(for: card.peerID)?.avatar,
                 isExistingContact: isExistingContact(card)
             ) {
@@ -214,13 +214,7 @@ struct MainContentView: View {
     }
 
     private func openScannedContact(_ card: ShumContactCard) {
-        let peer: ShumPeer
-        if isExistingContact(card) {
-            peer = ShumPeer(id: card.peerID, name: card.name, lastConnected: Date())
-        } else {
-            guard let added = chat.addContact(card, source: "link") else { return }
-            peer = added
-        }
+        guard let peer = chat.addContact(card, source: "link") else { return }
         coordinator.invitation = nil
         selectedTab = 1
         // An explicitly accepted invitation can replace a chat already open

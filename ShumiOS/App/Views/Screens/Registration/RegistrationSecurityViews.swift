@@ -9,7 +9,7 @@ struct RegistrationSecurityCreationView: View {
     @State private var animationStartedAt = Date()
     @State private var isRunning = false
     @State private var ceremonyCompleted = false
-    @State private var showReady = false
+    @State private var showProfileDetails = false
     @State private var showError = false
 
     private let stageTitles = [
@@ -24,7 +24,8 @@ struct RegistrationSecurityCreationView: View {
         case 0: "Создаём криптографические ключи".localized
         case 1: "Шифруем хранилище".localized
         case 2: "Сохраняем ключи на устройстве".localized
-        default: "Проверяем защиту".localized
+        case 3: "Проверяем защиту".localized
+        default: "Ключи сохранены на устройстве".localized
         }
     }
 
@@ -38,12 +39,14 @@ struct RegistrationSecurityCreationView: View {
             .frame(width: 190, height: 174)
             .accessibilityHidden(true)
 
-            Text("Создаём вашу защиту".localized)
+            Text(ceremonyCompleted ? "Ключ профиля создан".localized : "Создаём вашу защиту".localized)
                 .font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .padding(.top, 28)
 
-            Text("Ключи создаются и сохраняются\nтолько на этом устройстве.".localized)
+            Text(ceremonyCompleted
+                ? "Уникальные ключи защищают ваш профиль и сообщения. Закрытые ключи не передаются Shum и не покидают устройство.".localized
+                : "Ключи создаются и сохраняются\nтолько на этом устройстве.".localized)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -107,7 +110,7 @@ struct RegistrationSecurityCreationView: View {
                     isEnabled: true,
                     accentColor: Color.accentColor
                 ) {
-                    showReady = true
+                    showProfileDetails = true
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .padding(.bottom, 20)
@@ -124,7 +127,7 @@ struct RegistrationSecurityCreationView: View {
         .navigationTitle("Защита".localized)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
-        .navigationDestination(isPresented: $showReady) {
+        .navigationDestination(isPresented: $showProfileDetails) {
             LocalCardRegistration(photoViewModel: coordinator.profilePhotoViewModel)
         }
         .alert("Не удалось создать защиту".localized, isPresented: $showError) {
@@ -144,8 +147,9 @@ struct RegistrationSecurityCreationView: View {
 
     @MainActor
     private func runCreationCeremony() async {
-        guard !isRunning else { return }
+        guard !isRunning, !ceremonyCompleted else { return }
         isRunning = true
+        defer { isRunning = false }
         ceremonyCompleted = false
         showError = false
         stage = 0
@@ -186,7 +190,6 @@ struct RegistrationSecurityCreationView: View {
             guard !Task.isCancelled else { return }
 
             guard prepared else {
-                isRunning = false
                 showError = true
                 return
             }
@@ -195,7 +198,6 @@ struct RegistrationSecurityCreationView: View {
             successFeedback.notificationOccurred(.success)
             try await Task.sleep(nanoseconds: 450_000_000)
             guard !Task.isCancelled else { return }
-            isRunning = false
             withAnimation(.easeOut(duration: 0.28)) {
                 ceremonyCompleted = true
             }
@@ -483,76 +485,6 @@ private struct RegistrationKeyCreationIllustration: View {
             self.x = x
             self.y = y
         }
-    }
-}
-struct RegistrationSecurityReadyView: View {
-    @EnvironmentObject private var coordinator: AppCoordinator
-    @State private var showPasscode = false
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            ShumOnboardingPixelIllustration(kind: .security)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 112, height: 92)
-                .accessibilityHidden(true)
-
-            Text("Защита готова".localized)
-                .font(.title2.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .padding(.top, 34)
-
-            Text("Уникальные ключи защищают ваш профиль и сообщения. Закрытые ключи не передаются Shum и не покидают устройство.".localized)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .lineSpacing(3)
-                .padding(.top, 12)
-                .frame(maxWidth: 350)
-
-            VStack(spacing: 14) {
-                securityStatus("Ключ профиля создан".localized)
-                securityStatus("Сквозное шифрование включено".localized)
-                securityStatus("Ключи сохранены на устройстве".localized)
-            }
-            .padding(.top, 30)
-
-            if let fingerprint = coordinator.identityFingerprint {
-                Text(String.localizedFormat("Отпечаток %@".localized, fingerprint))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 20)
-            }
-
-            Spacer()
-
-            RegistrationPrimaryButton(
-                title: "Продолжить".localized,
-                isEnabled: true,
-                accentColor: Color.accentColor
-            ) {
-                showPasscode = true
-            }
-            .padding(.bottom, 20)
-        }
-        .padding(.horizontal, 24)
-        .background(ShumThemeCanvas().ignoresSafeArea())
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(isPresented: $showPasscode) {
-            RegistrationPasscodeSetupView()
-        }
-    }
-
-    private func securityStatus(_ title: String) -> some View {
-        HStack(spacing: 11) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(Color.accentColor)
-            Text(title)
-                .font(.subheadline)
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: 310)
     }
 }
 struct RegistrationPasscodeSetupView: View {

@@ -94,7 +94,7 @@ struct ShumContactsView: View {
             .sheet(item: $share) { ShumShareSheet(items: [$0.text]) }
             .sheet(item: $invitation) { card in
                 ShumContactConfirmation(
-                    card: card,
+                    card: runtime.currentProfileCard(card),
                     imageData: runtime.profile(for: card.peerID)?.avatar,
                     isExistingContact: isExistingContact(card)
                 ) {
@@ -107,13 +107,7 @@ struct ShumContactsView: View {
         .presentationDragIndicator(.visible)
     }
     private func open(_ card: ShumContactCard, source: String) {
-        let peer: ShumPeer
-        if isExistingContact(card) {
-            peer = ShumPeer(id: card.peerID, name: card.name, lastConnected: Date())
-        } else {
-            guard let added = runtime.addContact(card, source: source) else { return }
-            peer = added
-        }
+        guard let peer = runtime.addContact(card, source: source) else { return }
         dismiss(); select(peer)
     }
 
@@ -153,7 +147,7 @@ struct ShumContactRequestsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $invitation) { card in
             ShumContactConfirmation(
-                card: card,
+                card: runtime.currentProfileCard(card),
                 imageData: runtime.profile(for: card.peerID)?.avatar
             ) {
                 if let peer = runtime.addContact(card, source: "invitation") {
@@ -172,6 +166,11 @@ struct ShumContactConfirmation: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showPhoto = false
 
+    private var displayedAvatar: Data? {
+        if let seed = card.avatarSeed { return ShumPixelAvatarGenerator.data(seed: seed) }
+        return imageData
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let contentWidth = min(360, max(0, geometry.size.width - 48))
@@ -179,10 +178,10 @@ struct ShumContactConfirmation: View {
             VStack(spacing: 0) {
                 Spacer(minLength: 28)
 
-                ShumAvatar(name: card.name, size: 202, imageData: imageData)
+                ShumAvatar(name: card.name, size: 202, imageData: displayedAvatar)
                     .contentShape(Circle())
                     .onTapGesture(perform: openPhoto)
-                    .accessibilityLabel(imageData == nil ? card.name : "Посмотреть фото".localized)
+                    .accessibilityLabel(displayedAvatar == nil ? card.name : "Посмотреть фото".localized)
 
                 Text(card.name)
                     .font(.title2.bold())
@@ -224,7 +223,7 @@ struct ShumContactConfirmation: View {
             .padding(.bottom, 8)
         }
         .fullScreenCover(isPresented: $showPhoto) {
-            if let imageData, let image = UIImage(data: imageData) {
+            if let displayedAvatar, let image = UIImage(data: displayedAvatar) {
                 FullScreenPhotoView(isPresented: $showPhoto) {
                     Image(uiImage: image)
                         .resizable()
@@ -237,7 +236,7 @@ struct ShumContactConfirmation: View {
     }
 
     private func openPhoto() {
-        guard imageData.flatMap(UIImage.init(data:)) != nil else { return }
+        guard displayedAvatar.flatMap(UIImage.init(data:)) != nil else { return }
 
         var transaction = Transaction()
         transaction.disablesAnimations = true

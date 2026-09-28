@@ -56,20 +56,50 @@ struct LocalCardTests {
     @Test func registrationPreviewUsesThePreparedIdentitySeed() throws {
         let (store, url, _) = makeStore()
         defer { try? FileManager.default.removeItem(at: url) }
-        try store.prepareSigningKey()
+        let publicKey = try store.prepareSigningKey()
         #expect(store.ownManifest == nil)
         let model = ProfilePhotoViewModel(store: store)
-        let identityPublicKey = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
-        let identitySeed = ShumPixelAvatarGenerator.seed(for: identityPublicKey)
-        model.prepareRegistrationAvatar(seed: identitySeed)
+        try model.prepareRegistrationAvatar()
         let previewSeed = try #require(model.avatarSeed)
         #expect(model.uiImage != nil)
-        #expect(previewSeed == identitySeed)
+        #expect(previewSeed == ShumPixelAvatarGenerator.seed(for: publicKey))
+        #expect(store.ownManifest == nil)
+        #expect(try store.prepareSigningKey() == publicKey)
+
+        // Returning to the ceremony must preserve a user's selected variant.
+        #expect(model.usePixelAvatar(seed: previewSeed &+ 1))
+        try model.prepareRegistrationAvatar()
+        #expect(model.avatarSeed == previewSeed &+ 1)
 
         let saved = try store.saveOwn(name: "Аня", bio: nil, photo: nil,
-            avatarSeed: previewSeed)
-        #expect(saved.body.avatarSeed == previewSeed)
-        #expect(previewSeed == ShumPixelAvatarGenerator.seed(for: identityPublicKey))
+            avatarSeed: model.avatarSeed)
+        #expect(saved.publicKey == publicKey)
+        #expect(saved.body.avatarSeed == previewSeed &+ 1)
+    }
+
+    @Test func registrationKeyPersistsInSystemKeychainBeforeProfileExists() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let keychain = KeychainStore(service: "Shum.registration-test." + UUID().uuidString)
+        let defaultsName = "Shum.registration-test." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: defaultsName))
+        defer {
+            try? keychain.remove("shum.local-card.signing-key.v1")
+            try? FileManager.default.removeItem(at: url)
+            defaults.removePersistentDomain(forName: defaultsName)
+        }
+        let store = LocalCardStore(directory: url, defaults: defaults, secureStore: keychain)
+        let model = ProfilePhotoViewModel(store: store)
+        try model.prepareRegistrationAvatar()
+        let seed = try #require(model.avatarSeed)
+        #expect(store.ownManifest == nil)
+
+        let reopenedStore = LocalCardStore(directory: url, defaults: defaults, secureStore: keychain)
+        let reopenedModel = ProfilePhotoViewModel(store: reopenedStore)
+        try reopenedModel.prepareRegistrationAvatar()
+        #expect(reopenedModel.avatarSeed == seed)
+        let saved = try reopenedStore.saveOwn(name: "Аня", bio: nil, photo: nil)
+        #expect(saved.body.avatarSeed == seed)
+        #expect(saved.body.photoHash == nil)
     }
 
     @Test func identitySurvivesNameAndUsernameEdits() throws {

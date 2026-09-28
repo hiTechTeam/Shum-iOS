@@ -19,7 +19,7 @@ struct ShumStoreCleanupTests {
         let card = try identity.card(name: "Аня", bio: "Привет")
         wire.myPeerID = PeerID(publicKey: card.noiseKey)
         let store = try ShumConversationStore(ownerID: card.id, key: identity.storageKey, url: url)
-        let service = ShumMessageStore(identity: identity, store: store, transport: wire, wire: wire, card: card, internet: nil, now: { clock.date })
+        let service = try ShumMessageStore(identity: identity, store: store, transport: wire, wire: wire, card: card, internet: nil, now: { clock.date })
         try store.transaction { state in
             state.seenRelay["relay-copy"] = clock.date.addingTimeInterval(3_600)
             state.deletedMessageIDs = ["deleted-message": clock.date.addingTimeInterval(3_600)]

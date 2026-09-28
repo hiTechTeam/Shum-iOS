@@ -165,15 +165,165 @@ struct ShumChatCanvas: View {
     var body: some View {
         ZStack {
             palette.canvas
-            Image("ChatDoodleWallpaper")
-                .renderingMode(.template)
-                .resizable(resizingMode: .tile)
+            ShumPixelDoodleWallpaper()
                 .foregroundStyle(palette.chatDoodle)
                 .opacity(palette.chatDoodleOpacity)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
+}
+
+private struct ShumPixelDoodleWallpaper: View {
+    @Environment(\.shumThemePalette) private var palette
+    @State private var seed = UInt64.random(in: 1...UInt64.max)
+
+    var body: some View {
+        Canvas { context, size in
+            // A fixed world height prevents the background from rearranging
+            // when the keyboard changes the visible height of the chat.
+            let worldHeight = max(1600.0, size.height)
+            let moduleSide: CGFloat = 220
+            let columns = Int(ceil(size.width / moduleSide)) + 2
+            let rows = Int(ceil(worldHeight / moduleSide)) + 2
+
+            for row in -1..<rows {
+                for column in -1..<columns {
+                    let templateIndex = Self.positiveModulo(row * 7 + column * 11, 12)
+                    let templateSeed = seed &+ UInt64(templateIndex + 1) &* 0x9E3779B97F4A7C15
+                    Self.drawModule(
+                        in: context,
+                        origin: CGPoint(
+                            x: CGFloat(column) * moduleSide,
+                            y: CGFloat(row) * moduleSide
+                        ),
+                        side: moduleSide,
+                        seed: templateSeed,
+                        color: palette.chatDoodle
+                    )
+                }
+            }
+        }
+    }
+
+    private static func drawModule(
+        in context: GraphicsContext,
+        origin: CGPoint,
+        side: CGFloat,
+        seed: UInt64,
+        color: Color
+    ) {
+        var random = DoodleRandom(state: seed)
+        var occupied: [CGRect] = []
+
+        // Every square has a strong anchor, a couple of medium characters
+        // and a loose field of tiny marks. The squares themselves stay hidden.
+        let largePixel = CGFloat(random.pick(2) == 0 ? 6 : 7)
+        let mediumPixels: [CGFloat] = [
+            CGFloat(random.pick(2) == 0 ? 3 : 4),
+            CGFloat(random.pick(2) == 0 ? 3 : 4)
+        ]
+        let tinyCount = 5 + random.pick(3)
+        let pixels = [largePixel] + mediumPixels + (0..<tinyCount).map { _ in
+            CGFloat(random.pick(2) == 0 ? 1.5 : 2)
+        }
+
+        for (index, pixel) in pixels.enumerated() {
+            for _ in 0..<80 {
+                let art = Self.art[random.pick(Self.art.count)]
+                let width = CGFloat(art[0].count) * pixel
+                let height = CGFloat(art.count) * pixel
+                let overflow: CGFloat = index == 0 ? 14 : 8
+                let availableX = max(1, Int(side - width + overflow * 2))
+                let availableY = max(1, Int(side - height + overflow * 2))
+                let localX = Self.snap(CGFloat(random.pick(availableX)) - overflow)
+                let localY = Self.snap(CGFloat(random.pick(availableY)) - overflow)
+                let localBox = CGRect(x: localX, y: localY, width: width, height: height)
+                let spacing: CGFloat = index == 0 ? 8 : 4
+                guard !occupied.contains(where: {
+                    $0.intersects(localBox.insetBy(dx: -spacing, dy: -spacing))
+                }) else { continue }
+
+                occupied.append(localBox)
+                let path = Self.path(
+                    for: art,
+                    pixel: pixel,
+                    origin: CGPoint(x: origin.x + localX, y: origin.y + localY)
+                )
+                var layer = context
+                layer.opacity = Self.opacity(for: index, random: &random)
+                layer.fill(path, with: .color(color), style: FillStyle(antialiased: false))
+                break
+            }
+        }
+    }
+
+    private static func path(for art: [String], pixel: CGFloat, origin: CGPoint) -> Path {
+        var path = Path()
+        for (row, line) in art.enumerated() {
+            for (column, value) in line.enumerated() where value == "1" {
+                path.addRect(
+                    CGRect(
+                        x: origin.x + CGFloat(column) * pixel,
+                        y: origin.y + CGFloat(row) * pixel,
+                        width: pixel,
+                        height: pixel
+                    )
+                )
+            }
+        }
+        return path
+    }
+
+    private static func opacity(for index: Int, random: inout DoodleRandom) -> Double {
+        if index == 0 {
+            return random.pick(2) == 0 ? 0.82 : 1
+        }
+        if index < 3 {
+            return [0.52, 0.68, 0.84][random.pick(3)]
+        }
+        return [0.26, 0.36, 0.48, 0.60][random.pick(4)]
+    }
+
+    private static func positiveModulo(_ value: Int, _ divisor: Int) -> Int {
+        let remainder = value % divisor
+        return remainder >= 0 ? remainder : remainder + divisor
+    }
+
+    private static func snap(_ value: CGFloat) -> CGFloat {
+        (value * 2).rounded() / 2
+    }
+
+    private struct DoodleRandom {
+        var state: UInt64
+        mutating func pick(_ count: Int) -> Int {
+            state &+= 0x9E3779B97F4A7C15
+            var z = state
+            z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+            z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+            return Int((z ^ (z >> 31)) % UInt64(count))
+        }
+    }
+    private static let art: [[String]] = [
+        ["010000010","011000110","010101010","100000001","101000101","100010001","010101010","001111100"],
+        ["001111100","010000010","100000001","101101101","101101101","100000001","010010010","001101100"],
+        ["010000010","001000100","001111100","010000010","110101011","100000001","101111101","101000101","000101000"],
+        ["000111100000","001000010000","010000001000","010000001110","011001110010","110110001100","101000110000","011111000000"],
+        ["000010000","000010000","000111000","111101111","000111000","000010000","000010000"],
+        ["000010000","000111000","001000100","011111110","010010010","011111110","001111100","011010110","010010010"],
+        ["01100110","10011001","10000001","01000010","00100100","00011000"],
+        ["000100000","001110000","001010000","000100110","000101001","000111110","001110000","010000100","001111000"],
+        ["001111100","010000010","101101101","101101101","100000001","100110001","100000001","101010101","010101010"],
+        ["000010000","001111100","010000010","110101011","100000001","101111101","010000010","001111100","000101000","001101100"],
+        ["0111111100","1100000110","1000000010","1010101010","1000000010","0111111100","0001100000","0011000000"],
+        ["000110000","001001000","010000100","100000010","111111110","000110000","000110000","000110000"],
+        ["000010000","000111000","001101100","001000100","001111100","011111110","110111011","100010001","000101000"],
+        ["01000010","10100101","01011010","00111100","01011010","10100101","01000010","00011000"],
+        ["000001100","000010010","000100001","001011110","010100000","101000000","110000000"],
+        ["000110000","000110000","011111100","010000100","110110110","100000010","111111110","001001000"],
+        ["00111100","01000010","10111101","10100101","10111101","01000010","00111100"],
+        ["10000001","01000010","00100100","00011000","00011000","00100100","01000010","10000001"]
+    ]
 }
 
 private struct ShumWindowTintBridge: UIViewRepresentable {

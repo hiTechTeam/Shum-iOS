@@ -29,14 +29,14 @@ private struct LocalCardPhotoRegistration: View {
     let name: String
     @ObservedObject var photoViewModel: ProfilePhotoViewModel
     @EnvironmentObject private var coordinator: AppCoordinator
-    @State private var showSecurityReady = false
+    @State private var showPasscode = false
     @State private var showSaveError = false
 
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
-            Text("Пиксельный аватар".localized).font(.largeTitle.bold()).multilineTextAlignment(.center)
-            Text("Люди, звери, пришельцы и роботы. Перебирайте варианты, пока не найдёте своего.".localized)
+            Text("Аватар".localized).font(.largeTitle.bold()).multilineTextAlignment(.center)
+            Text("Найди аватар себе по душе. Свой характер, свой стиль.".localized)
                 .foregroundStyle(.secondary).multilineTextAlignment(.center)
             ProfilePhotoView(
                 viewModel: photoViewModel,
@@ -51,8 +51,8 @@ private struct LocalCardPhotoRegistration: View {
         }
         .padding(.horizontal, 24).background(ShumThemeCanvas().ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(isPresented: $showSecurityReady) {
-            RegistrationSecurityReadyView()
+        .navigationDestination(isPresented: $showPasscode) {
+            RegistrationPasscodeSetupView()
         }
         .alert("Не удалось создать защиту".localized, isPresented: $showSaveError) {
             Button("Понятно".localized, role: .cancel) { }
@@ -68,7 +68,7 @@ private struct LocalCardPhotoRegistration: View {
             showSaveError = true
             return
         }
-        showSecurityReady = true
+        showPasscode = true
     }
 }
 

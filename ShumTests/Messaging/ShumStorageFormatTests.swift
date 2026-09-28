@@ -26,7 +26,7 @@ struct ShumStorageFormatTests {
     /// Stores `contact` for `owner` and returns the database as it is persisted.
     private func database(of owner: Account, with contact: Account, at url: URL) throws -> ShumDatabase {
         let store = try ShumConversationStore(ownerID: owner.card.id, key: owner.identity.storageKey, url: url)
-        let service = ShumMessageStore(identity: owner.identity, store: store, transport: owner.wire, wire: owner.wire, card: owner.card, internet: nil)
+        let service = try ShumMessageStore(identity: owner.identity, store: store, transport: owner.wire, wire: owner.wire, card: owner.card, internet: nil)
         try service.add(contact.card, source: "test")
         return store.state
     }

@@ -351,7 +351,6 @@
 "Запрос будет отклонён. Вы сможете принять его позднее в этом чате." = "The request will be declined. You can accept it later in this chat.";
 "Зашифрованная история чатов" = "Encrypted chat history";
 "Защита" = "Protection";
-"Защита готова" = "Protection is ready";
 "Защита копии" = "Backup protection";
 "Защита чата" = "Chat protection";
 "Защитите доступ к переписке, если устройство окажется у другого человека." = "Protect access to your conversations if someone else gets your device.";
@@ -535,7 +534,7 @@
 "Пока можно отправить до 255 байт текста. Разделите сообщение на несколько частей." = "Messages can currently contain up to 255 bytes of text. Split the message into several parts.";
 "Пока не встречались" = "No encounters yet";
 "Пока тихо" = "Quiet for now";
-"Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытый идентификатор." = "Show this QR code to the person so they can add you to their Shum contacts. The code contains only a public identifier.";
+"Покажите QR-код, чтобы вас добавили в Shum. Имя и аватар появятся даже без интернета." = "Show your QR code to connect on Shum. Your name and avatar appear even without internet.";
 "Покажите этот QR-код собеседнику. Затем отсканируйте его код, чтобы подтвердить сохранённый ключ контакта." = "Show this QR code to the other person. Then scan their code to verify the saved contact key.";
 "Политика конфиденциальности" = "Privacy Policy";
 "Полные тексты лицензий компонентов, входящих в приложение, доступны в разделе «Сторонние лицензии» на экране «О приложении»." = "The complete license texts for components included in the app are available under Third-Party Licenses on the About screen.";
@@ -667,10 +666,11 @@
 "Шифрование" = "Encryption";
 "Шифруем хранилище" = "Encrypting storage";
 "Шумное фото" = "Noise photo";
-"Пиксельный аватар" = "Pixel avatar";
-"Предпросмотр пиксельного аватара" = "Pixel avatar preview";
+"Аватар" = "Avatar";
+"Сменить аватар" = "Change avatar";
+"Предпросмотр аватара" = "Avatar preview";
 "Создайте аватар без своего фото. Нажимайте, пока не найдёте подходящий." = "Create an avatar without using your photo. Keep trying until you find one you like.";
-"Люди, звери, пришельцы и роботы. Перебирайте варианты, пока не найдёте своего." = "People, animals, aliens and robots. Keep trying until you find your favourite.";
+"Найди аватар себе по душе. Свой характер, свой стиль." = "Find an avatar you love. Your character, your style.";
 "Другой вариант" = "Try another";
 "Поставить на аватар" = "Use this avatar";
 "Экран %@ из %@" = "Screen %@ of %@";

@@ -349,7 +349,6 @@
 "Запрос будет отклонён. Вы сможете принять его позднее в этом чате." = "La solicitud se rechazará. Podrás aceptarla más tarde en este chat.";
 "Зашифрованная история чатов" = "Historial de chats cifrado";
 "Защита" = "Protección";
-"Защита готова" = "La protección está lista";
 "Защита копии" = "Protección de la copia";
 "Защита чата" = "Protección del chat";
 "Защитите доступ к переписке, если устройство окажется у другого человека." = "Protege el acceso a tus conversaciones si otra persona obtiene tu dispositivo.";
@@ -533,7 +532,7 @@
 "Пока можно отправить до 255 байт текста. Разделите сообщение на несколько частей." = "Por ahora, los mensajes pueden contener hasta 255 bytes de texto. Divide el mensaje en varias partes.";
 "Пока не встречались" = "Aún no hay encuentros";
 "Пока тихо" = "Todo tranquilo por ahora";
-"Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытый идентификатор." = "Muestra este código QR a la persona para que te añada a sus contactos de Shum. El código solo contiene un identificador público.";
+"Покажите QR-код, чтобы вас добавили в Shum. Имя и аватар появятся даже без интернета." = "Muestra tu código QR para conectar en Shum. Tu nombre y avatar aparecen incluso sin internet.";
 "Покажите этот QR-код собеседнику. Затем отсканируйте его код, чтобы подтвердить сохранённый ключ контакта." = "Muestra este código QR a la otra persona. Después escanea su código para verificar la clave de contacto guardada.";
 "Политика конфиденциальности" = "Política de privacidad";
 "Полные тексты лицензий компонентов, входящих в приложение, доступны в разделе «Сторонние лицензии» на экране «О приложении»." = "Los textos completos de las licencias de los componentes incluidos en la app están disponibles en Licencias de terceros, en la pantalla Acerca de la app.";
@@ -704,8 +703,9 @@
 "Когда вы отправляете сообщение или приглашение, приложение передаёт серверу вашу карточку, идентификатор получателя и тип события. Поэтому при обработке запроса сервер знает, какому профилю вы отправили уведомление. Эти сведения не сохраняются. Получатель видит уведомление без текста сообщения. Сервер не получает текст сообщений, фотографии и список контактов." = "Cuando envías un mensaje o una invitación, la app envía al servidor tu tarjeta, el identificador del destinatario y el tipo de evento. Por ello, mientras procesa la solicitud, el servidor sabe a qué perfil has enviado la notificación. Esta información no se almacena. El destinatario ve una notificación sin el texto del mensaje. El servidor no recibe el texto de los mensajes, las fotos ni tu lista de contactos.";
 "Сервер использует IP-адрес запроса только для ограничения частоты запросов и не сохраняет его. Инфраструктура хостинга может вести технические журналы соединений." = "El servidor usa la dirección IP de la solicitud solo para limitar la frecuencia de solicitudes y no la almacena. La infraestructura de alojamiento puede conservar registros técnicos de conexión.";
 "При удалении профиля приложение также просит сервер уведомлений удалить токен устройства." = "Al eliminar tu perfil, la app también pide al servidor de notificaciones que elimine el token del dispositivo.";
-"Пиксельный аватар" = "Avatar pixelado";
-"Предпросмотр пиксельного аватара" = "Vista previa del avatar pixelado";
-"Люди, звери, пришельцы и роботы. Перебирайте варианты, пока не найдёте своего." = "Personas, animales, extraterrestres y robots. Prueba hasta encontrar el tuyo.";
+"Аватар" = "Avatar";
+"Сменить аватар" = "Cambiar avatar";
+"Предпросмотр аватара" = "Vista previa del avatar";
+"Найди аватар себе по душе. Свой характер, свой стиль." = "Encuentra un avatar que te guste. Tu personalidad, tu estilo.";
 "Другой вариант" = "Probar otro";
 "Поставить на аватар" = "Usar este avatar";

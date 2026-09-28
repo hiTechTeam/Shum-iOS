@@ -8,7 +8,6 @@ struct Welcome: View {
     @State private var isImportingBackup = false
     @State private var importedBackup: Data?
     @State private var showRestore = false
-    @State private var showSecuritySetup = false
     @State private var showPasscodeSetup = false
     @State private var importError: String?
 
@@ -73,9 +72,6 @@ struct Welcome: View {
                 Text("Профиль создаётся на этом устройстве. Номер телефона и внешний аккаунт не нужны.".localized)
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.bottom, 18)
             }.padding(.horizontal, 28).background(ShumThemeCanvas().ignoresSafeArea())
-                .navigationDestination(isPresented: $showSecuritySetup) {
-                    RegistrationSecurityReadyView()
-                }
                 .navigationDestination(isPresented: $showPasscodeSetup) {
                     RegistrationPasscodeSetupView()
                 }
@@ -147,11 +143,7 @@ struct Welcome: View {
         }
         .task {
             if coordinator.needsSecuritySetup {
-                if coordinator.needsRestoredPasscodeSetup {
-                    showPasscodeSetup = true
-                } else {
-                    showSecuritySetup = true
-                }
+                showPasscodeSetup = true
             }
         }
     }

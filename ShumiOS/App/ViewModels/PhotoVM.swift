@@ -34,8 +34,14 @@ final class ProfilePhotoViewModel: ObservableObject {
         loadPhotoIfNeeded()
     }
 
-    func prepareRegistrationAvatar(seed: UInt64) {
-        guard store.ownManifest == nil, avatarSeed == nil else { return }
+    func prepareRegistrationAvatar() throws {
+        guard avatarSeed == nil else { return }
+        if store.ownManifest != nil {
+            loadPhotoIfNeeded()
+            return
+        }
+        let publicKey = try store.prepareSigningKey()
+        let seed = ShumPixelAvatarGenerator.seed(for: publicKey)
         avatarSeed = seed
         let image = ShumPixelAvatarGenerator.image(seed: seed)
         uiImage = image

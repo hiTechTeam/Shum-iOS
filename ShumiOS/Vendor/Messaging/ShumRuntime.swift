@@ -80,7 +80,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         if UserDefaults.standard.string(forKey: "ShumSelfTestRun") == nil {
             do {
                 let identity = try ShumIdentityService(transport: ble, keychain: keychain, bridge: NostrIdentityBridge(keychain: keychain))
-                let card = try identity.card(name: model.nickname, bio: model.profiles.own.bio)
+                let card = try identity.card(name: model.nickname, bio: model.profiles.own.bio, avatarSeed: model.profiles.own.avatarSeed)
                 var preview = false
                 #if DEBUG && targetEnvironment(simulator)
                 preview = ProcessInfo.processInfo.arguments.contains("-ShumPermanentPreview")
@@ -88,7 +88,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                 let store = try ShumConversationStore(ownerID: card.id, key: identity.storageKey, url: preview ? nil : ShumConversationStore.liveURL)
                 if !preview { try ShumHistoryMigration.live(into: store) }
                 let internet = preview ? nil : ShumNostrService(identity: identity.nostr, manager: .shum())
-                let permanent = ShumMessageStore(identity: identity, store: store, transport: ble, wire: ble, card: card, internet: internet)
+                let permanent = try ShumMessageStore(identity: identity, store: store, transport: ble, wire: ble, card: card, internet: internet)
                 model.permanent = permanent
                 permanent.configureContactLookup { [weak model] in model?.profiles.own }
                 permanent.onError = { [weak model] in model?.error = $0 }
@@ -364,9 +364,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     }
     func profile(for peer: PeerID) -> ShumProfile? {
         if let permanent, let card = permanent.card(for: peer) {
-            let remote = permanent.session(for: card).flatMap { profiles.remote[$0] }
-                ?? profiles.remote[card.peerID]
-            let seed = remote?.avatarSeed ?? card.avatarSeed
+            let seed = card.avatarSeed
                 ?? ShumPixelAvatarGenerator.seed(for: card.noiseKey)
             return ShumProfile(name: card.name, bio: card.bio,
                 avatarSeed: seed).rendered()
@@ -384,11 +382,14 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         }
         return nil
     }
+    func currentProfileCard(_ card: ShumContactCard) -> ShumContactCard {
+        (try? permanent?.contacts.freshest(card)) ?? card
+    }
     func addContact(_ card: ShumContactCard, source: String) -> ShumPeer? {
         do {
             guard let permanent else { throw ShumFailure.unavailableIdentity }
             try permanent.add(card, source: source, avatar: nil)
-            return ShumPeer(id: card.peerID, name: card.name, lastConnected: Date())
+            return ShumPeer(id: card.peerID, name: permanent.card(for: card.peerID)?.name ?? card.name, lastConnected: Date())
         } catch { self.error = error.localizedDescription; return nil }
     }
     func isContact(_ peer: PeerID) -> Bool {

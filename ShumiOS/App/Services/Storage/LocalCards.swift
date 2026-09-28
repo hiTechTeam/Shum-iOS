@@ -190,9 +190,10 @@ final class LocalCardStore: @unchecked Sendable {
 
     var ownManifest: LocalCardManifest? { lock.withLock { own } }
 
-    func prepareSigningKey() throws {
+    @discardableResult
+    func prepareSigningKey() throws -> Data {
         try lock.withLock {
-            _ = try signingKey()
+            try signingKey().publicKey.rawRepresentation
         }
     }
 

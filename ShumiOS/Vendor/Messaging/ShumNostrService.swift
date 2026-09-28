@@ -196,6 +196,7 @@ final class ShumNostrService {
               lookup.target == sender, response.card.nostrKey == sender,
               response.profile.valid, response.profile.name == response.card.name,
               response.profile.bio == response.card.bio,
+              response.profile.avatarSeed == response.card.avatarSeed,
               (try? response.card.validate()) != nil else { return }
         lookup.card = response.card
         lookup.profile = response.profile

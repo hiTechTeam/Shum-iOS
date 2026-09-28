@@ -42,6 +42,15 @@ struct ShumGalleryScannerTests {
         #expect(ShumQRCodeDetector.payload(in: normalized) == payload)
     }
 
+    @Test func selfContainedProfileQRIsReadableAtPhoneDisplaySize() throws {
+        let node = try ShumPermanentTests.Node("Alice", clock: ShumPermanentTests.Clock())
+        let payload = try node.card.invitation().absoluteString
+        let photo = try #require(makePhoto(size: CGSize(width: 756, height: 756),
+            payload: payload, qrRect: CGRect(x: 60, y: 60, width: 636, height: 636), obscuresCenter: true))
+        let image = try #require(photo.cgImage)
+        #expect(ShumQRCodeDetector.payload(in: image) == payload)
+    }
+
     @Test func invalidGeometryDoesNotProduceAnImage() {
         let image = UIGraphicsImageRenderer(size: CGSize(width: 10, height: 10)).image { _ in }
         #expect(ShumScannerPhotoRenderer.render(

@@ -58,7 +58,7 @@ struct ShumQRView: View {
                             profileCard(qrImage: image)
                                 .padding(.top, 54)
 
-                            Text("Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытый идентификатор.".localized)
+                            Text("Покажите QR-код, чтобы вас добавили в Shum. Имя и аватар появятся даже без интернета.".localized)
                                 .font(.system(size: 15, weight: .regular))
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -92,7 +92,7 @@ struct ShumQRView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let invitationURL = try? card.sharingInvitation() {
-                ShumQRShareToolbar(invitationURL: invitationURL)
+                ShumQRShareToolbar(invitationURL: (try? card.sharingInvitation()) ?? invitationURL)
             }
         }
         .fullScreenCover(isPresented: $showScanner) {

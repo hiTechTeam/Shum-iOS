@@ -4,7 +4,9 @@ import UIKit
 /// A seed always produces the same portrait. Rendered pixels stay local to this device.
 @MainActor
 enum ShumPixelAvatarGenerator {
-    static let version = 1
+    // Version 1 is a wire contract. Keep its palette, PRNG and drawing rules
+    // unchanged; introduce a separate renderer/version for future designs.
+    nonisolated static let version = 1
 
     nonisolated static func seed(for publicKey: Data) -> UInt64 {
         let digest = SHA256.hash(data: Data("shum.pixel-avatar.v1\0".utf8) + publicKey)

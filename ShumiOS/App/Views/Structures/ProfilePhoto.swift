@@ -25,7 +25,7 @@ struct ProfilePhotoView: View {
             }
             .buttonStyle(.plain)
 
-            Button("Пиксельный аватар".localized) {
+            Button("Сменить аватар".localized) {
                 showPixelAvatarGenerator = true
             }
             .font(.system(size: 16, weight: .semibold))
@@ -62,7 +62,7 @@ private struct PixelAvatarGeneratorSheet: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack {
-                Text("Пиксельный аватар".localized)
+                Text("Аватар".localized)
                     .font(.system(size: 20, weight: .semibold))
                 Spacer()
                 Button { dismiss() } label: {
@@ -81,9 +81,9 @@ private struct PixelAvatarGeneratorSheet: View {
                 .interpolation(.none)
                 .frame(width: 184, height: 184)
                 .clipShape(Circle())
-                .accessibilityLabel("Предпросмотр пиксельного аватара".localized)
+                .accessibilityLabel("Предпросмотр аватара".localized)
 
-            Text("Люди, звери, пришельцы и роботы. Перебирайте варианты, пока не найдёте своего.".localized)
+            Text("Найди аватар себе по душе. Свой характер, свой стиль.".localized)
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

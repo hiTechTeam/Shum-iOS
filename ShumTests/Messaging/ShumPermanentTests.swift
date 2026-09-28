@@ -19,7 +19,7 @@ struct ShumPermanentTests {
             card = try identity.card(name: name, bio: "Привет")
             wire.myPeerID = PeerID(publicKey: card.noiseKey)
             store = try ShumConversationStore(ownerID: card.id, key: identity.storageKey, url: url)
-            service = ShumMessageStore(identity: identity, store: store, transport: wire, wire: wire, card: card, internet: nil, now: { clock.date })
+            service = try ShumMessageStore(identity: identity, store: store, transport: wire, wire: wire, card: card, internet: nil, now: { clock.date })
         }
     }
     func connect(_ a: Node, _ b: Node, clock: Clock) {
@@ -89,6 +89,113 @@ struct ShumPermanentTests {
         #expect(a.wire.shumPackets.count == 1)
     }
 
+    @Test("Offline QR contains the complete signed avatar and persists on the receiver")
+    func offlineSeedInvitation() throws {
+        let clock = Clock()
+        let alice = try Node("Alice", clock: clock)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let bob = try Node("Bob", clock: clock, url: url)
+        try alice.service.updateProfile(name: "Alice", bio: "Offline", avatarSeed: UInt64.max)
+        let original = alice.service.ownCard
+        guard case let .card(decoded) = try ShumInvitationPayload.parse(original.invitation()) else {
+            Issue.record("QR required a network lookup"); return
+        }
+        #expect(decoded == original)
+        #expect(try original.invitation().absoluteString.utf8.count < 600)
+        try bob.service.add(decoded, source: "qr")
+        #expect(bob.service.invitationPhase(for: decoded) == .ready)
+        #expect(bob.wire.shumPackets.isEmpty)
+        let reopened = try ShumConversationStore(ownerID: bob.card.id, key: bob.identity.storageKey, url: url)
+        let saved = try #require(reopened.state.contacts.first?.card)
+        #expect(saved == original)
+        #expect(reopened.state.contacts.first?.avatar == nil)
+        #expect(ShumPixelAvatarGenerator.data(seed: saved.avatarSeed!) == ShumPixelAvatarGenerator.data(seed: UInt64.max))
+        var tampered = decoded
+        tampered.profileRevision = 100
+        #expect(throws: (any Error).self) { try tampered.validate() }
+        tampered = decoded
+        tampered.avatarVersion = 2
+        #expect(throws: (any Error).self) { try tampered.validate() }
+    }
+
+    @Test("Old QR, BLE cards and internet packets cannot roll back a profile")
+    func profileVersionOrdering() throws {
+        let clock = Clock()
+        let a = try Node("Alice", clock: clock), b = try Node("Bob", clock: clock)
+        try allowBoth(a, b, clock: clock)
+        try a.service.updateProfile(name: "New Alice", bio: "", avatarSeed: 77)
+        let fresh = a.service.ownCard
+        b.service.receive(ShumPacket(card: fresh), from: nil, nostrSender: fresh.nostrKey)
+        try b.service.add(a.card, source: "old-qr")
+        b.service.receive(ShumPacket(card: a.card), from: nil, nostrSender: a.card.nostrKey)
+        connect(a, b, clock: clock)
+        b.service.receive(ShumPacket(card: a.card), from: a.wire.myPeerID, nostrSender: nil)
+        #expect(b.service.card(for: a.card.peerID) == fresh)
+        #expect(b.service.nearby[a.wire.myPeerID] == fresh)
+        #expect(b.service.invitationPhase(for: fresh) == .accepted)
+    }
+
+    @Test("BLE retries persist and acknowledgement clears only the delivered revision")
+    func durableProfileUpdates() throws {
+        let clock = Clock()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let a = try Node("Alice", clock: clock, url: url), b = try Node("Bob", clock: clock)
+        try allowBoth(a, b, clock: clock)
+        try a.service.updateProfile(name: "Alice", bio: "", avatarSeed: 10)
+        try a.service.updateProfile(name: "Alice", bio: "", avatarSeed: 20)
+        #expect(a.service.state.profileOutbox?.count == 1)
+        let latest = a.service.ownCard
+        a.store = try ShumConversationStore(ownerID: a.card.id, key: a.identity.storageKey, url: url)
+        a.service = try ShumMessageStore(identity: a.identity, store: a.store, transport: a.wire,
+            wire: a.wire, card: latest, internet: nil, now: { clock.date })
+        #expect(a.service.ownCard == latest)
+        connect(a, b, clock: clock)
+        clock.date.addTimeInterval(2)
+        a.service.tick(connected: [b.wire.myPeerID], active: true)
+        b.service.tick(connected: [a.wire.myPeerID], active: true)
+        drain([a, b])
+        #expect(b.service.card(for: a.card.peerID)?.avatarSeed == 20)
+        #expect(a.service.state.profileOutbox?.isEmpty == true)
+        #expect(b.service.state.profileOutbox?.isEmpty == true)
+    }
+
+    @Test("Encrypted internet profile protocol authenticates acknowledgements and reconciles restored counters")
+    func profileSyncAndRestore() throws {
+        let clock = Clock()
+        let a = try Node("Alice", clock: clock), b = try Node("Bob", clock: clock)
+        try allowBoth(a, b, clock: clock)
+        let newer = try a.identity.card(name: "Alice", bio: "", avatarSeed: 55, revision: 90)
+        var sync = ShumProfileSync(sender: b.service.ownCard, recipientID: a.card.id,
+            knownRecipient: newer, requestsReply: false)
+        sync.signature = try #require(b.wire.noiseSignData(sync.signingBytes()))
+        a.service.receive(ShumPacket(profileSync: sync), from: nil, nostrSender: b.card.nostrKey)
+        #expect(a.service.ownCard.profileRevision == 91)
+        #expect(a.service.ownCard.avatarSeed == a.card.avatarSeed)
+        #expect(a.service.state.ownProfileCard == a.service.ownCard)
+        #expect(a.service.state.profileOutbox?.count == 1)
+        // A forged acknowledgement cannot clear the queue.
+        sync.knownRecipient = a.service.ownCard
+        a.service.receive(ShumPacket(profileSync: sync), from: nil, nostrSender: b.card.nostrKey)
+        #expect(a.service.state.profileOutbox?.count == 1)
+        sync.signature = try #require(b.wire.noiseSignData(sync.signingBytes()))
+        a.service.receive(ShumPacket(profileSync: sync), from: nil, nostrSender: b.card.nostrKey)
+        #expect(a.service.state.profileOutbox?.isEmpty == true)
+    }
+
+    @Test("Legacy locator links still decode and profile payloads reject trailing bytes")
+    func invitationCompatibilityAndBounds() throws {
+        let old = try #require(URL(string: "shum://c2/AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"))
+        guard case .locator = try ShumInvitationPayload.parse(old) else { Issue.record("Legacy locator rejected"); return }
+        let node = try Node("Alice", clock: Clock())
+        let valid = try node.card.invitation().absoluteString
+        let extra = try #require(URL(string: valid + "AAAA"))
+        #expect(throws: (any Error).self) { try ShumInvitationPayload.parse(extra) }
+        let truncated = try #require(URL(string: String(valid.dropLast(20))))
+        #expect(throws: (any Error).self) { try ShumInvitationPayload.parse(truncated) }
+    }
+
     @Test func identityAndQRStayStableAndRejectTampering() throws {
         let a = try Node("Аня", clock: Clock())
         let restored = try ShumIdentityService(transport: a.wire, keychain: a.wire.mockKeychain, bridge: NostrIdentityBridge(keychain: a.wire.mockKeychain))
@@ -100,11 +207,11 @@ struct ShumPermanentTests {
         #expect(try restoredCard.signedBytes() == a.card.signedBytes())
         try restoredCard.validate()
         let compactInvitation = try ShumInvitationPayload.parse(a.card.invitation())
-        guard case let .locator(locator) = compactInvitation else {
-            Issue.record("The compact invitation must contain a Nostr locator")
+        guard case let .card(profile) = compactInvitation else {
+            Issue.record("The invitation must contain an offline profile")
             return
         }
-        #expect(locator.nostrKey == a.card.nostrKey)
+        #expect(profile == a.card)
         let legacyCard = try ShumContactCard.parse(a.card.legacyInvitation())
         #expect(legacyCard.id == a.card.id && legacyCard.avatarSeed == nil)
         #expect(legacyCard.signature == a.card.signature)
@@ -125,11 +232,11 @@ struct ShumPermanentTests {
         let fragment = try #require(shared.fragment)
         let direct = try #require(URL(string: "shum://" + fragment))
         #expect(direct == (try a.card.invitation()))
-        guard case let .locator(locator) = try ShumInvitationPayload.parse(direct) else {
+        guard case let .card(profile) = try ShumInvitationPayload.parse(shared) else {
             Issue.record("Shared invitation must open the original contact")
             return
         }
-        #expect(locator.nostrKey == a.card.nostrKey)
+        #expect(profile == a.card)
         #expect(!shared.absoluteString.contains(a.card.name))
         let insecure = try #require(URL(string: "http://example.test"))
         #expect(throws: (any Error).self) { try a.card.sharingInvitation(baseURL: insecure) }
@@ -147,6 +254,8 @@ struct ShumPermanentTests {
         #expect(throws: (any Error).self) { try changed.validate() }
 
         var oldShape = card
+        oldShape.profileRevision = nil
+        oldShape.profileSignature = nil
         oldShape.avatarSeed = nil
         oldShape.avatarVersion = nil
         oldShape.avatarSeedSignature = nil
@@ -189,7 +298,7 @@ struct ShumPermanentTests {
         #expect(b.service.avatar(for: a.card) == nil)
         b.store = try ShumConversationStore(ownerID: b.card.id,
             key: b.identity.storageKey, url: receiverURL)
-        b.service = ShumMessageStore(identity: b.identity, store: b.store,
+        b.service = try ShumMessageStore(identity: b.identity, store: b.store,
             transport: b.wire, wire: b.wire, card: b.card, internet: nil,
             now: { clock.date })
         #expect(b.service.acceptInvitation(a.card))
@@ -269,7 +378,7 @@ struct ShumPermanentTests {
         // Reconnect after the reply was published; either relay event may arrive first.
         a.service.retire()
         a.store = try ShumConversationStore(ownerID: a.card.id, key: a.identity.storageKey, url: url)
-        a.service = ShumMessageStore(identity: a.identity, store: a.store, transport: a.wire, wire: a.wire,
+        a.service = try ShumMessageStore(identity: a.identity, store: a.store, transport: a.wire, wire: a.wire,
             card: a.card, internet: nil, now: { clock.date })
         a.service.setActive(true)
         let legacy = ShumPacket(card: b.card)
@@ -311,7 +420,7 @@ struct ShumPermanentTests {
         }
         a.service.retire()
         a.store = try ShumConversationStore(ownerID: a.card.id, key: a.identity.storageKey, url: url)
-        a.service = ShumMessageStore(identity: a.identity, store: a.store, transport: a.wire, wire: a.wire,
+        a.service = try ShumMessageStore(identity: a.identity, store: a.store, transport: a.wire, wire: a.wire,
             card: a.card, internet: nil, now: { clock.date })
         let timestamp = Int64(clock.date.timeIntervalSince1970 * 1000)
         var acceptance = ShumInvitationControl(id: UUID().uuidString, sender: b.card, recipient: a.card,
@@ -600,7 +709,7 @@ struct ShumPermanentTests {
         #expect(throws: (any Error).self) { _ = try c.wire.openShumPayload(copy.envelope.ciphertext) }
         // A fresh coordinator consumes the persisted relay snapshot.
         c.store = try ShumConversationStore(ownerID: c.card.id, key: c.identity.storageKey, url: url)
-        c.service = ShumMessageStore(identity: c.identity, store: c.store, transport: c.wire, wire: c.wire, card: c.card, internet: nil, now: { clock.date })
+        c.service = try ShumMessageStore(identity: c.identity, store: c.store, transport: c.wire, wire: c.wire, card: c.card, internet: nil, now: { clock.date })
         #expect(c.service.state.relay.count == 1)
         a.wire.connectedPeers = []; a.service.tick(connected: [], active: true)
         clock.date.addTimeInterval(31); connect(c,b,clock:clock)

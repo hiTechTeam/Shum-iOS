@@ -19,6 +19,8 @@ struct ShumContactCard: Codable, Equatable {
     var avatarSeed: UInt64?
     var avatarVersion: Int?
     var avatarSeedSignature: Data?
+    var profileRevision: UInt64?
+    var profileSignature: Data?
     var id: String { Self.userID(noiseKey) }
     var peerID: PeerID { PeerID(hexData: noiseKey) }
     static func userID(_ key: Data) -> String { SHA256.hash(data: key).map { String(format: "%02x", $0) }.joined() }
@@ -26,6 +28,8 @@ struct ShumContactCard: Codable, Equatable {
         var unsigned = self
         unsigned.signature = Data()
         // Keep the original card signature valid for older Shum versions.
+        unsigned.profileRevision = nil
+        unsigned.profileSignature = nil
         unsigned.avatarSeed = nil
         unsigned.avatarVersion = nil
         unsigned.avatarSeedSignature = nil
@@ -39,14 +43,46 @@ struct ShumContactCard: Codable, Equatable {
         withUnsafeBytes(of: &littleEndianSeed) { bytes.append(contentsOf: $0) }
         return bytes
     }
+    func profileBytes() throws -> Data {
+        var unsigned = self
+        unsigned.signature = Data()
+        unsigned.avatarSeedSignature = nil
+        unsigned.profileSignature = nil
+        return Data("shum.profile.v1\0".utf8) + (try ShumCoding.encode(unsigned))
+    }
+
+    var profileID: String { (try? profileBytes()).map(Self.userID) ?? "" }
+
+    /// Only compare authenticated cards with the same pinned identity.
+    func preferred(over previous: Self) throws -> Self {
+        try validate()
+        guard noiseKey == previous.noiseKey, signingKey == previous.signingKey,
+              nostrKey == previous.nostrKey else { throw ShumFailure.invalidContact }
+        let incoming = profileRevision ?? 0, known = previous.profileRevision ?? 0
+        if incoming != known { return incoming > known ? self : previous }
+        // A deterministic tie-break converges after restoring an old backup.
+        if incoming > 0 {
+            return previous.profileID < profileID ? self : previous
+        }
+        return self
+    }
+
     func validate() throws {
         guard version == 1, noiseKey.count == 32, signingKey.count == 32,
               noiseKey.contains(where: { $0 != 0 }), nostrKey.count == 64,
               nostrKey.allSatisfy({ $0.isHexDigit && !$0.isUppercase }),
               !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              name.utf8.count <= 64, bio.count <= 72,
+              name.utf8.count <= 64, bio.count <= 72, bio.utf8.count <= 640,
               try Curve25519.Signing.PublicKey(rawRepresentation: signingKey)
                 .isValidSignature(signature, for: signedBytes()) else { throw ShumFailure.invalidContact }
+        if let profileRevision {
+            guard profileRevision > 0, avatarSeed != nil,
+                  let profileSignature, profileSignature.count == 64,
+                  try Curve25519.Signing.PublicKey(rawRepresentation: signingKey)
+                    .isValidSignature(profileSignature, for: profileBytes()) else {
+                throw ShumFailure.invalidContact
+            }
+        } else if profileSignature != nil { throw ShumFailure.invalidContact }
         if avatarSeed != nil {
             guard let signedSeed = avatarSeedBytes(), let avatarSeedSignature,
                   avatarSeedSignature.count == 64,
@@ -60,22 +96,37 @@ struct ShumContactCard: Codable, Equatable {
     }
     func invitation() throws -> URL {
         try validate()
-        guard let nostrKey = Data(hexString: nostrKey), nostrKey.count == 32 else {
-            throw ShumFailure.invalidContact
+        guard let seed = avatarSeed, let avatarVersion, let profileRevision,
+              let avatarSeedSignature, let profileSignature,
+              let nostrBytes = Data(hexString: nostrKey) else {
+            return try legacyInvitation()
         }
-        let encoded = nostrKey.base64EncodedString()
+        // Binary c3 is self-contained and substantially smaller than JSON.
+        var payload = Data([3, UInt8(version)])
+        payload.append(noiseKey); payload.append(signingKey); payload.append(nostrBytes)
+        payload.append(UInt8(name.utf8.count)); payload.append(contentsOf: name.utf8)
+        payload.append(UInt8((bio.utf8.count >> 8) & 255))
+        payload.append(UInt8(bio.utf8.count & 255)); payload.append(contentsOf: bio.utf8)
+        payload.append(signature)
+        func appendInteger(_ value: UInt64) {
+            var value = value.littleEndian
+            withUnsafeBytes(of: &value) { payload.append(contentsOf: $0) }
+        }
+        appendInteger(seed)
+        payload.append(UInt8(avatarVersion))
+        appendInteger(profileRevision)
+        payload.append(avatarSeedSignature); payload.append(profileSignature)
+        let encoded = payload.base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
-        guard let result = URL(string: "shum://c2/\(encoded)") else {
-            throw ShumFailure.invalidContact
-        }
+        guard let result = URL(string: "shum://c3/\(encoded)") else { throw ShumFailure.invalidContact }
         return result
     }
 
-    /// HTTPS links are recognized by messengers. Keep the locator in the
+    /// HTTPS links are recognized by messengers. Keep the public profile in the
     /// fragment so opening the landing page does not send it to the server.
-    /// QR codes continue using the compact scheme, including when offline.
+    /// The same signed payload is used by QR codes and links.
     func sharingInvitation(baseURL: URL? = nil) throws -> URL {
         let configuredURL = (Bundle.main.object(forInfoDictionaryKey: "ShumPushAPIBaseURL") as? String)
             .flatMap(URL.init(string:))
@@ -88,7 +139,7 @@ struct ShumContactCard: Codable, Equatable {
         let directURL = try invitation()
         components.path = "/invite"
         components.query = nil
-        components.fragment = "c2/" + directURL.lastPathComponent
+        components.fragment = (directURL.host ?? "c3") + "/" + directURL.lastPathComponent
         guard let url = components.url else { throw ShumFailure.invalidContact }
         return url
     }
@@ -128,7 +179,7 @@ struct ShumContactCard: Codable, Equatable {
         guard url.absoluteString.utf8.count <= 4096, url.scheme == "shum" else {
             throw ShumFailure.invalidContact
         }
-        if url.host == "c" {
+        if url.host == "c" || url.host == "c3" {
             return try parseCompact(url)
         }
         guard url.host == "contact",
@@ -143,14 +194,14 @@ struct ShumContactCard: Codable, Equatable {
 
     private static func parseCompact(_ url: URL) throws -> Self {
         let encoded = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard !encoded.isEmpty, encoded.utf8.count <= 1024 else {
+        guard !encoded.isEmpty, encoded.utf8.count <= 2048 else {
             throw ShumFailure.invalidContact
         }
         var base64 = encoded
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
         base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
-        guard let bytes = Data(base64Encoded: base64), bytes.count <= 768 else {
+        guard let bytes = Data(base64Encoded: base64), bytes.count <= 1536 else {
             throw ShumFailure.invalidContact
         }
 
@@ -168,7 +219,8 @@ struct ShumContactCard: Codable, Equatable {
             return bytes[cursor]
         }
 
-        guard try readByte() == 1 else { throw ShumFailure.invalidContact }
+        let format = try readByte()
+        guard format == (url.host == "c3" ? 3 : 1) else { throw ShumFailure.invalidContact }
         let cardVersion = Int(try readByte())
         let noiseKey = try read(32)
         let signingKey = try read(32)
@@ -178,6 +230,14 @@ struct ShumContactCard: Codable, Equatable {
         let bioLength = (Int(try readByte()) << 8) | Int(try readByte())
         let bioData = try read(bioLength)
         let signature = try read(64)
+        func readInteger() throws -> UInt64 {
+            try read(8).enumerated().reduce(UInt64(0)) { $0 | (UInt64($1.element) << ($1.offset * 8)) }
+        }
+        let seed = format == 3 ? try readInteger() : nil
+        let avatarVersion = format == 3 ? Int(try readByte()) : nil
+        let revision = format == 3 ? try readInteger() : nil
+        let seedSignature = format == 3 ? try read(64) : nil
+        let profileSignature = format == 3 ? try read(64) : nil
         guard cursor == bytes.endIndex,
               let name = String(data: nameData, encoding: .utf8),
               let bio = String(data: bioData, encoding: .utf8) else {
@@ -191,7 +251,9 @@ struct ShumContactCard: Codable, Equatable {
             nostrKey: nostrKey,
             name: name,
             bio: bio,
-            signature: signature
+            signature: signature,
+            avatarSeed: seed, avatarVersion: avatarVersion, avatarSeedSignature: seedSignature,
+            profileRevision: revision, profileSignature: profileSignature
         )
         try card.validate()
         return card
@@ -232,6 +294,10 @@ enum ShumInvitationPayload {
     case locator(ShumContactLocator)
 
     static func parse(_ url: URL) throws -> Self {
+        if url.scheme == "https", url.path == "/invite", url.absoluteString.utf8.count <= 4096,
+           let fragment = url.fragment, let direct = URL(string: "shum://" + fragment) {
+            return try parse(direct)
+        }
         if url.scheme == "shum", url.host == "c2" {
             return .locator(try ShumContactLocator.parse(url))
         }
@@ -326,7 +392,7 @@ final class ShumIdentityService {
         }
         storageKey = SymmetricKey(data: storageBytes)
     }
-    func card(name: String, bio: String, avatarSeed: UInt64? = nil) throws -> ShumContactCard {
+    func card(name: String, bio: String, avatarSeed: UInt64? = nil, revision: UInt64 = 1) throws -> ShumContactCard {
         var card = ShumContactCard(noiseKey: transport.noiseStaticPublicKeyData(), signingKey: transport.noiseSigningPublicKeyData(), nostrKey: nostr.publicKeyHex, name: name, bio: String(bio.prefix(72)))
         guard let signature = transport.noiseSignData(try card.signedBytes()) else { throw ShumFailure.unavailableIdentity }
         card.signature = signature
@@ -337,6 +403,11 @@ final class ShumIdentityService {
             throw ShumFailure.unavailableIdentity
         }
         card.avatarSeedSignature = seedSignature
+        card.profileRevision = revision
+        guard let profileSignature = transport.noiseSignData(try card.profileBytes()) else {
+            throw ShumFailure.unavailableIdentity
+        }
+        card.profileSignature = profileSignature
         try card.validate()
         return card
     }

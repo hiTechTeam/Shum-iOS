@@ -36,7 +36,7 @@ struct ShumStoreBenchmarkTests {
         defer { try? FileManager.default.removeItem(at: url) }
         let owner = try Account("Аня"), contact = try Account("Борис")
         let store = try ShumConversationStore(ownerID: owner.card.id, key: owner.identity.storageKey, url: url)
-        let service = ShumMessageStore(identity: owner.identity, store: store, transport: owner.wire, wire: owner.wire, card: owner.card, internet: nil)
+        let service = try ShumMessageStore(identity: owner.identity, store: store, transport: owner.wire, wire: owner.wire, card: owner.card, internet: nil)
         try service.add(contact.card, source: "benchmark")
         try store.transaction { state in
             state.invitationStates?[contact.card.id] = ShumInvitationState(phase: .accepted, updatedAt: 0, eventID: "benchmark")

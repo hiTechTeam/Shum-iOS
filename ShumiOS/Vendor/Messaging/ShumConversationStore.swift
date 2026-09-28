@@ -303,6 +303,37 @@ struct ShumStoredReceipt: Codable {
     var lastNostrAttempt: Date?
     var nostrAttempts: Int?
 }
+/// Recipient acknowledgements refer to the signed profile, not relay acceptance.
+struct ShumProfileSync: Codable {
+    var sender: ShumContactCard
+    var recipientID: String
+    var knownRecipient: ShumContactCard?
+    var requestsReply: Bool
+    var signature = Data()
+
+    func signingBytes() throws -> Data {
+        var unsigned = self
+        unsigned.signature = Data()
+        return Data("shum.profile-sync.v1\0".utf8) + (try ShumCoding.encode(unsigned))
+    }
+    func validate() throws {
+        try sender.validate()
+        guard sender.profileRevision != nil, signature.count == 64,
+              try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey)
+                .isValidSignature(signature, for: signingBytes()) else { throw ShumFailure.invalidContact }
+        if let knownRecipient {
+            try knownRecipient.validate()
+            guard knownRecipient.id == recipientID else { throw ShumFailure.invalidContact }
+        }
+    }
+}
+struct ShumProfileDelivery: Codable {
+    var recipientID: String
+    var profileID: String
+    var lastAttempt: Date?
+    var attempts = 0
+}
+
 struct ShumPacket: Codable {
     var version = 1
     var card: ShumContactCard?
@@ -313,6 +344,7 @@ struct ShumPacket: Codable {
     var invitationAvatar: ShumInvitationAvatar?
     var typing: ShumTypingControl?
     var presence: ShumPresenceControl?
+    var profileSync: ShumProfileSync?
 }
 struct ShumDatabase: Codable {
     var version = 1
@@ -335,6 +367,8 @@ struct ShumDatabase: Codable {
     var pinnedDirectoryEntries: [String: [String]]?
     var invitationStates: [String: ShumInvitationState]?
     var invitationOutbox: [ShumStoredInvitationControl]?
+    var ownProfileCard: ShumContactCard?
+    var profileOutbox: [ShumProfileDelivery]?
 }
 
 @MainActor
@@ -403,14 +437,43 @@ final class ShumConversationStore {
 final class ShumContactsService {
     let store: ShumConversationStore
     init(store: ShumConversationStore) { self.store = store }
+    func freshest(_ card: ShumContactCard) throws -> ShumContactCard {
+        try card.validate()
+        let candidates = store.state.contacts.filter { $0.id == card.id }.map(\.card)
+            + (store.state.encounters ?? []).filter { $0.id == card.id }.map(\.card)
+            + store.state.requests.filter { $0.id == card.id }
+        return try candidates.reduce(card) { try $0.preferred(over: $1) }
+    }
+    static func apply(_ card: ShumContactCard, to state: inout ShumDatabase) {
+        if let index = state.contacts.firstIndex(where: { $0.id == card.id }) {
+            state.contacts[index].card = card
+            if card.avatarSeed != nil { state.contacts[index].avatar = nil }
+        }
+        if let index = state.encounters?.firstIndex(where: { $0.id == card.id }) {
+            state.encounters?[index].card = card
+            if card.avatarSeed != nil { state.encounters?[index].avatar = nil }
+        }
+        if let index = state.requests.firstIndex(where: { $0.id == card.id }) {
+            state.requests[index] = card
+        }
+    }
+    @discardableResult
+    func merge(_ incoming: ShumContactCard) throws -> ShumContactCard {
+        let card = try freshest(incoming)
+        let needsSave = store.state.contacts.contains { $0.id == card.id && $0.card != card }
+            || store.state.encounters?.contains { $0.id == card.id && $0.card != card } == true
+            || store.state.requests.contains { $0.id == card.id && $0 != card }
+        if needsSave { try store.transaction { Self.apply(card, to: &$0) } }
+        return card
+    }
     func add(
-        _ card: ShumContactCard,
+        _ incoming: ShumContactCard,
         source: String,
         avatar: Data? = nil,
         now: Date = Date(),
         includeInAddressBook: Bool = true
     ) throws {
-        try card.validate()
+        let card = try freshest(incoming)
         guard card.id != store.state.ownerID else { throw ShumFailure.invalidContact }
         if let existing = store.state.contacts.first(where: { $0.id == card.id }),
            existing.card == card,
@@ -419,6 +482,7 @@ final class ShumContactsService {
             return
         }
         try store.transaction { state in
+            Self.apply(card, to: &state)
             if let index = state.contacts.firstIndex(where: { $0.id == card.id }) {
                 // Identity bindings are pinned. Name/bio updates cannot rotate authentication keys.
                 guard state.contacts[index].card.signingKey == card.signingKey,

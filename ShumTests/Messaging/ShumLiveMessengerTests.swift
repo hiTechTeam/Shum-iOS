@@ -22,7 +22,7 @@ final class ShumLiveMessengerTests: XCTestCase {
             manager = .shum()
             internet = ShumNostrService(identity: identity.nostr, manager: manager)
             let store = try ShumConversationStore(ownerID: card.id, key: identity.storageKey, url: nil)
-            service = ShumMessageStore(identity: identity, store: store, transport: wire, wire: wire, card: card, internet: internet)
+            service = try ShumMessageStore(identity: identity, store: store, transport: wire, wire: wire, card: card, internet: internet)
         }
     }
     func testEncryptedConversationAndReadReceiptWithoutBluetooth() async throws {

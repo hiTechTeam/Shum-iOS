@@ -43,12 +43,25 @@ final class ShumMessageStore: ObservableObject {
 
     init(identity: ShumIdentityService, store: ShumConversationStore, transport: Transport,
          wire: ShumSecureTransport, card: ShumContactCard,
-         internet: ShumNostrService?, now: @escaping () -> Date = Date.init) {
+         internet: ShumNostrService?, now: @escaping () -> Date = Date.init) throws {
         self.identity = identity; self.store = store; self.transport = transport; self.wire = wire
         self.crypto = ShumCryptoService(wire: wire); self.ownCard = card
         self.contacts = ShumContactsService(store: store); self.internet = internet; self.now = now
+        if let saved = store.state.ownProfileCard {
+            try saved.validate()
+            guard saved.noiseKey == card.noiseKey, saved.signingKey == card.signingKey,
+                  saved.nostrKey == card.nostrKey else { throw ShumFailure.unavailableIdentity }
+            self.ownCard = saved
+        }
+        if state.ownProfileCard == nil, card.profileRevision != nil {
+            try card.validate()
+            try commitOwnProfile(card)
+        } else {
+            try updateProfile(name: card.name, bio: card.bio, avatarSeed: card.avatarSeed)
+        }
+        try queueProfileReconciliation()
         internet?.received = { [weak self] packet, sender in self?.receive(packet, from: nil, nostrSender: sender) }
-        ShumPushService.shared.configure(card: card) { [weak transport] data in
+        ShumPushService.shared.configure(card: ownCard) { [weak transport] data in
             transport?.noiseSignData(data)
         }
     }
@@ -140,6 +153,7 @@ final class ShumMessageStore: ObservableObject {
         if !active { broadcastPresence(online: false) }
         foreground = active
         if active {
+            do { try queueProfileReconciliation() } catch { fail(error) }
             internet?.start()
             lastPresenceBroadcast = .distantPast
             markRead()
@@ -147,12 +161,126 @@ final class ShumMessageStore: ObservableObject {
         else if backgroundFetchTask == nil { internet?.stop() }
     }
     func updateProfile(name: String, bio: String, avatarSeed: UInt64? = nil) throws {
-        ownCard = try identity.card(name: name, bio: bio, avatarSeed: avatarSeed)
+        guard !retired else { throw ShumFailure.unavailableIdentity }
+        if state.ownProfileCard != nil, ownCard.name == name, ownCard.bio == bio,
+           ownCard.avatarSeed == avatarSeed { return }
+        let revision = state.ownProfileCard == nil ? UInt64(1) : try nextProfileRevision(ownCard.profileRevision ?? 0)
+        let next = try identity.card(name: name, bio: bio, avatarSeed: avatarSeed, revision: revision)
+        try commitOwnProfile(next)
+    }
+    private func nextProfileRevision(_ revision: UInt64) throws -> UInt64 {
+        guard revision < UInt64.max else { throw ShumFailure.invalidContact }
+        return revision + 1
+    }
+    private func commitOwnProfile(_ card: ShumContactCard) throws {
+        try store.transaction { state in
+            state.ownProfileCard = card
+            state.profileOutbox = state.contacts.filter { state.blocked?[$0.id] == nil }.map {
+                ShumProfileDelivery(recipientID: $0.id, profileID: card.profileID)
+            }
+        }
+        ownCard = card
         helloTimes.removeAll()
         ShumPushService.shared.configure(card: ownCard) { [weak transport] data in
             transport?.noiseSignData(data)
         }
+        changed()
     }
+
+    /// All transports share the same signature/version merge and persistent head.
+    @discardableResult
+    private func mergeProfile(_ incoming: ShumContactCard) throws -> ShumContactCard {
+        var head = incoming
+        for current in nearby.values where current.id == incoming.id {
+            head = try head.preferred(over: current)
+        }
+        let card = try contacts.merge(head)
+        for peer in Array(nearby.keys) where nearby[peer]?.id == card.id {
+            nearby[peer] = card
+        }
+        changed()
+        return card
+    }
+
+    private func profilePacket(to card: ShumContactCard, reply: Bool) throws -> ShumPacket {
+        var sync = ShumProfileSync(sender: ownCard, recipientID: card.id,
+            knownRecipient: try contacts.freshest(card), requestsReply: reply)
+        guard let signature = transport.noiseSignData(try sync.signingBytes()) else {
+            throw ShumFailure.unavailableIdentity
+        }
+        sync.signature = signature
+        return ShumPacket(profileSync: sync)
+    }
+
+    private func receiveProfile(_ sync: ShumProfileSync, from peer: PeerID?, nostrSender: String?) throws {
+        try sync.validate()
+        guard sync.recipientID == ownCard.id, !isBlocked(sync.sender),
+              state.contacts.contains(where: { $0.id == sync.sender.id }) else { return }
+        if let peer {
+            guard transport.noiseSessionPublicKeyData(for: peer) == sync.sender.noiseKey else { return }
+        } else if nostrSender != sync.sender.nostrKey { return }
+        let sender = try mergeProfile(sync.sender)
+        if let known = sync.knownRecipient {
+            let preferred = try known.preferred(over: ownCard)
+            if preferred.profileID != ownCard.profileID {
+                // The peer retained a newer head than our restored backup.
+                // Rebase the local choice; never reset the counter on restore.
+                let rebased = try identity.card(name: ownCard.name, bio: ownCard.bio,
+                    avatarSeed: ownCard.avatarSeed, revision: nextProfileRevision(known.profileRevision ?? 0))
+                try commitOwnProfile(rebased)
+            } else if known.profileID == ownCard.profileID {
+                try store.transaction { state in
+                    state.profileOutbox?.removeAll {
+                        $0.recipientID == sender.id && $0.profileID == known.profileID
+                    }
+                }
+            }
+        }
+        if sync.requestsReply {
+            let packet = try profilePacket(to: sender, reply: false)
+            if let peer { sendPacket(packet, to: peer) }
+            else { internet?.send(packet, to: sender) { _ in } }
+        }
+    }
+
+    private func queueProfileReconciliation() throws {
+        let missing = state.contacts.filter { contact in
+            !isBlocked(contact.card) && !(state.profileOutbox ?? []).contains { $0.recipientID == contact.id }
+        }
+        guard !missing.isEmpty else { return }
+        try store.transaction { state in
+            if state.profileOutbox == nil { state.profileOutbox = [] }
+            state.profileOutbox?.append(contentsOf: missing.map {
+                ShumProfileDelivery(recipientID: $0.id, profileID: ownCard.profileID)
+            })
+        }
+    }
+
+    private func routeProfiles() {
+        var sent = 0
+        for pending in state.profileOutbox ?? [] {
+            guard sent < 4 else { break }
+            guard let card = state.contacts.first(where: { $0.id == pending.recipientID })?.card,
+                  !isBlocked(card) else { continue }
+            let peer = session(for: card)
+            guard peer != nil || internet?.connected == true else { continue }
+            let delay = min(3600.0, 5.0 * pow(2, Double(min(pending.attempts, 10))))
+            guard now().timeIntervalSince(pending.lastAttempt ?? .distantPast) >= delay else { continue }
+            do {
+                let packet = try profilePacket(to: card, reply: true)
+                try store.transaction { state in
+                    if let index = state.profileOutbox?.firstIndex(where: { $0.recipientID == card.id }) {
+                        state.profileOutbox?[index].lastAttempt = now()
+                        state.profileOutbox?[index].attempts = min(pending.attempts + 1, 20)
+                    }
+                }
+                if let peer { sendPacket(packet, to: peer) }
+                if internet?.connected == true { internet?.send(packet, to: card) { _ in } }
+                sent += 1
+            } catch { fail(error); return }
+        }
+    }
+
     func card(for peer: PeerID) -> ShumContactCard? {
         state.contacts.first(where: { $0.card.peerID == peer })?.card
             ?? nearby[peer]
@@ -171,9 +299,15 @@ final class ShumMessageStore: ObservableObject {
     func add(_ card: ShumContactCard, source: String, avatar: Data? = nil) throws {
         guard !retired else { throw ShumFailure.unavailableIdentity }
         guard !isBlocked(card) else { throw ShumFailure.blocked }
+        let isNew = !state.contacts.contains { $0.id == card.id }
         try contacts.add(card, source: source, avatar: avatar, now: now())
         try contacts.conversation(with: card, now: now())
         try store.transaction { state in
+            if isNew {
+                if state.profileOutbox == nil { state.profileOutbox = [] }
+                state.profileOutbox?.append(ShumProfileDelivery(recipientID: card.id,
+                    profileID: ownCard.profileID))
+            }
             if state.invitationStates == nil { state.invitationStates = [:] }
             if state.invitationStates?[card.id] == nil {
                 state.invitationStates?[card.id] = ShumInvitationState(
@@ -390,6 +524,7 @@ final class ShumMessageStore: ObservableObject {
             throw ShumFailure.invalidMessage
         }
 
+        try mergeProfile(control.sender)
         let currentPhase = invitationPhase(for: control.sender)
         if state.invitationStates?[control.sender.id]?.eventID == control.id {
             return
@@ -539,10 +674,10 @@ final class ShumMessageStore: ObservableObject {
         } catch { fail(error) }
     }
 
-    func recordEncounter(_ card: ShumContactCard, avatar: Data? = nil) throws {
+    func recordEncounter(_ incoming: ShumContactCard, avatar: Data? = nil) throws {
         guard !retired else { throw ShumFailure.unavailableIdentity }
-        try card.validate()
-        guard card.id != ownCard.id, !isBlocked(card), (avatar?.count ?? 0) <= 40_960 else { return }
+        guard incoming.id != ownCard.id, !isBlocked(incoming), (avatar?.count ?? 0) <= 40_960 else { return }
+        let card = try mergeProfile(incoming)
         let timestamp = now()
         if let existing = state.encounters?.first(where: { $0.id == card.id }),
            timestamp.timeIntervalSince(existing.lastSeen) < 60,
@@ -744,6 +879,7 @@ final class ShumMessageStore: ObservableObject {
                 }; changed()
             }
         } catch { fail(error); return }
+        routeProfiles()
         routeInvitationControls()
         routeOutbox()
         routeRelay()
@@ -777,7 +913,7 @@ final class ShumMessageStore: ObservableObject {
         guard progress.1 < 80, ingressRate.count < 1000 || ingressRate[source] != nil,
               packet.version == 1,
               [packet.card != nil, packet.envelope != nil, packet.receipt != nil,
-               packet.invitation != nil, packet.typing != nil, packet.presence != nil]
+               packet.invitation != nil, packet.typing != nil, packet.presence != nil, packet.profileSync != nil]
                 .filter({ $0 }).count == 1 else { return }
         ingressRate[source] = (progress.0, progress.1 + 1)
         do {
@@ -787,7 +923,7 @@ final class ShumMessageStore: ObservableObject {
                 if let peer {
                     guard transport.noiseSessionPublicKeyData(for: peer) == card.noiseKey else { return }
                     ShumDiscoveryTrace.record("card-verified")
-                    let first = nearby[peer] == nil; nearby[peer] = card
+                    let first = nearby[peer] == nil; nearby[peer] = try mergeProfile(card)
                     if first { sendPacket(ShumPacket(card: ownCard), to: peer) }
                     try recordEncounter(card)
                     if state.contacts.contains(where: { $0.id == card.id }) {
@@ -799,7 +935,12 @@ final class ShumMessageStore: ObservableObject {
                         )
                     }
                     changed()
-                } else if nostrSender == card.nostrKey { try request(card) }
+                } else if nostrSender == card.nostrKey {
+                    if state.contacts.contains(where: { $0.id == card.id }) { try mergeProfile(card) }
+                    else { try request(card) }
+                }
+            } else if let sync = packet.profileSync {
+                try receiveProfile(sync, from: peer, nostrSender: nostrSender)
             } else if let envelope = packet.envelope {
                 try envelope.validate(at: now())
                 if let nostrSender, nostrSender != envelope.sender.nostrKey { return }
@@ -841,6 +982,7 @@ final class ShumMessageStore: ObservableObject {
               contact.card.noiseKey == control.sender.noiseKey,
               contact.card.nostrKey == control.sender.nostrKey,
               canMessage(contact.card) else { return }
+        try mergeProfile(control.sender)
         if let latest = latestTypingEvents[control.sender.id],
            control.timestamp < latest.timestamp
             || (control.timestamp == latest.timestamp && control.id <= latest.id) { return }
@@ -900,6 +1042,7 @@ final class ShumMessageStore: ObservableObject {
               contact.card.noiseKey == control.sender.noiseKey,
               contact.card.nostrKey == control.sender.nostrKey,
               canMessage(contact.card) else { return }
+        try mergeProfile(control.sender)
         if let latest = latestPresenceEvents[control.sender.id],
            control.timestamp < latest.timestamp
             || (control.timestamp == latest.timestamp && control.id <= latest.id) { return }
@@ -914,6 +1057,7 @@ final class ShumMessageStore: ObservableObject {
         changed()
     }
     private func request(_ card: ShumContactCard) throws {
+        let card = try mergeProfile(card)
         let phase = invitationPhase(for: card)
         // A legacy card has no action field: it can be a request or the
         // recipient's acceptance after previously declining our request.
@@ -965,6 +1109,7 @@ final class ShumMessageStore: ObservableObject {
         }
         guard contact.card.signingKey == envelope.sender.signingKey, contact.card.nostrKey == envelope.sender.nostrKey else { throw ShumFailure.invalidContact }
         guard canMessage(contact.card) else { return }
+        try mergeProfile(envelope.sender)
         if let existing = state.messages.first(where: { $0.id == envelope.id }) {
             guard !existing.outgoing, existing.envelope.digest == envelope.digest else { throw ShumFailure.invalidMessage }
             try makeReceipt(for: existing, read: !existing.unread, force: true); return
@@ -1021,6 +1166,9 @@ final class ShumMessageStore: ObservableObject {
         var next = state
         guard try applyReceipt(receipt, to: &next) else { return }
         try store.transaction { $0 = next }
+        if receipt.sender.id != ownCard.id, state.contacts.contains(where: { $0.id == receipt.sender.id }) {
+            try mergeProfile(receipt.sender)
+        }
         changed()
     }
     /// Reuse the same validation for network receipts and a batch of local reads.
@@ -1290,6 +1438,7 @@ final class ShumMessageStore: ObservableObject {
                 state.requests.removeAll { $0.id == card.id }
                 state.invitationStates?.removeValue(forKey: card.id)
                 state.invitationOutbox?.removeAll { $0.control.recipient.id == card.id }
+                state.profileOutbox?.removeAll { $0.recipientID == card.id }
                 for directory in state.pinnedDirectoryEntries?.keys.map({ $0 }) ?? [] {
                     state.pinnedDirectoryEntries?[directory]?.removeAll { $0 == card.id }
                 }
@@ -1314,6 +1463,7 @@ final class ShumMessageStore: ObservableObject {
                 state.blocked?[card.id] = card
                 state.requests.removeAll { $0.id == card.id }
                 state.invitationOutbox?.removeAll { $0.control.recipient.id == card.id }
+                state.profileOutbox?.removeAll { $0.recipientID == card.id }
                 state.relay.removeAll { $0.envelope.sender.id == card.id || $0.envelope.recipient.id == card.id || $0.depositor == card.id }
                 state.receipts.removeAll { $0.receipt.sender.id == card.id || $0.receipt.destination.id == card.id }
                 for directory in state.pinnedDirectoryEntries?.keys.map({ $0 }) ?? [] {

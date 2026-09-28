@@ -137,6 +137,7 @@ struct ShumContactsUI: View {
         if #available(iOS 26.0, *) {
             Button { openNewContact() } label: {
                 Image(systemName: "plus")
+                    .foregroundStyle(palette.accentForeground)
             }
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.circle)
@@ -164,7 +165,11 @@ struct ShumContactsUI: View {
             path.addLine(to: CGPoint(x: size.width - 1, y: size.height / 2))
             path.move(to: CGPoint(x: size.width / 2, y: 1))
             path.addLine(to: CGPoint(x: size.width / 2, y: size.height - 1))
-            context.stroke(path, with: .color(.white), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            context.stroke(
+                path,
+                with: .color(palette.accentForeground),
+                style: StrokeStyle(lineWidth: 1.5, lineCap: .round)
+            )
         }
         .frame(width: 17, height: 17)
         .accessibilityHidden(true)

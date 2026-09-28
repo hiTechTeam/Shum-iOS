@@ -129,17 +129,13 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
     @discardableResult
     func prepareInitialRegistrationIdentity() -> Bool {
-        guard !deletingProfile, !isRegistered, LocalCardStore.shared.ownManifest == nil else {
+        guard !deletingProfile, !isRegistered else {
             return false
         }
-        do { try LocalCardStore.shared.prepareSigningKey() }
+        // The ceremony needs only the local profile key. Messaging, Bluetooth,
+        // relays and history are initialized after the user saves their profile.
+        do { try profilePhotoViewModel.prepareRegistrationAvatar() }
         catch { return false }
-        createMessaging(bluetoothEnabled: false)
-        guard chat?.isReady == true, let card = chat?.permanent?.ownCard else {
-            return false
-        }
-        let seed = ShumPixelAvatarGenerator.seed(for: card.noiseKey)
-        profilePhotoViewModel.prepareRegistrationAvatar(seed: seed)
         return profilePhotoViewModel.avatarSeed != nil
     }
     @discardableResult

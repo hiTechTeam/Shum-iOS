@@ -410,7 +410,8 @@ final class ShumBackupService {
             } + database.receipts.flatMap {
                 [$0.receipt.sender, $0.receipt.destination]
             }
-            for card in cards where card.id == ownID {
+            let ownCards = cards.filter { $0.id == ownID } + [database.ownProfileCard].compactMap { $0 }
+            for card in ownCards {
                 guard card.noiseKey == ownNoiseKey,
                       card.signingKey == ownSigningKey,
                       card.nostrKey == verifiedNostr.publicKeyHex,
