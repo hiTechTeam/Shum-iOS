@@ -65,7 +65,7 @@ struct ShumTimelinePerformanceTests {
         window.isHidden = true
     }
 
-    @Test(arguments: [3, 8, 12, 100])
+    @Test(arguments: [0, 3, 8, 12, 100])
     func shortAndLongHistoryMoveInSyncWithKeyboard(rowCount: Int) async throws {
         try await checkKeyboardMotion(rowCount: rowCount, readingHistory: false)
     }
@@ -179,14 +179,13 @@ private struct KeyboardTimelineFixture: View {
             ShumConversationTimeline(
                 items: (0..<rowCount).map { ShumTimelineItem(id: "\($0)", revision: 0) },
                 storageKey: key, appearanceKey: "test", command: nil,
-                contentInsets: geometry.safeAreaInsets, bottomChanged: { _ in }, tapped: {}
+                contentInsets: geometry.safeAreaInsets,
+                composer: AnyView(KeyboardTestInput(input: input).frame(height: 46).padding(.vertical, 8)),
+                bottomChanged: { _ in }, tapped: {}
             ) { index, width in
                 Text("Message \(index)").frame(width: width, height: CGFloat(44 + (index % 3) * 20))
             }
             .ignoresSafeArea(.all, edges: .vertical)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            KeyboardTestInput(input: input).frame(height: 46).padding(.vertical, 8)
         }
     }
 }

@@ -46,6 +46,7 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     let appearanceKey: String
     let command: ShumTimelineCommand?
     var contentInsets: EdgeInsets = EdgeInsets()
+    var composer: AnyView? = nil
     let bottomChanged: (Bool) -> Void
     let tapped: () -> Void
     @ViewBuilder let row: (Int, CGFloat) -> Row
@@ -57,13 +58,13 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: ShumTimelineController, context: Context) {
         controller.bottomChanged = bottomChanged
         controller.tapped = tapped
+        controller.updateComposer(composer.map { AnyView($0.environment(\.self, environment)) })
         controller.viewportInsets = UIEdgeInsets(top: contentInsets.top, left: 0, bottom: contentInsets.bottom + 10, right: 0)
         controller.update(items: items, appearanceKey: "\(appearanceKey)-\(environment.dynamicTypeSize)-\(environment.locale.identifier)", command: command) { index, width in
             AnyView(row(index, width).environment(\.self, environment))
         }
-        // Apply the inset and scroll offset inside the current system layout
-        // transaction, shared with the composer. A separate keyboard animation
-        // races this update and causes a second correction when it finishes.
+        // Apply ordinary content and size updates synchronously. Keyboard
+        // motion arrives separately through the composer's keyboard layout guide.
         controller.view.setNeedsLayout()
         controller.view.layoutIfNeeded()
     }
@@ -72,6 +73,7 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
 final class ShumTimelineController: UIViewController, UITableViewDataSource, UITableViewDelegate, UIGestureRecognizerDelegate {
     private let table = UITableView(frame: .zero, style: .plain)
     private let measurementHost = UIHostingController(rootView: AnyView(EmptyView()))
+    private var composerHost: UIHostingController<AnyView>?
     private let storageKey: String
     private var items: [ShumTimelineItem] = []
     private var row: (Int, CGFloat) -> AnyView = { _, _ in AnyView(EmptyView()) }
@@ -127,6 +129,33 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         backgroundObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in self?.persistPosition() }
+    }
+
+    /// Apple's keyboard layout guide moves the composer inside the system
+    /// keyboard animation on every supported iOS version, including
+    /// interactive dismissal. The history follows the composer's frame in the
+    /// same layout pass, so both share one animation.
+    func updateComposer(_ content: AnyView?) {
+        guard let content else { return }
+        if let composerHost {
+            composerHost.rootView = content
+            return
+        }
+        let host = UIHostingController(rootView: content)
+        host.view.backgroundColor = .clear
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        host.view.setContentHuggingPriority(.required, for: .vertical)
+        host.sizingOptions = .intrinsicContentSize
+        if #available(iOS 16.4, *) { host.safeAreaRegions = [] }
+        addChild(host)
+        view.addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            host.view.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+        ])
+        host.didMove(toParent: self)
+        composerHost = host
     }
 
     deinit {
@@ -201,6 +230,12 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     /// outside the controller when a parent constrains its frame.
     private func resolvedViewportInsets() -> UIEdgeInsets {
         var insets = viewportInsets
+        if let composerHost {
+            // The composer sits on the keyboard layout guide; everything below
+            // its top edge is covered by the composer or the keyboard.
+            insets.bottom = max(10, view.bounds.maxY - composerHost.view.frame.minY + 10)
+            return insets
+        }
         guard let window = view.window else { return insets }
         let frame = view.convert(view.bounds, to: window)
         let areaAlreadyOutsideViewport = max(0, window.bounds.maxY - frame.maxY)

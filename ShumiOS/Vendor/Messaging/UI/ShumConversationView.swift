@@ -73,6 +73,7 @@ struct ShumConversationView: View {
                     appearanceKey: "\(palette.accentUIColor)-\(palette.colorScheme)",
                     command: scrollCommand,
                     contentInsets: geometry.safeAreaInsets,
+                    composer: AnyView(composer),
                     bottomChanged: { bottom in
                         #if DEBUG && targetEnvironment(simulator)
                         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewScrollButton") {
@@ -162,9 +163,6 @@ struct ShumConversationView: View {
                     .shumHiddenFromSystemCapture(true)
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            composer
-        }
         .sheet(isPresented: $showProtection) {
             ShumChatProtectionSheet(runtime: runtime, peer: peer)
         }
@@ -213,7 +211,7 @@ struct ShumConversationView: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
         .padding(.top, 8)
-        // SwiftUI's keyboard safe area moves this inset with the keyboard.
+        // The timeline pins the composer to the keyboard layout guide.
         // A fixed gap avoids a second, mismatched animation of the composer.
         .padding(.bottom, 8)
         .animation(.easeOut(duration: 0.2), value: invitationPhase)
