@@ -62,7 +62,16 @@ struct ShumContactCard: Codable, Equatable {
         if incoming != known { return incoming > known ? self : previous }
         // A deterministic tie-break converges after restoring an old backup.
         if incoming > 0 {
-            return previous.profileID < profileID ? self : previous
+            if previous.profileID != profileID {
+                return previous.profileID < profileID ? self : previous
+            }
+            // Prefer the complete transport card after first learning the same
+            // authenticated profile through the compact QR representation.
+            let incomingAuxiliarySignatures = (signature.isEmpty ? 0 : 1)
+                + (avatarSeedSignature == nil ? 0 : 1)
+            let previousAuxiliarySignatures = (previous.signature.isEmpty ? 0 : 1)
+                + (previous.avatarSeedSignature == nil ? 0 : 1)
+            return incomingAuxiliarySignatures > previousAuxiliarySignatures ? self : previous
         }
         return self
     }
@@ -72,42 +81,57 @@ struct ShumContactCard: Codable, Equatable {
               noiseKey.contains(where: { $0 != 0 }), nostrKey.count == 64,
               nostrKey.allSatisfy({ $0.isHexDigit && !$0.isUppercase }),
               !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              name.utf8.count <= 64, bio.count <= 72, bio.utf8.count <= 640,
-              try Curve25519.Signing.PublicKey(rawRepresentation: signingKey)
-                .isValidSignature(signature, for: signedBytes()) else { throw ShumFailure.invalidContact }
+              name.utf8.count <= 64, bio.count <= 72, bio.utf8.count <= 640 else {
+            throw ShumFailure.invalidContact
+        }
+        let publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: signingKey)
         if let profileRevision {
             guard profileRevision > 0, avatarSeed != nil,
+                  avatarVersion == ShumPixelAvatarGenerator.version,
                   let profileSignature, profileSignature.count == 64,
-                  try Curve25519.Signing.PublicKey(rawRepresentation: signingKey)
-                    .isValidSignature(profileSignature, for: profileBytes()) else {
+                  publicKey.isValidSignature(profileSignature, for: try profileBytes()) else {
                 throw ShumFailure.invalidContact
             }
-        } else if profileSignature != nil { throw ShumFailure.invalidContact }
-        if avatarSeed != nil {
-            guard let signedSeed = avatarSeedBytes(), let avatarSeedSignature,
-                  avatarSeedSignature.count == 64,
-                  try Curve25519.Signing.PublicKey(rawRepresentation: signingKey)
-                    .isValidSignature(avatarSeedSignature, for: signedSeed) else {
+            if !signature.isEmpty,
+               !publicKey.isValidSignature(signature, for: try signedBytes()) {
                 throw ShumFailure.invalidContact
             }
-        } else if avatarVersion != nil || avatarSeedSignature != nil {
-            throw ShumFailure.invalidContact
+            if let avatarSeedSignature {
+                guard let signedSeed = avatarSeedBytes(), avatarSeedSignature.count == 64,
+                      publicKey.isValidSignature(avatarSeedSignature, for: signedSeed) else {
+                    throw ShumFailure.invalidContact
+                }
+            }
+        } else {
+            guard profileSignature == nil, signature.count == 64,
+                  publicKey.isValidSignature(signature, for: try signedBytes()) else {
+                throw ShumFailure.invalidContact
+            }
+            if avatarSeed != nil {
+                guard let signedSeed = avatarSeedBytes(), let avatarSeedSignature,
+                      avatarSeedSignature.count == 64,
+                      publicKey.isValidSignature(avatarSeedSignature, for: signedSeed) else {
+                    throw ShumFailure.invalidContact
+                }
+            } else if avatarVersion != nil || avatarSeedSignature != nil {
+                throw ShumFailure.invalidContact
+            }
         }
     }
     func invitation() throws -> URL {
         try validate()
         guard let seed = avatarSeed, let avatarVersion, let profileRevision,
-              let avatarSeedSignature, let profileSignature,
+              let profileSignature,
               let nostrBytes = Data(hexString: nostrKey) else {
             return try legacyInvitation()
         }
-        // Binary c3 is self-contained and substantially smaller than JSON.
-        var payload = Data([3, UInt8(version)])
+        // Binary c4 carries one signature over the complete public profile.
+        // The transport-only signatures are redundant in a QR payload.
+        var payload = Data([4, UInt8(version)])
         payload.append(noiseKey); payload.append(signingKey); payload.append(nostrBytes)
         payload.append(UInt8(name.utf8.count)); payload.append(contentsOf: name.utf8)
         payload.append(UInt8((bio.utf8.count >> 8) & 255))
         payload.append(UInt8(bio.utf8.count & 255)); payload.append(contentsOf: bio.utf8)
-        payload.append(signature)
         func appendInteger(_ value: UInt64) {
             var value = value.littleEndian
             withUnsafeBytes(of: &value) { payload.append(contentsOf: $0) }
@@ -115,12 +139,12 @@ struct ShumContactCard: Codable, Equatable {
         appendInteger(seed)
         payload.append(UInt8(avatarVersion))
         appendInteger(profileRevision)
-        payload.append(avatarSeedSignature); payload.append(profileSignature)
+        payload.append(profileSignature)
         let encoded = payload.base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
-        guard let result = URL(string: "shum://c3/\(encoded)") else { throw ShumFailure.invalidContact }
+        guard let result = URL(string: "shum://c4/\(encoded)") else { throw ShumFailure.invalidContact }
         return result
     }
 
@@ -139,7 +163,7 @@ struct ShumContactCard: Codable, Equatable {
         let directURL = try invitation()
         components.path = "/invite"
         components.query = nil
-        components.fragment = (directURL.host ?? "c3") + "/" + directURL.lastPathComponent
+        components.fragment = (directURL.host ?? "c4") + "/" + directURL.lastPathComponent
         guard let url = components.url else { throw ShumFailure.invalidContact }
         return url
     }
@@ -179,7 +203,7 @@ struct ShumContactCard: Codable, Equatable {
         guard url.absoluteString.utf8.count <= 4096, url.scheme == "shum" else {
             throw ShumFailure.invalidContact
         }
-        if url.host == "c" || url.host == "c3" {
+        if url.host == "c" || url.host == "c3" || url.host == "c4" {
             return try parseCompact(url)
         }
         guard url.host == "contact",
@@ -220,7 +244,8 @@ struct ShumContactCard: Codable, Equatable {
         }
 
         let format = try readByte()
-        guard format == (url.host == "c3" ? 3 : 1) else { throw ShumFailure.invalidContact }
+        let expectedFormat = url.host == "c4" ? 4 : (url.host == "c3" ? 3 : 1)
+        guard format == expectedFormat else { throw ShumFailure.invalidContact }
         let cardVersion = Int(try readByte())
         let noiseKey = try read(32)
         let signingKey = try read(32)
@@ -229,15 +254,16 @@ struct ShumContactCard: Codable, Equatable {
         let nameData = try read(nameLength)
         let bioLength = (Int(try readByte()) << 8) | Int(try readByte())
         let bioData = try read(bioLength)
-        let signature = try read(64)
         func readInteger() throws -> UInt64 {
             try read(8).enumerated().reduce(UInt64(0)) { $0 | (UInt64($1.element) << ($1.offset * 8)) }
         }
-        let seed = format == 3 ? try readInteger() : nil
-        let avatarVersion = format == 3 ? Int(try readByte()) : nil
-        let revision = format == 3 ? try readInteger() : nil
+        let signature = format == 4 ? Data() : try read(64)
+        let hasSeedProfile = format == 3 || format == 4
+        let seed = hasSeedProfile ? try readInteger() : nil
+        let avatarVersion = hasSeedProfile ? Int(try readByte()) : nil
+        let revision = hasSeedProfile ? try readInteger() : nil
         let seedSignature = format == 3 ? try read(64) : nil
-        let profileSignature = format == 3 ? try read(64) : nil
+        let profileSignature = hasSeedProfile ? try read(64) : nil
         guard cursor == bytes.endIndex,
               let name = String(data: nameData, encoding: .utf8),
               let bio = String(data: bioData, encoding: .utf8) else {

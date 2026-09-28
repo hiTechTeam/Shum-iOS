@@ -95,18 +95,18 @@ private struct PixelAvatarGeneratorSheet: View {
                 seed = next
             } label: {
                 Label("Другой вариант".localized, systemImage: "arrow.clockwise")
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 46)
+                    .frame(height: 50)
+                    .background(Color(uiColor: .tertiarySystemFill), in: Capsule())
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
 
             Button { onUse(seed) } label: {
                 Text("Поставить на аватар".localized)
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 46)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(ShumPrimaryButtonStyle())
         }
         .padding(.horizontal, 24)
         .padding(.top, 20)

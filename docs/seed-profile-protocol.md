@@ -26,26 +26,25 @@ Historical message envelopes retain their original signed snapshots.
 
 ## QR and links
 
-New QR payloads are `shum://c3/<base64url>`. The binary payload contains:
+New QR payloads are `shum://c4/<base64url>`. The compact binary payload contains:
 
-- format byte 3, contact-card version byte
+- format byte 4, contact-card version byte
 - 32-byte Noise, signing and Nostr public keys
 - one-byte UTF-8 name length and name
 - two-byte big-endian UTF-8 bio length and bio
-- 64-byte legacy identity signature
 - little-endian UInt64 avatar seed, one-byte generator version
 - little-endian UInt64 profile revision
-- 64-byte avatar signature, 64-byte profile signature
+- one 64-byte signature over the complete public profile
 
 There is no image and no network lookup. The receiver verifies the payload,
 renders the avatar locally and asks the user whether to save the contact.
 Saving a contact does not accept a chat invitation.
 
-Shared links use `/invite#c3/<same-payload>` on the configured HTTPS gateway.
+Shared links use `/invite#c4/<same-payload>` on the configured HTTPS gateway.
 The fragment does not reach the web server. The landing page needs the matching
 `feature/seed-avatar-invitations` server change before releasing shared links.
 The browser page itself requires connectivity; scanning a QR or importing its
-payload does not. Legacy `c`, `contact` and `c2` inputs are still read. Old `c2`
+payload does not. Legacy `c`, `c3`, `contact` and `c2` inputs are still read. Old `c2`
 locators still need the former online lookup because they have no profile data.
 An already shared QR is an immutable snapshot, never a live pointer to a new avatar.
 

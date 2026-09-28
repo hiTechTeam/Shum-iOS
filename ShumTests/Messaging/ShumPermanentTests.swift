@@ -89,7 +89,7 @@ struct ShumPermanentTests {
         #expect(a.wire.shumPackets.count == 1)
     }
 
-    @Test("Offline QR contains the complete signed avatar and persists on the receiver")
+    @Test("Offline QR contains the compact signed avatar profile and persists on the receiver")
     func offlineSeedInvitation() throws {
         let clock = Clock()
         let alice = try Node("Alice", clock: clock)
@@ -101,14 +101,18 @@ struct ShumPermanentTests {
         guard case let .card(decoded) = try ShumInvitationPayload.parse(original.invitation()) else {
             Issue.record("QR required a network lookup"); return
         }
-        #expect(decoded == original)
-        #expect(try original.invitation().absoluteString.utf8.count < 600)
+        #expect(decoded.profileID == original.profileID)
+        #expect(decoded.avatarSeed == original.avatarSeed)
+        #expect(decoded.signature.isEmpty && decoded.avatarSeedSignature == nil)
+        #expect(try original.invitation().absoluteString.utf8.count < 400)
+        #expect(try original.preferred(over: decoded) == original)
         try bob.service.add(decoded, source: "qr")
         #expect(bob.service.invitationPhase(for: decoded) == .ready)
         #expect(bob.wire.shumPackets.isEmpty)
         let reopened = try ShumConversationStore(ownerID: bob.card.id, key: bob.identity.storageKey, url: url)
         let saved = try #require(reopened.state.contacts.first?.card)
-        #expect(saved == original)
+        #expect(saved.profileID == original.profileID)
+        #expect(saved.avatarSeed == original.avatarSeed)
         #expect(reopened.state.contacts.first?.avatar == nil)
         #expect(ShumPixelAvatarGenerator.data(seed: saved.avatarSeed!) == ShumPixelAvatarGenerator.data(seed: UInt64.max))
         var tampered = decoded
@@ -211,7 +215,8 @@ struct ShumPermanentTests {
             Issue.record("The invitation must contain an offline profile")
             return
         }
-        #expect(profile == a.card)
+        #expect(profile.profileID == a.card.profileID)
+        #expect(profile.signature.isEmpty && profile.avatarSeedSignature == nil)
         let legacyCard = try ShumContactCard.parse(a.card.legacyInvitation())
         #expect(legacyCard.id == a.card.id && legacyCard.avatarSeed == nil)
         #expect(legacyCard.signature == a.card.signature)
@@ -236,7 +241,7 @@ struct ShumPermanentTests {
             Issue.record("Shared invitation must open the original contact")
             return
         }
-        #expect(profile == a.card)
+        #expect(profile.profileID == a.card.profileID)
         #expect(!shared.absoluteString.contains(a.card.name))
         let insecure = try #require(URL(string: "http://example.test"))
         #expect(throws: (any Error).self) { try a.card.sharingInvitation(baseURL: insecure) }
