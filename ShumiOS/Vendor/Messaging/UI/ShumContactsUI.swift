@@ -201,10 +201,6 @@ struct ShumContactsUI: View {
                         .font(.system(size: 16, weight: .regular))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
-                    Text(contactStatus(for: peer))
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(contactStatusColor(for: peer))
-                        .lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
@@ -244,10 +240,6 @@ struct ShumContactsUI: View {
                             .font(.system(size: 16, weight: .regular))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                        Text(contactStatus(for: peer))
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(contactStatusColor(for: peer))
-                            .lineLimit(1)
                     }
                     Spacer(minLength: 0)
                 }
@@ -270,41 +262,6 @@ struct ShumContactsUI: View {
         }
         contactToRemove = nil
     }
-
-    private func contactStatus(for peer: ShumPeer) -> String {
-        let nearby = runtime.isNearby(peer.id)
-        let online = runtime.isOnline(peer.id)
-        if nearby && online { return "В сети · Рядом".localized }
-        if nearby { return "Рядом".localized }
-        if online { return "В сети".localized }
-        guard let date = runtime.lastActiveAt(peer.id) else {
-            return "Давно не в сети".localized
-        }
-        if Date().timeIntervalSince(date) < 60 {
-            return "был(а) только что".localized
-        }
-        let relativeDate = Self.relativeDateFormatter.localizedString(
-            for: date,
-            relativeTo: Date()
-        )
-        return String.localizedFormat("был(а) %@".localized, relativeDate)
-    }
-
-    private func contactStatusColor(for peer: ShumPeer) -> Color {
-        runtime.isNearby(peer.id) || runtime.isOnline(peer.id)
-            ? Color(uiColor: .systemGreen)
-            : .secondary
-    }
-
-    // Built per use so a language change in Settings applies immediately.
-    private static var relativeDateFormatter: RelativeDateTimeFormatter {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = ShumLanguageStore.contentLocale
-        formatter.unitsStyle = .full
-        formatter.dateTimeStyle = .numeric
-        return formatter
-    }
-
 }
 
 private struct ShumContactContextPreview<Content: View>: View {
@@ -478,10 +435,6 @@ struct ShumNewMessageSheet: View {
                         .font(.system(size: 17, weight: .regular))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
-                    Text(contactStatus(for: peer))
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(contactStatusColor(for: peer))
-                        .lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
@@ -498,32 +451,6 @@ struct ShumNewMessageSheet: View {
         .accessibilityHint("Открыть чат".localized)
     }
 
-    private func contactStatus(for peer: ShumPeer) -> String {
-        let nearby = runtime.isNearby(peer.id)
-        let online = runtime.isOnline(peer.id)
-        if nearby && online { return "В сети · Рядом".localized }
-        if nearby { return "Рядом".localized }
-        if online { return "В сети".localized }
-        guard let date = runtime.lastActiveAt(peer.id) else { return "Давно не в сети".localized }
-        if Date().timeIntervalSince(date) < 60 { return "был(а) только что".localized }
-        let relative = Self.relativeDateFormatter.localizedString(for: date, relativeTo: Date())
-        return String.localizedFormat("был(а) %@".localized, relative)
-    }
-
-    private func contactStatusColor(for peer: ShumPeer) -> Color {
-        runtime.isNearby(peer.id) || runtime.isOnline(peer.id)
-            ? Color(uiColor: .systemGreen)
-            : .secondary
-    }
-
-    // Built per use so a language change in Settings applies immediately.
-    private static var relativeDateFormatter: RelativeDateTimeFormatter {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = ShumLanguageStore.contentLocale
-        formatter.unitsStyle = .full
-        formatter.dateTimeStyle = .numeric
-        return formatter
-    }
 }
 
 private struct ContactAlphabetIndex: View {

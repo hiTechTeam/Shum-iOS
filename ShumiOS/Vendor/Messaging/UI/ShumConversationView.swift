@@ -22,11 +22,14 @@ private struct ShumAvatarToolbar<Content: View>: ToolbarContent {
 }
 
 private struct ShumComposerSurface: ViewModifier {
+    /// Liquid Glass casts a shadow onto content passing underneath. Controls
+    /// floating over the history use the plain material instead.
+    var glass = true
     private let shape = RoundedRectangle(cornerRadius: 23, style: .continuous)
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), glass {
             content.glassEffect(.regular, in: shape)
         } else {
             content
@@ -123,7 +126,7 @@ struct ShumConversationView: View {
         .onDisappear {
             typingPauseTask?.cancel()
             runtime.setTyping(false, for: peer.id)
-            runtime.openConversation(nil)
+            runtime.closeConversation(peer.id)
         }
         .background(ShumChatCanvas().ignoresSafeArea())
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -139,20 +142,16 @@ struct ShumConversationView: View {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 2) {
                     Text(name).font(.system(size: 17, weight: .semibold)).lineLimit(1)
-                    if runtime.isTyping(peer.id) {
-                        ShumTypingIndicator()
-                            .transition(.opacity)
-                    } else {
-                        HStack(spacing: 4) {
-                            if runtime.isOnline(peer.id) {
-                                Circle().fill(Color(uiColor: .systemGreen)).frame(width: 5, height: 5)
-                            }
-                            Text(presenceText)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
+                    // Typing is shown by the pulsing pixels; the label stays still.
+                    HStack(spacing: 4) {
+                        if runtime.isTyping(peer.id) || runtime.isInChat(peer.id) {
+                            ShumPresencePixels(seed: peer.id.id, offColor: Color.secondary.opacity(0.3))
                         }
-                        .transition(.opacity)
+                        Text(runtime.isTyping(peer.id) ? "шумит".localized : presenceText)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
                     }
+                    .transition(.opacity)
                 }.accessibilityElement(children: .combine)
                     .animation(.easeInOut(duration: 0.18), value: runtime.isTyping(peer.id))
                     .shumHiddenFromSystemCapture(true)
@@ -191,10 +190,15 @@ struct ShumConversationView: View {
         presentPeerPhoto?(image)
     }
 
+    /// "In chat" means the contact has this conversation open right now.
     private var presenceText: String {
         if runtime.isBlocked(peer.id) { return "Заблокирован".localized }
-        if runtime.isNearby(peer.id) { return "Рядом · в сети".localized }
-        return runtime.isOnline(peer.id) ? "В сети".localized : "Не в сети".localized
+        let inChat = runtime.isInChat(peer.id)
+        let nearby = runtime.isNearby(peer.id)
+        if inChat && nearby { return "в чате · рядом".localized }
+        if inChat { return "в чате".localized }
+        if nearby { return "рядом".localized }
+        return "не в чате".localized
     }
 
     @ViewBuilder
@@ -259,7 +263,7 @@ struct ShumConversationView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .modifier(ShumComposerSurface())
+        .modifier(ShumComposerSurface(glass: false))
         .accessibilityLabel("К последнему сообщению".localized)
         .accessibilityIdentifier("shum.scrollToBottom")
     }

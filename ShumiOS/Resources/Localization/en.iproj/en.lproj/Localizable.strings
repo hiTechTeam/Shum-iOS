@@ -277,8 +277,6 @@
 "В очереди" = "Queued";
 "В рамке QR-код не найден. Переместите или увеличьте фото." = "No QR code was found in the frame. Move or enlarge the photo.";
 "В резервной копии" = "Included in the backup";
-"В сети" = "Online";
-"В сети · Рядом" = "Online · Nearby";
 "Ваш QR-код для сверки ключа" = "Your QR code for key verification";
 "Ваш отпечаток ключа" = "Your key fingerprint";
 "Ваш профиль принадлежит вам" = "Your profile belongs to you";
@@ -318,7 +316,6 @@
 "Гость" = "Guest";
 "Гость %@" = "Guest %@";
 "Готово" = "Done";
-"Давно не в сети" = "Last seen a while ago";
 "Данные уничтожены" = "Data destroyed";
 "Действия с контактом" = "Contact actions";
 "Децентрализованная связь" = "Decentralized communication";
@@ -423,7 +420,6 @@
 "Начать чат" = "Start chat";
 "Начните общение" = "Start chatting";
 "Не в контактах" = "Not in contacts";
-"Не в сети" = "Offline";
 "Не доставлено" = "Not delivered";
 "Не доставлено · Повторить" = "Not delivered · Retry";
 "Не закрывайте Shum" = "Do not close Shum";
@@ -519,7 +515,6 @@
 "Передаётся" = "Transferring";
 "Передаётся через mesh" = "Transferring through mesh";
 "Переместите и масштабируйте фото" = "Move and resize the photo";
-"Печатает" = "Typing";
 "Повторите код" = "Repeat passcode";
 "Повторите новый код" = "Repeat new passcode";
 "Повторите пароль" = "Repeat password";
@@ -585,7 +580,6 @@
 "Резервная копия слишком большая или повреждена." = "The backup is too large or corrupted.";
 "Резервная копия создана" = "Backup created";
 "Рядом" = "Nearby";
-"Рядом · в сети" = "Nearby · Online";
 "Рядом сообщения передаются по Bluetooth. Для связи через интернет используются независимые ретрансляторы. Единого центрального сервера переписки нет." = "Nearby messages are sent over Bluetooth. Independent relays are used for communication over the internet. There is no single central chat server.";
 "Сверить ключ" = "Verify key";
 "Сверка ключа станет доступна после получения профиля собеседника." = "Key verification will be available after the contact's profile is received.";
@@ -677,8 +671,6 @@
 "Это подтверждает, что настройки меняете вы." = "This confirms that you are changing the settings.";
 "Это сохранённая история старого чата. Новые сообщения в этот чат не отправляются." = "This is saved history from an old chat. New messages cannot be sent to this chat.";
 "Это устройство" = "This device";
-"был(а) %@" = "last seen %@";
-"был(а) только что" = "last seen just now";
 "не применять приложение для угроз, преследования, мошенничества и другой незаконной деятельности;" = "do not use the app for threats, harassment, fraud, or other illegal activity;";
 "не рассылать вредоносные программы, спам и содержимое, на передачу которого у вас нет права;" = "do not distribute malware, spam, or content you do not have the right to share;";
 "самостоятельно проверять личность собеседника, если от этого зависит безопасность общения." = "verify a person's identity yourself when the safety of a conversation depends on it.";
@@ -712,3 +704,11 @@
 "Сервер использует IP-адрес запроса только для ограничения частоты запросов и не сохраняет его. Инфраструктура хостинга может вести технические журналы соединений." = "The server uses the request's IP address only to limit the request rate and does not store it. The hosting infrastructure may keep technical connection logs.";
 "При удалении профиля приложение также просит сервер уведомлений удалить токен устройства." = "When you delete your profile, the app also asks the notification server to remove the device token.";
 "Покажите QR-код человеку, чтобы он добавил вас в контакты Shum даже без интернета. Код содержит ваше имя, аватар и открытые ключи." = "Show this QR code to the person so they can add you to their Shum contacts, even without internet. The code contains your name, avatar and public keys.";
+
+/* Chat presence */
+"в чате" = "in chat";
+"не в чате" = "not in chat";
+"в чате · рядом" = "in chat · nearby";
+"рядом" = "nearby";
+"шумит" = "making noise";
+"Шумит" = "Making noise";

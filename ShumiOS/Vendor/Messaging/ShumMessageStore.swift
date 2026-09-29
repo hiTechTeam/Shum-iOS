@@ -9,8 +9,11 @@ final class ShumMessageStore: ObservableObject {
     static let encounterRetention: TimeInterval = 24 * 60 * 60
     static let invitationLifetimeMilliseconds: Int64 = 30 * 86_400_000
     static let typingLifetimeMilliseconds: Int64 = 8_000
-    static let presenceLifetimeMilliseconds: Int64 = 90_000
-    static let presenceBroadcastInterval: TimeInterval = 60
+    // "In chat" is renewed well before it expires, so a lost relay event or a
+    // closed app leaves a stale mark for at most the lifetime.
+    static let presenceLifetimeMilliseconds: Int64 = 40_000
+    static let presenceBroadcastInterval: TimeInterval = 25
+    static let presenceFlushTimeout: TimeInterval = 4
     @Published private(set) var revision = 0
     let store: ShumConversationStore
     let contacts: ShumContactsService
@@ -18,7 +21,7 @@ final class ShumMessageStore: ObservableObject {
     private let crypto: ShumCryptoService
     private let transport: Transport
     private let wire: ShumSecureTransport
-    private let internet: ShumNostrService?
+    private let internet: (any ShumInternetTransport)?
     private let now: () -> Date
     var ownCard: ShumContactCard
     var onError: ((String) -> Void)?
@@ -35,15 +38,21 @@ final class ShumMessageStore: ObservableObject {
     private var lastTypingSent: [String: (active: Bool, sentAt: Date)] = [:]
     private var presenceDeadlines: [String: Date] = [:]
     private var latestPresenceEvents: [String: (timestamp: Int64, id: String)] = [:]
-    private var lastPresenceBroadcast = Date.distantPast
     private var lastPresenceByContact: [String: Date] = [:]
+    /// Receivers keep the newest presence event, so each signal is strictly
+    /// later than the previous one even within the same millisecond.
+    private var lastPresenceMilliseconds: Int64 = 0
+    /// Set while the "left" signal sent on backgrounding awaits the relay.
+    private var presenceFlushID: UUID?
+    /// Lets the app release the background time it requested for the flush.
+    var onPresenceFlushFinished: (() -> Void)?
     private var backgroundFetchTask: Task<Void, Never>?
     private var backgroundFetchCompletions:
         [(eventID: String, completion: (Bool) -> Void)] = []
 
     init(identity: ShumIdentityService, store: ShumConversationStore, transport: Transport,
          wire: ShumSecureTransport, card: ShumContactCard,
-         internet: ShumNostrService?, now: @escaping () -> Date = Date.init) throws {
+         internet: (any ShumInternetTransport)?, now: @escaping () -> Date = Date.init) throws {
         self.identity = identity; self.store = store; self.transport = transport; self.wire = wire
         self.crypto = ShumCryptoService(wire: wire); self.ownCard = card
         self.contacts = ShumContactsService(store: store); self.internet = internet; self.now = now
@@ -121,7 +130,7 @@ final class ShumMessageStore: ObservableObject {
             let completions = self.backgroundFetchCompletions
             self.backgroundFetchCompletions.removeAll()
             self.backgroundFetchTask = nil
-            if !self.foreground { self.internet?.stop() }
+            if !self.foreground, self.presenceFlushID == nil { self.internet?.stop() }
             for pending in completions {
                 pending.completion(self.containsRemoteEvent(pending.eventID))
             }
@@ -150,15 +159,42 @@ final class ShumMessageStore: ObservableObject {
     }
     func setActive(_ active: Bool) {
         guard !retired else { return }
-        if !active { broadcastPresence(online: false) }
-        foreground = active
         if active {
+            foreground = true
+            finishPresenceFlush()
             do { try queueProfileReconciliation() } catch { fail(error) }
             internet?.start()
-            lastPresenceBroadcast = .distantPast
+            // The chat still open on return is announced on the next tick,
+            // not after the regular renewal interval.
+            if let activeContact { lastPresenceByContact.removeValue(forKey: activeContact) }
             markRead()
+            return
         }
-        else if backgroundFetchTask == nil { internet?.stop() }
+        foreground = false
+        // Keep the relay connection until it accepts "left"; cutting it in
+        // the same moment dropped the signal and left a stale "in chat".
+        let flushID = UUID()
+        let sent = sendPresence(online: false, to: activeContact) { [weak self] in
+            self?.finishPresenceFlush(flushID)
+        }
+        if sent, presenceFlushID == nil {
+            presenceFlushID = flushID
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.presenceFlushTimeout) { [weak self] in
+                self?.finishPresenceFlush(flushID)
+            }
+        } else if backgroundFetchTask == nil {
+            internet?.stop()
+            onPresenceFlushFinished?()
+        }
+    }
+
+    /// Ends the background flush (all flushes when `id` is nil) and closes the
+    /// relay connection unless the app returned or a background fetch runs.
+    private func finishPresenceFlush(_ id: UUID? = nil) {
+        guard let current = presenceFlushID, id == nil || id == current else { return }
+        presenceFlushID = nil
+        if !foreground, backgroundFetchTask == nil { internet?.stop() }
+        onPresenceFlushFinished?()
     }
     func updateProfile(name: String, bio: String, avatarSeed: UInt64? = nil) throws {
         guard !retired else { throw ShumFailure.unavailableIdentity }
@@ -347,41 +383,13 @@ final class ShumMessageStore: ObservableObject {
     func isTyping(_ card: ShumContactCard) -> Bool {
         typingDeadlines[card.id].map { $0 > now() } == true
     }
-    func isOnline(_ card: ShumContactCard) -> Bool {
-        session(for: card) != nil || presenceDeadlines[card.id].map { $0 > now() } == true
+    /// Contacts currently typing to this device.
+    var typingCards: [ShumContactCard] {
+        state.contacts.map(\.card).filter { isTyping($0) }
     }
-
-    func lastActiveAt(_ card: ShumContactCard) -> Date? {
-        var candidates: [Date] = []
-
-        if let latestPresence = latestPresenceEvents[card.id] {
-            candidates.append(
-                Date(
-                    timeIntervalSince1970:
-                        Double(latestPresence.timestamp) / 1_000
-                )
-            )
-        }
-        if let encounter = state.encounters?.first(where: {
-            $0.card.id == card.id
-        }) {
-            candidates.append(encounter.lastSeen)
-        }
-        if let latestIncoming = state.messages
-            .filter({ !$0.outgoing && $0.envelope.sender.id == card.id })
-            .max(by: { $0.envelope.timestamp < $1.envelope.timestamp }) {
-            candidates.append(
-                Date(
-                    timeIntervalSince1970:
-                        Double(latestIncoming.envelope.timestamp) / 1_000
-                )
-            )
-        }
-        if let contact = state.contacts.first(where: { $0.id == card.id }) {
-            candidates.append(contact.addedAt)
-        }
-
-        return candidates.max()
+    /// The contact has this conversation open, per its signed presence.
+    func isInChat(_ card: ShumContactCard) -> Bool {
+        presenceDeadlines[card.id].map { $0 > now() } == true
     }
 
     func setTyping(_ active: Bool, for card: ShumContactCard) {
@@ -642,6 +650,10 @@ final class ShumMessageStore: ObservableObject {
     }
     func open(_ card: ShumContactCard?) {
         guard !retired else { return }
+        if let previous = activeContact, previous != card?.id, foreground {
+            // Switching or leaving ends "in chat" for the previous contact now.
+            sendPresence(online: false, to: previous)
+        }
         activeContact = card?.id
         if let card {
             do {
@@ -649,9 +661,15 @@ final class ShumMessageStore: ObservableObject {
                 try contacts.conversation(with: card, now: now())
                 if state.conversations.count != count { changed() }
             } catch { fail(error) }
-            if foreground { broadcastPresence(online: true) }
+            if foreground { sendPresence(online: true, to: card.id) }
         }
         markRead()
+    }
+    /// A chat reports disappearing after the next one may have appeared, so
+    /// only the chat that is still open is closed.
+    func close(_ card: ShumContactCard) {
+        guard !retired, activeContact == card.id else { return }
+        open(nil)
     }
     func updateAvatar(_ avatar: Data?, for peer: PeerID) {
         guard !retired else { return }
@@ -850,10 +868,7 @@ final class ShumMessageStore: ObservableObject {
         nearby = nearby.filter { connected.contains($0.key) }
         helloTimes = helloTimes.filter { connected.contains($0.key) }
         if tickNumber % 30 == 0 { ingressRate = ingressRate.filter { now().timeIntervalSince($0.value.0) < 60 } }
-        if active, internet?.connected == true,
-           now().timeIntervalSince(lastPresenceBroadcast) >= Self.presenceBroadcastInterval {
-            broadcastPresence(online: true)
-        }
+        if active, foreground { sendPresence(online: true, to: activeContact) }
         // Discovery must recover promptly if the first card raced with the
         // Noise handshake or a republished BLE service. Once authenticated,
         // retain the quiet refresh interval for established neighbors.
@@ -999,17 +1014,19 @@ final class ShumMessageStore: ObservableObject {
         }
         changed()
     }
-    private func broadcastPresence(online: Bool) {
-        guard !retired, internet?.connected == true else { return }
+    /// "In chat" is shared only with the contact whose chat is open. Returns
+    /// whether a signal was handed to the relay connection.
+    @discardableResult
+    private func sendPresence(online: Bool, to contactID: String?, completion: (() -> Void)? = nil) -> Bool {
+        guard !retired, internet?.connected == true, let contactID,
+              let card = state.contacts.first(where: { $0.id == contactID })?.card,
+              !isBlocked(card), canMessage(card) else { return false }
         let timestamp = now()
-        guard let activeContact,
-              let card = state.contacts.first(where: { $0.id == activeContact })?.card,
-              !isBlocked(card), canMessage(card) else { return }
-        if online, timestamp.timeIntervalSince(
-            lastPresenceByContact[activeContact] ?? .distantPast
-        ) < Self.presenceBroadcastInterval { return }
+        if online, let last = lastPresenceByContact[contactID],
+           timestamp.timeIntervalSince(last) < Self.presenceBroadcastInterval { return false }
         do {
-            let milliseconds = Int64(timestamp.timeIntervalSince1970 * 1000)
+            let milliseconds = max(Int64(timestamp.timeIntervalSince1970 * 1000), lastPresenceMilliseconds + 1)
+            lastPresenceMilliseconds = milliseconds
             var control = ShumPresenceControl(
                 id: UUID().uuidString,
                 sender: ownCard,
@@ -1018,12 +1035,13 @@ final class ShumMessageStore: ObservableObject {
                 timestamp: milliseconds,
                 expiresAt: milliseconds + Self.presenceLifetimeMilliseconds
             )
-            guard let signature = transport.noiseSignData(try control.signingBytes()) else { return }
+            guard let signature = transport.noiseSignData(try control.signingBytes()) else { return false }
             control.signature = signature
-            internet?.send(ShumPacket(presence: control), to: card) { _ in }
-            if online { lastPresenceByContact[activeContact] = timestamp }
-        } catch { /* Presence is best effort and never blocks messaging. */ }
-        lastPresenceBroadcast = timestamp
+            internet?.send(ShumPacket(presence: control), to: card) { _ in completion?() }
+        } catch { return false } // Presence is best effort and never blocks messaging.
+        if online { lastPresenceByContact[contactID] = timestamp }
+        else { lastPresenceByContact.removeValue(forKey: contactID) }
+        return true
     }
 
     private func receivePresence(_ control: ShumPresenceControl, from peer: PeerID?, nostrSender: String?) throws {
@@ -1479,7 +1497,7 @@ final class ShumMessageStore: ObservableObject {
     }
     // Prevent all delayed callbacks from saving or sending after profile deletion.
     func retire() {
-        broadcastPresence(online: false)
+        sendPresence(online: false, to: activeContact)
         ShumPushService.shared.clearIdentity(ownCard.id)
         backgroundFetchTask?.cancel()
         backgroundFetchTask = nil
@@ -1492,6 +1510,7 @@ final class ShumMessageStore: ObservableObject {
         typingDeadlines.removeAll(); latestTypingEvents.removeAll(); lastTypingSent.removeAll()
         presenceDeadlines.removeAll(); latestPresenceEvents.removeAll()
         lastPresenceByContact.removeAll()
+        presenceFlushID = nil
     }
     private func changed() {
         revision &+= 1

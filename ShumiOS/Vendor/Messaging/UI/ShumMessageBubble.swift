@@ -200,27 +200,13 @@ struct ShumMessageBubble: View {
             ? themePalette.outgoingMessageMetadata(for: colorScheme)
             : .secondary
     }
-    @ViewBuilder private var receipt: some View {
-        switch message.status {
-        case .read:
-            ShumDoubleCheck().stroke(themePalette.accent, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
-                .frame(width: 16, height: 10)
-        case .delivered:
-            Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
-        case .failed:
-            Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
-        default:
-            Image(systemName: "clock").font(.system(size: 10))
-        }
+    private var receipt: some View {
+        ShumDeliveryReceipt(status: message.status, color: metadataColor, readColor: themePalette.accent)
+            .font(.system(size: 10, weight: .semibold))
     }
     private var statusDescription: String {
         if message.waitingForConnection { return "Ожидаем связь".localized }
-        switch message.status {
-        case .read: return "Прочитано".localized
-        case .delivered: return "Доставлено".localized
-        case .failed: return "Не доставлено".localized
-        default: return "Отправляется".localized
-        }
+        return ShumDeliveryReceipt.description(for: message.status)
     }
 }
 

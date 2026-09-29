@@ -403,24 +403,10 @@ struct ShumDirectoryRow: View {
                 size: 58,
                 imageData: runtime.profile(for: entry.peer.id)?.avatar
             )
-                .mask {
-                    Circle()
-                        .fill(.white)
-                        .overlay(alignment: .bottomTrailing) {
-                            if runtime.isOnline(entry.peer.id) {
-                                Circle()
-                                    .frame(width: 14, height: 14)
-                                    .blendMode(.destinationOut)
-                            }
-                        }
-                        .compositingGroup()
-                }
                 .overlay(alignment: .bottomTrailing) {
-                    if runtime.isOnline(entry.peer.id) {
-                        Circle()
-                            .fill(Color(uiColor: .systemGreen))
-                            .frame(width: 10, height: 10)
-                            .frame(width: 14, height: 14)
+                    if typing || runtime.isInChat(entry.peer.id) {
+                        ShumPresenceBadge(seed: entry.peer.id.id)
+                            .offset(x: 2, y: 1)
                     }
                 }
             VStack(alignment: .leading, spacing: 5) {
@@ -446,12 +432,17 @@ struct ShumDirectoryRow: View {
                 }
                 HStack(spacing: 8) {
                     if typing {
-                        ShumChatListTypingIndicator()
+                        Text("Шумит".localized)
+                            .font(.system(size: 15, weight: .regular))
+                            .foregroundStyle(Color.accentColor)
+                            .lineLimit(1)
                             .transition(.opacity)
                     } else {
                         Group {
                             if let last, last.outgoing, !entry.isInvitation {
-                                ShumChatReceipt(status: last.status)
+                                ShumDeliveryReceipt(status: last.status)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .accessibilityLabel(ShumDeliveryReceipt.description(for: last.status))
                             }
                             Text(invitationSummary ?? last?.text ?? "Начать чат".localized)
                                 .font(.system(size: 15))
@@ -498,56 +489,4 @@ struct ShumDirectoryRow: View {
 }
 /// Mirrors Telegram's chat-list activity treatment: the message preview is
 /// temporarily replaced by accent-colored text while the row keeps its layout.
-private struct ShumChatListTypingIndicator: View {
-    @State private var phase = 0
-    private let timer = Timer.publish(every: 0.34, on: .main, in: .common).autoconnect()
-
-    var body: some View {
-        HStack(spacing: 0) {
-            Text("Печатает".localized)
-            ForEach(0..<3, id: \.self) { index in
-                Text(".")
-                    .opacity(index <= phase ? 1 : 0.22)
-            }
-        }
-        .font(.system(size: 15, weight: .regular))
-        .foregroundStyle(Color.accentColor)
-        .lineLimit(1)
-        .onReceive(timer) { _ in phase = (phase + 1) % 3 }
-        .accessibilityLabel("Печатает".localized)
-    }
-}
-private struct ShumChatReceipt: View {
-    let status: DeliveryStatus
-    private var receiptDescription: String {
-        switch status {
-        case .read: "Прочитано".localized
-        case .delivered: "Доставлено".localized
-        case .sent: "Отправлено".localized
-        case .failed: "Не доставлено".localized
-        default: "Отправляется".localized
-        }
-    }
-    var body: some View {
-        Group {
-            switch status {
-            case .read:
-                ShumDoubleCheck().stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
-                    .frame(width: 16, height: 10)
-            case .delivered:
-                ShumDoubleCheck().stroke(Color.secondary, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
-                    .frame(width: 16, height: 10)
-            case .sent:
-                Image(systemName: "checkmark").foregroundStyle(.secondary)
-            case .failed:
-                Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
-            default:
-                Image(systemName: "clock").foregroundStyle(.secondary)
-            }
-        }
-        .font(.system(size: 11, weight: .medium))
-        .accessibilityLabel(receiptDescription)
-    }
-}
-
 #endif

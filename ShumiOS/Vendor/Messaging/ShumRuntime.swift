@@ -3,6 +3,7 @@ import Combine
 import CryptoKit
 import CoreBluetooth
 import Foundation
+import UIKit
 
 struct ShumPeer: Identifiable, Hashable {
     let id: PeerID
@@ -92,6 +93,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                 model.permanent = permanent
                 permanent.configureContactLookup { [weak model] in model?.profiles.own }
                 permanent.onError = { [weak model] in model?.error = $0 }
+                permanent.onPresenceFlushFinished = { [weak model] in model?.endPresenceFlushTime() }
                 model.permanentChanges = permanent.$revision.sink { [weak model] _ in model?.syncPermanentMessages() }
                 #if DEBUG && targetEnvironment(simulator)
                 if preview { try model.seedPermanentPreview() }
@@ -269,6 +271,8 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         guard appActive != active else { return }
         appActive = active
         profiles.setAppActive(active)
+        // Ask iOS for a few seconds so the "left chat" signal reaches the relay.
+        if !active, permanent != nil { beginPresenceFlushTime() }
         permanent?.setActive(active)
         // Suspension is not a delivery failure. On return give the BLE/Noise
         // session a fresh acknowledgement interval before retrying.
@@ -287,6 +291,21 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         recordSelfTestEvent(active ? "foreground" : "background")
         writeSelfTestResult()
         #endif
+    }
+
+    private var presenceFlushTask: UIBackgroundTaskIdentifier = .invalid
+
+    private func beginPresenceFlushTime() {
+        guard presenceFlushTask == .invalid else { return }
+        presenceFlushTask = UIApplication.shared.beginBackgroundTask(withName: "shum.presence") {
+            MainActor.assumeIsolated { [weak self] in self?.endPresenceFlushTime() }
+        }
+    }
+
+    fileprivate func endPresenceFlushTime() {
+        guard presenceFlushTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(presenceFlushTask)
+        presenceFlushTask = .invalid
     }
 
     func fetchRemoteEvents(eventID: String, completion: @escaping (Bool) -> Void) {
@@ -438,6 +457,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     }
     private func syncPermanentMessages() {
         guard let permanent else { return }
+        ShumTypingPixels.shared.update(typing: Set(permanent.typingCards.map { $0.peerID.id }))
         messages = permanent.state.messages.map { stored in
             let card = stored.outgoing ? stored.envelope.recipient : stored.envelope.sender
             let status: DeliveryStatus
@@ -472,6 +492,18 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         if let permanent { permanent.open(peer.flatMap { permanent.card(for: $0) }); return }
         if let peer, transport.isPeerConnected(peer) { transport.triggerHandshake(with: peer) }
         markVisibleRead()
+    }
+
+    /// A chat may report disappearing after the next chat appeared; only the
+    /// chat that is still open is closed.
+    func closeConversation(_ peer: PeerID) {
+        guard activePeer == peer else { return }
+        if let permanent, let card = permanent.card(for: peer) {
+            activePeer = nil
+            permanent.close(card)
+            return
+        }
+        openConversation(nil)
     }
 
     func isLegacyOnly(_ peer: PeerID) -> Bool { peer.id.hasPrefix("legacy-") }
@@ -544,18 +576,9 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         return permanent.isTyping(card)
     }
 
-    func isOnline(_ peer: PeerID) -> Bool {
-        guard let permanent, let card = permanent.card(for: peer) else {
-            return transport.isPeerConnected(peer)
-        }
-        return permanent.isOnline(card)
-    }
-
-    func lastActiveAt(_ peer: PeerID) -> Date? {
-        if let permanent, let card = permanent.card(for: peer) {
-            return permanent.lastActiveAt(card)
-        }
-        return knownPeers[peer]?.lastConnected
+    func isInChat(_ peer: PeerID) -> Bool {
+        guard let permanent, let card = permanent.card(for: peer) else { return false }
+        return permanent.isInChat(card)
     }
 
     func setTyping(_ active: Bool, for peer: PeerID) {

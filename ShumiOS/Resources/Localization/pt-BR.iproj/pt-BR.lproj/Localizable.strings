@@ -277,8 +277,6 @@
 "В очереди" = "Em fila";
 "В рамке QR-код не найден. Переместите или увеличьте фото." = "Nenhum código QR foi encontrado na moldura. Mova ou amplie a foto.";
 "В резервной копии" = "Incluído no backup";
-"В сети" = "Online";
-"В сети · Рядом" = "Online · Perto";
 "Ваш QR-код для сверки ключа" = "Seu código QR para verificação de chaves";
 "Ваш отпечаток ключа" = "A sua impressão digital da chave";
 "Ваш профиль принадлежит вам" = "Seu perfil pertence a você";
@@ -318,7 +316,6 @@
 "Гость" = "Convidado";
 "Гость %@" = "Convidado%@";
 "Готово" = "Feito";
-"Давно не в сети" = "Visto pela última vez há algum tempo";
 "Данные уничтожены" = "Dados destruídos";
 "Действия с контактом" = "Acções de contacto";
 "Децентрализованная связь" = "Comunicação descentralizada";
@@ -423,7 +420,6 @@
 "Начать чат" = "Iniciar conversa";
 "Начните общение" = "Começar a conversar";
 "Не в контактах" = "Não em contactos";
-"Не в сети" = "Desligado";
 "Не доставлено" = "Não entregue";
 "Не доставлено · Повторить" = "Não entregue · Repetir";
 "Не закрывайте Shum" = "Não fechar Shum";
@@ -519,7 +515,6 @@
 "Передаётся" = "Transferência";
 "Передаётся через mesh" = "Transferência através da malha";
 "Переместите и масштабируйте фото" = "Mover e redimensionar a foto";
-"Печатает" = "Dactilografia";
 "Повторите код" = "Repetir a senha";
 "Повторите новый код" = "Repetir nova senha";
 "Повторите пароль" = "Repetir senha";
@@ -585,7 +580,6 @@
 "Резервная копия слишком большая или повреждена." = "O backup é muito grande ou corrompido.";
 "Резервная копия создана" = "Cópia de segurança criada";
 "Рядом" = "Perto";
-"Рядом · в сети" = "Perto · Online";
 "Рядом сообщения передаются по Bluetooth. Для связи через интернет используются независимые ретрансляторы. Единого центрального сервера переписки нет." = "Mensagens próximas são enviadas através de Bluetooth. Relés independentes são usados para comunicação através da internet. Não existe nenhum servidor de chat central.";
 "Сверить ключ" = "Verificar chave";
 "Сверка ключа станет доступна после получения профиля собеседника." = "A verificação chave estará disponível após o perfil do contato ser recebido.";
@@ -670,8 +664,6 @@
 "Это подтверждает, что настройки меняете вы." = "Isso confirma que você está mudando as configurações.";
 "Это сохранённая история старого чата. Новые сообщения в этот чат не отправляются." = "Isto é histórico salvo de uma conversa antiga. Novas mensagens não podem ser enviadas para esta conversa.";
 "Это устройство" = "Este dispositivo";
-"был(а) %@" = "última vista%@";
-"был(а) только что" = "visto pela última vez";
 "не применять приложение для угроз, преследования, мошенничества и другой незаконной деятельности;" = "Não utilizar o aplicativo para ameaças, assédio, fraude ou outra atividade ilegal;";
 "не рассылать вредоносные программы, спам и содержимое, на передачу которого у вас нет права;" = "não distribua malware, spam ou conteúdo que não tenha o direito de partilhar;";
 "самостоятельно проверять личность собеседника, если от этого зависит безопасность общения." = "verificar a identidade de uma pessoa quando a segurança de uma conversa depende disso.";
@@ -711,3 +703,11 @@
 "Другой вариант" = "Tentar outro";
 "Поставить на аватар" = "Usar este avatar";
 "Покажите QR-код человеку, чтобы он добавил вас в контакты Shum даже без интернета. Код содержит ваше имя, аватар и открытые ключи." = "Mostre este código QR à pessoa para que ela possa adicionar você aos seus contatos Shum, mesmo sem internet. O código contém seu nome, seu avatar e suas chaves públicas.";
+
+/* Chat presence */
+"в чате" = "no chat";
+"не в чате" = "fora do chat";
+"в чате · рядом" = "no chat · por perto";
+"рядом" = "por perto";
+"шумит" = "fazendo barulho";
+"Шумит" = "Fazendo barulho";

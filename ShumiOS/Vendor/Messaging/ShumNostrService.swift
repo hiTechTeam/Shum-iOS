@@ -6,8 +6,21 @@ struct ShumResolvedContact {
     let profile: ShumProfile
 }
 
+/// The relay connection used by the message store. Tests substitute an
+/// in-memory implementation to observe what is sent over the internet.
 @MainActor
-final class ShumNostrService {
+protocol ShumInternetTransport: AnyObject {
+    var received: ((ShumPacket, String) -> Void)? { get set }
+    var connected: Bool { get }
+    func start()
+    func stop()
+    func send(_ packet: ShumPacket, to card: ShumContactCard, completion: @escaping (Bool) -> Void)
+    func resolve(_ locator: ShumContactLocator, completion: @escaping (Result<ShumResolvedContact, Error>) -> Void)
+    func configureContactLookup(card: @escaping () -> ShumContactCard?, profile: @escaping () -> ShumProfile?)
+}
+
+@MainActor
+final class ShumNostrService: ShumInternetTransport {
     private struct ContactRequest: Codable {
         let id: String
     }

@@ -1,25 +1,6 @@
 #if os(iOS)
 import SwiftUI
 
-struct ShumTypingIndicator: View {
-    @State private var phase = 0
-    private let timer = Timer.publish(every: 0.34, on: .main, in: .common).autoconnect()
-
-    var body: some View {
-        HStack(spacing: 0) {
-            Text("Печатает".localized)
-            ForEach(0..<3, id: \.self) { index in
-                Text(".")
-                    .opacity(index <= phase ? 1 : 0.22)
-            }
-        }
-        .font(.system(size: 11))
-        .foregroundStyle(.secondary)
-        .onReceive(timer) { _ in phase = (phase + 1) % 3 }
-        .accessibilityLabel("Печатает".localized)
-    }
-}
-
 struct ShumInvitationRecoverySlider: View {
     let accept: () -> Bool
     @State private var offset: CGFloat = 0
