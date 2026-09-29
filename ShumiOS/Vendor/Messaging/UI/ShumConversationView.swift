@@ -142,15 +142,15 @@ struct ShumConversationView: View {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 2) {
                     Text(name).font(.system(size: 17, weight: .semibold)).lineLimit(1)
-                    // Typing is shown by the pulsing pixels; the label stays still.
+                    // Typing is shown only by the pulsing pixels.
                     HStack(spacing: 4) {
                         if runtime.isTyping(peer.id) || runtime.isInChat(peer.id) {
                             ShumPresencePixels(seed: peer.id.id, offColor: Color.secondary.opacity(0.3))
                         }
-                        Text(runtime.isTyping(peer.id) ? "шумит".localized : presenceText)
+                        Text(presenceText)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
-                            // VoiceOver keeps the plain word for the playful label.
+                            // VoiceOver cannot see the pixels, so it hears the state.
                             .accessibilityLabel(runtime.isTyping(peer.id) ? "печатает".localized : presenceText)
                     }
                     .transition(.opacity)
@@ -191,7 +191,8 @@ struct ShumConversationView: View {
     /// "In chat" means the contact has this conversation open right now.
     private var presenceText: String {
         if runtime.isBlocked(peer.id) { return "Заблокирован".localized }
-        let inChat = runtime.isInChat(peer.id)
+        // Someone typing has this chat open even before the presence mark arrives.
+        let inChat = runtime.isInChat(peer.id) || runtime.isTyping(peer.id)
         let nearby = runtime.isNearby(peer.id)
         if inChat && nearby { return "в чате · рядом".localized }
         if inChat { return "в чате".localized }

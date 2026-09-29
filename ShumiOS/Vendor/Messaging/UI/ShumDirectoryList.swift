@@ -431,27 +431,18 @@ struct ShumDirectoryRow: View {
                     }
                 }
                 HStack(spacing: 8) {
-                    if typing {
-                        Text("Шумит".localized)
-                            .font(.system(size: 15, weight: .regular))
-                            .foregroundStyle(Color.accentColor)
-                            .lineLimit(1)
-                            .accessibilityLabel("печатает".localized)
-                            .transition(.opacity)
-                    } else {
-                        Group {
-                            if let last, last.outgoing, !entry.isInvitation {
-                                ShumDeliveryReceipt(status: last.status)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .accessibilityLabel(ShumDeliveryReceipt.description(for: last.status))
-                            }
-                            Text(invitationSummary ?? last?.text ?? "Начать чат".localized)
-                                .font(.system(size: 15))
-                                .foregroundStyle(Color.secondary)
-                                .lineLimit(1)
-                        }
-                        .transition(.opacity)
+                    // Typing is shown only by the pulsing pixels on the avatar.
+                    if let last, last.outgoing, !entry.isInvitation {
+                        ShumDeliveryReceipt(status: last.status)
+                            .font(.system(size: 11, weight: .medium))
+                            .accessibilityLabel(ShumDeliveryReceipt.description(for: last.status))
                     }
+                    let preview = invitationSummary ?? last?.text ?? "Начать чат".localized
+                    Text(preview)
+                        .font(.system(size: 15))
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                        .accessibilityLabel(typing ? "печатает".localized : preview)
                     Spacer(minLength: 4)
                     if entry.unread > 0 || entry.invitationAwaitingResponse {
                         Text(entry.unread > 99 ? "99+" : String(max(entry.unread, entry.invitationAwaitingResponse ? 1 : 0)))
