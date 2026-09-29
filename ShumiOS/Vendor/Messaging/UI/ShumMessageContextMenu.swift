@@ -146,8 +146,20 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
             // SwiftUI's scroll recognizer is not always owned by UIScrollView.
-            // The hold must fail when a scroll or reply swipe starts.
-            gestureRecognizer === replyPanGesture && other !== hold
+            // The hold must fail when a scroll or reply swipe starts. The chat
+            // itself must not scroll underneath a message being swiped.
+            gestureRecognizer === replyPanGesture && other !== hold && !isEnclosingScrollPan(other)
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            // Scrolling starts once the reply swipe declines a vertical drag,
+            // at the same movement threshold, so it gains no noticeable delay.
+            gestureRecognizer === replyPanGesture && isEnclosingScrollPan(other)
+        }
+
+        private func isEnclosingScrollPan(_ recognizer: UIGestureRecognizer) -> Bool {
+            guard let scrollView = recognizer.view as? UIScrollView else { return false }
+            return recognizer === scrollView.panGestureRecognizer && isDescendant(of: scrollView)
         }
 
         @objc private func replyPan(_ pan: UIPanGestureRecognizer) {
