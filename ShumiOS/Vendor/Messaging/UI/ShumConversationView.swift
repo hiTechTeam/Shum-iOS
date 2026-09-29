@@ -77,7 +77,7 @@ struct ShumConversationView: View {
                     command: scrollCommand,
                     contentInsets: geometry.safeAreaInsets,
                     composer: AnyView(composer),
-                    composerTopHitArea: showsScrollToBottom ? ShumTimelineLayout.composerTopHitArea : 0,
+                    accessory: showsScrollToBottom ? AnyView(scrollToBottomButton) : nil,
                     bottomChanged: { bottom in
                         #if DEBUG && targetEnvironment(simulator)
                         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewScrollButton") {
@@ -204,20 +204,10 @@ struct ShumConversationView: View {
                 addContactShortcut
             }
             composerControl
-                .overlay(alignment: .topTrailing) {
-                    if showsScrollToBottom {
-                        scrollToBottomButton
-                            .padding(.trailing, 3)
-                            .offset(y: -48)
-                    }
-                }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
-        // The button is offset 48 points above the composer control. The
-        // original eight-point gap plus this extra hit area keeps the button
-        // inside the UIHostingController view, where it can receive taps.
-        .padding(.top, 8 + (showsScrollToBottom ? ShumTimelineLayout.composerTopHitArea : 0))
+        .padding(.top, 8)
         // The timeline pins the composer to the keyboard layout guide.
         // A fixed gap avoids a second, mismatched animation of the composer.
         .padding(.bottom, 8)

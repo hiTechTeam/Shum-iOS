@@ -17,12 +17,6 @@ extension Notification.Name {
     static let shumHighlightMessage = Notification.Name("shum.highlight-message")
 }
 
-enum ShumTimelineLayout {
-    /// The scroll-to-bottom button sits above the composer. Keep that visible
-    /// area inside the hosting view so UIKit can deliver taps to it.
-    static let composerTopHitArea: CGFloat = 40
-}
-
 /// A message and its visible offset survive changes to the history above it.
 /// No message contents are stored in preferences.
 struct ShumTimelinePosition: Codable {
@@ -53,7 +47,8 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     let command: ShumTimelineCommand?
     var contentInsets: EdgeInsets = EdgeInsets()
     var composer: AnyView? = nil
-    var composerTopHitArea: CGFloat = 0
+    /// Floating control above the composer's trailing edge (scroll-to-bottom).
+    var accessory: AnyView? = nil
     let bottomChanged: (Bool) -> Void
     let tapped: () -> Void
     @ViewBuilder let row: (Int, CGFloat) -> Row
@@ -65,8 +60,8 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: ShumTimelineController, context: Context) {
         controller.bottomChanged = bottomChanged
         controller.tapped = tapped
-        controller.composerTopHitArea = composerTopHitArea
         controller.updateComposer(composer.map { AnyView($0.environment(\.self, environment)) })
+        controller.updateAccessory(accessory.map { AnyView($0.environment(\.self, environment)) })
         controller.viewportInsets = UIEdgeInsets(top: contentInsets.top, left: 0, bottom: contentInsets.bottom + 10, right: 0)
         controller.update(items: items, appearanceKey: "\(appearanceKey)-\(environment.dynamicTypeSize)-\(environment.locale.identifier)", command: command) { index, width in
             AnyView(row(index, width).environment(\.self, environment))
@@ -82,6 +77,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     private let table = UITableView(frame: .zero, style: .plain)
     private let measurementHost = UIHostingController(rootView: AnyView(EmptyView()))
     private var composerHost: UIHostingController<AnyView>?
+    private var accessoryHost: UIHostingController<AnyView>?
     private let storageKey: String
     private var items: [ShumTimelineItem] = []
     private var row: (Int, CGFloat) -> AnyView = { _, _ in AnyView(EmptyView()) }
@@ -99,7 +95,6 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     private var saveWork: DispatchWorkItem?
     private var backgroundObserver: NSObjectProtocol?
     var viewportInsets = UIEdgeInsets(top: 0, left: 0, bottom: 10, right: 0)
-    var composerTopHitArea: CGFloat = 0
     var bottomChanged: (Bool) -> Void = { _ in }
     var tapped: () -> Void = {}
 
@@ -167,6 +162,30 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         composerHost = host
     }
 
+    /// Hosted apart from the composer so the control receives taps within its
+    /// own frame and showing or hiding it never resizes the composer, which
+    /// would interrupt a scroll already in progress.
+    func updateAccessory(_ content: AnyView?) {
+        guard let composerHost else { return }
+        if accessoryHost == nil {
+            let host = UIHostingController(rootView: AnyView(EmptyView()))
+            host.view.backgroundColor = .clear
+            host.view.translatesAutoresizingMaskIntoConstraints = false
+            host.sizingOptions = .intrinsicContentSize
+            if #available(iOS 16.4, *) { host.safeAreaRegions = [] }
+            addChild(host)
+            view.addSubview(host.view)
+            NSLayoutConstraint.activate([
+                host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -23),
+                host.view.bottomAnchor.constraint(equalTo: composerHost.view.topAnchor)
+            ])
+            host.didMove(toParent: self)
+            accessoryHost = host
+        }
+        accessoryHost?.rootView = content ?? AnyView(EmptyView())
+        accessoryHost?.view.isHidden = content == nil
+    }
+
     deinit {
         saveWork?.cancel()
         highlightWork?.cancel()
@@ -214,7 +233,12 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
             }
             restored = true
         } else if changedSize || changedInsets, restored {
-            if followsBottom {
+            if scrollingToBottom {
+                // A layout change interrupts an animated scroll to the bottom;
+                // finish it at the new bottom instead of stopping short.
+                scrollingToBottom = false
+                moveToBottom(animated: false)
+            } else if followsBottom {
                 // The final row is already materialized. Move its offset with
                 // the keyboard instead of an immediate scrollToRow jump.
                 setOffset(
@@ -241,12 +265,8 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         var insets = viewportInsets
         if let composerHost {
             // The composer sits on the keyboard layout guide; everything below
-            // its interactive content is covered by the composer or keyboard.
-            // Its top hit area belongs to the floating scroll button and must
-            // not push the message viewport upward.
-            let coveredHeight = view.bounds.maxY - composerHost.view.frame.minY
-                - composerTopHitArea
-            insets.bottom = max(10, coveredHeight + 10)
+            // its top edge is covered by the composer or the keyboard.
+            insets.bottom = max(10, view.bounds.maxY - composerHost.view.frame.minY + 10)
             return insets
         }
         guard let window = view.window else { return insets }
@@ -345,7 +365,9 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         guard restored, !adjusting, !leaving else { return }
-        followsBottom = distanceFromBottom < 4
+        // An animated scroll to the bottom still follows the bottom while it
+        // passes through intermediate offsets.
+        if !scrollingToBottom { followsBottom = distanceFromBottom < 4 }
         reportScrollEdges()
         saveWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.persistPosition() }
@@ -434,6 +456,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
             moveToBottom(animated: scrollingToBottom)
         case .message(let id):
             guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+            scrollingToBottom = false
             followsBottom = false
             table.scrollToRow(at: IndexPath(row: index, section: 0), at: .middle,
                               animated: !UIAccessibility.isReduceMotionEnabled)

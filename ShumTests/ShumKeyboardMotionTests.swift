@@ -51,6 +51,54 @@ struct ShumKeyboardMotionTests {
         #expect(Self.firstResponder(in: window) == nil, "Unfocusing from the screen must close the keyboard")
     }
 
+    /// The chevron appears once the reader leaves the bottom. Tapping it must
+    /// land exactly on the last message, even though the button disappears
+    /// while the history is still scrolling.
+    @Test func scrollToBottomButtonReachesLastMessage() async throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let originalKeyWindow = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.frame = scene.coordinateSpace.bounds
+        window.windowLevel = UIWindow.Level(rawValue: (originalKeyWindow?.windowLevel.rawValue ?? 0) + 1)
+        let probe = ScrollProbe()
+        let input = UITextField()
+        let key = "test.keyboard.scroll.\(UUID())"
+        window.rootViewController = UIHostingController(rootView: ScrollButtonFixture(probe: probe, input: input, key: key))
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+            originalKeyWindow?.makeKey()
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        try await Task.sleep(for: .milliseconds(400))
+        let table = try #require(Self.findTable(in: window))
+        for attempt in 0..<3 {
+            table.setContentOffset(CGPoint(x: 0, y: 1500 + CGFloat(attempt) * 700), animated: false)
+            try await Task.sleep(for: .milliseconds(400))
+            #expect(probe.buttonVisible, "The chevron must appear after scrolling up")
+
+            probe.command = ShumTimelineCommand(target: .bottom)
+            try await Task.sleep(for: .milliseconds(1500))
+            let last = IndexPath(row: table.numberOfRows(inSection: 0) - 1, section: 0)
+            let lastBottom = table.convert(table.rectForRow(at: last), to: window).maxY
+            let inputTop = input.convert(input.bounds, to: window).minY
+            let distance = table.contentSize.height + table.contentInset.bottom
+                - table.bounds.height - table.contentOffset.y
+            print("SCROLL iOS \(UIDevice.current.systemVersion) attempt=\(attempt) "
+                  + String(format: "gap=%.1f distanceFromEnd=%.1f", Double(inputTop - lastBottom), Double(distance)))
+            #expect(abs(distance) < 1, "History stopped \(distance) pt before its end")
+            #expect(abs(inputTop - lastBottom - KeyboardStage.composerGap) < 1,
+                    "Last message must sit \(KeyboardStage.composerGap) pt above the composer")
+            #expect(!probe.buttonVisible, "The chevron must hide at the bottom")
+        }
+    }
+
+    private static func findTable(in view: UIView) -> UITableView? {
+        if let table = view as? UITableView { return table }
+        return view.subviews.lazy.compactMap { findTable(in: $0) }.first
+    }
+
     private static func firstResponder(in view: UIView) -> UIView? {
         if view.isFirstResponder { return view }
         return view.subviews.lazy.compactMap { firstResponder(in: $0) }.first
@@ -283,6 +331,48 @@ private struct KeyboardChatFixture: View {
             .ignoresSafeArea(.all, edges: .vertical)
         }
         .background(Color(white: 0.06).ignoresSafeArea())
+    }
+}
+
+@MainActor
+private final class ScrollProbe: ObservableObject {
+    @Published var command: ShumTimelineCommand?
+    var buttonVisible = false
+}
+
+/// Mirrors ShumConversationView's chevron: shown while away from the bottom,
+/// placed just above the composer.
+private struct ScrollButtonFixture: View {
+    @ObservedObject var probe: ScrollProbe
+    let input: UITextField
+    let key: String
+    @State private var atBottom = true
+
+    var body: some View {
+        GeometryReader { geometry in
+            ShumConversationTimeline(
+                items: (0..<100).map { ShumTimelineItem(id: "\($0)", revision: 0) },
+                storageKey: key, appearanceKey: "scroll", command: probe.command,
+                contentInsets: geometry.safeAreaInsets,
+                composer: AnyView(composer),
+                accessory: atBottom ? nil : AnyView(Circle().fill(Color.green).frame(width: 40, height: 40)),
+                bottomChanged: { bottom in
+                    atBottom = bottom
+                    probe.buttonVisible = !bottom
+                }, tapped: {}
+            ) { index, width in
+                FixtureBubble(index: index, width: width)
+            }
+            .ignoresSafeArea(.all, edges: .vertical)
+        }
+    }
+
+    private var composer: some View {
+        FixtureInput(input: input)
+            .frame(height: 46)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
     }
 }
 
