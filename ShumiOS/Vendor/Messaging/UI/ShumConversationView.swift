@@ -150,6 +150,8 @@ struct ShumConversationView: View {
                         Text(runtime.isTyping(peer.id) ? "шумит".localized : presenceText)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
+                            // VoiceOver keeps the plain word for the playful label.
+                            .accessibilityLabel(runtime.isTyping(peer.id) ? "печатает".localized : presenceText)
                     }
                     .transition(.opacity)
                 }.accessibilityElement(children: .combine)

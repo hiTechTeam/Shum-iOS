@@ -436,6 +436,7 @@ struct ShumDirectoryRow: View {
                             .font(.system(size: 15, weight: .regular))
                             .foregroundStyle(Color.accentColor)
                             .lineLimit(1)
+                            .accessibilityLabel("печатает".localized)
                             .transition(.opacity)
                     } else {
                         Group {

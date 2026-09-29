@@ -51,6 +51,16 @@ struct ShumPresencePixelsTests {
         pixels.update(typing: [])
     }
 
+    /// Pixels follow the theme accent; on the dark avatar plate a near-black
+    /// accent (monochrome light) turns white so the pixels stay visible.
+    @Test func pixelsFollowTheThemeAccent() {
+        let pink = UIColor(red: 1, green: 79 / 255, blue: 154 / 255, alpha: 1)
+        let nearBlack = UIColor(red: 22 / 255, green: 23 / 255, blue: 22 / 255, alpha: 1)
+        #expect(ShumPresencePixels.litColor(accent: pink, onDarkPlate: true) == Color(uiColor: pink))
+        #expect(ShumPresencePixels.litColor(accent: nearBlack, onDarkPlate: false) == Color(uiColor: nearBlack))
+        #expect(ShumPresencePixels.litColor(accent: nearBlack, onDarkPlate: true) == .white)
+    }
+
     @Test func badgeFitsTheAvatarCorner() throws {
         let renderer = ImageRenderer(content: ShumPresenceBadge(seed: "peer-a"))
         renderer.scale = 3

@@ -3,14 +3,22 @@ import SwiftUI
 import UIKit
 
 /// "In chat" mark in the pixel style of Shum avatars: a 3×3 grid with a few
-/// lit pixels. Each contact keeps its own stable pattern.
+/// lit pixels in the theme accent. Each contact keeps its own stable pattern.
 struct ShumPresencePixels: View {
     let seed: String
     var cell: CGFloat = 2
     var gap: CGFloat = 1
     var offColor: Color = .clear
+    /// On the dark avatar plate, an accent too dark to see is drawn white.
+    var onDarkPlate = false
+    @Environment(\.shumThemePalette) private var palette
 
-    static let litColor = Color(red: 0.30, green: 0.93, blue: 0.47)
+    static func litColor(accent: UIColor, onDarkPlate: Bool) -> Color {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        accent.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        let luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+        return onDarkPlate && luminance < 0.25 ? .white : Color(uiColor: accent)
+    }
 
     /// Four distinct cells chosen by a stable FNV-1a hash of the seed.
     static func pattern(for seed: String) -> Set<Int> {
@@ -30,13 +38,14 @@ struct ShumPresencePixels: View {
 
     var body: some View {
         let levels = typing.levels(for: seed)
+        let lit = Self.litColor(accent: palette.accentUIColor, onDarkPlate: onDarkPlate)
         VStack(spacing: gap) {
             ForEach(0..<3, id: \.self) { row in
                 HStack(spacing: gap) {
                     ForEach(0..<3, id: \.self) { column in
                         ZStack {
                             Rectangle().fill(offColor)
-                            Rectangle().fill(Self.litColor).opacity(levels[row * 3 + column])
+                            Rectangle().fill(lit).opacity(levels[row * 3 + column])
                         }
                         .frame(width: cell, height: cell)
                     }
@@ -118,7 +127,7 @@ struct ShumPresenceBadge: View {
     private let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
 
     var body: some View {
-        ShumPresencePixels(seed: seed, cell: 3, gap: 0.5, offColor: .white.opacity(0.16))
+        ShumPresencePixels(seed: seed, cell: 3, gap: 0.5, offColor: .white.opacity(0.16), onDarkPlate: true)
             .padding(.horizontal, 3.5)
             .padding(.vertical, 2.5)
             .background(Color.black.opacity(0.45), in: shape)
