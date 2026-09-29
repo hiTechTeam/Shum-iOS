@@ -17,6 +17,12 @@ extension Notification.Name {
     static let shumHighlightMessage = Notification.Name("shum.highlight-message")
 }
 
+enum ShumTimelineLayout {
+    /// The scroll-to-bottom button sits above the composer. Keep that visible
+    /// area inside the hosting view so UIKit can deliver taps to it.
+    static let composerTopHitArea: CGFloat = 40
+}
+
 /// A message and its visible offset survive changes to the history above it.
 /// No message contents are stored in preferences.
 struct ShumTimelinePosition: Codable {
@@ -47,6 +53,7 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     let command: ShumTimelineCommand?
     var contentInsets: EdgeInsets = EdgeInsets()
     var composer: AnyView? = nil
+    var composerTopHitArea: CGFloat = 0
     let bottomChanged: (Bool) -> Void
     let tapped: () -> Void
     @ViewBuilder let row: (Int, CGFloat) -> Row
@@ -58,6 +65,7 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: ShumTimelineController, context: Context) {
         controller.bottomChanged = bottomChanged
         controller.tapped = tapped
+        controller.composerTopHitArea = composerTopHitArea
         controller.updateComposer(composer.map { AnyView($0.environment(\.self, environment)) })
         controller.viewportInsets = UIEdgeInsets(top: contentInsets.top, left: 0, bottom: contentInsets.bottom + 10, right: 0)
         controller.update(items: items, appearanceKey: "\(appearanceKey)-\(environment.dynamicTypeSize)-\(environment.locale.identifier)", command: command) { index, width in
@@ -91,6 +99,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     private var saveWork: DispatchWorkItem?
     private var backgroundObserver: NSObjectProtocol?
     var viewportInsets = UIEdgeInsets(top: 0, left: 0, bottom: 10, right: 0)
+    var composerTopHitArea: CGFloat = 0
     var bottomChanged: (Bool) -> Void = { _ in }
     var tapped: () -> Void = {}
 
@@ -232,8 +241,12 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         var insets = viewportInsets
         if let composerHost {
             // The composer sits on the keyboard layout guide; everything below
-            // its top edge is covered by the composer or the keyboard.
-            insets.bottom = max(10, view.bounds.maxY - composerHost.view.frame.minY + 10)
+            // its interactive content is covered by the composer or keyboard.
+            // Its top hit area belongs to the floating scroll button and must
+            // not push the message viewport upward.
+            let coveredHeight = view.bounds.maxY - composerHost.view.frame.minY
+                - composerTopHitArea
+            insets.bottom = max(10, coveredHeight + 10)
             return insets
         }
         guard let window = view.window else { return insets }

@@ -62,6 +62,9 @@ struct ShumConversationView: View {
     private var offersAddContact: Bool {
         peerCard != nil && !runtime.isContact(peer.id) && !runtime.isBlocked(peer.id)
     }
+    private var showsScrollToBottom: Bool {
+        !atBottom && !messages.isEmpty
+    }
 
     var body: some View {
         let conversation = messages
@@ -74,6 +77,7 @@ struct ShumConversationView: View {
                     command: scrollCommand,
                     contentInsets: geometry.safeAreaInsets,
                     composer: AnyView(composer),
+                    composerTopHitArea: showsScrollToBottom ? ShumTimelineLayout.composerTopHitArea : 0,
                     bottomChanged: { bottom in
                         #if DEBUG && targetEnvironment(simulator)
                         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewScrollButton") {
@@ -201,7 +205,7 @@ struct ShumConversationView: View {
             }
             composerControl
                 .overlay(alignment: .topTrailing) {
-                    if !atBottom && !messages.isEmpty {
+                    if showsScrollToBottom {
                         scrollToBottomButton
                             .padding(.trailing, 3)
                             .offset(y: -48)
@@ -210,7 +214,10 @@ struct ShumConversationView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
-        .padding(.top, 8)
+        // The button is offset 48 points above the composer control. The
+        // original eight-point gap plus this extra hit area keeps the button
+        // inside the UIHostingController view, where it can receive taps.
+        .padding(.top, 8 + (showsScrollToBottom ? ShumTimelineLayout.composerTopHitArea : 0))
         // The timeline pins the composer to the keyboard layout guide.
         // A fixed gap avoids a second, mismatched animation of the composer.
         .padding(.bottom, 8)
