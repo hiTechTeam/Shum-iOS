@@ -83,6 +83,24 @@ struct ShumChatDirectoryTests {
         #expect(!owner.service.isAddressBookContact(person.card))
     }
 
+    @Test func badgeCountsOnlyUnreadMessagesAndInvitations() throws {
+        let clock = Clock(), owner = try Node("Owner", clock: clock)
+        let chat = try Node("Chat", clock: clock), invitation = try Node("Invitation", clock: clock)
+        let near = try Node("Near", clock: clock), met = try Node("Met", clock: clock)
+        try owner.service.add(chat.card, source: "test")
+        try owner.service.add(near.card, source: "test")
+        try owner.service.recordEncounter(met.card)
+        try owner.store.transaction { $0.requests = [invitation.card] }
+        let entries = ShumChatDirectory.entries(
+            chats: [peer(chat)], peers: [peer(near)], permanent: owner.service,
+            isNearby: { $0 == near.card.peerID },
+            unreadCount: { $0 == chat.card.peerID ? 3 : 0 })
+
+        #expect(entries.contains { $0.isNearby })
+        #expect(entries.contains { $0.lastSeen != nil })
+        #expect(entries.badgeCount == 4)
+    }
+
     @Test func blockedPeopleDoNotLeakBackThroughAnotherSource() throws {
         let clock = Clock(), owner = try Node("Owner", clock: clock), person = try Node("Person", clock: clock)
         try owner.service.add(person.card, source: "test")

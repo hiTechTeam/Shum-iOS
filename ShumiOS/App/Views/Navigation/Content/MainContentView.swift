@@ -38,9 +38,7 @@ struct MainContentView: View {
             .modifier(ShumPeerPhotoPresentationHost())
             .toolbar(chatsPath.isEmpty ? .visible : .hidden, for: .tabBar)
             .tabItem { tabLabel("Чаты".localized, image: "PixelChats", tab: 1) }
-                .badge(chat.directoryEntries.reduce(0) {
-                    $0 + max($1.unread, $1.invitationAwaitingResponse ? 1 : 0)
-                }).tag(1)
+                .badge(chat.directoryEntries.badgeCount).tag(1)
             NavigationStack(path: $profilePath) {
                 ProfileOverviewView(
                     chat: chat,

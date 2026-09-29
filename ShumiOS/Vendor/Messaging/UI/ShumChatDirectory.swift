@@ -47,6 +47,13 @@ struct ShumDirectoryEntry: Identifiable {
     }
 }
 
+extension Array where Element == ShumDirectoryEntry {
+    /// The Chats tab and the app icon show this same number.
+    var badgeCount: Int {
+        reduce(0) { $0 + Swift.max($1.unread, $1.invitationAwaitingResponse ? 1 : 0) }
+    }
+}
+
 extension ShumRuntime {
     var directoryEntries: [ShumDirectoryEntry] {
         var unreadByPeer: [PeerID: Int] = [:]

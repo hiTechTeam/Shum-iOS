@@ -407,16 +407,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         }
         notifiedNearbyPeerIDs = nearbyIDs
 
-        let chatBadgeCount = entries.reduce(0) {
-            $0 + max(
-                $1.unread,
-                $1.invitationAwaitingResponse ? 1 : 0
-            )
-        }
-        let totalBadgeCount = chatBadgeCount
-            + nearbyIDs.count
-            + permanent.unviewedEncounterCount
-        nearbyPeopleNotifier.setApplicationIconBadgeCount(totalBadgeCount)
+        nearbyPeopleNotifier.setApplicationIconBadgeCount(entries.badgeCount)
     }
 
     private func resetNotificationState() {
