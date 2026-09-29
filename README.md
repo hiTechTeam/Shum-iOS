@@ -14,9 +14,9 @@
 - Резервные копии профиля и переписки.
 - Код приложения и биометрия для входа, переписки скрыты в переключателе приложений.
 - Пиксельный аватар создаётся на устройстве из короткого кода. Его можно менять, не загружая фотографию.
-- Приглашение по ссылке содержит подписанный профиль: получатель может увидеть имя и аватар даже тогда, когда отправитель не в сети. Изменения профиля передаются сохранённым контактам при появлении связи.
+- QR-код и ссылка «Поделиться» уже содержат ваше имя и аватар, поэтому контакт добавляется без интернета, даже если вы не в сети. Изменения профиля передаются сохранённым контактам при появлении связи.
 
-QR-код на экране профиля остаётся коротким кодом-указателем: для получения профиля по нему отправитель должен быть доступен через интернет. Ссылка через кнопку «Поделиться» содержит сам подписанный профиль. Сохранение контакта не открывает переписку автоматически: приглашение в чат принимается отдельно.
+Сохранение контакта не открывает переписку автоматически: приглашение в чат принимается отдельно.
 
 Сообщения не проходят через центральный сервер: они идут напрямую по Bluetooth или через независимые релеи. Для push-уведомлений используется сервер разработчиков, который не получает текст сообщений. Приложение развивается, сейчас доступны текстовые сообщения.
 
@@ -34,9 +34,9 @@ Meet people nearby and stay connected over distance. No phone number is needed.
 - Backups of your profile and conversations.
 - App passcode and biometric unlock; chats are hidden in the app switcher.
 - A pixel avatar generated on your device from a small seed. You can change it without uploading a photo.
-- Shared links include a signed profile, so the recipient can see your name and avatar even while you are offline. Profile changes reach saved contacts when a connection is available.
+- Your QR code and shared link already contain your name and avatar, so a contact can be added without internet access, even while you are offline. Profile changes reach saved contacts when a connection is available.
 
-The QR code shown on the profile screen is still a short locator: resolving it requires the owner to be reachable over the internet. The Share action includes the signed profile itself. Saving a contact does not automatically accept a chat invitation.
+Saving a contact does not automatically accept a chat invitation.
 
 Messages do not pass through a central server: they travel directly over Bluetooth or through independent relays. Push notifications use a developer-operated server that never receives message text. The app is under development and currently supports text messaging.
 

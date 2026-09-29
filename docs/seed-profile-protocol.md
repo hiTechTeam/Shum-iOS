@@ -36,22 +36,21 @@ Self-contained invitation payloads are `shum://c4/<base64url>`. The compact bina
 - little-endian UInt64 profile revision
 - one 64-byte signature over the complete public profile
 
-The profile QR screen uses the original short `shum://c2/<base64url-nostr-key>` locator and original 252-point layout. It uses the existing internet lookup and requires the owner to be reachable. It does not carry the avatar seed itself.
-
-The full c4 invitation remains in shared links. It contains no image and needs no network lookup once its payload reaches Shum. The receiver verifies the payload,
-renders the avatar locally and asks the user whether to save the contact.
-Saving a contact does not accept a chat invitation.
+The profile QR code and shared links carry the same c4 payload. It holds the
+keys, name and avatar seed, but no image. Adding a contact from it needs no
+network at all: the receiver checks the signature, draws the avatar on the
+device and asks whether to save the contact. Saving a contact does not accept
+a chat invitation. The QR code uses error correction level M so it still scans
+with the logo in the middle.
 
 Shared links use `/invite#c4/<same-payload>` on the configured HTTPS gateway.
-The fragment does not reach the web server. The push server's invitation page
-accepts c4 links; deploying that server version is required before distributing
-links from this app version.
-The browser page itself requires connectivity. Once the c4 payload reaches the
-app, importing it needs no network lookup. The short c2 QR still requires an
-online lookup because it has no profile data. Legacy `c`, `c3`, `contact` and
-`c2` inputs are still read.
-An already shared c4 link is an immutable profile snapshot. The short c2 QR is
-a locator and resolves the currently available profile through the network.
+The part after `#` never reaches the web server. Opening the page in a browser
+needs internet, but the app itself does not.
+
+A c4 code is a snapshot of the profile at the moment it was shared. Later
+changes reach saved contacts through profile sync (see Delivery). Older `c`,
+`c2`, `c3` and `contact` codes can still be read; `c2` holds only a key, so it
+needs an internet lookup.
 
 ## Delivery
 

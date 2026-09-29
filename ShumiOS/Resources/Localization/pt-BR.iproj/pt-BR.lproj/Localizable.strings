@@ -268,7 +268,7 @@
 "Shum не смог проверить эту резервную копию." = "O Shum não pôde verificar este backup.";
 "Shum не содержит рекламы, аналитики и средств отслеживания. Разработчики Shum не продают персональные данные." = "Shum não contém publicidade, análise ou rastreamento. Os desenvolvedores da Shum não vendem dados pessoais.";
 "Shum позволяет находить людей рядом по Bluetooth и обмениваться зашифрованными сообщениями напрямую или через общедоступные Nostr-релеи." = "Shum permite encontrar pessoas próximas através de Bluetooth e trocar mensagens criptografadas diretamente ou através de relés Nostr públicos.";
-"Shum — мессенджер без центрального сервера учётных записей. Для работы не нужны номер телефона, адрес электронной почты или внешний аккаунт." = "Shum é um mensageiro sem um servidor de conta central. Ele não requer um número de telefone, endereço de e-mail ou conta externa.";
+"В Shum нет центрального сервера учётных записей. Для работы не нужны номер телефона, адрес электронной почты или внешний аккаунт." = "Shum é um mensageiro sem um servidor de conta central. Ele não requer um número de telefone, endereço de e-mail ou conta externa.";
 "Алфавитный указатель" = "Índice alfabético";
 "Без проверки" = "Sem verificação";
 "Безопасность" = "Segurança";
@@ -308,7 +308,7 @@
 "Вчера" = "Ontem";
 "Вы" = "Você";
 "Вы можете прекратить использование Shum и удалить локальный профиль в настройках приложения. Удаление с устройства не удаляет данные, которые ранее были переданы другим людям или сторонним релеям." = "Você pode parar de usar Shum e excluir seu perfil local em Configurações. Excluindo-o do seu dispositivo não exclui dados anteriormente enviados para outras pessoas ou relés de terceiros.";
-"Вы отвечаете за имя, фотографию, сообщения и другие данные, которыми делитесь через Shum." = "Você é responsável pelo nome, foto, mensagens e outras informações que você compartilha através do Shum.";
+"Вы отвечаете за имя, аватар, сообщения и другие данные, которыми делитесь через Shum." = "Você é responsável pelo nome, avatar, mensagens e outras informações que compartilha pelo Shum.";
 "Вы снова сможете обмениваться сообщениями." = "Você será capaz de trocar mensagens novamente.";
 "Выбрана тема %@" = "Tema%@selecionado";
 "Выбрать из Фото" = "Escolher a partir de fotos";
@@ -320,6 +320,7 @@
 "Действия с контактом" = "Acções de contacto";
 "Децентрализованная связь" = "Comunicação descentralizada";
 "Для доставки сообщений через интернет Shum подключается к общедоступным Nostr-релеям. Релеи получают зашифрованные пакеты и технические данные, необходимые для доставки. Они не получают открытый текст сообщений, но могут видеть IP-адрес, время соединения и другие сетевые данные. Каждый релей работает по собственным правилам, которые Shum не контролирует." = "Para entrega de internet, Shum conecta-se aos relés públicos Nostr. Relés recebem pacotes criptografados e dados técnicos necessários para a entrega. Eles não podem ler o texto da mensagem, mas podem ver seu endereço IP, tempo de conexão e outros metadados de rede. Cada relé segue regras fora do controle da Shum.";
+"Собеседник видит, когда вы открыли переписку с ним или набираете сообщение, и получает отметки о прочтении. Эти сигналы шифруются так же, как сообщения." = "A pessoa com quem você conversa pode ver quando você está com a conversa aberta ou digitando, e recebe confirmações de leitura. Esses sinais são criptografados da mesma forma que as mensagens.";
 "Для этой тестовой версии сократите сообщение или отправьте его частями." = "Para esta versão de teste, encurtar a mensagem ou enviá-la em partes.";
 "Добавить" = "Adicionar";
 "Добавить в контакты" = "Adicionar aos contactos";
@@ -370,7 +371,7 @@
 "История чата будет удалена только на этом устройстве. У собеседника сообщения сохранятся." = "O histórico de conversas será excluído apenas deste dispositivo. A outra pessoa manterá as mensagens.";
 "К последнему сообщению" = "Até à última mensagem";
 "Какие данные использует Shum" = "Dados utilizados pela Shum";
-"Камера используется только для создания фотографии профиля и сканирования QR-кодов. Выбранные фотографии обрабатываются на устройстве. Системный выбор контакта передаёт Shum только выбранные пользователем данные; приложение не загружает адресную книгу." = "A câmera é usada apenas para fotos de perfil e digitalização QR. Fotos selecionadas são processadas no dispositivo. O seletor de contato do sistema fornece Shum apenas as informações que você escolher; o aplicativo não envia seu livro de endereços.";
+"Камера используется для сканирования QR-кодов. Выбранное изображение QR-кода обрабатывается на устройстве. Системный выбор контакта передаёт Shum только выбранные пользователем данные; приложение не загружает адресную книгу." = "A câmera é usada para escanear códigos QR. A imagem com código QR que você escolher é processada no dispositivo. O seletor de contatos do sistema fornece ao Shum apenas as informações que você escolher; o app não envia sua agenda.";
 "Карточка будет удалена из списка «Виделись»." = "O cartão será removido da lista Met.";
 "Ключ контакта пока недоступен" = "A chave de contacto ainda não está disponível";
 "Ключ профиля создан" = "Chave de perfil criada";
@@ -381,7 +382,7 @@
 "Ключи профиля недоступны. Разблокируйте iPhone и снова откройте Shum." = "As chaves do perfil não estão disponíveis. Desbloqueie o iPhone e abra Shum novamente.";
 "Ключи создаются и сохраняются\\nтолько на этом устройстве." = "Chaves são criadas e armazenadas\nSó neste dispositivo.";
 "Ключи сохранены на устройстве" = "Chaves salvas no dispositivo";
-"Когда обнаружение включено, Shum использует Bluetooth, чтобы находить другие устройства рядом. Людям рядом может передаваться подписанная карточка профиля с именем и фотографией, если она добавлена. Shum не определяет и не сохраняет точные координаты устройства." = "Quando a descoberta é ativada, o Shum usa Bluetooth para encontrar dispositivos próximos. Um cartão de perfil assinado contendo seu nome e foto, se fornecido, pode ser compartilhado com pessoas próximas. Shum não determina nem armazena a sua localização exata.";
+"Когда обнаружение включено, Shum использует Bluetooth, чтобы находить другие устройства рядом. Людям рядом может передаваться подписанная карточка профиля с именем и кодом пиксельного аватара. Shum не определяет и не сохраняет точные координаты устройства." = "Quando a descoberta está ativada, o Shum usa Bluetooth para encontrar dispositivos próximos. Um cartão de perfil assinado com seu nome e o código do seu avatar em pixels pode ser compartilhado com pessoas próximas. O Shum não determina nem armazena sua localização exata.";
 "Код Shum" = "Código Shum";
 "Код Shum не найден." = "Código Shum não encontrado.";
 "Код должен состоять из пяти цифр." = "A senha deve conter cinco dígitos.";
@@ -407,7 +408,7 @@
 "Можете начинать общение" = "Você pode começar a conversar";
 "Мой QR-код" = "O meu código QR";
 "На устройстве не осталось профиля, ключей и переписки." = "Nenhum perfil, chaves ou conversas permanecem no dispositivo.";
-"На устройстве хранятся имя и необязательная фотография профиля, криптографические ключи, контакты, сообщения, сведения о встречах с людьми рядом, список блокировок и настройки приложения." = "Seu dispositivo armazena seu nome e foto de perfil opcional, chaves criptográficas, contatos, mensagens, histórico de encontro próximo, perfis bloqueados e configurações de aplicativo.";
+"На устройстве хранятся имя и код пиксельного аватара, криптографические ключи, контакты, сообщения, сведения о встречах с людьми рядом, список блокировок и настройки приложения." = "Seu dispositivo armazena seu nome e o código do seu avatar em pixels, chaves criptográficas, contatos, mensagens, histórico de encontros próximos, perfis bloqueados e ajustes do app.";
 "Наведите камеру на QR-код Shum" = "Aponte a câmera para um código QR Shum";
 "Назад" = "Voltar";
 "Найти людей" = "Encontrar pessoas";
@@ -467,6 +468,7 @@
 "Нужен Bluetooth" = "Bluetooth requerido";
 "Обмен сообщениями остановлен." = "A mensagem parou.";
 "Обновлено 28 сентября 2026 года" = "Atualizado em 28 de setembro de 2026";
+"Обновлено 29 сентября 2026 года" = "Atualizado em 29 de setembro de 2026";
 "Общайтесь без единого центра" = "Comunicar sem autoridade central";
 "Общедоступные Nostr-релеи управляются третьими лицами. Их доступность, журналы соединений, сроки хранения зашифрованных пакетов и собственные правила находятся вне контроля Shum." = "Os relés Nostr públicos são geridos por terceiros. Sua disponibilidade, registros de conexão, períodos de retenção de pacotes criptografados e regras estão fora do controle da Shum.";
 "Общение" = "Comunicação";

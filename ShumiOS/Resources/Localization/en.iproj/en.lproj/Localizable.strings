@@ -268,7 +268,7 @@
 "Shum не смог проверить эту резервную копию." = "Shum could not verify this backup.";
 "Shum не содержит рекламы, аналитики и средств отслеживания. Разработчики Shum не продают персональные данные." = "Shum contains no advertising, analytics, or tracking. Shum's developers do not sell personal data.";
 "Shum позволяет находить людей рядом по Bluetooth и обмениваться зашифрованными сообщениями напрямую или через общедоступные Nostr-релеи." = "Shum lets you find nearby people over Bluetooth and exchange encrypted messages directly or through public Nostr relays.";
-"Shum — мессенджер без центрального сервера учётных записей. Для работы не нужны номер телефона, адрес электронной почты или внешний аккаунт." = "Shum is a messenger without a central account server. It does not require a phone number, email address, or external account.";
+"В Shum нет центрального сервера учётных записей. Для работы не нужны номер телефона, адрес электронной почты или внешний аккаунт." = "Shum is a messenger without a central account server. It does not require a phone number, email address, or external account.";
 "Алфавитный указатель" = "Alphabetical index";
 "Без проверки" = "No verification";
 "Безопасность" = "Security";
@@ -320,6 +320,7 @@
 "Действия с контактом" = "Contact actions";
 "Децентрализованная связь" = "Decentralized communication";
 "Для доставки сообщений через интернет Shum подключается к общедоступным Nostr-релеям. Релеи получают зашифрованные пакеты и технические данные, необходимые для доставки. Они не получают открытый текст сообщений, но могут видеть IP-адрес, время соединения и другие сетевые данные. Каждый релей работает по собственным правилам, которые Shum не контролирует." = "For internet delivery, Shum connects to public Nostr relays. Relays receive encrypted packets and technical data needed for delivery. They cannot read message text, but may see your IP address, connection time, and other network metadata. Each relay follows rules outside Shum's control.";
+"Собеседник видит, когда вы открыли переписку с ним или набираете сообщение, и получает отметки о прочтении. Эти сигналы шифруются так же, как сообщения." = "The person you are chatting with can see when you have your chat with them open or are typing, and receives read receipts. These signals are encrypted the same way as messages.";
 "Для этой тестовой версии сократите сообщение или отправьте его частями." = "For this test version, shorten the message or send it in parts.";
 "Добавить" = "Add";
 "Добавить в контакты" = "Add to contacts";
@@ -467,6 +468,7 @@
 "Нужен Bluetooth" = "Bluetooth required";
 "Обмен сообщениями остановлен." = "Messaging has stopped.";
 "Обновлено 28 сентября 2026 года" = "Updated September 28, 2026";
+"Обновлено 29 сентября 2026 года" = "Updated September 29, 2026";
 "Общайтесь без единого центра" = "Communicate without a central authority";
 "Общедоступные Nostr-релеи управляются третьими лицами. Их доступность, журналы соединений, сроки хранения зашифрованных пакетов и собственные правила находятся вне контроля Shum." = "Public Nostr relays are run by third parties. Their availability, connection logs, encrypted-packet retention periods, and rules are outside Shum's control.";
 "Общение" = "Communication";
@@ -662,7 +664,6 @@
 "Аватар" = "Avatar";
 "Сменить аватар" = "Change avatar";
 "Предпросмотр аватара" = "Avatar preview";
-"Создайте аватар без своего фото. Нажимайте, пока не найдёте подходящий." = "Create an avatar without using your photo. Keep trying until you find one you like.";
 "Найди аватар себе по душе. Свой характер, свой стиль." = "Find an avatar you love. Your character, your style.";
 "Другой вариант" = "Try another";
 "Поставить на аватар" = "Use this avatar";
