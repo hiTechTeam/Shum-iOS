@@ -85,7 +85,6 @@ struct ShumQRView: View {
                 .scrollIndicators(.hidden)
             }
         }
-        .shumAllowsScreenshots()
         .navigationTitle("QR-код".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

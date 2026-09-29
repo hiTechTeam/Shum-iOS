@@ -12,7 +12,7 @@
 - Общение через интернет с помощью независимых ретрансляторов.
 - Сквозное шифрование сообщений и зашифрованная история на устройстве.
 - Резервные копии профиля и переписки.
-- Код приложения и биометрия для входа, защита содержимого переписок при снимке и записи экрана.
+- Код приложения и биометрия для входа, переписки скрыты в переключателе приложений.
 - Пиксельный аватар создаётся на устройстве из короткого кода. Его можно менять, не загружая фотографию.
 - Приглашение по ссылке содержит подписанный профиль: получатель может увидеть имя и аватар даже тогда, когда отправитель не в сети. Изменения профиля передаются сохранённым контактам при появлении связи.
 
@@ -32,7 +32,7 @@ Meet people nearby and stay connected over distance. No phone number is needed.
 - Stay in touch over the internet through independent relays.
 - End-to-end encrypted messages and encrypted history on your device.
 - Backups of your profile and conversations.
-- App passcode and biometric unlock, with chat content protected during screenshots and screen recording.
+- App passcode and biometric unlock; chats are hidden in the app switcher.
 - A pixel avatar generated on your device from a small seed. You can change it without uploading a photo.
 - Shared links include a signed profile, so the recipient can see your name and avatar even while you are offline. Profile changes reach saved contacts when a connection is available.
 

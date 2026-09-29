@@ -156,7 +156,6 @@ struct ShumConversationView: View {
                     .transition(.opacity)
                 }.accessibilityElement(children: .combine)
                     .animation(.easeInOut(duration: 0.18), value: runtime.isTyping(peer.id))
-                    .shumHiddenFromSystemCapture(true)
             }
             ShumAvatarToolbar {
                 Button(action: openPhotoPreview) {
@@ -165,14 +164,11 @@ struct ShumConversationView: View {
                 }.foregroundStyle(.primary)
                     .accessibilityLabel("Посмотреть фото".localized)
                     .accessibilityIdentifier("shum.chat.avatar")
-                    .shumHiddenFromSystemCapture(true)
             }
         }
         .sheet(isPresented: $showProtection) {
             ShumChatProtectionSheet(runtime: runtime, peer: peer)
         }
-        // Keep message rows protected during a navigation pop transition.
-        .shumHiddenFromSystemCapture(true)
         #if DEBUG && targetEnvironment(simulator)
         .task {
             if ProcessInfo.processInfo.arguments.contains("-ShumPreviewScrollButton") {

@@ -23,7 +23,6 @@ struct MainContentView: View {
                 }
             }
             .modifier(ShumPeerPhotoPresentationHost())
-            .shumProtectFromCapture(contactsPath.last?.containsMessages == true)
             .toolbar(contactsPath.isEmpty ? .visible : .hidden, for: .tabBar)
             .tabItem { tabLabel("Контакты".localized, image: "PixelPeople", tab: 0) }.tag(0)
 
@@ -37,7 +36,6 @@ struct MainContentView: View {
                 }
             }
             .modifier(ShumPeerPhotoPresentationHost())
-            .shumProtectFromCapture()
             .toolbar(chatsPath.isEmpty ? .visible : .hidden, for: .tabBar)
             .tabItem { tabLabel("Чаты".localized, image: "PixelChats", tab: 1) }
                 .badge(chat.directoryEntries.reduce(0) {
@@ -56,7 +54,6 @@ struct MainContentView: View {
                 }
             }
             .modifier(ShumPeerPhotoPresentationHost())
-            .shumProtectFromCapture(protectsProfileConversation)
             .toolbar(
                 showSecurity || profilePath.last?.hidesTabBar == true ? .hidden : .visible,
                 for: .tabBar
@@ -72,10 +69,6 @@ struct MainContentView: View {
                 }
             }
         }
-        // The tab bar belongs to TabView, outside each NavigationStack. Host
-        // the complete surface in the capture-protected canvas so a chat-list
-        // screenshot cannot expose the bar beneath the privacy cover.
-        .shumProtectFromCapture(protectsVisibleContent, protectsSystemChrome: true)
         .sheet(isPresented: $showContacts) {
             ShumContactsView(runtime: chat, showOwnQR: {
                 let sourceTab = selectedTab
@@ -91,7 +84,6 @@ struct MainContentView: View {
                 showContacts = false; selectedTab = 1
                 chatsPath.push(.conversation(peer))
             }
-            .shumAllowsScreenshots()
         }
         .sheet(item: $coordinator.invitation) { card in
             ShumContactConfirmation(
@@ -101,7 +93,6 @@ struct MainContentView: View {
             ) {
                 openScannedContact(card)
             }
-            .shumAllowsScreenshots()
         }
         .alert("Shum", isPresented: Binding(get: { chat.error != nil }, set: { if !$0 { chat.error = nil } })) {
             Button("Понятно".localized) { chat.error = nil }
@@ -131,20 +122,6 @@ struct MainContentView: View {
             }
         }
         #endif
-    }
-
-    private var protectsProfileConversation: Bool {
-        if case .conversation = profilePath.last { return true }
-        return false
-    }
-
-    private var protectsVisibleContent: Bool {
-        switch selectedTab {
-        case 0: contactsPath.last?.containsMessages == true
-        case 1: true // Message previews are visible in the chat directory.
-        case 2: protectsProfileConversation
-        default: false
-        }
     }
 
     private func tabLabel(_ title: String, image name: String, tab: Int) -> some View {

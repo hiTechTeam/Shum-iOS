@@ -135,7 +135,6 @@ struct ShumKeyVerificationView: View {
                 verify(scannedCard)
             }
         }
-        .shumProtectFromCapture()
     }
 
     private var formattedOwnFingerprint: String {

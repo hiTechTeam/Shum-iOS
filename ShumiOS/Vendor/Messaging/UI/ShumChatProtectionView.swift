@@ -129,7 +129,6 @@ struct ShumChatProtectionSheet: View {
         }
         // This sheet contains public explanations only. The verification
         // screen presented from it enables capture protection separately.
-        .shumAllowsScreenshots()
     }
 
     private func detail(_ title: String, text: String, symbol: String, isActive: Bool = true) -> some View {

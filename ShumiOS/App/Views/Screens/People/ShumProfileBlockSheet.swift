@@ -8,7 +8,6 @@ struct ShumProfileBlockRequest: Identifiable {
     let waitsForTransientUI: Bool
 }
 private struct ShumProfileBlockSheetModifier: ViewModifier {
-    @Environment(\.shumCaptureProtectionEnabled) private var protectsCapture
     @ObservedObject var runtime: ShumRuntime
     @Binding var request: ShumProfileBlockRequest?
     @State private var activeRequest: ShumProfileBlockRequest?
@@ -22,7 +21,6 @@ private struct ShumProfileBlockSheetModifier: ViewModifier {
                     onClose: { activeRequest = nil },
                     onBlock: { block(pending) }
                 )
-                .shumProtectFromCapture(protectsCapture)
                 .presentationDetents([.height(195)])
                 .presentationDragIndicator(.hidden)
             }

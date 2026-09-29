@@ -120,12 +120,10 @@ struct ShumChatsUI: View {
                 showsNewMessage = false
                 open(.conversation(peer))
             }
-            .shumAllowsScreenshots()
         }
         .shumOnChange(of: folder) { _, folder in
             if folder == .encounters { runtime.permanent?.markEncountersViewed() }
         }
-        .shumHiddenFromSystemCapture(true)
         #if DEBUG && targetEnvironment(simulator)
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("-ShumPreviewPeople") { folder = .nearby }

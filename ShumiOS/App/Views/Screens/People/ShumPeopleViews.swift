@@ -60,7 +60,6 @@ private struct ShumDistanceLabel: View {
     }
 }
 struct ShumPeerCard: View {
-    @Environment(\.shumCaptureProtectionEnabled) private var protectsCapture
     @ObservedObject var runtime: ShumRuntime
     let peer: ShumPeer
     let profileCard: ShumContactCard?
@@ -162,13 +161,11 @@ struct ShumPeerCard: View {
                 .padding(.top, 8)
             }
         }
-        .shumProtectFromCapture(protectsCapture)
         .fullScreenCover(isPresented: $showPhoto) {
             if let avatar, let image = UIImage(data: avatar) {
                 FullScreenPhotoView(isPresented: $showPhoto) {
                     Image(uiImage: image).resizable().scaledToFit()
                 }
-                .shumProtectFromCapture(protectsCapture)
             }
         }
         .sheet(isPresented: $showVerification) {
