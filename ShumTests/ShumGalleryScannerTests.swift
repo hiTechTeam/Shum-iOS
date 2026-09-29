@@ -51,6 +51,29 @@ struct ShumGalleryScannerTests {
         #expect(ShumQRCodeDetector.payload(in: image) == payload)
     }
 
+    /// The profile screen shows the complete signed card with correction M
+    /// under the centered logo. Scanning it must produce the name and avatar
+    /// seed directly, so adding the contact needs no network exchange.
+    @Test func profileQRAddsContactWithoutNetwork() throws {
+        let node = try ShumPermanentTests.Node("Alice", clock: ShumPermanentTests.Clock())
+        let url = try node.card.invitation()
+        #expect(url.host == "c4")
+        // 212 pt code on a 2x screen, photographed or saved from the library.
+        let photo = try #require(makePhoto(size: CGSize(width: 504, height: 504),
+            payload: url.absoluteString, qrRect: CGRect(x: 40, y: 40, width: 424, height: 424),
+            obscuresCenter: true, correctionLevel: "M"))
+        let image = try #require(photo.cgImage)
+        let scanned = try #require(ShumQRCodeDetector.payload(in: image))
+        #expect(scanned == url.absoluteString)
+        guard case .card(let card) = try ShumInvitationPayload.parse(try #require(URL(string: scanned))) else {
+            Issue.record("A profile QR must not require a network lookup")
+            return
+        }
+        #expect(card.name == "Alice")
+        #expect(card.avatarSeed != nil && card.avatarSeed == node.card.avatarSeed)
+        #expect(card.id == node.card.id)
+    }
+
     @Test func invalidGeometryDoesNotProduceAnImage() {
         let image = UIGraphicsImageRenderer(size: CGSize(width: 10, height: 10)).image { _ in }
         #expect(ShumScannerPhotoRenderer.render(
@@ -66,11 +89,12 @@ struct ShumGalleryScannerTests {
         size: CGSize,
         payload: String,
         qrRect: CGRect,
-        obscuresCenter: Bool
+        obscuresCenter: Bool,
+        correctionLevel: String = "H"
     ) -> UIImage? {
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(payload.utf8)
-        filter.correctionLevel = "H"
+        filter.correctionLevel = correctionLevel
         guard let output = filter.outputImage,
               let qr = CIContext().createCGImage(output, from: output.extent) else { return nil }
         let format = UIGraphicsImageRendererFormat()

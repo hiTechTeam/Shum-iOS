@@ -708,4 +708,4 @@
 "Найди аватар себе по душе. Свой характер, свой стиль." = "Encuentra un avatar que te guste. Tu personalidad, tu estilo.";
 "Другой вариант" = "Probar otro";
 "Поставить на аватар" = "Usar este avatar";
-"Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытый идентификатор." = "Muestra este código QR a la persona para que te añada a sus contactos de Shum. El código solo contiene un identificador público.";
+"Покажите QR-код человеку, чтобы он добавил вас в контакты Shum даже без интернета. Код содержит ваше имя, аватар и открытые ключи." = "Muestra este código QR a la persona para que te añada a sus contactos de Shum, incluso sin internet. El código contiene tu nombre, tu avatar y tus claves públicas.";

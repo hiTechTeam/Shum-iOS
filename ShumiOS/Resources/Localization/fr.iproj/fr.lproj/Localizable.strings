@@ -710,4 +710,4 @@
 "Найди аватар себе по душе. Свой характер, свой стиль." = "Trouve un avatar qui te plaît. Ton caractère, ton style.";
 "Другой вариант" = "Essayer un autre";
 "Поставить на аватар" = "Utiliser cet avatar";
-"Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытый идентификатор." = "Afficher ce code QR à la personne afin qu'elle puisse vous ajouter à ses contacts Shum. Le code ne contient qu'un identifiant public.";
+"Покажите QR-код человеку, чтобы он добавил вас в контакты Shum даже без интернета. Код содержит ваше имя, аватар и открытые ключи." = "Montrez ce code QR à la personne afin qu'elle puisse vous ajouter à ses contacts Shum, même sans internet. Le code contient votre nom, votre avatar et vos clés publiques.";

@@ -30,8 +30,10 @@ struct ShumQRView: View {
         self.scanned = scanned
     }
 
+    /// The QR carries the complete signed profile: public keys, name and
+    /// avatar seed. Scanning adds the contact without any network exchange.
     private var invitationURL: URL? {
-        try? card.compactQRInvitation()
+        try? card.invitation()
     }
 
     private var avatarData: Data? {
@@ -54,7 +56,7 @@ struct ShumQRView: View {
                             profileCard(qrImage: image)
                                 .padding(.top, 54)
 
-                            Text("Покажите QR-код человеку, чтобы он добавил вас в контакты Shum. Код содержит только открытый идентификатор.".localized)
+                            Text("Покажите QR-код человеку, чтобы он добавил вас в контакты Shum даже без интернета. Код содержит ваше имя, аватар и открытые ключи.".localized)
                                 .font(.system(size: 15, weight: .regular))
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -167,7 +169,9 @@ struct ShumQRView: View {
     }
 
     private func qr(_ text: String) -> UIImage? {
-        let filter = CIFilter.qrCodeGenerator(); filter.message = Data(text.utf8); filter.correctionLevel = "H"
+        // M keeps the denser self-contained profile readable under the
+        // centered logo, which covers about 4% of the code.
+        let filter = CIFilter.qrCodeGenerator(); filter.message = Data(text.utf8); filter.correctionLevel = "M"
         guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 6, y: 6)), let image = CIContext().createCGImage(output, from: output.extent) else { return nil }
         return UIImage(cgImage: image)
     }
