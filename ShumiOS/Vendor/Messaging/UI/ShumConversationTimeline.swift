@@ -77,6 +77,8 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     private let table = UITableView(frame: .zero, style: .plain)
     private let measurementHost = UIHostingController(rootView: AnyView(EmptyView()))
     private var composerHost: UIHostingController<AnyView>?
+    private var composerContent: AnyView?
+    private var composerWidth: CGFloat = 0
     private var accessoryHost: UIHostingController<AnyView>?
     private let storageKey: String
     private var items: [ShumTimelineItem] = []
@@ -141,11 +143,12 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     /// same layout pass, so both share one animation.
     func updateComposer(_ content: AnyView?) {
         guard let content else { return }
+        composerContent = content
         if let composerHost {
-            composerHost.rootView = content
+            composerHost.rootView = sizedComposer(content)
             return
         }
-        let host = UIHostingController(rootView: content)
+        let host = UIHostingController(rootView: sizedComposer(content))
         host.view.backgroundColor = .clear
         host.view.translatesAutoresizingMaskIntoConstraints = false
         host.view.setContentHuggingPriority(.required, for: .vertical)
@@ -160,6 +163,13 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         ])
         host.didMove(toParent: self)
         composerHost = host
+    }
+
+    /// A hosting controller sizes itself from its content's ideal size, which
+    /// for a vertical text field is a single unbounded line. Proposing the
+    /// real width lets a long draft wrap and grow the capsule upward.
+    private func sizedComposer(_ content: AnyView) -> AnyView {
+        AnyView(content.frame(width: composerWidth > 0 ? composerWidth : nil))
     }
 
     /// Hosted apart from the composer so the control receives taps within its
@@ -211,6 +221,10 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        if let composerContent, view.bounds.width > 0, composerWidth != view.bounds.width {
+            composerWidth = view.bounds.width
+            composerHost?.rootView = sizedComposer(composerContent)
+        }
         guard !leaving, view.bounds.width > 0, view.bounds.height > 0, !adjusting else { return }
         adjusting = true
         defer { adjusting = false }

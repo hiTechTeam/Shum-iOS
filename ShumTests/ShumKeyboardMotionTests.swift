@@ -94,6 +94,45 @@ struct ShumKeyboardMotionTests {
         }
     }
 
+    /// A long draft wraps inside the capsule and grows it upward (up to five
+    /// lines) instead of scrolling sideways on a single line.
+    @Test func longDraftGrowsComposerUpward() async throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let originalKeyWindow = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.frame = scene.coordinateSpace.bounds
+        window.windowLevel = UIWindow.Level(rawValue: (originalKeyWindow?.windowLevel.rawValue ?? 0) + 1)
+        let probe = DraftProbe()
+        let key = "test.keyboard.draft.\(UUID())"
+        window.rootViewController = UIHostingController(rootView: DraftFixture(probe: probe, key: key))
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+            originalKeyWindow?.makeKey()
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        try await Task.sleep(for: .milliseconds(400))
+        let field = try #require(Self.textInput(in: window))
+        let singleLine = field.convert(field.bounds, to: window)
+
+        probe.text = String(repeating: "Long message that must wrap onto new lines. ", count: 8)
+        try await Task.sleep(for: .milliseconds(600))
+        let wrapped = field.convert(field.bounds, to: window)
+        print("DRAFT iOS \(UIDevice.current.systemVersion) "
+              + String(format: "single=%.0f wrapped=%.0f maxX=%.0f window=%.0f",
+                       Double(singleLine.height), Double(wrapped.height),
+                       Double(wrapped.maxX), Double(window.bounds.width)))
+        #expect(wrapped.height > singleLine.height * 3, "The capsule must grow to several lines")
+        #expect(wrapped.maxX <= window.bounds.width - 20, "The draft must stay inside the screen")
+        #expect(abs(wrapped.maxY - singleLine.maxY) < 1, "The capsule must grow upward from the bottom")
+    }
+
+    private static func textInput(in view: UIView) -> UIView? {
+        if view is UITextView || view is UITextField { return view }
+        return view.subviews.lazy.compactMap { textInput(in: $0) }.first
+    }
+
     private static func findTable(in view: UIView) -> UITableView? {
         if let table = view as? UITableView { return table }
         return view.subviews.lazy.compactMap { findTable(in: $0) }.first
@@ -373,6 +412,45 @@ private struct ScrollButtonFixture: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 20)
             .padding(.vertical, 8)
+    }
+}
+
+@MainActor
+private final class DraftProbe: ObservableObject {
+    @Published var text = ""
+}
+
+/// Mirrors the message capsule: a vertical text field limited to five lines
+/// next to the send button.
+private struct DraftFixture: View {
+    @ObservedObject var probe: DraftProbe
+    let key: String
+
+    var body: some View {
+        GeometryReader { geometry in
+            ShumConversationTimeline(
+                items: (0..<20).map { ShumTimelineItem(id: "\($0)", revision: 0) },
+                storageKey: key, appearanceKey: "draft", command: nil,
+                contentInsets: geometry.safeAreaInsets,
+                composer: AnyView(
+                    HStack(alignment: .bottom, spacing: 4) {
+                        TextField("Message", text: $probe.text, axis: .vertical)
+                            .font(.body).lineLimit(1...5)
+                            .textFieldStyle(.plain)
+                            .padding(.leading, 16).padding(.vertical, 12)
+                        Circle().frame(width: 36, height: 36).padding(5)
+                    }
+                    .frame(maxWidth: 520, minHeight: 46)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                ),
+                bottomChanged: { _ in }, tapped: {}
+            ) { index, width in
+                FixtureBubble(index: index, width: width)
+            }
+            .ignoresSafeArea(.all, edges: .vertical)
+        }
     }
 }
 
