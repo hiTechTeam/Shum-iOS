@@ -96,8 +96,14 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
                 completion(.noData)
                 return
             }
-            chat.fetchRemoteEvents(eventID: eventID) { receivedData in
-                completion(receivedData ? .newData : .noData)
+            chat.fetchRemoteEvents(eventID: eventID) { [weak self] receivedData in
+                Task { @MainActor in
+                    if let self, let chat = self.chat {
+                        self.refreshNotificationState(for: chat)
+                        await self.nearbyPeopleNotifier.applyApplicationIconBadge()
+                    }
+                    completion(receivedData ? .newData : .noData)
+                }
             }
         }
     }

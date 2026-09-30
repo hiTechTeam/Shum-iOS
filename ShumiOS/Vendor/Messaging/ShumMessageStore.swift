@@ -14,6 +14,9 @@ final class ShumMessageStore: ObservableObject {
     static let presenceLifetimeMilliseconds: Int64 = 40_000
     static let presenceBroadcastInterval: TimeInterval = 25
     static let presenceFlushTimeout: TimeInterval = 4
+    // A nearby contact gets the message over Bluetooth and shows its own
+    // notification; the push waits this long for that delivery first.
+    static let directDeliveryPushDelay: TimeInterval = 8
     @Published private(set) var revision = 0
     let store: ShumConversationStore
     let contacts: ShumContactsService
@@ -46,6 +49,11 @@ final class ShumMessageStore: ObservableObject {
     private var presenceFlushID: UUID?
     /// Lets the app release the background time it requested for the flush.
     var onPresenceFlushFinished: (() -> Void)?
+    var requestPush: (_ recipientID: String, _ eventID: String, _ kind: ShumPushKind) -> Void = {
+        ShumPushService.shared.notify(recipientID: $0, eventID: $1, kind: $2)
+    }
+    /// Pushes held while a Bluetooth delivery to a nearby contact may still finish.
+    private var heldPushes: [String: (recipientID: String, due: Date)] = [:]
     private var backgroundFetchTask: Task<Void, Never>?
     private var backgroundFetchCompletions:
         [(eventID: String, completion: (Bool) -> Void)] = []
@@ -171,6 +179,8 @@ final class ShumMessageStore: ObservableObject {
             return
         }
         foreground = false
+        // A suspended app cannot wait for the Bluetooth receipt any longer.
+        sendHeldPushes(force: true)
         // Keep the relay connection until it accepts "left"; cutting it in
         // the same moment dropped the signal and left a stale "in chat".
         let flushID = UUID()
@@ -861,6 +871,7 @@ final class ShumMessageStore: ObservableObject {
             for id in expiredPresence { presenceDeadlines.removeValue(forKey: id) }
             changed()
         }
+        sendHeldPushes(force: false)
         if localSessionID != transport.myPeerID {
             localSessionID = transport.myPeerID
             helloTimes.removeAll()
@@ -1353,12 +1364,11 @@ final class ShumMessageStore: ObservableObject {
                                     state.messages[i].deliveryTransport = "nostr"
                                 }
                             }
-                            if needsPush {
-                                ShumPushService.shared.notify(
-                                    recipientID: message.envelope.recipient.id,
-                                    eventID: message.id,
-                                    kind: .message
-                                )
+                            if needsPush, self.session(for: message.envelope.recipient) != nil {
+                                self.heldPushes[message.id] = (message.envelope.recipient.id,
+                                    self.now().addingTimeInterval(Self.directDeliveryPushDelay))
+                            } else if needsPush {
+                                self.requestPush(message.envelope.recipient.id, message.id, .message)
                             }
                             self.changed()
                         } catch { self.fail(error) }
@@ -1366,6 +1376,15 @@ final class ShumMessageStore: ObservableObject {
                 }
                 changed()
             } catch { fail(error); return }
+        }
+    }
+    /// Sends a held push only if the Bluetooth delivery did not finish in time.
+    private func sendHeldPushes(force: Bool) {
+        for (id, held) in heldPushes where force || now() >= held.due {
+            heldPushes.removeValue(forKey: id)
+            guard let message = state.messages.first(where: { $0.id == id }),
+                  [.queued, .forwarding].contains(message.status) else { continue }
+            requestPush(held.recipientID, id, .message)
         }
     }
     private func routeRelay() {
@@ -1505,6 +1524,7 @@ final class ShumMessageStore: ObservableObject {
         backgroundFetchCompletions.removeAll()
         for pending in pendingFetches { pending.completion(false) }
         retired = true; foreground = false; activeContact = nil
+        heldPushes.removeAll()
         internet?.received = nil; internet?.stop()
         nearby.removeAll(); helloTimes.removeAll(); ingressRate.removeAll()
         typingDeadlines.removeAll(); latestTypingEvents.removeAll(); lastTypingSent.removeAll()

@@ -302,23 +302,24 @@ final class NearbyPeopleNotifier: NearbyPeopleNotifying {
     }
 
     func setApplicationIconBadgeCount(_ count: Int) {
-        let badgeCount = max(0, count)
-        applicationIconBadgeCount = badgeCount
+        applicationIconBadgeCount = max(0, count)
+        Task { [weak self] in await self?.applyApplicationIconBadge() }
+    }
 
-        Task { [weak self] in
-            guard let self else { return }
-            let settings = await notificationCenter.notificationSettings()
-            guard Self.canDeliver(settings.authorizationStatus),
-                  settings.badgeSetting == .enabled else {
-                return
-            }
-            do {
-                try await notificationCenter.setBadgeCount(badgeCount)
-            } catch {
-                logger.error(
-                    "Application icon badge update failed: \(error.localizedDescription)"
-                )
-            }
+    /// Shows the latest count. A push wake-up awaits this before telling iOS
+    /// it is done, otherwise the app can be suspended before the icon changes.
+    func applyApplicationIconBadge() async {
+        let settings = await notificationCenter.notificationSettings()
+        guard Self.canDeliver(settings.authorizationStatus),
+              settings.badgeSetting == .enabled else {
+            return
+        }
+        do {
+            try await notificationCenter.setBadgeCount(applicationIconBadgeCount)
+        } catch {
+            logger.error(
+                "Application icon badge update failed: \(error.localizedDescription)"
+            )
         }
     }
 

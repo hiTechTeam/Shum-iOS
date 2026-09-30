@@ -137,3 +137,83 @@ struct ShumPresenceTests {
         #expect(!b.service.isInChat(a.card))
     }
 }
+
+/// A nearby contact shows its own notification for a Bluetooth delivery, so
+/// the push must not arrive as a second notification for the same message.
+@Suite("Push after Bluetooth delivery", .serialized)
+@MainActor
+struct ShumDirectDeliveryPushTests {
+    typealias Node = ShumPermanentTests.Node
+    private let helpers = ShumPermanentTests()
+
+    private func makePair(clock: ShumPermanentTests.Clock) throws -> (Node, Node, FakeInternet) {
+        let a = try Node("Alice", clock: clock), b = try Node("Bob", clock: clock)
+        let internet = FakeInternet()
+        a.service = try ShumMessageStore(identity: a.identity, store: a.store, transport: a.wire, wire: a.wire,
+                                         card: a.card, internet: internet, now: { clock.date })
+        try helpers.allowBoth(a, b, clock: clock)
+        return (a, b, internet)
+    }
+
+    private func lastSentID(_ node: Node) throws -> String {
+        try #require(node.service.state.messages.last { $0.outgoing }).id
+    }
+
+    @Test func bluetoothDeliveryNeedsNoPush() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, b, _) = try makePair(clock: clock)
+        var pushes: [String] = []
+        a.service.requestPush = { _, id, _ in pushes.append(id) }
+        helpers.connect(a, b, clock: clock)
+
+        #expect(a.service.send("Рядом", to: b.card))
+        helpers.drain([a, b])
+        clock.date.addTimeInterval(ShumMessageStore.directDeliveryPushDelay + 1)
+        a.service.tick(connected: [b.wire.myPeerID], active: true)
+
+        #expect(a.service.state.messages.last { $0.outgoing }?.status == .delivered)
+        #expect(pushes.isEmpty)
+    }
+
+    @Test func lostBluetoothDeliveryPushesAfterTheDelay() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, b, _) = try makePair(clock: clock)
+        var pushes: [String] = []
+        a.service.requestPush = { _, id, _ in pushes.append(id) }
+        helpers.connect(a, b, clock: clock)
+
+        #expect(a.service.send("Потеряется", to: b.card))
+        a.wire.shumPackets.removeAll() // The Bluetooth copy is lost.
+        let id = try lastSentID(a)
+        a.service.tick(connected: [b.wire.myPeerID], active: true)
+        #expect(pushes.isEmpty)
+        clock.date.addTimeInterval(ShumMessageStore.directDeliveryPushDelay + 1)
+        a.service.tick(connected: [b.wire.myPeerID], active: true)
+        #expect(pushes == [id])
+    }
+
+    @Test func backgroundingSendsTheHeldPush() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, b, _) = try makePair(clock: clock)
+        var pushes: [String] = []
+        a.service.requestPush = { _, id, _ in pushes.append(id) }
+        helpers.connect(a, b, clock: clock)
+
+        #expect(a.service.send("Сворачиваю", to: b.card))
+        a.wire.shumPackets.removeAll()
+        let id = try lastSentID(a)
+        a.service.setActive(false)
+        #expect(pushes == [id])
+    }
+
+    @Test func contactFarAwayGetsThePushAtOnce() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, b, _) = try makePair(clock: clock)
+        var pushes: [String] = []
+        a.service.requestPush = { _, id, _ in pushes.append(id) }
+
+        #expect(a.service.send("Далеко", to: b.card))
+        let id = try lastSentID(a)
+        #expect(pushes == [id])
+    }
+}
