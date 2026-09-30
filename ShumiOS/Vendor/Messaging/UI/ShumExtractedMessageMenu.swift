@@ -21,6 +21,8 @@ final class ShumExtractedMessageMenu: UIView {
     private var initialSize = CGSize.zero
     private var targetBubbleFrame = CGRect.zero
     private var dismissalTouch: MessageDismissalTouch?
+    private var returnAnimator: UIViewPropertyAnimator?
+    private var pendingReturnSteps = 0
 
     init(source: UIView, bubble: UIView, outgoing: Bool,
          reply: @escaping () -> Void, copy: @escaping () -> Void,
@@ -257,23 +259,41 @@ final class ShumExtractedMessageMenu: UIView {
         // The fading overlay must not swallow a new hold or scroll.
         isUserInteractionEnabled = false
         let target = source.map { $0.convert($0.bounds, to: scroll) } ?? targetBubbleFrame
-        let changes = {
-            guard !self.restored else { return }
-            self.backdrop.effect = nil
-            self.bubble.transform = .identity
-            self.bubble.center = CGPoint(x: target.midX, y: target.midY)
-        }
-        let finish = {
+        // UIKit's menu animator fades only the backdrop. If it moved the bubble,
+        // stopping it after an early restore would write an overlay position
+        // into the bubble already back in its row, and the message would blink.
+        pendingReturnSteps = animator == nil ? 1 : 2
+        let finish = { [weak self] in
+            guard let self else { return }
+            self.pendingReturnSteps -= 1
+            guard self.pendingReturnSteps == 0 else { return }
             self.restoreOnce()
             self.removeFromSuperview()
         }
-        if let animator { animator.addAnimations(changes); animator.addCompletion(finish) }
-        else { changes(); finish() }
+        let back = UIViewPropertyAnimator(duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.28,
+                                          timingParameters: UISpringTimingParameters(dampingRatio: 1))
+        back.addAnimations {
+            self.bubble.transform = .identity
+            self.bubble.center = CGPoint(x: target.midX, y: target.midY)
+        }
+        back.addCompletion { _ in finish() }
+        returnAnimator = back
+        if let animator {
+            animator.addAnimations { if !self.restored { self.backdrop.effect = nil } }
+            animator.addCompletion { finish() }
+        } else {
+            backdrop.effect = nil
+        }
+        back.startAnimation()
     }
 
     private func restoreOnce() {
         guard !restored else { return }
         restored = true
+        // Stop the return before the bubble leaves this overlay, so the
+        // animator has nothing left to write into it afterwards.
+        if let returnAnimator, returnAnimator.state == .active { returnAnimator.stopAnimation(true) }
+        returnAnimator = nil
         if let dismissalTouch {
             dismissalTouch.view?.removeGestureRecognizer(dismissalTouch)
             self.dismissalTouch = nil
