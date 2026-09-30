@@ -713,3 +713,13 @@
 "рядом" = "nearby";
 "печатает" = "typing";
 "Отменить отправку" = "Cancel Sending";
+"Сердце" = "Heart";
+"Нравится" = "Like";
+"Не нравится" = "Dislike";
+"Смешно" = "Haha";
+"Огонь" = "Fire";
+"Гроб" = "Coffin";
+"Кошмар" = "Horror";
+"Реакции: %@" = "Reactions: %@";
+"Убрать реакцию" = "Remove Reaction";
+"Нажмите ещё раз, чтобы убрать реакцию" = "Tap again to remove your reaction";

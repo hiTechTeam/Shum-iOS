@@ -877,6 +877,42 @@ final class ShumMessageStore: ObservableObject {
             changed(); return true
         } catch { fail(error); return false }
     }
+    func reaction(of personID: String, on messageID: String) -> ShumReaction? {
+        state.reactions?[messageID]?[personID]?.reaction
+    }
+    /// Sets the user's single reaction on a message. Choosing the reaction that
+    /// is already there takes it back. The contact gets it without a push.
+    @discardableResult
+    func toggleReaction(_ reaction: ShumReaction, on messageID: String) -> Bool {
+        guard !retired, let message = state.messages.first(where: { $0.id == messageID }) else { return false }
+        let peer = message.outgoing ? message.envelope.recipient : message.envelope.sender
+        guard let contact = state.contacts.first(where: { $0.id == peer.id })?.card,
+              !isBlocked(contact), canMessage(contact) else { return false }
+        let current = state.reactions?[messageID]?[ownCard.id]
+        let next: ShumReaction? = current?.reaction == reaction ? nil : reaction
+        let timestamp = max(Int64(now().timeIntervalSince1970 * 1000), (current?.timestamp ?? 0) + 1)
+        do {
+            var control = ShumReactionControl(
+                id: UUID().uuidString, sender: ownCard, recipient: contact, messageID: messageID,
+                reaction: next, timestamp: timestamp,
+                expiresAt: timestamp + ShumReactionControl.lifetimeMilliseconds
+            )
+            guard let signature = transport.noiseSignData(try control.signingBytes()) else {
+                throw ShumFailure.unavailableIdentity
+            }
+            control.signature = signature
+            try store.transaction { state in
+                if state.reactions == nil { state.reactions = [:] }
+                state.reactions?[messageID, default: [:]][ownCard.id] =
+                    ShumReactionMark(reaction: next, timestamp: timestamp, eventID: control.id)
+                // Only the latest choice is worth delivering.
+                if state.reactionOutbox == nil { state.reactionOutbox = [] }
+                state.reactionOutbox?.removeAll { $0.control.messageID == messageID }
+                state.reactionOutbox?.append(ShumStoredReaction(control: control))
+            }
+            changed(); route(\.reactionOutbox); return true
+        } catch { fail(error); return false }
+    }
     /// Removes an undelivered message. If a copy already left the phone, the
     /// contact gets a signed withdrawal so the copy is dropped there as well.
     @discardableResult
@@ -905,13 +941,15 @@ final class ShumMessageStore: ObservableObject {
             }
             try store.transaction { state in
                 state.messages.removeAll { $0.id == messageID }
+                state.reactions?.removeValue(forKey: messageID)
+                state.reactionOutbox?.removeAll { $0.control.messageID == messageID }
                 if let retract {
                     if state.retractOutbox == nil { state.retractOutbox = [] }
                     state.retractOutbox?.append(retract)
                 }
             }
             heldPushes.removeValue(forKey: messageID)
-            changed(); routeRetracts(); return true
+            changed(); route(\.retractOutbox); return true
         } catch { fail(error); return false }
     }
     func tick(connected: Set<PeerID>, active: Bool) {
@@ -960,7 +998,8 @@ final class ShumMessageStore: ObservableObject {
         } catch { fail(error); return }
         routeProfiles()
         routeInvitationControls()
-        routeRetracts()
+        route(\.retractOutbox)
+        route(\.reactionOutbox)
         routeOutbox()
         routeRelay()
         routeReceipts()
@@ -985,6 +1024,8 @@ final class ShumMessageStore: ObservableObject {
            isBlocked(presence.sender) || isBlocked(presence.recipient) { return }
         if let retract = packet.retract,
            isBlocked(retract.sender) || isBlocked(retract.recipient) { return }
+        if let reaction = packet.reaction,
+           isBlocked(reaction.sender) || isBlocked(reaction.recipient) { return }
         // Typing/presence and receipt bursts must never spend the delivery
         // budget. Each traffic class remains independently rate-limited.
         let trafficClass = packet.typing != nil || packet.presence != nil
@@ -996,7 +1037,7 @@ final class ShumMessageStore: ObservableObject {
               packet.version == 1,
               [packet.card != nil, packet.envelope != nil, packet.receipt != nil,
                packet.invitation != nil, packet.typing != nil, packet.presence != nil, packet.profileSync != nil,
-               packet.retract != nil]
+               packet.retract != nil, packet.reaction != nil]
                 .filter({ $0 }).count == 1 else { return }
         ingressRate[source] = (progress.0, progress.1 + 1)
         do {
@@ -1048,6 +1089,8 @@ final class ShumMessageStore: ObservableObject {
                 try receivePresence(presence, from: peer, nostrSender: nostrSender)
             } else if let retract = packet.retract {
                 try receiveRetract(retract, from: peer, nostrSender: nostrSender)
+            } else if let reaction = packet.reaction {
+                try receiveReaction(reaction, from: peer, nostrSender: nostrSender)
             }
         } catch { /* Untrusted invalid packets do not produce modal alerts. */ }
     }
@@ -1167,8 +1210,39 @@ final class ShumMessageStore: ObservableObject {
             state.deletedMessageIDs?[control.messageID] = expiry
             state.messages.removeAll { $0.id == control.messageID }
             state.receipts.removeAll { $0.receipt.envelopeID == control.messageID }
+            state.reactions?.removeValue(forKey: control.messageID)
         }
         if existing != nil { onMessagesRetracted?([control.messageID]) }
+        changed()
+    }
+    /// Keeps the newest reaction of the contact; an older one never overrides it.
+    private func receiveReaction(_ control: ShumReactionControl, from peer: PeerID?, nostrSender: String?) throws {
+        try control.validate(at: now())
+        guard control.recipient.noiseKey == ownCard.noiseKey,
+              control.recipient.signingKey == ownCard.signingKey,
+              control.recipient.nostrKey == ownCard.nostrKey else {
+            throw ShumFailure.invalidMessage
+        }
+        if let peer {
+            guard transport.noiseSessionPublicKeyData(for: peer) == control.sender.noiseKey else { return }
+        }
+        if let nostrSender, nostrSender != control.sender.nostrKey { return }
+        guard let contact = state.contacts.first(where: { $0.id == control.sender.id }),
+              contact.card.signingKey == control.sender.signingKey,
+              contact.card.noiseKey == control.sender.noiseKey,
+              canMessage(contact.card) else { return }
+        // A reaction may arrive before its message, but never for another chat.
+        if let message = state.messages.first(where: { $0.id == control.messageID }),
+           message.envelope.conversationID != ShumConversation.identifier(ownCard.id, control.sender.id) { return }
+        if let latest = state.reactions?[control.messageID]?[control.sender.id],
+           control.timestamp < latest.timestamp
+            || (control.timestamp == latest.timestamp && control.id <= latest.eventID) { return }
+        guard state.reactions?[control.messageID] != nil || (state.reactions?.count ?? 0) < 20_000 else { return }
+        try store.transaction { state in
+            if state.reactions == nil { state.reactions = [:] }
+            state.reactions?[control.messageID, default: [:]][control.sender.id] =
+                ShumReactionMark(reaction: control.reaction, timestamp: control.timestamp, eventID: control.id)
+        }
         changed()
     }
     private func request(_ card: ShumContactCard) throws {
@@ -1464,45 +1538,42 @@ final class ShumMessageStore: ObservableObject {
             } catch { fail(error); return }
         }
     }
-    /// Repeats a withdrawal until a relay accepts it or the message could no
-    /// longer arrive. A nearby contact also gets it over Bluetooth.
-    private func routeRetracts() {
-        guard !retired, let outbox = state.retractOutbox, !outbox.isEmpty else { return }
+    /// Repeats withdrawals and reactions until a relay accepts them, a nearby
+    /// contact was offered them six times, or they expire.
+    private func route<Item: ShumQueuedControl>(_ outbox: WritableKeyPath<ShumDatabase, [Item]?>) {
+        guard !retired, let items = state[keyPath: outbox], !items.isEmpty else { return }
         let ms = Int64(now().timeIntervalSince1970 * 1000)
-        func finished(_ stored: ShumStoredRetract) -> Bool {
-            stored.control.expiresAt <= ms || stored.nostrAccepted || stored.attempts >= 6
-        }
+        func finished(_ item: Item) -> Bool { item.expiresAt <= ms || item.nostrAccepted || item.attempts >= 6 }
         do {
-            if outbox.contains(where: finished) {
-                try store.transaction { $0.retractOutbox?.removeAll(where: finished) }
+            if items.contains(where: finished) {
+                try store.transaction { $0[keyPath: outbox]?.removeAll(where: finished) }
             }
-            for stored in (state.retractOutbox ?? []).prefix(8) {
-                let direct = session(for: stored.control.recipient)
-                let canSendDirect = direct != nil && now().timeIntervalSince(stored.lastAttempt) >= 10
+            for item in (state[keyPath: outbox] ?? []).prefix(8) {
+                let direct = session(for: item.recipient)
+                let canSendDirect = direct != nil && now().timeIntervalSince(item.lastAttempt) >= 10
                 let canSendInternet = internet?.connected == true
-                    && now().timeIntervalSince(stored.lastNostrAttempt ?? .distantPast)
-                        >= nostrRetryDelay(stored.nostrAttempts)
+                    && now().timeIntervalSince(item.lastNostrAttempt ?? .distantPast)
+                        >= nostrRetryDelay(item.nostrAttempts)
                 guard canSendDirect || canSendInternet else { continue }
                 try store.transaction { state in
-                    guard let i = state.retractOutbox?.firstIndex(where: { $0.id == stored.id }) else { return }
+                    guard let i = state[keyPath: outbox]?.firstIndex(where: { $0.id == item.id }) else { return }
                     if canSendDirect {
-                        state.retractOutbox?[i].lastAttempt = now()
-                        state.retractOutbox?[i].attempts += 1
+                        state[keyPath: outbox]?[i].lastAttempt = now()
+                        state[keyPath: outbox]?[i].attempts += 1
                     }
                     if canSendInternet {
-                        state.retractOutbox?[i].lastNostrAttempt = now()
-                        state.retractOutbox?[i].nostrAttempts = (stored.nostrAttempts ?? 0) + 1
+                        state[keyPath: outbox]?[i].lastNostrAttempt = now()
+                        state[keyPath: outbox]?[i].nostrAttempts = (item.nostrAttempts ?? 0) + 1
                     }
                 }
-                let packet = ShumPacket(retract: stored.control)
-                if let direct, canSendDirect { sendPacket(packet, to: direct) }
+                if let direct, canSendDirect { sendPacket(item.packet, to: direct) }
                 if canSendInternet {
-                    internet?.send(packet, to: stored.control.recipient) { [weak self] accepted in
+                    internet?.send(item.packet, to: item.recipient) { [weak self] accepted in
                         guard let self, accepted, !self.retired else { return }
                         do {
                             try self.store.transaction { state in
-                                guard let i = state.retractOutbox?.firstIndex(where: { $0.id == stored.id }) else { return }
-                                state.retractOutbox?[i].nostrAccepted = true
+                                guard let i = state[keyPath: outbox]?.firstIndex(where: { $0.id == item.id }) else { return }
+                                state[keyPath: outbox]?[i].nostrAccepted = true
                             }
                         } catch { self.fail(error) }
                     }
@@ -1596,8 +1667,10 @@ final class ShumMessageStore: ObservableObject {
             for message in state.messages where message.envelope.conversationID == conversationID {
                 let expiry = Date(timeIntervalSince1970: Double(message.envelope.expiresAt) / 1000)
                 if expiry > now() { state.deletedMessageIDs?[message.id] = expiry }
+                state.reactions?.removeValue(forKey: message.id)
             }
             state.messages.removeAll { $0.envelope.conversationID == conversationID }
+            state.reactionOutbox?.removeAll { $0.control.recipient.id == card.id }
             state.legacyHistory?.messages.removeAll { $0.contactID == card.id }
             state.legacyHistory?.contacts.removeAll { $0.id == card.id }
             state.conversations.removeAll { $0.id == conversationID }
@@ -1633,6 +1706,7 @@ final class ShumMessageStore: ObservableObject {
                 state.requests.removeAll { $0.id == card.id }
                 state.invitationOutbox?.removeAll { $0.control.recipient.id == card.id }
                 state.profileOutbox?.removeAll { $0.recipientID == card.id }
+                state.reactionOutbox?.removeAll { $0.control.recipient.id == card.id }
                 state.relay.removeAll { $0.envelope.sender.id == card.id || $0.envelope.recipient.id == card.id || $0.depositor == card.id }
                 state.receipts.removeAll { $0.receipt.sender.id == card.id || $0.receipt.destination.id == card.id }
                 for directory in state.pinnedDirectoryEntries?.keys.map({ $0 }) ?? [] {

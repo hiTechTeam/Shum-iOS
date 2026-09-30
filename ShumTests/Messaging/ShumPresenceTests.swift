@@ -325,3 +325,87 @@ struct ShumCancelSendingTests {
         #expect(a.service.state.messages.contains { $0.id == message.id })
     }
 }
+
+/// Each person keeps one reaction per message; choosing it again takes it back.
+@Suite("Message reactions", .serialized)
+@MainActor
+struct ShumReactionTests {
+    typealias Node = ShumPermanentTests.Node
+    private let helpers = ShumPermanentTests()
+
+    /// Alice is online through a relay; Bob has sent her one message.
+    private func makeChat(clock: ShumPermanentTests.Clock) throws -> (Node, Node, FakeInternet, String) {
+        let a = try Node("Alice", clock: clock), b = try Node("Bob", clock: clock)
+        let internet = FakeInternet()
+        a.service = try ShumMessageStore(identity: a.identity, store: a.store, transport: a.wire, wire: a.wire,
+                                         card: a.card, internet: internet, now: { clock.date })
+        a.service.requestPush = { _, _, _ in }
+        try helpers.allowBoth(a, b, clock: clock)
+        #expect(b.service.send("Как тебе?", to: a.card))
+        let envelope = try #require(b.service.state.messages.last { $0.outgoing }).envelope
+        a.service.receive(ShumPacket(envelope: envelope), from: nil, nostrSender: b.card.nostrKey)
+        #expect(a.service.state.messages.contains { $0.id == envelope.id })
+        return (a, b, internet, envelope.id)
+    }
+
+    private func relay(_ packets: ArraySlice<ShumPacket>, from a: Node, to b: Node) {
+        for packet in packets { b.service.receive(packet, from: nil, nostrSender: a.card.nostrKey) }
+    }
+
+    @Test func reactionReachesContactAndSecondTapTakesItBack() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, b, internet, id) = try makeChat(clock: clock)
+
+        var sent = internet.sent.count
+        #expect(a.service.toggleReaction(.heart, on: id))
+        #expect(a.service.reaction(of: a.card.id, on: id) == .heart)
+        relay(internet.sent[sent...], from: a, to: b)
+        #expect(b.service.reaction(of: a.card.id, on: id) == .heart)
+
+        clock.date.addTimeInterval(1)
+        sent = internet.sent.count
+        #expect(a.service.toggleReaction(.fire, on: id)) // One reaction: fire replaces heart.
+        relay(internet.sent[sent...], from: a, to: b)
+        #expect(b.service.reaction(of: a.card.id, on: id) == .fire)
+
+        clock.date.addTimeInterval(1)
+        sent = internet.sent.count
+        #expect(a.service.toggleReaction(.fire, on: id)) // The same one again takes it back.
+        #expect(a.service.reaction(of: a.card.id, on: id) == nil)
+        relay(internet.sent[sent...], from: a, to: b)
+        #expect(b.service.reaction(of: a.card.id, on: id) == nil)
+        // Relays accepted everything, so nothing is left to repeat.
+        a.service.tick(connected: [], active: true)
+        #expect((a.service.state.reactionOutbox ?? []).isEmpty)
+    }
+
+    @Test func olderReactionNeverOverridesNewer() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, b, internet, id) = try makeChat(clock: clock)
+        let first = internet.sent.count
+        #expect(a.service.toggleReaction(.laugh, on: id))
+        let older = Array(internet.sent[first...])
+        clock.date.addTimeInterval(1)
+        let second = internet.sent.count
+        #expect(a.service.toggleReaction(.hundred, on: id))
+
+        relay(internet.sent[second...], from: a, to: b)
+        relay(older[...], from: a, to: b)
+        #expect(b.service.reaction(of: a.card.id, on: id) == .hundred)
+    }
+
+    @Test func reactionToAnotherChatIsIgnored() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, _, _, id) = try makeChat(clock: clock)
+        let carol = try Node("Carol", clock: clock)
+        try helpers.allowBoth(a, carol, clock: clock)
+        let now = Int64(clock.date.timeIntervalSince1970 * 1000)
+        var control = ShumReactionControl(id: UUID().uuidString, sender: carol.card, recipient: a.card,
+                                          messageID: id, reaction: .coffin, timestamp: now,
+                                          expiresAt: now + ShumReactionControl.lifetimeMilliseconds)
+        control.signature = try #require(carol.wire.noiseSignData(try control.signingBytes()))
+
+        a.service.receive(ShumPacket(reaction: control), from: nil, nostrSender: carol.card.nostrKey)
+        #expect(a.service.reaction(of: carol.card.id, on: id) == nil)
+    }
+}

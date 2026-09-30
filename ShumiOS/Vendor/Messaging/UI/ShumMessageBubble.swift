@@ -25,6 +25,8 @@ struct ShumMessageBubble: View {
     var retry: () -> Void = {}
     var reply: () -> Void = {}
     var cancelSending: () -> Void = {}
+    /// Nil where the message cannot take reactions, such as an archived chat.
+    var react: ((ShumReaction) -> Void)?
     var openReply: (String) -> Void = { _ in }
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.shumThemePalette) private var themePalette
@@ -40,11 +42,13 @@ struct ShumMessageBubble: View {
             ZStack(alignment: .trailing) {
                 replyGestureIndicator
                 bubble
+                    .overlay(alignment: .bottomLeading) { reactionsPill.offset(x: 10, y: 15) }
                     .frame(maxWidth: maximumWidth, alignment: message.outgoing ? .trailing : .leading)
                     .frame(maxWidth: .infinity, alignment: message.outgoing ? .trailing : .leading)
                     .offset(x: horizontalOffset)
             }
             .frame(maxWidth: .infinity)
+            .padding(.bottom, hasReactions ? 17 : 0)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(
                 Text(
@@ -57,11 +61,15 @@ struct ShumMessageBubble: View {
                     )
                 )
             )
+            .accessibilityValue(reactionsDescription)
             .accessibilityAction(named: "Ответить".localized, reply)
             .accessibilityAction(named: "Скопировать".localized) { UIPasteboard.general.string = message.text }
             .accessibilityActions {
                 if canCancelSending {
                     Button("Отменить отправку".localized, action: cancelSending)
+                }
+                if let react, let mine = message.myReaction {
+                    Button("Убрать реакцию".localized) { react(mine) }
                 }
             }
             if message.outgoing, let label = message.deliveryLabel, label == "В очереди".localized || label.hasPrefix("Передаётся".localized) {
@@ -146,9 +154,44 @@ struct ShumMessageBubble: View {
         ShumMessageContextMenu(shape: bubbleShape, maximumWidth: maximumWidth,
             reply: reply, copy: { UIPasteboard.general.string = message.text },
             cancelSending: canCancelSending ? cancelSending : nil,
+            reaction: message.myReaction, react: react,
             dragChanged: updateReplyDrag, dragEnded: finishReplyDrag) {
                 bubbleContent
             }
+    }
+
+    private var hasReactions: Bool { message.myReaction != nil || message.theirReaction != nil }
+
+    private var reactionsDescription: String {
+        let names = [message.theirReaction, message.myReaction].compactMap { $0 }.map(ShumReactionArt.name(for:))
+        return names.isEmpty ? "" : String.localizedFormat("Реакции: %@".localized, names.joined(separator: ", "))
+    }
+
+    /// Hangs from the bottom edge of the bubble. Tapping your own reaction takes it back.
+    @ViewBuilder private var reactionsPill: some View {
+        if hasReactions {
+            let same = message.myReaction == message.theirReaction
+            Button {
+                if let react, let mine = message.myReaction { react(mine) }
+            } label: {
+                HStack(spacing: 3) {
+                    if let theirs = message.theirReaction { ShumReactionIcon(reaction: theirs) }
+                    if let mine = message.myReaction, !same { ShumReactionIcon(reaction: mine) }
+                    if same {
+                        ShumReactionIcon(reaction: message.myReaction!)
+                        Text("2").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 7).padding(.vertical, 5)
+                .background(Color(.tertiarySystemBackground), in: Capsule())
+                .overlay(Capsule().strokeBorder(themePalette.canvas, lineWidth: 2))
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(message.myReaction == nil || react == nil)
+            .accessibilityHidden(true)
+            .transition(.scale(scale: 0.6).combined(with: .opacity))
+        }
     }
 
     /// Offered exactly while the clock icon shows the message is in transit.

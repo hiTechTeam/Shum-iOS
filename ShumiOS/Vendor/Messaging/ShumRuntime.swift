@@ -25,6 +25,8 @@ struct ShumMessage: Identifiable {
     var lastProgress: Date = .distantPast
     var deliveryLabel: String?
     var reply: ShumReplyReference? = nil
+    var myReaction: ShumReaction? = nil
+    var theirReaction: ShumReaction? = nil
 }
 
 /// Shum composition. Radio/session management stays inside the transport;
@@ -474,7 +476,9 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                 date: Date(timeIntervalSince1970: Double(stored.envelope.timestamp) / 1000), outgoing: stored.outgoing,
                 status: status, attempts: stored.attempts,
                 deliveryLabel: stored.status == .forwarding && stored.deliveryTransport == "mesh" ? "Передаётся через mesh".localized : stored.status.label,
-                reply: stored.reply)
+                reply: stored.reply,
+                myReaction: permanent.reaction(of: permanent.ownCard.id, on: stored.id),
+                theirReaction: permanent.reaction(of: card.id, on: stored.id))
         }
         if let history = permanent.state.legacyHistory {
             messages += history.messages.map { old in
@@ -629,6 +633,11 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         trimMessages()
         transmit(id: message.id)
         return true
+    }
+
+    /// Sets the user's one reaction on a message; the same reaction again takes it back.
+    func toggleReaction(_ reaction: ShumReaction, on message: ShumMessage) {
+        permanent?.toggleReaction(reaction, on: message.id)
     }
 
     /// Withdraws a message that has not reached the contact yet.

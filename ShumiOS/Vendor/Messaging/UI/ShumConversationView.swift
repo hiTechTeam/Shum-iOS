@@ -550,6 +550,7 @@ struct ShumConversationView: View {
                 retry: { runtime.retry(message) },
                 reply: { beginReply(to: message) },
                 cancelSending: { runtime.cancelSending(message) },
+                react: runtime.isLegacyOnly(message.peerID) ? nil : { runtime.toggleReaction($0, on: message) },
                 openReply: { scrollCommand = ShumTimelineCommand(target: .message($0)) })
                 .padding(.top, sameDay && previous?.outgoing != message.outgoing ? 10 : 3)
         }

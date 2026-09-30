@@ -227,7 +227,20 @@ struct ShumRetractControl: Codable, Equatable, Identifiable {
         }
     }
 }
-struct ShumStoredRetract: Codable, Equatable, Identifiable {
+/// A signed control repeated over Bluetooth and relays until a relay accepts
+/// it, it has been offered six times nearby, or it expires.
+protocol ShumQueuedControl {
+    var id: String { get }
+    var recipient: ShumContactCard { get }
+    var expiresAt: Int64 { get }
+    var packet: ShumPacket { get }
+    var lastAttempt: Date { get set }
+    var attempts: Int { get set }
+    var nostrAccepted: Bool { get set }
+    var lastNostrAttempt: Date? { get set }
+    var nostrAttempts: Int? { get set }
+}
+struct ShumStoredRetract: Codable, Equatable, Identifiable, ShumQueuedControl {
     var control: ShumRetractControl
     var lastAttempt: Date = .distantPast
     var attempts = 0
@@ -235,6 +248,69 @@ struct ShumStoredRetract: Codable, Equatable, Identifiable {
     var lastNostrAttempt: Date?
     var nostrAttempts: Int?
     var id: String { control.id }
+    var recipient: ShumContactCard { control.recipient }
+    var expiresAt: Int64 { control.expiresAt }
+    var packet: ShumPacket { ShumPacket(retract: control) }
+}
+/// The pixel reactions a person can leave on a message.
+enum ShumReaction: String, Codable, CaseIterable {
+    case heart, like, dislike, laugh, fire, coffin, hundred, horror
+}
+/// One person's reaction to a message; `nil` takes it back. Each person has
+/// at most one reaction per message and the newest signal wins.
+struct ShumReactionControl: Codable, Equatable, Identifiable {
+    static let lifetimeMilliseconds: Int64 = 86_400_000
+    var version = 1
+    var id: String
+    var sender: ShumContactCard
+    var recipient: ShumContactCard
+    var messageID: String
+    var reaction: ShumReaction?
+    var timestamp: Int64
+    var expiresAt: Int64
+    var signature = Data()
+
+    func signingBytes() throws -> Data {
+        var value = self
+        value.signature = Data()
+        return try ShumCoding.encode(value)
+    }
+
+    func validate(at now: Date) throws {
+        try sender.validate()
+        try recipient.validate()
+        let milliseconds = Int64(now.timeIntervalSince1970 * 1000)
+        guard version == 1,
+              UUID(uuidString: id) != nil,
+              UUID(uuidString: messageID) != nil,
+              sender.id != recipient.id,
+              timestamp >= 0,
+              timestamp <= milliseconds + 300_000,
+              expiresAt > milliseconds,
+              expiresAt > timestamp,
+              expiresAt - timestamp <= Self.lifetimeMilliseconds,
+              try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey)
+                .isValidSignature(signature, for: signingBytes()) else {
+            throw ShumFailure.invalidMessage
+        }
+    }
+}
+struct ShumReactionMark: Codable, Equatable {
+    var reaction: ShumReaction?
+    var timestamp: Int64
+    var eventID: String
+}
+struct ShumStoredReaction: Codable, Equatable, Identifiable, ShumQueuedControl {
+    var control: ShumReactionControl
+    var lastAttempt: Date = .distantPast
+    var attempts = 0
+    var nostrAccepted = false
+    var lastNostrAttempt: Date?
+    var nostrAttempts: Int?
+    var id: String { control.id }
+    var recipient: ShumContactCard { control.recipient }
+    var expiresAt: Int64 { control.expiresAt }
+    var packet: ShumPacket { ShumPacket(reaction: control) }
 }
 enum ShumDelivery: String, Codable {
     case queued, forwarding, delivered, read, expired, cancelled
@@ -392,6 +468,7 @@ struct ShumPacket: Codable {
     var presence: ShumPresenceControl?
     var profileSync: ShumProfileSync?
     var retract: ShumRetractControl?
+    var reaction: ShumReactionControl?
 }
 struct ShumDatabase: Codable {
     var version = 1
@@ -417,6 +494,9 @@ struct ShumDatabase: Codable {
     var ownProfileCard: ShumContactCard?
     var profileOutbox: [ShumProfileDelivery]?
     var retractOutbox: [ShumStoredRetract]?
+    /// Message identifier → person identifier → that person's reaction.
+    var reactions: [String: [String: ShumReactionMark]]?
+    var reactionOutbox: [ShumStoredReaction]?
 }
 
 @MainActor
