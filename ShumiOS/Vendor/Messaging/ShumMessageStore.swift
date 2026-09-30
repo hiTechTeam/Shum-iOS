@@ -28,6 +28,8 @@ final class ShumMessageStore: ObservableObject {
     private let now: () -> Date
     var ownCard: ShumContactCard
     var onError: ((String) -> Void)?
+    /// Incoming messages the sender withdrew, so their notifications can go too.
+    var onMessagesRetracted: (([String]) -> Void)?
     private(set) var nearby: [PeerID: ShumContactCard] = [:]
     private var helloTimes: [PeerID: Date] = [:]
     private var ingressRate: [String: (Date, Int)] = [:]
@@ -861,6 +863,57 @@ final class ShumMessageStore: ObservableObject {
             changed(); routeOutbox(); return true
         } catch { fail(error); return false }
     }
+    /// Sends an expired message again at the end of the chat and removes the
+    /// failed one, so repeated taps on "Retry" never leave duplicates.
+    @discardableResult
+    func resend(_ messageID: String, to card: ShumContactCard) -> Bool {
+        guard !retired,
+              let failed = state.messages.first(where: { $0.id == messageID && $0.outgoing }),
+              failed.status == .expired,
+              failed.envelope.recipient.id == card.id,
+              send(failed.text, to: card, reply: failed.reply) else { return false }
+        do {
+            try store.transaction { $0.messages.removeAll { $0.id == messageID } }
+            changed(); return true
+        } catch { fail(error); return false }
+    }
+    /// Removes an undelivered message. If a copy already left the phone, the
+    /// contact gets a signed withdrawal so the copy is dropped there as well.
+    @discardableResult
+    func cancelSending(_ messageID: String) -> Bool {
+        guard !retired,
+              let message = state.messages.first(where: { $0.id == messageID && $0.outgoing }),
+              [.queued, .forwarding].contains(message.status) else { return false }
+        let leftPhone = message.attempts > 0 || message.nostrAccepted
+            || message.lastNostrAttempt != nil || !message.forwardedTo.isEmpty
+        do {
+            var retract: ShumStoredRetract?
+            if leftPhone {
+                var control = ShumRetractControl(
+                    id: UUID().uuidString,
+                    sender: ownCard,
+                    recipient: message.envelope.recipient,
+                    messageID: messageID,
+                    timestamp: Int64(now().timeIntervalSince1970 * 1000),
+                    expiresAt: message.envelope.expiresAt
+                )
+                guard let signature = transport.noiseSignData(try control.signingBytes()) else {
+                    throw ShumFailure.unavailableIdentity
+                }
+                control.signature = signature
+                retract = ShumStoredRetract(control: control)
+            }
+            try store.transaction { state in
+                state.messages.removeAll { $0.id == messageID }
+                if let retract {
+                    if state.retractOutbox == nil { state.retractOutbox = [] }
+                    state.retractOutbox?.append(retract)
+                }
+            }
+            heldPushes.removeValue(forKey: messageID)
+            changed(); routeRetracts(); return true
+        } catch { fail(error); return false }
+    }
     func tick(connected: Set<PeerID>, active: Bool) {
         guard !retired else { return }
         tickNumber += 1
@@ -907,6 +960,7 @@ final class ShumMessageStore: ObservableObject {
         } catch { fail(error); return }
         routeProfiles()
         routeInvitationControls()
+        routeRetracts()
         routeOutbox()
         routeRelay()
         routeReceipts()
@@ -929,6 +983,8 @@ final class ShumMessageStore: ObservableObject {
            isBlocked(typing.sender) || isBlocked(typing.recipient) { return }
         if let presence = packet.presence,
            isBlocked(presence.sender) || isBlocked(presence.recipient) { return }
+        if let retract = packet.retract,
+           isBlocked(retract.sender) || isBlocked(retract.recipient) { return }
         // Typing/presence and receipt bursts must never spend the delivery
         // budget. Each traffic class remains independently rate-limited.
         let trafficClass = packet.typing != nil || packet.presence != nil
@@ -939,7 +995,8 @@ final class ShumMessageStore: ObservableObject {
         guard progress.1 < 80, ingressRate.count < 1000 || ingressRate[source] != nil,
               packet.version == 1,
               [packet.card != nil, packet.envelope != nil, packet.receipt != nil,
-               packet.invitation != nil, packet.typing != nil, packet.presence != nil, packet.profileSync != nil]
+               packet.invitation != nil, packet.typing != nil, packet.presence != nil, packet.profileSync != nil,
+               packet.retract != nil]
                 .filter({ $0 }).count == 1 else { return }
         ingressRate[source] = (progress.0, progress.1 + 1)
         do {
@@ -989,6 +1046,8 @@ final class ShumMessageStore: ObservableObject {
                 try receiveTyping(typing, from: peer, nostrSender: nostrSender)
             } else if let presence = packet.presence {
                 try receivePresence(presence, from: peer, nostrSender: nostrSender)
+            } else if let retract = packet.retract {
+                try receiveRetract(retract, from: peer, nostrSender: nostrSender)
             }
         } catch { /* Untrusted invalid packets do not produce modal alerts. */ }
     }
@@ -1083,6 +1142,33 @@ final class ShumMessageStore: ObservableObject {
         } else {
             presenceDeadlines.removeValue(forKey: control.sender.id)
         }
+        changed()
+    }
+    /// The sender withdrew a message: remove it now or drop it when it arrives.
+    private func receiveRetract(_ control: ShumRetractControl, from peer: PeerID?, nostrSender: String?) throws {
+        try control.validate(at: now())
+        guard control.recipient.noiseKey == ownCard.noiseKey,
+              control.recipient.signingKey == ownCard.signingKey,
+              control.recipient.nostrKey == ownCard.nostrKey else {
+            throw ShumFailure.invalidMessage
+        }
+        if let peer {
+            guard transport.noiseSessionPublicKeyData(for: peer) == control.sender.noiseKey else { return }
+        }
+        if let nostrSender, nostrSender != control.sender.nostrKey { return }
+        guard let contact = state.contacts.first(where: { $0.id == control.sender.id }),
+              contact.card.signingKey == control.sender.signingKey,
+              contact.card.noiseKey == control.sender.noiseKey else { return }
+        let existing = state.messages.first { $0.id == control.messageID }
+        if let existing, existing.outgoing || existing.envelope.sender.id != control.sender.id { return }
+        let expiry = Date(timeIntervalSince1970: Double(control.expiresAt) / 1000)
+        try store.transaction { state in
+            if state.deletedMessageIDs == nil { state.deletedMessageIDs = [:] }
+            state.deletedMessageIDs?[control.messageID] = expiry
+            state.messages.removeAll { $0.id == control.messageID }
+            state.receipts.removeAll { $0.receipt.envelopeID == control.messageID }
+        }
+        if existing != nil { onMessagesRetracted?([control.messageID]) }
         changed()
     }
     private func request(_ card: ShumContactCard) throws {
@@ -1377,6 +1463,52 @@ final class ShumMessageStore: ObservableObject {
                 changed()
             } catch { fail(error); return }
         }
+    }
+    /// Repeats a withdrawal until a relay accepts it or the message could no
+    /// longer arrive. A nearby contact also gets it over Bluetooth.
+    private func routeRetracts() {
+        guard !retired, let outbox = state.retractOutbox, !outbox.isEmpty else { return }
+        let ms = Int64(now().timeIntervalSince1970 * 1000)
+        func finished(_ stored: ShumStoredRetract) -> Bool {
+            stored.control.expiresAt <= ms || stored.nostrAccepted || stored.attempts >= 6
+        }
+        do {
+            if outbox.contains(where: finished) {
+                try store.transaction { $0.retractOutbox?.removeAll(where: finished) }
+            }
+            for stored in (state.retractOutbox ?? []).prefix(8) {
+                let direct = session(for: stored.control.recipient)
+                let canSendDirect = direct != nil && now().timeIntervalSince(stored.lastAttempt) >= 10
+                let canSendInternet = internet?.connected == true
+                    && now().timeIntervalSince(stored.lastNostrAttempt ?? .distantPast)
+                        >= nostrRetryDelay(stored.nostrAttempts)
+                guard canSendDirect || canSendInternet else { continue }
+                try store.transaction { state in
+                    guard let i = state.retractOutbox?.firstIndex(where: { $0.id == stored.id }) else { return }
+                    if canSendDirect {
+                        state.retractOutbox?[i].lastAttempt = now()
+                        state.retractOutbox?[i].attempts += 1
+                    }
+                    if canSendInternet {
+                        state.retractOutbox?[i].lastNostrAttempt = now()
+                        state.retractOutbox?[i].nostrAttempts = (stored.nostrAttempts ?? 0) + 1
+                    }
+                }
+                let packet = ShumPacket(retract: stored.control)
+                if let direct, canSendDirect { sendPacket(packet, to: direct) }
+                if canSendInternet {
+                    internet?.send(packet, to: stored.control.recipient) { [weak self] accepted in
+                        guard let self, accepted, !self.retired else { return }
+                        do {
+                            try self.store.transaction { state in
+                                guard let i = state.retractOutbox?.firstIndex(where: { $0.id == stored.id }) else { return }
+                                state.retractOutbox?[i].nostrAccepted = true
+                            }
+                        } catch { self.fail(error) }
+                    }
+                }
+            }
+        } catch { fail(error) }
     }
     /// Sends a held push only if the Bluetooth delivery did not finish in time.
     private func sendHeldPushes(force: Bool) {

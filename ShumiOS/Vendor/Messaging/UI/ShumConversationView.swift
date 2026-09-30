@@ -549,6 +549,7 @@ struct ShumConversationView: View {
                 replyAuthor: message.reply.map(replyAuthor),
                 retry: { runtime.retry(message) },
                 reply: { beginReply(to: message) },
+                cancelSending: { runtime.cancelSending(message) },
                 openReply: { scrollCommand = ShumTimelineCommand(target: .message($0)) })
                 .padding(.top, sameDay && previous?.outgoing != message.outgoing ? 10 : 3)
         }

@@ -94,6 +94,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                 permanent.configureContactLookup { [weak model] in model?.profiles.own }
                 permanent.onError = { [weak model] in model?.error = $0 }
                 permanent.onPresenceFlushFinished = { [weak model] in model?.endPresenceFlushTime() }
+                permanent.onMessagesRetracted = { AppNotificationRouter.shared.removeMessages($0) }
                 model.permanentChanges = permanent.$revision.sink { [weak model] _ in model?.syncPermanentMessages() }
                 #if DEBUG && targetEnvironment(simulator)
                 if preview { try model.seedPermanentPreview() }
@@ -630,9 +631,15 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         return true
     }
 
+    /// Withdraws a message that has not reached the contact yet.
+    func cancelSending(_ message: ShumMessage) {
+        guard message.outgoing, let permanent else { return }
+        permanent.cancelSending(message.id)
+    }
+
     func retry(_ message: ShumMessage) {
         if let permanent, let card = permanent.card(for: message.peerID) {
-            if case .failed = message.status { _ = permanent.send(message.text, to: card, reply: message.reply) }
+            if case .failed = message.status { permanent.resend(message.id, to: card) }
             return
         }
         guard message.outgoing, isNearby(message.peerID),

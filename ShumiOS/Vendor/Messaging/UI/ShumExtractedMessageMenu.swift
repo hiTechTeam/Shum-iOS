@@ -23,7 +23,8 @@ final class ShumExtractedMessageMenu: UIView {
     private var dismissalTouch: MessageDismissalTouch?
 
     init(source: UIView, bubble: UIView, outgoing: Bool,
-         reply: @escaping () -> Void, copy: @escaping () -> Void, restore: @escaping () -> Void) {
+         reply: @escaping () -> Void, copy: @escaping () -> Void,
+         cancelSending: (() -> Void)?, restore: @escaping () -> Void) {
         self.source = source
         self.bubble = bubble
         self.outgoing = outgoing
@@ -49,10 +50,17 @@ final class ShumExtractedMessageMenu: UIView {
             func icon(_ name: String) -> UIImage? {
                 UIImage(systemName: name)?.withTintColor(foreground, renderingMode: .alwaysOriginal)
             }
-            nativeAnchor.menu = UIMenu(children: [
+            var children: [UIMenuElement] = [
                 UIAction(title: "Ответить".localized, image: icon("arrowshape.turn.up.left")) { _ in reply() },
                 UIAction(title: "Скопировать".localized, image: icon("doc.on.doc")) { _ in copy() }
-            ])
+            ]
+            if let cancelSending {
+                children.append(UIMenu(options: .displayInline, children: [
+                    UIAction(title: "Отменить отправку".localized, image: UIImage(systemName: "xmark.circle"),
+                             attributes: .destructive) { _ in cancelSending() }
+                ]))
+            }
+            nativeAnchor.menu = UIMenu(children: children)
             nativeAnchor.onDisplay = { [weak self] in
                 self?.nativeMenuIsVisible = true
                 self?.animatePresentation()
@@ -68,11 +76,17 @@ final class ShumExtractedMessageMenu: UIView {
             scroll.addSubview(menu)
             actions = [makeAction("Ответить".localized, symbol: "arrowshape.turn.up.left", action: reply),
                        makeAction("Скопировать".localized, symbol: "doc.on.doc", action: copy)]
+            if let cancelSending {
+                actions.append(makeAction("Отменить отправку".localized, symbol: "xmark.circle",
+                                          color: .systemRed, action: cancelSending))
+            }
             actions.forEach { menu.contentView.addSubview($0) }
-            let separator = UIView()
-            separator.backgroundColor = .separator
-            separator.tag = 1
-            menu.contentView.addSubview(separator)
+            for index in 1..<actions.count {
+                let separator = UIView()
+                separator.backgroundColor = .separator
+                separator.tag = index
+                menu.contentView.addSubview(separator)
+            }
         }
         NotificationCenter.default.addObserver(self, selector: #selector(interrupted), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(interrupted), name: UIScreen.capturedDidChangeNotification, object: nil)
@@ -96,7 +110,8 @@ final class ShumExtractedMessageMenu: UIView {
         }
     }
 
-    private func makeAction(_ title: String, symbol: String, action: @escaping () -> Void) -> UIButton {
+    private func makeAction(_ title: String, symbol: String, color: UIColor = .label,
+                            action: @escaping () -> Void) -> UIButton {
         let button = UIButton(type: .system)
         var configuration = UIButton.Configuration.plain()
         configuration.title = title
@@ -104,7 +119,7 @@ final class ShumExtractedMessageMenu: UIView {
         configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)
         configuration.imagePadding = 12
         configuration.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
-        configuration.baseForegroundColor = .label
+        configuration.baseForegroundColor = color
         configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
             var result = attributes
             result.font = .preferredFont(forTextStyle: .body)
@@ -113,7 +128,7 @@ final class ShumExtractedMessageMenu: UIView {
         button.configuration = configuration
         button.contentHorizontalAlignment = .leading
         button.configurationUpdateHandler = { button in
-            button.configuration?.baseForegroundColor = .label
+            button.configuration?.baseForegroundColor = color
             button.backgroundColor = button.isHighlighted ? .tertiarySystemFill : .clear
         }
         button.addAction(UIAction { [weak self] _ in
@@ -132,7 +147,7 @@ final class ShumExtractedMessageMenu: UIView {
         scroll.frame = bounds
         let sourceFrame = source.convert(source.bounds, to: window)
         let rowHeight = max(48, UIFont.preferredFont(forTextStyle: .body).lineHeight + 24)
-        let menuSize = CGSize(width: min(250, bounds.width - 32), height: rowHeight * 2)
+        let menuSize = CGSize(width: min(250, bounds.width - 32), height: rowHeight * CGFloat(max(actions.count, 2)))
         let top = window.safeAreaInsets.top + 12
         var bottom = bounds.height - window.safeAreaInsets.bottom - 12
         if let root = window.rootViewController?.view {
@@ -151,7 +166,10 @@ final class ShumExtractedMessageMenu: UIView {
         for (index, button) in actions.enumerated() {
             button.frame = CGRect(x: 0, y: CGFloat(index) * rowHeight, width: menuSize.width, height: rowHeight)
         }
-        menu.contentView.viewWithTag(1)?.frame = CGRect(x: 0, y: rowHeight, width: menuSize.width, height: 1 / window.screen.scale)
+        for index in 1..<max(actions.count, 1) {
+            menu.contentView.viewWithTag(index)?.frame = CGRect(x: 0, y: rowHeight * CGFloat(index),
+                                                                width: menuSize.width, height: 1 / window.screen.scale)
+        }
         scroll.contentSize = CGSize(width: bounds.width, height: max(bounds.height, menu.frame.maxY + window.safeAreaInsets.bottom + 12))
         targetBubbleFrame = bubbleFrame
         nativeAnchor.frame = CGRect(x: outgoing ? bubbleFrame.maxX - 1 : bubbleFrame.minX,

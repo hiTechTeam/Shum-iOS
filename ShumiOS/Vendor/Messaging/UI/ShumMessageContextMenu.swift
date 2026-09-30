@@ -10,6 +10,8 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
     let maximumWidth: CGFloat
     let reply: () -> Void
     let copy: () -> Void
+    /// Present only while the message can still be withdrawn.
+    let cancelSending: (() -> Void)?
     let dragChanged: (CGFloat) -> Void
     let dragEnded: (CGFloat, Bool) -> Void
     @ViewBuilder let content: () -> Content
@@ -18,7 +20,8 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
 
     func updateUIView(_ view: MessageMenuView, context: Context) {
         view.update(content: AnyView(content().environment(\.self, environment)),
-                    shape: shape, reply: reply, copy: copy, dragChanged: dragChanged, dragEnded: dragEnded)
+                    shape: shape, reply: reply, copy: copy, cancelSending: cancelSending,
+                    dragChanged: dragChanged, dragEnded: dragEnded)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: MessageMenuView, context: Context) -> CGSize? {
@@ -38,6 +41,7 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
         private var shape = ShumBubbleShape(outgoing: false, tail: true)
         private var reply: () -> Void = {}
         private var copy: () -> Void = {}
+        private var cancelSending: (() -> Void)?
         private var dragChanged: (CGFloat) -> Void = { _ in }
         private var dragEnded: (CGFloat, Bool) -> Void = { _, _ in }
         private var presentation: ShumExtractedMessageMenu?
@@ -77,10 +81,12 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
             bubbleView.transform = .identity
         }
 
-        func update(content: AnyView, shape: ShumBubbleShape, reply: @escaping () -> Void, copy: @escaping () -> Void, dragChanged: @escaping (CGFloat) -> Void, dragEnded: @escaping (CGFloat, Bool) -> Void) {
+        func update(content: AnyView, shape: ShumBubbleShape, reply: @escaping () -> Void, copy: @escaping () -> Void,
+                    cancelSending: (() -> Void)?, dragChanged: @escaping (CGFloat) -> Void, dragEnded: @escaping (CGFloat, Bool) -> Void) {
             self.shape = shape
             self.reply = reply
             self.copy = copy
+            self.cancelSending = cancelSending
             self.dragChanged = dragChanged
             self.dragEnded = dragEnded
             // Delivery/typing updates must not re-layout the extracted message.
@@ -210,7 +216,7 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
             guard presentation == nil, let window, !window.screen.isCaptured else { cancelPress(); return }
             finishPressAnimation()
             let menu = ShumExtractedMessageMenu(source: self, bubble: bubbleView, outgoing: shape.outgoing,
-                reply: reply, copy: copy) { [weak self] in
+                reply: reply, copy: copy, cancelSending: cancelSending) { [weak self] in
                     guard let self else { return }
                     if #available(iOS 26.0, *) {
                         // Restoration can run inside UIKit's dismissal animation.

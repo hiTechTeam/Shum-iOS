@@ -24,6 +24,7 @@ struct ShumMessageBubble: View {
     var replyAuthor: String?
     var retry: () -> Void = {}
     var reply: () -> Void = {}
+    var cancelSending: () -> Void = {}
     var openReply: (String) -> Void = { _ in }
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.shumThemePalette) private var themePalette
@@ -58,6 +59,11 @@ struct ShumMessageBubble: View {
             )
             .accessibilityAction(named: "Ответить".localized, reply)
             .accessibilityAction(named: "Скопировать".localized) { UIPasteboard.general.string = message.text }
+            .accessibilityActions {
+                if canCancelSending {
+                    Button("Отменить отправку".localized, action: cancelSending)
+                }
+            }
             if message.outgoing, let label = message.deliveryLabel, label == "В очереди".localized || label.hasPrefix("Передаётся".localized) {
                 Text(label).font(.caption).foregroundStyle(.secondary).padding(.top, 2)
             }
@@ -139,9 +145,15 @@ struct ShumMessageBubble: View {
     private var bubble: some View {
         ShumMessageContextMenu(shape: bubbleShape, maximumWidth: maximumWidth,
             reply: reply, copy: { UIPasteboard.general.string = message.text },
+            cancelSending: canCancelSending ? cancelSending : nil,
             dragChanged: updateReplyDrag, dragEnded: finishReplyDrag) {
                 bubbleContent
             }
+    }
+
+    /// Offered exactly while the clock icon shows the message is in transit.
+    private var canCancelSending: Bool {
+        message.outgoing && ShumDeliveryReceipt.symbol(for: message.status) == .clock
     }
 
     private var bubbleShape: ShumBubbleShape {

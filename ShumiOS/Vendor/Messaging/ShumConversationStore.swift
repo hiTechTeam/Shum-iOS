@@ -190,6 +190,52 @@ struct ShumPresenceControl: Codable, Equatable, Identifiable {
         }
     }
 }
+/// Withdraws an outgoing message that has not been delivered yet. It lives
+/// exactly as long as the message itself could still arrive.
+struct ShumRetractControl: Codable, Equatable, Identifiable {
+    var version = 1
+    var id: String
+    var sender: ShumContactCard
+    var recipient: ShumContactCard
+    var messageID: String
+    var timestamp: Int64
+    var expiresAt: Int64
+    var signature = Data()
+
+    func signingBytes() throws -> Data {
+        var value = self
+        value.signature = Data()
+        return try ShumCoding.encode(value)
+    }
+
+    func validate(at now: Date) throws {
+        try sender.validate()
+        try recipient.validate()
+        let milliseconds = Int64(now.timeIntervalSince1970 * 1000)
+        guard version == 1,
+              UUID(uuidString: id) != nil,
+              UUID(uuidString: messageID) != nil,
+              sender.id != recipient.id,
+              timestamp >= 0,
+              timestamp <= milliseconds + 300_000,
+              expiresAt > milliseconds,
+              expiresAt > timestamp,
+              expiresAt - timestamp <= 86_400_000,
+              try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey)
+                .isValidSignature(signature, for: signingBytes()) else {
+            throw ShumFailure.invalidMessage
+        }
+    }
+}
+struct ShumStoredRetract: Codable, Equatable, Identifiable {
+    var control: ShumRetractControl
+    var lastAttempt: Date = .distantPast
+    var attempts = 0
+    var nostrAccepted = false
+    var lastNostrAttempt: Date?
+    var nostrAttempts: Int?
+    var id: String { control.id }
+}
 enum ShumDelivery: String, Codable {
     case queued, forwarding, delivered, read, expired, cancelled
     var label: String {
@@ -345,6 +391,7 @@ struct ShumPacket: Codable {
     var typing: ShumTypingControl?
     var presence: ShumPresenceControl?
     var profileSync: ShumProfileSync?
+    var retract: ShumRetractControl?
 }
 struct ShumDatabase: Codable {
     var version = 1
@@ -369,6 +416,7 @@ struct ShumDatabase: Codable {
     var invitationOutbox: [ShumStoredInvitationControl]?
     var ownProfileCard: ShumContactCard?
     var profileOutbox: [ShumProfileDelivery]?
+    var retractOutbox: [ShumStoredRetract]?
 }
 
 @MainActor

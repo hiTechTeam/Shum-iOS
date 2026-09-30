@@ -217,3 +217,111 @@ struct ShumDirectDeliveryPushTests {
         #expect(pushes == [id])
     }
 }
+
+/// A message still in transit can be withdrawn, and the contact never keeps it.
+@Suite("Cancel sending", .serialized)
+@MainActor
+struct ShumCancelSendingTests {
+    typealias Node = ShumPermanentTests.Node
+    private let helpers = ShumPermanentTests()
+
+    private func makePair(clock: ShumPermanentTests.Clock) throws -> (Node, Node, FakeInternet) {
+        let a = try Node("Alice", clock: clock), b = try Node("Bob", clock: clock)
+        let internet = FakeInternet()
+        a.service = try ShumMessageStore(identity: a.identity, store: a.store, transport: a.wire, wire: a.wire,
+                                         card: a.card, internet: internet, now: { clock.date })
+        a.service.requestPush = { _, _, _ in }
+        try helpers.allowBoth(a, b, clock: clock)
+        return (a, b, internet)
+    }
+
+    /// Hands what Alice gave the relay to Bob, in the given order.
+    private func relay(_ packets: [ShumPacket], from a: Node, to b: Node) {
+        for packet in packets { b.service.receive(packet, from: nil, nostrSender: a.card.nostrKey) }
+    }
+
+    @Test func messageThatNeverLeftThePhoneIsSimplyRemoved() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, b, internet) = try makePair(clock: clock)
+        internet.connected = false
+        #expect(a.service.send("Черновик", to: b.card))
+        let id = try #require(a.service.state.messages.last { $0.outgoing }).id
+
+        #expect(a.service.cancelSending(id))
+        #expect(!a.service.state.messages.contains { $0.id == id })
+        #expect((a.service.state.retractOutbox ?? []).isEmpty)
+        #expect(internet.sent.isEmpty)
+    }
+
+    @Test func relayedMessageIsWithdrawnFromTheContact() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, b, internet) = try makePair(clock: clock)
+        var retracted: [String] = []
+        b.service.onMessagesRetracted = { retracted += $0 }
+        #expect(a.service.send("Передумал", to: b.card))
+        let id = try #require(a.service.state.messages.last { $0.outgoing }).id
+        relay(internet.sent, from: a, to: b)
+        #expect(b.service.state.messages.contains { $0.id == id })
+
+        let before = internet.sent.count
+        #expect(a.service.cancelSending(id))
+        #expect(!a.service.state.messages.contains { $0.id == id })
+        let withdrawals = internet.sent.dropFirst(before).compactMap(\.retract)
+        #expect(withdrawals.map(\.messageID) == [id])
+
+        relay(Array(internet.sent.dropFirst(before)), from: a, to: b)
+        #expect(!b.service.state.messages.contains { $0.id == id })
+        #expect(retracted == [id])
+        // A late relay copy of the message is ignored.
+        relay(Array(internet.sent.prefix(before)), from: a, to: b)
+        #expect(!b.service.state.messages.contains { $0.id == id })
+        // Once a relay accepted it, the withdrawal leaves the outbox.
+        a.service.tick(connected: [], active: true)
+        #expect((a.service.state.retractOutbox ?? []).isEmpty)
+    }
+
+    @Test func withdrawalArrivingFirstDropsTheMessage() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, b, internet) = try makePair(clock: clock)
+        #expect(a.service.send("Обгонит", to: b.card))
+        let id = try #require(a.service.state.messages.last { $0.outgoing }).id
+        let message = internet.sent
+        #expect(a.service.cancelSending(id))
+
+        relay(Array(internet.sent.dropFirst(message.count)), from: a, to: b)
+        relay(message, from: a, to: b)
+        #expect(!b.service.state.messages.contains { $0.id == id })
+    }
+
+    @Test func retryReplacesTheExpiredMessageInsteadOfCopyingIt() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, b, internet) = try makePair(clock: clock)
+        internet.connected = false
+        #expect(a.service.send("Повтори меня", to: b.card))
+        let expired = try #require(a.service.state.messages.last { $0.outgoing }).id
+        clock.date.addTimeInterval(24 * 60 * 60 + 1)
+        a.service.tick(connected: [], active: true)
+        #expect(a.service.state.messages.first { $0.id == expired }?.status == .expired)
+
+        #expect(a.service.resend(expired, to: b.card))
+        #expect(!a.service.resend(expired, to: b.card)) // A second tap adds nothing.
+        let outgoing = a.service.state.messages.filter(\.outgoing)
+        #expect(outgoing.count == 1)
+        #expect(outgoing.first?.id != expired)
+        #expect(outgoing.first?.text == "Повтори меня")
+        #expect(outgoing.first?.status == .queued)
+    }
+
+    @Test func deliveredMessageCannotBeCancelled() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, b, _) = try makePair(clock: clock)
+        helpers.connect(a, b, clock: clock)
+        #expect(a.service.send("Дошло", to: b.card))
+        helpers.drain([a, b])
+        let message = try #require(a.service.state.messages.last { $0.outgoing })
+        #expect(message.status == .delivered)
+
+        #expect(!a.service.cancelSending(message.id))
+        #expect(a.service.state.messages.contains { $0.id == message.id })
+    }
+}

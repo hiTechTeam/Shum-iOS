@@ -548,6 +548,23 @@ final class AppNotificationRouter: NSObject,
         )
     }
 
+    /// Takes back notifications of messages the sender withdrew: the one shown
+    /// after a Bluetooth delivery and the push for the same message.
+    func removeMessages(_ ids: [String]) {
+        let center = UNUserNotificationCenter.current()
+        let local = ids.map { "shum.message.\($0)" }
+        center.removePendingNotificationRequests(withIdentifiers: local)
+        center.removeDeliveredNotifications(withIdentifiers: local)
+        let withdrawn = Set(ids)
+        Task {
+            let pushes = await center.deliveredNotifications().filter { note in
+                let payload = note.request.content.userInfo["shum"] as? [String: Any]
+                return (payload?["event_id"] as? String).map(withdrawn.contains) == true
+            }.map(\.request.identifier)
+            center.removeDeliveredNotifications(withIdentifiers: pushes)
+        }
+    }
+
     private func scheduleChatNotification(
         identifier: String,
         peerID: String,
