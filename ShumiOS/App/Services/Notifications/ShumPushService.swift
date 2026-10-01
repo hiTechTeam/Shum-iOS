@@ -6,6 +6,7 @@ import UIKit
 enum ShumPushKind: String, Encodable {
     case message
     case invitation
+    case reaction
 }
 
 @MainActor

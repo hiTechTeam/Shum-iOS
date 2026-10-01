@@ -519,6 +519,9 @@ struct ShumConversationView: View {
         revision.combine(message.deliveryLabel)
         revision.combine(message.waitingForConnection)
         revision.combine(message.reply)
+        // A reaction changes the row height, so the table must re-measure it.
+        revision.combine(message.myReaction)
+        revision.combine(message.theirReaction)
         revision.combine(index > 0 ? conversation[index - 1].date : nil)
         revision.combine(index > 0 ? conversation[index - 1].outgoing : nil)
         revision.combine(index + 1 < conversation.count ? conversation[index + 1].date : nil)
@@ -550,6 +553,10 @@ struct ShumConversationView: View {
                 retry: { runtime.retry(message) },
                 reply: { beginReply(to: message) },
                 cancelSending: { runtime.cancelSending(message) },
+                react: runtime.isLegacyOnly(message.peerID) ? nil : { runtime.toggleReaction($0, on: message) },
+                reactionPeople: message.myReaction == nil && message.theirReaction == nil ? ShumReactionPeople()
+                    : ShumReactionPeople(myName: runtime.nickname, myAvatar: runtime.profiles.own.avatar,
+                                         peerName: name, peerAvatar: runtime.profile(for: peer.id)?.avatar),
                 openReply: { scrollCommand = ShumTimelineCommand(target: .message($0)) })
                 .padding(.top, sameDay && previous?.outgoing != message.outgoing ? 10 : 3)
         }

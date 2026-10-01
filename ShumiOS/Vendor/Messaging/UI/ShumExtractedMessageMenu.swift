@@ -1,8 +1,9 @@
 #if os(iOS)
 import UIKit
 
-/// Presents the original hosting view above a separate blur. The bubble has no
-/// snapshot, extra fill, shadow, mask or scale greater than one.
+/// Presents the original hosting view above a separate blur, with the pixel
+/// reactions above it and the actions below. The bubble has no snapshot,
+/// extra fill, shadow, mask or scale greater than one.
 final class ShumExtractedMessageMenu: UIView {
     private weak var source: UIView?
     private let bubble: UIView
@@ -10,23 +11,35 @@ final class ShumExtractedMessageMenu: UIView {
     private let outgoing: Bool
     private let backdrop = UIVisualEffectView()
     private let scroll = UIScrollView()
-    private let menu = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
+    private let menu = ShumExtractedMessageMenu.surface()
+    private let reactionBar = ShumExtractedMessageMenu.surface()
     private var actions: [UIButton] = []
-    private let nativeAnchor = MessageMenuAnchor(type: .custom)
-    private var nativeMenuIsVisible = false
-    private var usesNativeMenu: Bool { if #available(iOS 17.4, *) { return true }; return false }
+    private var reactionButtons: [UIButton] = []
     private var isDismissing = false
     private var restored = false
-    private var presentationStarted = false
     private var initialSize = CGSize.zero
     private var targetBubbleFrame = CGRect.zero
     private var dismissalTouch: MessageDismissalTouch?
-    private var returnAnimator: UIViewPropertyAnimator?
-    private var pendingReturnSteps = 0
+    /// Runs once the bubble is back in its row, so a row that grows for a new
+    /// reaction does not move under a bubble still travelling back.
+    private var afterRestore: (() -> Void)?
+
+    private static let reactionSize: CGFloat = 36
+    private static let reactionSpacing: CGFloat = 2
+    private static let reactionInset = UIEdgeInsets(top: 6, left: 8, bottom: 6, right: 8)
+
+    /// The system glass on iOS 26, the system material before it.
+    private static func surface() -> UIVisualEffectView {
+        if #available(iOS 26.0, *) {
+            return UIVisualEffectView(effect: UIGlassEffect(style: .regular))
+        }
+        return UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
+    }
 
     init(source: UIView, bubble: UIView, outgoing: Bool,
          reply: @escaping () -> Void, copy: @escaping () -> Void,
-         cancelSending: (() -> Void)?, restore: @escaping () -> Void) {
+         cancelSending: (() -> Void)?, reaction: ShumReaction?, react: ((ShumReaction) -> Void)?,
+         restore: @escaping () -> Void) {
         self.source = source
         self.bubble = bubble
         self.outgoing = outgoing
@@ -44,51 +57,37 @@ final class ShumExtractedMessageMenu: UIView {
         let dismissTap = UITapGestureRecognizer(target: self, action: #selector(tappedOutside(_:)))
         dismissTap.cancelsTouchesInView = false
         scroll.addGestureRecognizer(dismissTap)
-        if usesNativeMenu {
-            nativeAnchor.backgroundColor = .clear
-            nativeAnchor.showsMenuAsPrimaryAction = true
-            nativeAnchor.accessibilityElementsHidden = true
-            let foreground = UIColor.label.resolvedColor(with: source.traitCollection)
-            func icon(_ name: String) -> UIImage? {
-                UIImage(systemName: name)?.withTintColor(foreground, renderingMode: .alwaysOriginal)
+
+        let radius: CGFloat
+        if #available(iOS 26.0, *) { radius = 24 } else { radius = 14 }
+        menu.layer.cornerRadius = radius
+        menu.layer.cornerCurve = .continuous
+        menu.clipsToBounds = true
+        menu.alpha = 0
+        scroll.addSubview(menu)
+        actions = [makeAction("Ответить".localized, symbol: "arrowshape.turn.up.left", action: reply),
+                   makeAction("Скопировать".localized, symbol: "doc.on.doc", action: copy)]
+        if let cancelSending {
+            actions.append(makeAction("Отменить отправку".localized, symbol: "xmark.circle",
+                                      color: .systemRed, action: cancelSending))
+        }
+        actions.forEach { menu.contentView.addSubview($0) }
+        for index in 1..<actions.count {
+            let separator = UIView()
+            separator.backgroundColor = .separator
+            separator.tag = index
+            menu.contentView.addSubview(separator)
+        }
+
+        if let react {
+            reactionBar.layer.cornerCurve = .continuous
+            reactionBar.clipsToBounds = true
+            reactionBar.alpha = 0
+            scroll.addSubview(reactionBar)
+            reactionButtons = ShumReaction.allCases.map { option in
+                makeReaction(option, selected: option == reaction) { react(option) }
             }
-            var children: [UIMenuElement] = [
-                UIAction(title: "Ответить".localized, image: icon("arrowshape.turn.up.left")) { _ in reply() },
-                UIAction(title: "Скопировать".localized, image: icon("doc.on.doc")) { _ in copy() }
-            ]
-            if let cancelSending {
-                children.append(UIMenu(options: .displayInline, children: [
-                    UIAction(title: "Отменить отправку".localized, image: UIImage(systemName: "xmark.circle"),
-                             attributes: .destructive) { _ in cancelSending() }
-                ]))
-            }
-            nativeAnchor.menu = UIMenu(children: children)
-            nativeAnchor.onDisplay = { [weak self] in
-                self?.nativeMenuIsVisible = true
-                self?.animatePresentation()
-            }
-            nativeAnchor.onEnd = { [weak self] animator in self?.nativeMenuEnding(animator: animator) }
-            scroll.addSubview(nativeAnchor)
-        } else {
-            // iOS 16–17.3 has no public programmatic primary-menu presentation.
-            // Retain the existing menu there without changing its bubble behavior.
-            menu.layer.cornerRadius = 14
-            menu.clipsToBounds = true
-            menu.alpha = 0
-            scroll.addSubview(menu)
-            actions = [makeAction("Ответить".localized, symbol: "arrowshape.turn.up.left", action: reply),
-                       makeAction("Скопировать".localized, symbol: "doc.on.doc", action: copy)]
-            if let cancelSending {
-                actions.append(makeAction("Отменить отправку".localized, symbol: "xmark.circle",
-                                          color: .systemRed, action: cancelSending))
-            }
-            actions.forEach { menu.contentView.addSubview($0) }
-            for index in 1..<actions.count {
-                let separator = UIView()
-                separator.backgroundColor = .separator
-                separator.tag = index
-                menu.contentView.addSubview(separator)
-            }
+            reactionButtons.forEach { reactionBar.contentView.addSubview($0) }
         }
         NotificationCenter.default.addObserver(self, selector: #selector(interrupted), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(interrupted), name: UIScreen.capturedDidChangeNotification, object: nil)
@@ -140,6 +139,32 @@ final class ShumExtractedMessageMenu: UIView {
         return button
     }
 
+    /// The current reaction is highlighted; choosing it again takes it back.
+    private func makeReaction(_ reaction: ShumReaction, selected: Bool,
+                              action: @escaping () -> Void) -> UIButton {
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = ShumReactionArt.image(for: reaction, size: 26)
+        configuration.contentInsets = .zero
+        configuration.background.cornerRadius = Self.reactionSize / 2
+        let selection = ShumAppearanceStore.shared.accentUIColor.withAlphaComponent(0.3)
+        let button = UIButton(configuration: configuration)
+        button.configurationUpdateHandler = { button in
+            button.configuration?.background.backgroundColor = button.isHighlighted
+                ? .tertiarySystemFill : (selected ? selection : .clear)
+        }
+        button.accessibilityLabel = ShumReactionArt.name(for: reaction)
+        if selected {
+            button.accessibilityTraits.insert(.selected)
+            button.accessibilityHint = "Нажмите ещё раз, чтобы убрать реакцию".localized
+        }
+        button.addAction(UIAction { [weak self] _ in
+            UISelectionFeedbackGenerator().selectionChanged()
+            self?.afterRestore = action
+            self?.dismiss(animated: true)
+        }, for: .touchUpInside)
+        return button
+    }
+
     func present(in window: UIWindow) {
         Self.finishDismissal(in: window)
         guard let source, let surface = window.rootViewController?.view else { restoreOnce(); return }
@@ -149,7 +174,12 @@ final class ShumExtractedMessageMenu: UIView {
         scroll.frame = bounds
         let sourceFrame = source.convert(source.bounds, to: window)
         let rowHeight = max(48, UIFont.preferredFont(forTextStyle: .body).lineHeight + 24)
-        let menuSize = CGSize(width: min(250, bounds.width - 32), height: rowHeight * CGFloat(max(actions.count, 2)))
+        let menuSize = CGSize(width: min(250, bounds.width - 32), height: rowHeight * CGFloat(actions.count))
+        let inset = Self.reactionInset
+        let count = CGFloat(reactionButtons.count)
+        let barSize = CGSize(width: count * Self.reactionSize + max(0, count - 1) * Self.reactionSpacing + inset.left + inset.right,
+                             height: Self.reactionSize + inset.top + inset.bottom)
+        let barRoom = reactionButtons.isEmpty ? 0 : barSize.height + 10
         let top = window.safeAreaInsets.top + 12
         var bottom = bounds.height - window.safeAreaInsets.bottom - 12
         if let root = window.rootViewController?.view {
@@ -161,10 +191,11 @@ final class ShumExtractedMessageMenu: UIView {
         // messages remain full-size and can scroll together with their actions.
         var bubbleFrame = sourceFrame
         let menuRoom = menuSize.height + 40
-        bubbleFrame.origin.y = max(top, min(sourceFrame.minY, bottom - menuRoom - bubbleFrame.height))
-        let menuY = bubbleFrame.maxY + 8
-        let menuX = max(16, min(outgoing ? bubbleFrame.maxX - menuSize.width : bubbleFrame.minX, bounds.width - menuSize.width - 16))
-        menu.frame = CGRect(origin: CGPoint(x: menuX, y: menuY), size: menuSize)
+        bubbleFrame.origin.y = max(top + barRoom, min(sourceFrame.minY, bottom - menuRoom - bubbleFrame.height))
+        func aligned(_ width: CGFloat) -> CGFloat {
+            max(16, min(outgoing ? bubbleFrame.maxX - width : bubbleFrame.minX, bounds.width - width - 16))
+        }
+        menu.frame = CGRect(origin: CGPoint(x: aligned(menuSize.width), y: bubbleFrame.maxY + 8), size: menuSize)
         for (index, button) in actions.enumerated() {
             button.frame = CGRect(x: 0, y: CGFloat(index) * rowHeight, width: menuSize.width, height: rowHeight)
         }
@@ -172,10 +203,14 @@ final class ShumExtractedMessageMenu: UIView {
             menu.contentView.viewWithTag(index)?.frame = CGRect(x: 0, y: rowHeight * CGFloat(index),
                                                                 width: menuSize.width, height: 1 / window.screen.scale)
         }
+        reactionBar.frame = CGRect(origin: CGPoint(x: aligned(barSize.width), y: bubbleFrame.minY - barRoom), size: barSize)
+        reactionBar.layer.cornerRadius = barSize.height / 2
+        for (index, button) in reactionButtons.enumerated() {
+            button.frame = CGRect(x: inset.left + CGFloat(index) * (Self.reactionSize + Self.reactionSpacing),
+                                  y: inset.top, width: Self.reactionSize, height: Self.reactionSize)
+        }
         scroll.contentSize = CGSize(width: bounds.width, height: max(bounds.height, menu.frame.maxY + window.safeAreaInsets.bottom + 12))
         targetBubbleFrame = bubbleFrame
-        nativeAnchor.frame = CGRect(x: outgoing ? bubbleFrame.maxX - 1 : bubbleFrame.minX,
-                                    y: menuY, width: 1, height: 1)
 
         surface.addSubview(self)
         source.accessibilityElementsHidden = true
@@ -185,30 +220,28 @@ final class ShumExtractedMessageMenu: UIView {
         bubble.bounds = CGRect(origin: .zero, size: sourceFrame.size)
         bubble.center = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)
         bubble.isUserInteractionEnabled = false
-        // The anchor is already at the final location. Opening the native menu
-        // must not wait for the bubble to travel there.
+        reactionBar.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
         layoutIfNeeded()
-        if #available(iOS 17.4, *) { nativeAnchor.performPrimaryAction() }
-        else { animatePresentation() }
+        animatePresentation()
     }
 
     private func animatePresentation() {
-        guard !isDismissing, !presentationStarted else { return }
-        presentationStarted = true
         let reducedMotion = UIAccessibility.isReduceMotionEnabled
         UIView.animate(withDuration: reducedMotion ? 0 : 0.28, delay: 0,
                        usingSpringWithDamping: 1, initialSpringVelocity: 0,
                        options: [.beginFromCurrentState, .allowUserInteraction]) {
             self.bubble.transform = .identity
             self.bubble.center = CGPoint(x: self.targetBubbleFrame.midX, y: self.targetBubbleFrame.midY)
+            self.reactionBar.transform = .identity
         }
         UIView.animate(withDuration: reducedMotion ? 0 : 0.18, delay: 0,
                        options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
             self.backdrop.effect = UIBlurEffect(style: .regular)
-            if !self.usesNativeMenu { self.menu.alpha = 1 }
+            self.menu.alpha = 1
+            self.reactionBar.alpha = 1
         } completion: { [weak self] _ in
             guard let self, !self.isDismissing else { return }
-            if !self.usesNativeMenu { UIAccessibility.post(notification: .screenChanged, argument: self.actions.first) }
+            UIAccessibility.post(notification: .screenChanged, argument: self.reactionButtons.first ?? self.actions.first)
         }
     }
 
@@ -219,8 +252,8 @@ final class ShumExtractedMessageMenu: UIView {
     }
 
     @objc private func tappedOutside(_ recognizer: UITapGestureRecognizer) {
-        if usesNativeMenu { dismiss(animated: true); return }
-        if !menu.frame.contains(recognizer.location(in: scroll)) { dismiss(animated: true) }
+        let point = recognizer.location(in: scroll)
+        if !menu.frame.contains(point), !reactionBar.frame.contains(point) { dismiss(animated: true) }
     }
     @objc private func interrupted() { dismiss(animated: false) }
     override func accessibilityPerformEscape() -> Bool { dismiss(animated: true); return true }
@@ -230,12 +263,9 @@ final class ShumExtractedMessageMenu: UIView {
             if !animated { layer.removeAllAnimations(); restoreOnce(); removeFromSuperview() }
             return
         }
-        if nativeMenuIsVisible {
-            nativeAnchor.contextMenuInteraction?.dismissMenu()
-            if animated { return }
-        }
         isDismissing = true
         observeNextTouch()
+        // The fading overlay must not swallow a new hold or scroll.
         isUserInteractionEnabled = false
         let target = source.map { $0.convert($0.bounds, to: scroll) } ?? targetBubbleFrame
         let finish = { [self] in
@@ -246,64 +276,30 @@ final class ShumExtractedMessageMenu: UIView {
         UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
             self.backdrop.effect = nil
             self.menu.alpha = 0
+            self.reactionBar.alpha = 0
             self.bubble.transform = .identity
             self.bubble.center = CGPoint(x: target.midX, y: target.midY)
         } completion: { _ in finish() }
     }
 
-    private func nativeMenuEnding(animator: UIContextMenuInteractionAnimating?) {
-        nativeMenuIsVisible = false
-        guard !isDismissing else { return }
-        isDismissing = true
-        observeNextTouch()
-        // The fading overlay must not swallow a new hold or scroll.
-        isUserInteractionEnabled = false
-        let target = source.map { $0.convert($0.bounds, to: scroll) } ?? targetBubbleFrame
-        // UIKit's menu animator fades only the backdrop. If it moved the bubble,
-        // stopping it after an early restore would write an overlay position
-        // into the bubble already back in its row, and the message would blink.
-        pendingReturnSteps = animator == nil ? 1 : 2
-        let finish = { [weak self] in
-            guard let self else { return }
-            self.pendingReturnSteps -= 1
-            guard self.pendingReturnSteps == 0 else { return }
-            self.restoreOnce()
-            self.removeFromSuperview()
-        }
-        let back = UIViewPropertyAnimator(duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.28,
-                                          timingParameters: UISpringTimingParameters(dampingRatio: 1))
-        back.addAnimations {
-            self.bubble.transform = .identity
-            self.bubble.center = CGPoint(x: target.midX, y: target.midY)
-        }
-        back.addCompletion { _ in finish() }
-        returnAnimator = back
-        if let animator {
-            animator.addAnimations { if !self.restored { self.backdrop.effect = nil } }
-            animator.addCompletion { finish() }
-        } else {
-            backdrop.effect = nil
-        }
-        back.startAnimation()
-    }
-
     private func restoreOnce() {
         guard !restored else { return }
         restored = true
-        // Stop the return before the bubble leaves this overlay, so the
-        // animator has nothing left to write into it afterwards.
-        if let returnAnimator, returnAnimator.state == .active { returnAnimator.stopAnimation(true) }
-        returnAnimator = nil
         if let dismissalTouch {
             dismissalTouch.view?.removeGestureRecognizer(dismissalTouch)
             self.dismissalTouch = nil
         }
+        // UIView animations leave the model at its final value, so removing
+        // them never writes an overlay position into the returned bubble.
         bubble.layer.removeAllAnimations()
         bubble.transform = .identity
         bubble.isUserInteractionEnabled = true
         source?.accessibilityElementsHidden = false
         restore()
         UIAccessibility.post(notification: .layoutChanged, argument: source)
+        let action = afterRestore
+        afterRestore = nil
+        action?()
     }
 }
 
@@ -323,29 +319,6 @@ private final class MessageDismissalTouch: UIGestureRecognizer {
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
         state = .failed
         finish()
-    }
-}
-
-/// An empty, already-positioned anchor supplies only the native action menu.
-/// UIKit never creates a preview or a second surface for the message itself.
-private final class MessageMenuAnchor: UIButton {
-    var onDisplay: (() -> Void)?
-    var onEnd: ((UIContextMenuInteractionAnimating?) -> Void)?
-    override func menuAttachmentPoint(for configuration: UIContextMenuConfiguration) -> CGPoint {
-        CGPoint(x: bounds.midX, y: bounds.maxY)
-    }
-    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
-        let configuration = UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in self?.menu }
-        configuration.preferredMenuElementOrder = .fixed
-        return configuration
-    }
-    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction, willDisplayMenuFor configuration: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
-        super.contextMenuInteraction(interaction, willDisplayMenuFor: configuration, animator: animator)
-        onDisplay?()
-    }
-    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction, willEndFor configuration: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
-        super.contextMenuInteraction(interaction, willEndFor: configuration, animator: animator)
-        onEnd?(animator)
     }
 }
 #endif
