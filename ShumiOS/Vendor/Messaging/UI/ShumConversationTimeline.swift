@@ -49,6 +49,9 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     var composer: AnyView? = nil
     /// Floating control above the composer's trailing edge (scroll-to-bottom).
     var accessory: AnyView? = nil
+    /// Distance from the composer's top to its capsule. Lines shown above the
+    /// capsule, such as "add to contacts", must not lift the accessory.
+    var accessoryInset: CGFloat = 8
     let bottomChanged: (Bool) -> Void
     let tapped: () -> Void
     @ViewBuilder let row: (Int, CGFloat) -> Row
@@ -61,7 +64,7 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
         controller.bottomChanged = bottomChanged
         controller.tapped = tapped
         controller.updateComposer(composer.map { AnyView($0.environment(\.self, environment)) })
-        controller.updateAccessory(accessory.map { AnyView($0.environment(\.self, environment)) })
+        controller.updateAccessory(accessory.map { AnyView($0.environment(\.self, environment)) }, inset: accessoryInset)
         controller.viewportInsets = UIEdgeInsets(top: contentInsets.top, left: 0, bottom: contentInsets.bottom + 10, right: 0)
         controller.update(items: items, appearanceKey: "\(appearanceKey)-\(environment.dynamicTypeSize)-\(environment.locale.identifier)", command: command) { index, width in
             AnyView(row(index, width).environment(\.self, environment))
@@ -80,6 +83,8 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     private var composerContent: AnyView?
     private var composerWidth: CGFloat = 0
     private var accessoryHost: UIHostingController<AnyView>?
+    private var accessoryBottom: NSLayoutConstraint?
+    static let accessoryGap: CGFloat = 8
     private let storageKey: String
     private var items: [ShumTimelineItem] = []
     private var row: (Int, CGFloat) -> AnyView = { _, _ in AnyView(EmptyView()) }
@@ -175,7 +180,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     /// Hosted apart from the composer so the control receives taps within its
     /// own frame and showing or hiding it never resizes the composer, which
     /// would interrupt a scroll already in progress.
-    func updateAccessory(_ content: AnyView?) {
+    func updateAccessory(_ content: AnyView?, inset: CGFloat = 8) {
         guard let composerHost else { return }
         if accessoryHost == nil {
             let host = UIHostingController(rootView: AnyView(EmptyView()))
@@ -185,13 +190,17 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
             if #available(iOS 16.4, *) { host.safeAreaRegions = [] }
             addChild(host)
             view.addSubview(host.view)
+            let bottom = host.view.bottomAnchor.constraint(equalTo: composerHost.view.topAnchor)
             NSLayoutConstraint.activate([
                 host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -23),
-                host.view.bottomAnchor.constraint(equalTo: composerHost.view.topAnchor)
+                bottom
             ])
             host.didMove(toParent: self)
             accessoryHost = host
+            accessoryBottom = bottom
         }
+        // Always the same gap above the capsule itself.
+        accessoryBottom?.constant = max(0, inset - Self.accessoryGap)
         accessoryHost?.rootView = content ?? AnyView(EmptyView())
         accessoryHost?.view.isHidden = content == nil
     }

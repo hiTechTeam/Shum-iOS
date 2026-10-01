@@ -724,3 +724,14 @@
 "Реакции: %@" = "Reactions: %@";
 "Убрать реакцию" = "Remove Reaction";
 "Нажмите ещё раз, чтобы убрать реакцию" = "Tap again to remove your reaction";
+"Как работает связь" = "How Shum Connects";
+"Сообщения шифруются на вашем телефоне ещё до отправки. Прочитать их может только собеседник: ни ретрансляторы, ни сервер уведомлений текста не видят." = "Messages are encrypted on your phone before they are sent. Only the person you're chatting with can read them: neither relays nor the notification server can see the text.";
+"Рядом по Bluetooth" = "Nearby over Bluetooth";
+"Если собеседник рядом, сообщения идут напрямую с телефона на телефон, интернет для этого не нужен. Другие телефоны с Shum могут передать сообщение дальше, не видя его текста." = "When the other person is nearby, messages go directly from phone to phone, no internet needed. Other phones with Shum can pass a message along without seeing its text.";
+"На расстоянии через Nostr" = "Far Away Through Nostr";
+"Через интернет сообщения передаются через независимые ретрансляторы открытой сети Nostr. У неё нет единого владельца, а ретрансляторы получают только зашифрованные пакеты." = "Over the internet, messages travel through independent relays of the open Nostr network. It has no single owner, and relays only receive encrypted packets.";
+"Nostr подключён" = "Nostr Connected";
+"Shum на связи с ретрансляторами. Сообщения доставляются через интернет, даже если собеседник далеко." = "Shum is connected to the relays. Messages are delivered over the internet, even when the other person is far away.";
+"Ожидаем сеть" = "Waiting for Network";
+"Сейчас нет связи с ретрансляторами. Как только появится интернет, Shum подключится сам и отправит сообщения из очереди. Рядом Bluetooth работает и без сети." = "There is no connection to the relays right now. As soon as the internet is back, Shum reconnects on its own and sends queued messages. Nearby, Bluetooth works without a network.";
+"Узнать, как работает связь" = "Learn how Shum connects";

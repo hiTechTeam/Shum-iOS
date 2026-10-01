@@ -80,7 +80,6 @@ struct ShumChatProtectionSheet: View {
     @ObservedObject var runtime: ShumRuntime
     let peer: ShumPeer
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.shumThemePalette) private var palette
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showVerification = false
     private var state: ShumChatProtectionState { runtime.chatProtection(for: peer.id) }
@@ -90,8 +89,8 @@ struct ShumChatProtectionSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    detail(state.title, text: state.explanation, symbol: state.symbol, isActive: state == .encrypted)
-                    detail("Децентрализованная связь".localized, text:
+                    ShumInfoRow(title: state.title, text: state.explanation, symbol: state.symbol, isActive: state == .encrypted)
+                    ShumInfoRow(title: "Децентрализованная связь".localized, text:
                         "Рядом сообщения передаются по Bluetooth. Для связи через интернет используются независимые ретрансляторы. Единого центрального сервера переписки нет.".localized,
                         symbol: "network")
 
@@ -127,11 +126,18 @@ struct ShumChatProtectionSheet: View {
                 ShumKeyVerificationView(runtime: runtime, peerCard: card)
             }
         }
-        // This sheet contains public explanations only. The verification
-        // screen presented from it enables capture protection separately.
     }
+}
 
-    private func detail(_ title: String, text: String, symbol: String, isActive: Bool = true) -> some View {
+/// An explanation with a tinted symbol, shared by the information sheets.
+struct ShumInfoRow: View {
+    let title: String
+    let text: String
+    let symbol: String
+    var isActive = true
+    @Environment(\.shumThemePalette) private var palette
+
+    var body: some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: symbol)
                 .font(.system(size: 20, weight: .medium))
@@ -145,5 +151,52 @@ struct ShumChatProtectionSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Opened from the status line on the chat list: what end-to-end encryption,
+/// Bluetooth and the Nostr relays mean, and what the current status says.
+struct ShumNetworkInfoSheet: View {
+    @ObservedObject var runtime: ShumRuntime
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    if runtime.internetConnected {
+                        ShumInfoRow(title: "Nostr подключён".localized, text:
+                            "Shum на связи с ретрансляторами. Сообщения доставляются через интернет, даже если собеседник далеко.".localized,
+                            symbol: "checkmark.circle")
+                    } else {
+                        ShumInfoRow(title: "Ожидаем сеть".localized, text:
+                            "Сейчас нет связи с ретрансляторами. Как только появится интернет, Shum подключится сам и отправит сообщения из очереди. Рядом Bluetooth работает и без сети.".localized,
+                            symbol: "wifi.slash", isActive: false)
+                    }
+                    ShumInfoRow(title: "Сквозное шифрование".localized, text:
+                        "Сообщения шифруются на вашем телефоне ещё до отправки. Прочитать их может только собеседник: ни ретрансляторы, ни сервер уведомлений текста не видят.".localized,
+                        symbol: "lock.fill")
+                    ShumInfoRow(title: "Рядом по Bluetooth".localized, text:
+                        "Если собеседник рядом, сообщения идут напрямую с телефона на телефон, интернет для этого не нужен. Другие телефоны с Shum могут передать сообщение дальше, не видя его текста.".localized,
+                        symbol: "antenna.radiowaves.left.and.right")
+                    ShumInfoRow(title: "На расстоянии через Nostr".localized, text:
+                        "Через интернет сообщения передаются через независимые ретрансляторы открытой сети Nostr. У неё нет единого владельца, а ретрансляторы получают только зашифрованные пакеты.".localized,
+                        symbol: "network")
+                }
+                .padding(24)
+            }
+            .background(ShumThemeCanvas().ignoresSafeArea())
+            .navigationTitle("Как работает связь".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Готово".localized) { dismiss() }
+                }
+            }
+        }
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }

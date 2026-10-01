@@ -724,3 +724,14 @@
 "Реакции: %@" = "Réactions : %@";
 "Убрать реакцию" = "Retirer la réaction";
 "Нажмите ещё раз, чтобы убрать реакцию" = "Touchez à nouveau pour retirer votre réaction";
+"Как работает связь" = "Comment Shum se connecte";
+"Сообщения шифруются на вашем телефоне ещё до отправки. Прочитать их может только собеседник: ни ретрансляторы, ни сервер уведомлений текста не видят." = "Les messages sont chiffrés sur votre téléphone avant l'envoi. Seul votre interlocuteur peut les lire : ni les relais ni le serveur de notifications ne voient le texte.";
+"Рядом по Bluetooth" = "À proximité par Bluetooth";
+"Если собеседник рядом, сообщения идут напрямую с телефона на телефон, интернет для этого не нужен. Другие телефоны с Shum могут передать сообщение дальше, не видя его текста." = "Si votre interlocuteur est à proximité, les messages passent directement d'un téléphone à l'autre, sans internet. D'autres téléphones avec Shum peuvent relayer un message sans voir son texte.";
+"На расстоянии через Nostr" = "À distance via Nostr";
+"Через интернет сообщения передаются через независимые ретрансляторы открытой сети Nostr. У неё нет единого владельца, а ретрансляторы получают только зашифрованные пакеты." = "Par internet, les messages passent par des relais indépendants du réseau ouvert Nostr. Il n'a pas de propriétaire unique, et les relais ne reçoivent que des paquets chiffrés.";
+"Nostr подключён" = "Nostr connecté";
+"Shum на связи с ретрансляторами. Сообщения доставляются через интернет, даже если собеседник далеко." = "Shum est connecté aux relais. Les messages sont distribués par internet, même si votre interlocuteur est loin.";
+"Ожидаем сеть" = "En attente du réseau";
+"Сейчас нет связи с ретрансляторами. Как только появится интернет, Shum подключится сам и отправит сообщения из очереди. Рядом Bluetooth работает и без сети." = "Aucune connexion aux relais pour le moment. Dès que l'internet revient, Shum se reconnecte seul et envoie les messages en attente. À proximité, le Bluetooth fonctionne sans réseau.";
+"Узнать, как работает связь" = "Comprendre comment Shum se connecte";

@@ -48,6 +48,8 @@ struct ShumConversationView: View {
     @ObservedObject var runtime: ShumRuntime
     let peer: ShumPeer
     @State private var draft = ShumComposerDraft()
+    /// Where the composer's capsule starts, so the chevron sits right above it.
+    @State private var capsuleInset: CGFloat = 8
     @State private var showProtection = false
     @State private var replyingTo: ShumMessage?
     @State private var typingPauseTask: Task<Void, Never>?
@@ -81,6 +83,7 @@ struct ShumConversationView: View {
                     contentInsets: geometry.safeAreaInsets,
                     composer: AnyView(composer),
                     accessory: showsScrollToBottom ? AnyView(scrollToBottomButton) : nil,
+                    accessoryInset: capsuleInset,
                     bottomChanged: { bottom in
                         #if DEBUG && targetEnvironment(simulator)
                         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewScrollButton") {
@@ -200,6 +203,8 @@ struct ShumConversationView: View {
         return "не в чате".localized
     }
 
+    private static let composerSpace = "shum.composer"
+
     @ViewBuilder
     private var composer: some View {
         VStack(spacing: 8) {
@@ -207,6 +212,9 @@ struct ShumConversationView: View {
                 addContactShortcut
             }
             composerControl
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.composerSpace)).minY } action: {
+                    capsuleInset = $0
+                }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
@@ -214,6 +222,7 @@ struct ShumConversationView: View {
         // The timeline pins the composer to the keyboard layout guide.
         // A fixed gap avoids a second, mismatched animation of the composer.
         .padding(.bottom, 8)
+        .coordinateSpace(name: Self.composerSpace)
         .animation(.easeOut(duration: 0.2), value: invitationPhase)
     }
 

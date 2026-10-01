@@ -722,3 +722,14 @@
 "Реакции: %@" = "Reacciones: %@";
 "Убрать реакцию" = "Quitar reacción";
 "Нажмите ещё раз, чтобы убрать реакцию" = "Toca otra vez para quitar tu reacción";
+"Как работает связь" = "Cómo se conecta Shum";
+"Сообщения шифруются на вашем телефоне ещё до отправки. Прочитать их может только собеседник: ни ретрансляторы, ни сервер уведомлений текста не видят." = "Los mensajes se cifran en tu teléfono antes de enviarse. Solo la persona con la que hablas puede leerlos: ni los repetidores ni el servidor de notificaciones ven el texto.";
+"Рядом по Bluetooth" = "Cerca por Bluetooth";
+"Если собеседник рядом, сообщения идут напрямую с телефона на телефон, интернет для этого не нужен. Другие телефоны с Shum могут передать сообщение дальше, не видя его текста." = "Si la otra persona está cerca, los mensajes van directamente de teléfono a teléfono, sin necesidad de internet. Otros teléfonos con Shum pueden pasar el mensaje sin ver su texto.";
+"На расстоянии через Nostr" = "A distancia con Nostr";
+"Через интернет сообщения передаются через независимые ретрансляторы открытой сети Nostr. У неё нет единого владельца, а ретрансляторы получают только зашифрованные пакеты." = "Por internet, los mensajes pasan por repetidores independientes de la red abierta Nostr. No tiene un único dueño y los repetidores solo reciben paquetes cifrados.";
+"Nostr подключён" = "Nostr conectado";
+"Shum на связи с ретрансляторами. Сообщения доставляются через интернет, даже если собеседник далеко." = "Shum está conectado a los repetidores. Los mensajes se entregan por internet, aunque la otra persona esté lejos.";
+"Ожидаем сеть" = "Esperando conexión";
+"Сейчас нет связи с ретрансляторами. Как только появится интернет, Shum подключится сам и отправит сообщения из очереди. Рядом Bluetooth работает и без сети." = "Ahora no hay conexión con los repetidores. En cuanto vuelva internet, Shum se conectará solo y enviará los mensajes en cola. Cerca, Bluetooth funciona sin red.";
+"Узнать, как работает связь" = "Saber cómo se conecta Shum";

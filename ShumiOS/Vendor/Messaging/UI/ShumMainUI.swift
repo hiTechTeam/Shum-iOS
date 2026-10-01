@@ -45,6 +45,7 @@ struct ShumChatsUI: View {
     let open: (ShumUIRoute) -> Void
     @State private var folder: ShumChatFolder = .all
     @State private var showsNewMessage = false
+    @State private var showsNetworkInfo = false
 
     private var entries: [ShumDirectoryEntry] { runtime.directoryEntries }
     private var visible: [ShumDirectoryEntry] {
@@ -88,16 +89,24 @@ struct ShumChatsUI: View {
         }
         .refreshable { runtime.tick() }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "lock.fill")
-                Text(runtime.internetConnected
-                     ? "Сквозное шифрование · Nostr подключён".localized
-                     : "Сквозное шифрование · Ожидаем сеть".localized)
+            Button { showsNetworkInfo = true } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.fill")
+                    Text(runtime.internetConnected
+                         ? "Сквозное шифрование · Nostr подключён".localized
+                         : "Сквозное шифрование · Ожидаем сеть".localized)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(8)
+                .contentShape(Rectangle())
             }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .padding(8)
+            .buttonStyle(.plain)
+            .accessibilityHint("Узнать, как работает связь".localized)
         }
+        .sheet(isPresented: $showsNetworkInfo) { ShumNetworkInfoSheet(runtime: runtime) }
         .background(ShumThemeCanvas().ignoresSafeArea())
         .navigationTitle("Чаты".localized)
         .navigationBarTitleDisplayMode(.inline)

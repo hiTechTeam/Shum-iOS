@@ -724,3 +724,14 @@
 "Реакции: %@" = "Reações: %@";
 "Убрать реакцию" = "Remover reação";
 "Нажмите ещё раз, чтобы убрать реакцию" = "Toque de novo para remover sua reação";
+"Как работает связь" = "Como o Shum se conecta";
+"Сообщения шифруются на вашем телефоне ещё до отправки. Прочитать их может только собеседник: ни ретрансляторы, ни сервер уведомлений текста не видят." = "As mensagens são criptografadas no seu celular antes do envio. Só a pessoa com quem você conversa pode lê-las: nem os retransmissores nem o servidor de notificações veem o texto.";
+"Рядом по Bluetooth" = "Perto via Bluetooth";
+"Если собеседник рядом, сообщения идут напрямую с телефона на телефон, интернет для этого не нужен. Другие телефоны с Shum могут передать сообщение дальше, не видя его текста." = "Se a outra pessoa estiver perto, as mensagens vão direto de celular para celular, sem internet. Outros celulares com Shum podem repassar a mensagem sem ver o texto.";
+"На расстоянии через Nostr" = "À distância via Nostr";
+"Через интернет сообщения передаются через независимые ретрансляторы открытой сети Nostr. У неё нет единого владельца, а ретрансляторы получают только зашифрованные пакеты." = "Pela internet, as mensagens passam por retransmissores independentes da rede aberta Nostr. Ela não tem um dono único, e os retransmissores só recebem pacotes criptografados.";
+"Nostr подключён" = "Nostr conectado";
+"Shum на связи с ретрансляторами. Сообщения доставляются через интернет, даже если собеседник далеко." = "O Shum está conectado aos retransmissores. As mensagens são entregues pela internet, mesmo que a outra pessoa esteja longe.";
+"Ожидаем сеть" = "Aguardando rede";
+"Сейчас нет связи с ретрансляторами. Как только появится интернет, Shum подключится сам и отправит сообщения из очереди. Рядом Bluetooth работает и без сети." = "No momento não há conexão com os retransmissores. Assim que a internet voltar, o Shum se conecta sozinho e envia as mensagens da fila. Perto, o Bluetooth funciona sem rede.";
+"Узнать, как работает связь" = "Saiba como o Shum se conecta";
