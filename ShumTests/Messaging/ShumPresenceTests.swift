@@ -394,6 +394,51 @@ struct ShumReactionTests {
         #expect(b.service.reaction(of: a.card.id, on: id) == .hundred)
     }
 
+    @Test func reactionToContactsMessagePushesOnceAfterADelay() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, _, _, id) = try makeChat(clock: clock)
+        var pushes: [(String, ShumPushKind)] = []
+        a.service.requestPush = { _, event, kind in pushes.append((event, kind)) }
+
+        #expect(a.service.toggleReaction(.heart, on: id))
+        a.service.tick(connected: [], active: true)
+        #expect(pushes.isEmpty) // The user may still change their mind.
+        clock.date.addTimeInterval(1)
+        #expect(a.service.toggleReaction(.fire, on: id))
+        clock.date.addTimeInterval(ShumMessageStore.reactionPushDelay + 1)
+        a.service.tick(connected: [], active: true)
+        #expect(pushes.map(\.0) == [id])
+        #expect(pushes.map(\.1) == [.reaction])
+    }
+
+    @Test func reactionTakenBackInTimeSendsNoPush() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, _, _, id) = try makeChat(clock: clock)
+        var pushes = 0
+        a.service.requestPush = { _, _, _ in pushes += 1 }
+
+        #expect(a.service.toggleReaction(.laugh, on: id))
+        clock.date.addTimeInterval(1)
+        #expect(a.service.toggleReaction(.laugh, on: id))
+        clock.date.addTimeInterval(ShumMessageStore.reactionPushDelay + 1)
+        a.service.tick(connected: [], active: true)
+        #expect(pushes == 0)
+    }
+
+    @Test func reactionToOwnMessageSendsNoPushAndBackgroundingSendsHeldOne() throws {
+        let clock = ShumPermanentTests.Clock()
+        let (a, b, _, id) = try makeChat(clock: clock)
+        var pushes: [String] = []
+        a.service.requestPush = { _, event, kind in if kind == .reaction { pushes.append(event) } }
+        #expect(a.service.send("Моё", to: b.card))
+        let own = try #require(a.service.state.messages.last { $0.outgoing }).id
+        #expect(a.service.toggleReaction(.hundred, on: own))
+        #expect(a.service.toggleReaction(.coffin, on: id))
+
+        a.service.setActive(false)
+        #expect(pushes == [id])
+    }
+
     @Test func reactionToAnotherChatIsIgnored() throws {
         let clock = ShumPermanentTests.Clock()
         let (a, _, _, id) = try makeChat(clock: clock)

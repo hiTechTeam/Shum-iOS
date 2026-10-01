@@ -17,6 +17,8 @@ final class ShumMessageStore: ObservableObject {
     // A nearby contact gets the message over Bluetooth and shows its own
     // notification; the push waits this long for that delivery first.
     static let directDeliveryPushDelay: TimeInterval = 8
+    // A reaction changed or taken back within this time sends no push.
+    static let reactionPushDelay: TimeInterval = 5
     @Published private(set) var revision = 0
     let store: ShumConversationStore
     let contacts: ShumContactsService
@@ -56,6 +58,8 @@ final class ShumMessageStore: ObservableObject {
     }
     /// Pushes held while a Bluetooth delivery to a nearby contact may still finish.
     private var heldPushes: [String: (recipientID: String, due: Date)] = [:]
+    /// Keyed by the reacted message, so a message gets at most one push.
+    private var heldReactionPushes: [String: (recipientID: String, eventID: String, due: Date)] = [:]
     private var backgroundFetchTask: Task<Void, Never>?
     private var backgroundFetchCompletions:
         [(eventID: String, completion: (Bool) -> Void)] = []
@@ -148,6 +152,7 @@ final class ShumMessageStore: ObservableObject {
     }
     private func containsRemoteEvent(_ eventID: String) -> Bool {
         state.messages.contains { !$0.outgoing && $0.id == eventID }
+            || state.reactions?[eventID]?.contains { $0.key != ownCard.id && $0.value.reaction != nil } == true
             || state.invitationStates?.values.contains {
                 $0.eventID == eventID
             } == true
@@ -183,6 +188,7 @@ final class ShumMessageStore: ObservableObject {
         foreground = false
         // A suspended app cannot wait for the Bluetooth receipt any longer.
         sendHeldPushes(force: true)
+        sendHeldReactionPushes(force: true)
         // Keep the relay connection until it accepts "left"; cutting it in
         // the same moment dropped the signal and left a stale "in chat".
         let flushID = UUID()
@@ -910,6 +916,12 @@ final class ShumMessageStore: ObservableObject {
                 state.reactionOutbox?.removeAll { $0.control.messageID == messageID }
                 state.reactionOutbox?.append(ShumStoredReaction(control: control))
             }
+            // Only a reaction to the contact's own message is worth a push.
+            if next != nil, !message.outgoing {
+                heldReactionPushes[messageID] = (contact.id, control.id, now().addingTimeInterval(Self.reactionPushDelay))
+            } else {
+                heldReactionPushes.removeValue(forKey: messageID)
+            }
             changed(); route(\.reactionOutbox); return true
         } catch { fail(error); return false }
     }
@@ -963,6 +975,7 @@ final class ShumMessageStore: ObservableObject {
             changed()
         }
         sendHeldPushes(force: false)
+        sendHeldReactionPushes(force: false)
         if localSessionID != transport.myPeerID {
             localSessionID = transport.myPeerID
             helloTimes.removeAll()
@@ -1581,6 +1594,16 @@ final class ShumMessageStore: ObservableObject {
             }
         } catch { fail(error) }
     }
+    /// Sends a reaction push only if that exact reaction is still there. The
+    /// message identifier is the event, so a later change replaces the alert.
+    private func sendHeldReactionPushes(force: Bool) {
+        for (messageID, held) in heldReactionPushes where force || now() >= held.due {
+            heldReactionPushes.removeValue(forKey: messageID)
+            guard let mark = state.reactions?[messageID]?[ownCard.id],
+                  mark.eventID == held.eventID, mark.reaction != nil else { continue }
+            requestPush(held.recipientID, messageID, .reaction)
+        }
+    }
     /// Sends a held push only if the Bluetooth delivery did not finish in time.
     private func sendHeldPushes(force: Bool) {
         for (id, held) in heldPushes where force || now() >= held.due {
@@ -1731,6 +1754,7 @@ final class ShumMessageStore: ObservableObject {
         for pending in pendingFetches { pending.completion(false) }
         retired = true; foreground = false; activeContact = nil
         heldPushes.removeAll()
+        heldReactionPushes.removeAll()
         internet?.received = nil; internet?.stop()
         nearby.removeAll(); helloTimes.removeAll(); ingressRate.removeAll()
         typingDeadlines.removeAll(); latestTypingEvents.removeAll(); lastTypingSent.removeAll()

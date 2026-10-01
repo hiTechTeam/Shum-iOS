@@ -17,6 +17,14 @@ private struct ShumMessageBubbleSurface: ViewModifier {
             }
     }
 }
+/// Names and avatars shown next to reactions, so it is clear who left each one.
+struct ShumReactionPeople {
+    var myName = ""
+    var myAvatar: Data?
+    var peerName = ""
+    var peerAvatar: Data?
+}
+
 struct ShumMessageBubble: View {
     let message: ShumMessage
     var showsTail = true
@@ -27,6 +35,7 @@ struct ShumMessageBubble: View {
     var cancelSending: () -> Void = {}
     /// Nil where the message cannot take reactions, such as an archived chat.
     var react: ((ShumReaction) -> Void)?
+    var reactionPeople = ShumReactionPeople()
     var openReply: (String) -> Void = { _ in }
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.shumThemePalette) private var themePalette
@@ -42,13 +51,11 @@ struct ShumMessageBubble: View {
             ZStack(alignment: .trailing) {
                 replyGestureIndicator
                 bubble
-                    .overlay(alignment: .bottomLeading) { reactionsPill.offset(x: 10, y: 15) }
                     .frame(maxWidth: maximumWidth, alignment: message.outgoing ? .trailing : .leading)
                     .frame(maxWidth: .infinity, alignment: message.outgoing ? .trailing : .leading)
                     .offset(x: horizontalOffset)
             }
             .frame(maxWidth: .infinity)
-            .padding(.bottom, hasReactions ? 17 : 0)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(
                 Text(
@@ -132,12 +139,17 @@ struct ShumMessageBubble: View {
                 .buttonStyle(.plain)
             }
 
-            ShumBubbleLayout(inline: !message.text.contains("\n")) {
-                Text(message.text).font(.body).foregroundStyle(.primary)
-                HStack(spacing: 4) {
-                    Text(message.date, style: .time).monospacedDigit()
-                    if message.outgoing { receipt }
-                }.font(.system(size: 11)).foregroundStyle(metadataColor)
+            if hasReactions {
+                ShumReactedBubbleLayout {
+                    Text(message.text).font(.body).foregroundStyle(.primary)
+                    reactionChips
+                    metadata
+                }
+            } else {
+                ShumBubbleLayout(inline: !message.text.contains("\n")) {
+                    Text(message.text).font(.body).foregroundStyle(.primary)
+                    metadata
+                }
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
@@ -167,31 +179,52 @@ struct ShumMessageBubble: View {
         return names.isEmpty ? "" : String.localizedFormat("Реакции: %@".localized, names.joined(separator: ", "))
     }
 
-    /// Hangs from the bottom edge of the bubble. Tapping your own reaction takes it back.
-    @ViewBuilder private var reactionsPill: some View {
-        if hasReactions {
-            let same = message.myReaction == message.theirReaction
-            Button {
-                if let react, let mine = message.myReaction { react(mine) }
-            } label: {
-                HStack(spacing: 3) {
-                    if let theirs = message.theirReaction { ShumReactionIcon(reaction: theirs) }
-                    if let mine = message.myReaction, !same { ShumReactionIcon(reaction: mine) }
-                    if same {
-                        ShumReactionIcon(reaction: message.myReaction!)
-                        Text("2").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+    private var metadata: some View {
+        HStack(spacing: 4) {
+            Text(message.date, style: .time).monospacedDigit()
+            if message.outgoing { receipt }
+        }.font(.system(size: 11)).foregroundStyle(metadataColor)
+    }
+
+    /// One chip per reaction with the avatar of whoever left it. The same
+    /// reaction from both people shares one chip with both avatars.
+    private var reactionChips: some View {
+        HStack(spacing: 6) {
+            if let theirs = message.theirReaction, theirs == message.myReaction {
+                reactionChip(theirs, people: [false, true])
+            } else {
+                if let theirs = message.theirReaction { reactionChip(theirs, people: [false]) }
+                if let mine = message.myReaction { reactionChip(mine, people: [true]) }
+            }
+        }
+    }
+
+    /// `people` holds `true` for the user. The user's chip is outlined and
+    /// takes the reaction back when tapped; the contact's is only shown.
+    private func reactionChip(_ reaction: ShumReaction, people: [Bool]) -> some View {
+        let mine = people.contains(true)
+        return Button {
+            if mine, let react { react(reaction) }
+        } label: {
+            HStack(spacing: 4) {
+                ShumReactionIcon(reaction: reaction, size: 18)
+                HStack(spacing: -6) {
+                    ForEach(people.indices, id: \.self) { index in
+                        let me = people[index]
+                        ShumAvatar(name: me ? reactionPeople.myName : reactionPeople.peerName, size: 18,
+                                   imageData: me ? reactionPeople.myAvatar : reactionPeople.peerAvatar)
+                            .overlay(Circle().stroke(bubbleColor, lineWidth: index > 0 ? 1.5 : 0))
                     }
                 }
-                .padding(.horizontal, 7).padding(.vertical, 5)
-                .background(Color(.tertiarySystemBackground), in: Capsule())
-                .overlay(Capsule().strokeBorder(themePalette.canvas, lineWidth: 2))
-                .contentShape(Capsule())
             }
-            .buttonStyle(.plain)
-            .disabled(message.myReaction == nil || react == nil)
-            .accessibilityHidden(true)
-            .transition(.scale(scale: 0.6).combined(with: .opacity))
+            .padding(.leading, 6).padding(.trailing, 3).padding(.vertical, 3)
+            .background(Capsule().fill(mine ? themePalette.accent.opacity(message.outgoing ? 0.32 : 0.22)
+                                            : Color.primary.opacity(0.1)))
+            .overlay(Capsule().strokeBorder(mine ? themePalette.accent : .clear, lineWidth: 1.2))
+            .contentShape(Capsule())
         }
+        .buttonStyle(.plain)
+        .allowsHitTesting(mine && react != nil)
     }
 
     /// Offered exactly while the clock icon shows the message is in transit.
@@ -291,6 +324,34 @@ struct ShumBubbleLayout: Layout {
         let (text, meta, _) = metrics(ProposedViewSize(width: bounds.width, height: bounds.height), subviews)
         subviews[0].place(at: bounds.origin, proposal: ProposedViewSize(text))
         subviews[1].place(at: CGPoint(x: bounds.maxX - meta.width, y: bounds.maxY - meta.height), proposal: ProposedViewSize(meta))
+    }
+}
+
+/// Text on top; below it the reaction chips on the leading side and the time
+/// on the trailing side. The bubble is only as wide as its widest row.
+struct ShumReactedBubbleLayout: Layout {
+    private let spacing: CGFloat = 6
+    private func metrics(_ proposal: ProposedViewSize, _ subviews: Subviews) -> (text: CGSize, chips: CGSize, meta: CGSize, width: CGFloat) {
+        let limit = max(1, proposal.width ?? 300)
+        let chips = roundedUp(subviews[1].sizeThatFits(.unspecified))
+        let meta = roundedUp(subviews[2].sizeThatFits(.unspecified))
+        let ideal = roundedUp(subviews[0].sizeThatFits(.unspecified))
+        let text = roundedUp(subviews[0].sizeThatFits(ProposedViewSize(width: min(limit, ideal.width), height: nil)))
+        return (text, chips, meta, min(limit, max(text.width, chips.width + 10 + meta.width)))
+    }
+    private func roundedUp(_ size: CGSize) -> CGSize {
+        CGSize(width: ceil(size.width), height: ceil(size.height))
+    }
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let m = metrics(proposal, subviews)
+        return CGSize(width: m.width, height: m.text.height + spacing + max(m.chips.height, m.meta.height))
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let m = metrics(ProposedViewSize(width: bounds.width, height: bounds.height), subviews)
+        subviews[0].place(at: bounds.origin, proposal: ProposedViewSize(m.text))
+        let row = max(m.chips.height, m.meta.height), y = bounds.minY + m.text.height + spacing
+        subviews[1].place(at: CGPoint(x: bounds.minX, y: y + (row - m.chips.height) / 2), proposal: ProposedViewSize(m.chips))
+        subviews[2].place(at: CGPoint(x: bounds.maxX - m.meta.width, y: y + (row - m.meta.height) / 2), proposal: ProposedViewSize(m.meta))
     }
 }
 

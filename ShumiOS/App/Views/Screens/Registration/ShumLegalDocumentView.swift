@@ -117,7 +117,7 @@ private extension ShumLegalDocument {
         case (.privacy, true):
             return ShumLegalContent(
                 title: "Политика конфиденциальности".localized,
-                updatedAt: "Обновлено 29 сентября 2026 года".localized,
+                updatedAt: "Обновлено 1 октября 2026 года".localized,
                 introduction: "В Shum нет центрального сервера учётных записей. Для работы не нужны номер телефона, адрес электронной почты или внешний аккаунт.".localized,
                 sections: [
                     ShumLegalSection(
@@ -134,9 +134,9 @@ private extension ShumLegalDocument {
                     ShumLegalSection(
                         title: "Уведомления".localized,
                         paragraphs: [
-                            "Чтобы сообщать о новых сообщениях и приглашениях, когда приложение закрыто, Shum использует сервер уведомлений, которым управляют разработчики Shum, и службу Apple Push Notification service.".localized,
+                            "Чтобы сообщать о новых сообщениях, приглашениях и реакциях, когда приложение закрыто, Shum использует сервер уведомлений, которым управляют разработчики Shum, и службу Apple Push Notification service.".localized,
                             "При запуске приложение регистрирует устройство на сервере уведомлений, в том числе если показ уведомлений отключён в настройках iOS. Сервер получает подписанную карточку профиля (имя, описание профиля и публичные ключи), токен push-уведомлений устройства и версию приложения. Хранится только связь между идентификатором профиля и токеном устройства.".localized,
-                            "Когда вы отправляете сообщение или приглашение, приложение передаёт серверу вашу карточку, идентификатор получателя и тип события. Поэтому при обработке запроса сервер знает, какому профилю вы отправили уведомление. Эти сведения не сохраняются. Получатель видит уведомление без текста сообщения. Сервер не получает текст сообщений, фотографии и список контактов.".localized,
+                            "Когда вы отправляете сообщение, приглашение или реакцию, приложение передаёт серверу вашу карточку, идентификатор получателя и тип события. Поэтому при обработке запроса сервер знает, какому профилю вы отправили уведомление. Эти сведения не сохраняются. Получатель видит в уведомлении ваше имя, но не текст сообщения и не выбранную реакцию. Имя вместе с уведомлением передаётся службе Apple Push Notification service. Сервер не получает текст сообщений, фотографии и список контактов.".localized,
                             "Сервер использует IP-адрес запроса только для ограничения частоты запросов и не сохраняет его. Инфраструктура хостинга может вести технические журналы соединений.".localized
                         ]
                     ),
@@ -211,7 +211,7 @@ private extension ShumLegalDocument {
         case (.privacy, false):
             return ShumLegalContent(
                 title: "Privacy Policy",
-                updatedAt: "Updated September 29, 2026",
+                updatedAt: "Updated October 1, 2026",
                 introduction: "Shum is a messenger without a central account server. It does not require a phone number, email address, or external account.",
                 sections: [
                     ShumLegalSection(
@@ -228,9 +228,9 @@ private extension ShumLegalDocument {
                     ShumLegalSection(
                         title: "Notifications",
                         paragraphs: [
-                            "To tell you about new messages and invitations while the app is closed, Shum uses a notification server operated by the Shum developers and the Apple Push Notification service.",
+                            "To tell you about new messages, invitations, and reactions while the app is closed, Shum uses a notification server operated by the Shum developers and the Apple Push Notification service.",
                             "When the app starts, it registers the device with the notification server, even if notifications are turned off in iOS Settings. The server receives your signed profile card (name, profile description, and public keys), the device push token, and the app version. Only the link between the profile identifier and the device token is stored.",
-                            "When you send a message or an invitation, the app sends the server your card, the recipient's identifier, and the event type. While processing the request, the server therefore knows which profile you notified. This information is not stored. The recipient sees a notification without the message text. The server does not receive message text, photos, or your contact list.",
+                            "When you send a message, an invitation, or a reaction, the app sends the server your card, the recipient's identifier, and the event type. While processing the request, the server therefore knows which profile you notified. This information is not stored. The recipient sees your name in the notification, but not the message text or the chosen reaction. Your name is passed to the Apple Push Notification service together with the notification. The server does not receive message text, photos, or your contact list.",
                             "The server uses the request's IP address only to limit the request rate and does not store it. The hosting infrastructure may keep technical connection logs."
                         ]
                     ),

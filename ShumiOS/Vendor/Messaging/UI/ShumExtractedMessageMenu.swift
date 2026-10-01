@@ -20,6 +20,9 @@ final class ShumExtractedMessageMenu: UIView {
     private var initialSize = CGSize.zero
     private var targetBubbleFrame = CGRect.zero
     private var dismissalTouch: MessageDismissalTouch?
+    /// Runs once the bubble is back in its row, so a row that grows for a new
+    /// reaction does not move under a bubble still travelling back.
+    private var afterRestore: (() -> Void)?
 
     private static let reactionSize: CGFloat = 36
     private static let reactionSpacing: CGFloat = 2
@@ -156,8 +159,8 @@ final class ShumExtractedMessageMenu: UIView {
         }
         button.addAction(UIAction { [weak self] _ in
             UISelectionFeedbackGenerator().selectionChanged()
+            self?.afterRestore = action
             self?.dismiss(animated: true)
-            action()
         }, for: .touchUpInside)
         return button
     }
@@ -294,6 +297,9 @@ final class ShumExtractedMessageMenu: UIView {
         source?.accessibilityElementsHidden = false
         restore()
         UIAccessibility.post(notification: .layoutChanged, argument: source)
+        let action = afterRestore
+        afterRestore = nil
+        action?()
     }
 }
 
