@@ -20,6 +20,7 @@ struct ShumContactsView: View {
     var select: (ShumPeer) -> Void
     @Environment(\.dismiss) private var dismiss
     @ScaledMetric(relativeTo: .body) private var sheetHeight = 280
+    @ScaledMetric(relativeTo: .body) private var rowHeight = 50
     @State private var showQR = false
     @State private var showScanner = false
     @State private var showPhoneBook = false
@@ -40,7 +41,9 @@ struct ShumContactsView: View {
                     } label: {
                         Label("Мой QR-код".localized, systemImage: "qrcode")
                     }
-                    Button { showPhoneBook = true } label: { Label("Пригласить".localized, systemImage: "person.badge.plus") }
+                    if ShumInviteLinks.isEnabled {
+                        Button { showPhoneBook = true } label: { Label("Пригласить".localized, systemImage: "person.badge.plus") }
+                    }
                 }
             }
             .listStyle(.insetGrouped)
@@ -103,7 +106,7 @@ struct ShumContactsView: View {
             }
         }
         .tint(palette.accent)
-        .presentationDetents([.height(sheetHeight)])
+        .presentationDetents([.height(ShumInviteLinks.isEnabled ? sheetHeight : sheetHeight - rowHeight)])
         .presentationDragIndicator(.visible)
     }
     private func open(_ card: ShumContactCard, source: String) {

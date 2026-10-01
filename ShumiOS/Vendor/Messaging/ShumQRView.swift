@@ -2,6 +2,13 @@
 import CoreImage.CIFilterBuiltins
 import SwiftUI
 
+/// Invitation links open a web page that sends people to install Shum. Until
+/// Shum is on the App Store that page has nowhere proper to send them, so
+/// contacts are added only by QR code. Turn this on after the release.
+enum ShumInviteLinks {
+    static let isEnabled = false
+}
+
 private struct ShumQRShareToolbar: ToolbarContent {
     let invitationURL: URL
 
@@ -88,7 +95,7 @@ struct ShumQRView: View {
         .navigationTitle("QR-код".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let invitationURL = try? card.sharingInvitation() {
+            if ShumInviteLinks.isEnabled, let invitationURL = try? card.sharingInvitation() {
                 ShumQRShareToolbar(invitationURL: invitationURL)
             }
         }

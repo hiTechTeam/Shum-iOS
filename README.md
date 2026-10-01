@@ -14,7 +14,7 @@
 - Резервные копии профиля и переписки.
 - Код приложения и биометрия для входа, переписки скрыты в переключателе приложений.
 - Пиксельный аватар создаётся на устройстве из короткого кода. Его можно менять, не загружая фотографию.
-- QR-код и ссылка «Поделиться» уже содержат ваше имя и аватар, поэтому контакт добавляется без интернета, даже если вы не в сети. Изменения профиля передаются сохранённым контактам при появлении связи.
+- QR-код уже содержит ваше имя и аватар, поэтому контакт добавляется без интернета, даже если вы не в сети. Изменения профиля передаются сохранённым контактам при появлении связи.
 
 Сохранение контакта не открывает переписку автоматически: приглашение в чат принимается отдельно.
 
@@ -34,7 +34,7 @@ Meet people nearby and stay connected over distance. No phone number is needed.
 - Backups of your profile and conversations.
 - App passcode and biometric unlock; chats are hidden in the app switcher.
 - A pixel avatar generated on your device from a small seed. You can change it without uploading a photo.
-- Your QR code and shared link already contain your name and avatar, so a contact can be added without internet access, even while you are offline. Profile changes reach saved contacts when a connection is available.
+- Your QR code already contains your name and avatar, so a contact can be added without internet access, even while you are offline. Profile changes reach saved contacts when a connection is available.
 
 Saving a contact does not automatically accept a chat invitation.
 
