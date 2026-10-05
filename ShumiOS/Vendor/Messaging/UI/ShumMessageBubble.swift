@@ -200,11 +200,11 @@ struct ShumMessageBubble: View {
     }
 
     /// `people` holds `true` for the user. The user's chip is outlined and
-    /// takes the reaction back when tapped; the contact's is only shown.
+    /// takes the reaction back when tapped; the contact's sets the same reaction.
     private func reactionChip(_ reaction: ShumReaction, people: [Bool]) -> some View {
         let mine = people.contains(true)
         return Button {
-            if mine, let react { react(reaction) }
+            react?(reaction)
         } label: {
             HStack(spacing: 4) {
                 ShumReactionIcon(reaction: reaction, size: 18)
@@ -224,7 +224,7 @@ struct ShumMessageBubble: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .allowsHitTesting(mine && react != nil)
+        .allowsHitTesting(react != nil)
     }
 
     /// Offered exactly while the clock icon shows the message is in transit.

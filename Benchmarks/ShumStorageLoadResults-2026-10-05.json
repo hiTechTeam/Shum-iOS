@@ -1,0 +1,902 @@
+{
+  "date": "2026-10-05",
+  "device": "iPhone 11 (iPhone12,1)",
+  "ios": "26.6.2",
+  "configuration": "Release",
+  "swift_optimization": "-O whole-module-optimization",
+  "enable_testability": true,
+  "code_coverage": false,
+  "git_branch": "main",
+  "git_head": "dfcfa0e218115338c4c7524159b63a4a679cc169",
+  "working_tree": "Includes uncommitted build 25 performance and UI fixes.",
+  "host_bundle_id": "hiTeam.ShumLoadBenchmark.Shum",
+  "integrity_checks": "All three cases passed: message counts, read flags, signed receipt creation, cache persistence and encrypted restoration.",
+  "performance_assessment": "Growing histories cause unacceptable MainActor blocking. Integrity success does not mean the performance gate passed.",
+  "methodology": [
+    "Separate app sandbox and temporary synthetic database; real user history was not used.",
+    "Histories contain 1000, 5000, 10000 genuinely encrypted and signed text messages, about 230 Cyrillic characters each, one conversation, mixed incoming/outgoing.",
+    "Production JSON encoding, ChaChaPoly encryption and atomic disk persistence.",
+    "Restore measures complete decrypt/decode with warmed filesystem caches, not total cold app launch.",
+    "Network transport is simulated. Relay confirmations run immediately on MainActor, concentrating send bookkeeping and acknowledgement writes into one operation. Burst and loaded-resume peaks are conservative stress measurements, not live-network timings.",
+    "A queued MainActor probe follows each synchronous operation. Its delay measures main-thread blocking, not display frame times.",
+    "Burst: 20 valid new packets; outgoing read ACKs: 20 signed packets; duplicate fallback: 20 application packets, deliberately bypassing the earlier Nostr event filter.",
+    "Timeline uses the production controller and SwiftUI text rows, not complete message bubbles or attachment rendering.",
+    "One device run; sample counts are stored per metric. A p95 of 20 samples equals the maximum sample.",
+    "Nostr cache lookup timings include assertion overhead.",
+    "Release testability enabled; two legacy Debug-only suites excluded only in this benchmark build."
+  ],
+  "command": "xcodebuild -project ShumiOS.xcodeproj -scheme Shum -configuration Release -xcconfig /tmp/shum-load-release.xcconfig -destination 'platform=iOS,id=${DEVICE_UDID}' -allowProvisioningUpdates -disableAutomaticPackageResolution -enableCodeCoverage NO -parallel-testing-enabled NO -only-testing:ShumTests/ShumStorageLoadTests test",
+  "xcconfig": "PRODUCT_BUNDLE_IDENTIFIER = hiTeam.ShumLoadBenchmark.$(PRODUCT_NAME:rfc1034identifier)\nCODE_SIGN_ENTITLEMENTS =\nENABLE_TESTABILITY = YES\nSWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) SHUM_LOAD_TESTS\nEXCLUDED_SOURCE_FILE_NAMES = $(inherited) NostrProtocolTests.swift ShumIntegrationTests.swift\n",
+  "metrics": [
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 37.07904159091413,
+      "median_ms": 36.66570829227567,
+      "messages": 1000,
+      "operation": "restore_decrypt_decode",
+      "os": "26.6.2",
+      "p95_ms": 37.07904159091413,
+      "samples": [
+        36.66570829227567,
+        36.32499999366701,
+        37.07904159091413
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 34.40212504938245,
+      "median_ms": 34.40212504938245,
+      "messages": 1000,
+      "operation": "encode_entire_snapshot_json",
+      "os": "26.6.2",
+      "p95_ms": 34.40212504938245,
+      "samples": [
+        34.40212504938245
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 7.008500047959387,
+      "median_ms": 7.008500047959387,
+      "messages": 1000,
+      "operation": "encrypt_entire_snapshot",
+      "os": "26.6.2",
+      "p95_ms": 7.008500047959387,
+      "samples": [
+        7.008500047959387
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 50.537750008516014,
+      "median_ms": 50.537750008516014,
+      "messages": 1000,
+      "operation": "persist_one_metadata_change_full_database",
+      "os": "26.6.2",
+      "p95_ms": 50.537750008516014,
+      "samples": [
+        50.537750008516014
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 122.78774997685105,
+      "median_ms": 122.78774997685105,
+      "messages": 1000,
+      "operation": "service_init_and_initial_projection",
+      "os": "26.6.2",
+      "p95_ms": 122.78774997685105,
+      "samples": [
+        122.78774997685105
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 54.18691667728126,
+      "median_ms": 1.2180417543277144,
+      "messages": 1000,
+      "operation": "background_foreground_idle",
+      "os": "26.6.2",
+      "p95_ms": 54.18691667728126,
+      "samples": [
+        54.18691667728126,
+        1.3576666824519634,
+        1.1341250501573086,
+        1.127874944359064,
+        1.2180417543277144
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 248.45770839601755,
+      "median_ms": 248.45770839601755,
+      "messages": 1000,
+      "operation": "open_chat_mark_20_read",
+      "os": "26.6.2",
+      "p95_ms": 248.45770839601755,
+      "samples": [
+        248.45770839601755
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 36.35974996723235,
+      "median_ms": 36.35974996723235,
+      "messages": 1000,
+      "operation": "timeline_text_rows_initial_layout",
+      "os": "26.6.2",
+      "p95_ms": 36.35974996723235,
+      "samples": [
+        36.35974996723235
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 1126.7333750147372,
+      "median_ms": 337.2302500065416,
+      "messages": 1000,
+      "operation": "incoming_message_crypto_disk_projection",
+      "os": "26.6.2",
+      "p95_ms": 1126.7333750147372,
+      "samples": [
+        1075.5579583346844,
+        1126.7333750147372,
+        1104.8340833513066,
+        419.5739165879786,
+        349.7640833957121,
+        331.78004168439656,
+        332.12262496817857,
+        330.43695823289454,
+        338.4897083742544,
+        327.4327917024493,
+        329.7386666527018,
+        335.70329169742763,
+        331.66999998502433,
+        330.9819999849424,
+        338.4133749641478,
+        337.4788750661537,
+        335.54812509100884,
+        334.1912083560601,
+        343.19733327720314,
+        337.2302500065416
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 1126.9121250370517,
+      "median_ms": 337.4007917009294,
+      "messages": 1000,
+      "operation": "incoming_main_actor_queue_delay",
+      "os": "26.6.2",
+      "p95_ms": 1126.9121250370517,
+      "samples": [
+        1076.1165416333824,
+        1126.9121250370517,
+        1105.0024166470394,
+        419.75004167761654,
+        349.92629173211753,
+        331.9469166453928,
+        332.29541673790663,
+        330.6065833894536,
+        338.6510834097862,
+        327.59695826098323,
+        329.91108333226293,
+        335.88625001721084,
+        331.9161250256002,
+        331.16687496658415,
+        338.6001249309629,
+        337.6430833013728,
+        335.71849996224046,
+        334.3540832865983,
+        343.3604167075828,
+        337.4007917009294
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 9096.49124997668,
+      "median_ms": 9096.49124997668,
+      "messages": 1000,
+      "operation": "incoming_burst_20_total",
+      "os": "26.6.2",
+      "p95_ms": 9096.49124997668,
+      "samples": [
+        9096.49124997668
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 185.82966667599976,
+      "median_ms": 181.79699999745935,
+      "messages": 1000,
+      "operation": "outgoing_read_ack_disk_projection",
+      "os": "26.6.2",
+      "p95_ms": 185.82966667599976,
+      "samples": [
+        178.74962510541081,
+        181.2189583433792,
+        181.79699999745935,
+        182.31499998364598,
+        177.72808333393186,
+        177.63520835433155,
+        178.0344167491421,
+        177.54833330400288,
+        183.0262083094567,
+        182.45991657022387,
+        182.5826249551028,
+        183.68258327245712,
+        183.15604177769274,
+        181.47575005423278,
+        180.7027499889955,
+        183.31708328332752,
+        179.65408333111554,
+        184.41454169806093,
+        179.98300003819168,
+        185.82966667599976
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 1.280666678212583,
+      "median_ms": 1.2376250233501196,
+      "messages": 1000,
+      "operation": "duplicate_packet_receipt_fallback",
+      "os": "26.6.2",
+      "p95_ms": 1.280666678212583,
+      "samples": [
+        1.2800833210349083,
+        1.2367499293759465,
+        1.2295834021642804,
+        1.2279165675863624,
+        1.2737916549667716,
+        1.2417082907631993,
+        1.2303749099373817,
+        1.2298333458602428,
+        1.276958268135786,
+        1.237083226442337,
+        1.2312916805967689,
+        1.2442084262147546,
+        1.280666678212583,
+        1.2445416068658233,
+        1.2338332599028945,
+        1.2302084360271692,
+        1.2745832791551948,
+        1.2414166703820229,
+        1.2376250233501196,
+        1.232041628099978
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 1206.8847916088998,
+      "median_ms": 1206.8847916088998,
+      "messages": 1000,
+      "operation": "foreground_with_open_chat_20_unread",
+      "os": "26.6.2",
+      "p95_ms": 1206.8847916088998,
+      "samples": [
+        1206.8847916088998
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 2.925500040873885,
+      "median_ms": 2.925500040873885,
+      "messages": 1000,
+      "operation": "nostr_handled_cache_skip_all_history",
+      "os": "26.6.2",
+      "p95_ms": 2.925500040873885,
+      "samples": [
+        2.925500040873885
+      ]
+    },
+    {
+      "database_bytes": 3460531,
+      "device": "iPhone",
+      "max_ms": 0.39116665720939636,
+      "median_ms": 0.39116665720939636,
+      "messages": 1000,
+      "operation": "handled_cache_async_save_main_thread",
+      "os": "26.6.2",
+      "p95_ms": 0.39116665720939636,
+      "samples": [
+        0.39116665720939636
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 184.92391670588404,
+      "median_ms": 180.57795835193247,
+      "messages": 5000,
+      "operation": "restore_decrypt_decode",
+      "os": "26.6.2",
+      "p95_ms": 184.92391670588404,
+      "samples": [
+        184.92391670588404,
+        180.57795835193247,
+        178.12141659669578
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 173.58720838092268,
+      "median_ms": 173.58720838092268,
+      "messages": 5000,
+      "operation": "encode_entire_snapshot_json",
+      "os": "26.6.2",
+      "p95_ms": 173.58720838092268,
+      "samples": [
+        173.58720838092268
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 35.45129171106964,
+      "median_ms": 35.45129171106964,
+      "messages": 5000,
+      "operation": "encrypt_entire_snapshot",
+      "os": "26.6.2",
+      "p95_ms": 35.45129171106964,
+      "samples": [
+        35.45129171106964
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 238.38824999984354,
+      "median_ms": 238.38824999984354,
+      "messages": 5000,
+      "operation": "persist_one_metadata_change_full_database",
+      "os": "26.6.2",
+      "p95_ms": 238.38824999984354,
+      "samples": [
+        238.38824999984354
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 587.2685000067577,
+      "median_ms": 587.2685000067577,
+      "messages": 5000,
+      "operation": "service_init_and_initial_projection",
+      "os": "26.6.2",
+      "p95_ms": 587.2685000067577,
+      "samples": [
+        587.2685000067577
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 238.46845829393715,
+      "median_ms": 4.278458305634558,
+      "messages": 5000,
+      "operation": "background_foreground_idle",
+      "os": "26.6.2",
+      "p95_ms": 238.46845829393715,
+      "samples": [
+        238.46845829393715,
+        4.32470825035125,
+        4.278458305634558,
+        4.197916714474559,
+        4.172458313405514
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 1014.5812499104068,
+      "median_ms": 1014.5812499104068,
+      "messages": 5000,
+      "operation": "open_chat_mark_20_read",
+      "os": "26.6.2",
+      "p95_ms": 1014.5812499104068,
+      "samples": [
+        1014.5812499104068
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 74.77191661018878,
+      "median_ms": 74.77191661018878,
+      "messages": 5000,
+      "operation": "timeline_text_rows_initial_layout",
+      "os": "26.6.2",
+      "p95_ms": 74.77191661018878,
+      "samples": [
+        74.77191661018878
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 5170.197166735306,
+      "median_ms": 1648.1696250848472,
+      "messages": 5000,
+      "operation": "incoming_message_crypto_disk_projection",
+      "os": "26.6.2",
+      "p95_ms": 5170.197166735306,
+      "samples": [
+        5170.197166735306,
+        4980.090625002049,
+        4726.282624993473,
+        1692.1147916000336,
+        1610.8861666871235,
+        1591.4278749842197,
+        1588.866874924861,
+        1579.4997083721682,
+        1601.461041602306,
+        1644.7233749786392,
+        1703.1204582890496,
+        1658.6605833144858,
+        1628.626250079833,
+        1658.0455417279154,
+        1662.473874981515,
+        1696.4747500605881,
+        1614.5149166695774,
+        1635.8147501014173,
+        1648.0372499208897,
+        1648.1696250848472
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 5171.34183330927,
+      "median_ms": 1648.691083304584,
+      "messages": 5000,
+      "operation": "incoming_main_actor_queue_delay",
+      "os": "26.6.2",
+      "p95_ms": 5171.34183330927,
+      "samples": [
+        5171.34183330927,
+        4980.681291664951,
+        4726.841791649349,
+        1692.4964167410508,
+        1611.4228334045038,
+        1591.974416631274,
+        1589.4068332854658,
+        1580.056416685693,
+        1601.8858749885112,
+        1645.0902500655502,
+        1703.4926667110994,
+        1659.1899583581835,
+        1629.140374949202,
+        1658.4324999712408,
+        1662.8357500303537,
+        1696.8545833369717,
+        1615.0654166704044,
+        1636.357833398506,
+        1648.5764583339915,
+        1648.691083304584
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 42751.56199990306,
+      "median_ms": 42751.56199990306,
+      "messages": 5000,
+      "operation": "incoming_burst_20_total",
+      "os": "26.6.2",
+      "p95_ms": 42751.56199990306,
+      "samples": [
+        42751.56199990306
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 918.4156666742638,
+      "median_ms": 907.105749938637,
+      "messages": 5000,
+      "operation": "outgoing_read_ack_disk_projection",
+      "os": "26.6.2",
+      "p95_ms": 918.4156666742638,
+      "samples": [
+        883.5211250698194,
+        893.9415416680276,
+        896.7560833552852,
+        884.1833333717659,
+        902.6488750241697,
+        902.7560417307541,
+        900.5830833921209,
+        902.1409583510831,
+        902.517958311364,
+        907.105749938637,
+        902.5085415923968,
+        913.3692916948348,
+        911.3320832839236,
+        911.4044583402574,
+        918.4156666742638,
+        907.2765000164509,
+        908.9294583536685,
+        911.2079166807234,
+        908.6406666319817,
+        909.8567083710805
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 2.3247500648722053,
+      "median_ms": 2.2446250077337027,
+      "messages": 5000,
+      "operation": "duplicate_packet_receipt_fallback",
+      "os": "26.6.2",
+      "p95_ms": 2.3247500648722053,
+      "samples": [
+        2.1519584115594625,
+        2.1248749690130353,
+        2.2465833462774754,
+        2.28191667702049,
+        2.2800415754318237,
+        2.2482917411252856,
+        2.3247500648722053,
+        2.2757083643227816,
+        2.2352499654516578,
+        2.2909583058208227,
+        2.2504166699945927,
+        2.2460833424702287,
+        2.1328750299289823,
+        2.132708323188126,
+        2.11687502451241,
+        2.0929999882355332,
+        2.0954166539013386,
+        2.220333321020007,
+        2.2446250077337027,
+        2.2381249582394958
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 5544.329791679047,
+      "median_ms": 5544.329791679047,
+      "messages": 5000,
+      "operation": "foreground_with_open_chat_20_unread",
+      "os": "26.6.2",
+      "p95_ms": 5544.329791679047,
+      "samples": [
+        5544.329791679047
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 12.657249928452075,
+      "median_ms": 12.657249928452075,
+      "messages": 5000,
+      "operation": "nostr_handled_cache_skip_all_history",
+      "os": "26.6.2",
+      "p95_ms": 12.657249928452075,
+      "samples": [
+        12.657249928452075
+      ]
+    },
+    {
+      "database_bytes": 17293530,
+      "device": "iPhone",
+      "max_ms": 0.3935833228752017,
+      "median_ms": 0.3935833228752017,
+      "messages": 5000,
+      "operation": "handled_cache_async_save_main_thread",
+      "os": "26.6.2",
+      "p95_ms": 0.3935833228752017,
+      "samples": [
+        0.3935833228752017
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 409.74195837043226,
+      "median_ms": 406.4260416198522,
+      "messages": 10000,
+      "operation": "restore_decrypt_decode",
+      "os": "26.6.2",
+      "p95_ms": 409.74195837043226,
+      "samples": [
+        409.74195837043226,
+        406.4260416198522,
+        396.41095825936645
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 387.76879163924605,
+      "median_ms": 387.76879163924605,
+      "messages": 10000,
+      "operation": "encode_entire_snapshot_json",
+      "os": "26.6.2",
+      "p95_ms": 387.76879163924605,
+      "samples": [
+        387.76879163924605
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 80.25674999225885,
+      "median_ms": 80.25674999225885,
+      "messages": 10000,
+      "operation": "encrypt_entire_snapshot",
+      "os": "26.6.2",
+      "p95_ms": 80.25674999225885,
+      "samples": [
+        80.25674999225885
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 537.1143750380725,
+      "median_ms": 537.1143750380725,
+      "messages": 10000,
+      "operation": "persist_one_metadata_change_full_database",
+      "os": "26.6.2",
+      "p95_ms": 537.1143750380725,
+      "samples": [
+        537.1143750380725
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 1297.7131665684283,
+      "median_ms": 1297.7131665684283,
+      "messages": 10000,
+      "operation": "service_init_and_initial_projection",
+      "os": "26.6.2",
+      "p95_ms": 1297.7131665684283,
+      "samples": [
+        1297.7131665684283
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 534.86674989108,
+      "median_ms": 9.225583402439952,
+      "messages": 10000,
+      "operation": "background_foreground_idle",
+      "os": "26.6.2",
+      "p95_ms": 534.86674989108,
+      "samples": [
+        534.86674989108,
+        9.225583402439952,
+        9.13495838176459,
+        9.284749976359308,
+        9.19212494045496
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 2223.757041618228,
+      "median_ms": 2223.757041618228,
+      "messages": 10000,
+      "operation": "open_chat_mark_20_read",
+      "os": "26.6.2",
+      "p95_ms": 2223.757041618228,
+      "samples": [
+        2223.757041618228
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 67.28887499775738,
+      "median_ms": 67.28887499775738,
+      "messages": 10000,
+      "operation": "timeline_text_rows_initial_layout",
+      "os": "26.6.2",
+      "p95_ms": 67.28887499775738,
+      "samples": [
+        67.28887499775738
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 10853.646458359435,
+      "median_ms": 3664.0582917025313,
+      "messages": 10000,
+      "operation": "incoming_message_crypto_disk_projection",
+      "os": "26.6.2",
+      "p95_ms": 10853.646458359435,
+      "samples": [
+        10478.986124973744,
+        10853.646458359435,
+        10006.642333348282,
+        3581.9984583649784,
+        3657.1005834266543,
+        3630.4364999523386,
+        3645.635375054553,
+        3657.1416249498725,
+        3704.4523750664666,
+        3719.8707084171474,
+        3650.5673333304003,
+        3653.5967083182186,
+        3664.0582917025313,
+        3690.546791651286,
+        3676.295291748829,
+        3647.677708417177,
+        3656.320166657679,
+        3788.1090416340157,
+        3674.1020417539403,
+        3662.467750022188
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 10854.597249999642,
+      "median_ms": 3664.8335417266935,
+      "messages": 10000,
+      "operation": "incoming_main_actor_queue_delay",
+      "os": "26.6.2",
+      "p95_ms": 10854.597249999642,
+      "samples": [
+        10479.914000025019,
+        10854.597249999642,
+        10007.502166670747,
+        3582.82391668763,
+        3657.9036666080356,
+        3631.2483333749697,
+        3646.411291672848,
+        3658.0162916798145,
+        3705.435000010766,
+        3720.751666696742,
+        3651.364458259195,
+        3654.417625046335,
+        3664.8335417266935,
+        3691.374291665852,
+        3677.1832917584106,
+        3648.5007499577478,
+        3657.157166628167,
+        3789.3010416300967,
+        3674.8925000429153,
+        3663.300291635096
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 93718.57649995945,
+      "median_ms": 93718.57649995945,
+      "messages": 10000,
+      "operation": "incoming_burst_20_total",
+      "os": "26.6.2",
+      "p95_ms": 93718.57649995945,
+      "samples": [
+        93718.57649995945
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 2053.5881250398234,
+      "median_ms": 1994.8922500479966,
+      "messages": 10000,
+      "operation": "outgoing_read_ack_disk_projection",
+      "os": "26.6.2",
+      "p95_ms": 2053.5881250398234,
+      "samples": [
+        1989.8663751082495,
+        1998.23024997022,
+        1989.7223332663998,
+        2004.9647082341835,
+        1992.4007916124538,
+        1991.5634583448991,
+        2053.5881250398234,
+        1995.675833313726,
+        1994.8922500479966,
+        1994.421916664578,
+        1996.5102500282228,
+        1989.4915416371077,
+        1991.5389582747594,
+        1996.6369166504592,
+        1988.0370416212827,
+        1991.371416603215,
+        1994.3553750636056,
+        1998.2828750507906,
+        1996.0486249765381,
+        1996.606000000611
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 4.03804169036448,
+      "median_ms": 3.6657917080447078,
+      "messages": 10000,
+      "operation": "duplicate_packet_receipt_fallback",
+      "os": "26.6.2",
+      "p95_ms": 4.03804169036448,
+      "samples": [
+        4.03804169036448,
+        3.9015833754092455,
+        3.783916705287993,
+        3.556541749276221,
+        3.397958353161812,
+        3.4381250152364373,
+        3.4303333377465606,
+        3.6455000517889857,
+        3.6437916569411755,
+        3.692624974064529,
+        3.7676666397601366,
+        3.6547499476000667,
+        3.685333300381899,
+        3.717083251103759,
+        3.6987916100770235,
+        3.625458339229226,
+        3.6382917314767838,
+        3.660833346657455,
+        3.712249919772148,
+        3.6657917080447078
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 11693.471999955364,
+      "median_ms": 11693.471999955364,
+      "messages": 10000,
+      "operation": "foreground_with_open_chat_20_unread",
+      "os": "26.6.2",
+      "p95_ms": 11693.471999955364,
+      "samples": [
+        11693.471999955364
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 25.740916724316776,
+      "median_ms": 25.740916724316776,
+      "messages": 10000,
+      "operation": "nostr_handled_cache_skip_all_history",
+      "os": "26.6.2",
+      "p95_ms": 25.740916724316776,
+      "samples": [
+        25.740916724316776
+      ]
+    },
+    {
+      "database_bytes": 34596031,
+      "device": "iPhone",
+      "max_ms": 0.4212500061839819,
+      "median_ms": 0.4212500061839819,
+      "messages": 10000,
+      "operation": "handled_cache_async_save_main_thread",
+      "os": "26.6.2",
+      "p95_ms": 0.4212500061839819,
+      "samples": [
+        0.4212500061839819
+      ]
+    }
+  ]
+}

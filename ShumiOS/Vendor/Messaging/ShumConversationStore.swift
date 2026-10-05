@@ -9,7 +9,7 @@ enum ShumWireProtocol {
     static let legacyRelayPrefix = "spotchat-v1:"
 }
 
-struct ShumContact: Codable, Identifiable {
+struct ShumContact: Equatable, Codable, Identifiable {
     var card: ShumContactCard
     var addedAt: Date
     var avatar: Data?
@@ -31,7 +31,7 @@ struct ShumSavedProfile: Codable, Equatable, Identifiable {
     var avatar: Data?
     var id: String { card.id }
 }
-struct ShumConversation: Codable, Identifiable {
+struct ShumConversation: Equatable, Codable, Identifiable {
     var id: String
     var contactID: String
     var createdAt: Date
@@ -369,7 +369,7 @@ struct ShumReplyReference: Codable, Hashable {
     var text: String
 }
 
-struct ShumStoredMessage: Codable, Identifiable {
+struct ShumStoredMessage: Codable, Equatable, Identifiable {
     var envelope: ShumEnvelope
     var text: String // Entire snapshot is encrypted at rest; relays never receive this field.
     var outgoing: Bool
@@ -388,7 +388,7 @@ struct ShumStoredMessage: Codable, Identifiable {
     var reply: ShumReplyReference? = nil
     var id: String { envelope.id }
 }
-struct ShumRelayCopy: Codable {
+struct ShumRelayCopy: Equatable, Codable {
     var envelope: ShumEnvelope
     var hopCount: Int
     var depositor: String
@@ -417,7 +417,7 @@ struct ShumReceipt: Codable, Equatable {
               try Curve25519.Signing.PublicKey(rawRepresentation: sender.signingKey).isValidSignature(signature, for: signingBytes()) else { throw ShumFailure.invalidMessage }
     }
 }
-struct ShumStoredReceipt: Codable {
+struct ShumStoredReceipt: Equatable, Codable {
     var receipt: ShumReceipt
     var lastAttempt: Date = .distantPast
     var sentTo: Set<String> = []
@@ -449,7 +449,7 @@ struct ShumProfileSync: Codable {
         }
     }
 }
-struct ShumProfileDelivery: Codable {
+struct ShumProfileDelivery: Equatable, Codable {
     var recipientID: String
     var profileID: String
     var lastAttempt: Date?
@@ -470,7 +470,7 @@ struct ShumPacket: Codable {
     var retract: ShumRetractControl?
     var reaction: ShumReactionControl?
 }
-struct ShumDatabase: Codable {
+struct ShumDatabase: Equatable, Codable {
     var version = 1
     var ownerID: String
     var contacts: [ShumContact] = []
@@ -502,58 +502,59 @@ struct ShumDatabase: Codable {
 @MainActor
 final class ShumConversationStore {
     private(set) var state: ShumDatabase
-    private let url: URL?
-    private let key: SymmetricKey
-    init(ownerID: String, key: SymmetricKey, url: URL?) throws {
-        self.key = key; self.url = url
-        if let url, FileManager.default.fileExists(atPath: url.path) {
-            let encrypted = try Data(contentsOf: url)
-            guard encrypted.count <= 100_000_000 else { throw ShumFailure.storage }
-            let plain = try ChaChaPoly.open(ChaChaPoly.SealedBox(combined: encrypted), using: key)
-            var restored = try JSONDecoder().decode(ShumDatabase.self, from: plain)
-            guard restored.version == 1, restored.ownerID == ownerID else { throw ShumFailure.unavailableIdentity }
-            // Builds before chat invitations allowed every saved contact to
-            // message immediately. Preserve that access during migration.
-            if restored.invitationStates == nil {
-                restored.invitationStates = Dictionary(uniqueKeysWithValues: restored.contacts.map { contact in
-                    let timestamp = Int64(contact.addedAt.timeIntervalSince1970 * 1000)
-                    return (contact.id, ShumInvitationState(
-                        phase: .accepted,
-                        updatedAt: timestamp,
-                        eventID: "legacy-\(contact.id)"
-                    ))
-                })
+    private let persistence: ShumSQLitePersistence?
+    var committedTransactions: Int { persistence?.committedTransactions ?? 0 }
+    var committedRows: Int { persistence?.committedRows ?? 0 }
+    struct Prepared: @unchecked Sendable {
+        let persistence: ShumSQLitePersistence
+        fileprivate let state: ShumDatabase
+    }
+    private nonisolated static let preparationQueue = DispatchQueue(label: "shum.storage.prepare", qos: .userInitiated)
+    nonisolated static func prepare(ownerID: String, key: SymmetricKey, url: URL,
+                                    legacyURL: URL, legacyKey: Data?) throws -> Prepared {
+        try preparationQueue.sync {
+            let persistence = try ShumSQLitePersistence(ownerID: ownerID, key: key, url: url)
+            var state = try persistence.read()
+            if state.legacyHistory == nil, FileManager.default.fileExists(atPath: legacyURL.path) {
+                guard let legacyKey, legacyKey.count == 32 else { throw ShumFailure.unavailableIdentity }
+                let encrypted = try Data(contentsOf: legacyURL)
+                guard encrypted.count <= 100_000_000 else { throw ShumFailure.storage }
+                let plain = try AES.GCM.open(AES.GCM.SealedBox(combined: encrypted), using: SymmetricKey(data: legacyKey))
+                var migrated = state
+                migrated.legacyHistory = try JSONDecoder().decode(ShumLegacyArchive.self, from: plain)
+                try persistence.commit(previous: state, next: migrated)
+                state = migrated
             }
-            if restored.invitationOutbox == nil { restored.invitationOutbox = [] }
-            // Saved profiles were replaced by per-folder pinning. Keep the
-            // optional field only so older encrypted snapshots still decode.
-            restored.savedProfiles = nil
-            state = restored
-        } else {
-            state = ShumDatabase(
-                ownerID: ownerID,
-                invitationStates: [:],
-                invitationOutbox: []
-            )
+            return Prepared(persistence: persistence, state: state)
         }
     }
-    // Commit disk first, publish memory second: a failed save never ACKs or loses durable history.
-    func transaction(_ update: (inout ShumDatabase) throws -> Void) throws {
-        var next = state; try update(&next)
+    init(prepared: Prepared) {
+        persistence = prepared.persistence
+        state = prepared.state
+    }
+    init(ownerID: String, key: SymmetricKey, url: URL?) throws {
         if let url {
-            let bytes = try ChaChaPoly.seal(ShumCoding.encode(next), using: key).combined
-            guard bytes.count <= 100_000_000 else { throw ShumFailure.quota }
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            #if os(iOS)
-            try bytes.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-            #else
-            try bytes.write(to: url, options: .atomic)
-            #endif
-            var directory = url.deletingLastPathComponent()
-            var values = URLResourceValues(); values.isExcludedFromBackup = true
-            try? directory.setResourceValues(values)
+            let disk = try ShumSQLitePersistence(ownerID: ownerID, key: key, url: url)
+            persistence = disk
+            state = try disk.read()
+        } else {
+            persistence = nil
+            state = ShumDatabase(ownerID: ownerID, invitationStates: [:], invitationOutbox: [])
         }
+    }
+    // Commit disk first, publish memory second. Only changed encrypted records
+    // are written; acknowledgements still cannot precede durable COMMIT.
+    func transaction(_ update: (inout ShumDatabase) throws -> Void) throws {
+        var next = state
+        try update(&next)
+        try persistence?.commit(previous: state, next: next)
         state = next
+    }
+    /// Backups retain the portable encrypted v1 snapshot format. SQLite and
+    /// its live WAL must never be copied individually into a backup.
+    nonisolated static func encryptedSnapshot(at url: URL, key: SymmetricKey) throws -> Data {
+        let state = try ShumSQLitePersistence.snapshot(at: url, key: key)
+        return try ChaChaPoly.seal(ShumCoding.encode(state), using: key).combined
     }
     static var liveURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

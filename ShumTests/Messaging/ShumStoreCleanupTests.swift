@@ -4,8 +4,8 @@ import Foundation
 import Testing
 @preconcurrency @testable import Shum
 
-/// The once-a-minute cleanup rewrites the whole encrypted store, so it must
-/// only run when an entry has actually expired.
+/// Idle cleanup must not start a disk transaction. Expired entries must be
+/// removed durably, including when the latest commit still resides in WAL.
 @Suite("Shum store cleanup", .serialized)
 @MainActor
 struct ShumStoreCleanupTests {
@@ -24,15 +24,15 @@ struct ShumStoreCleanupTests {
             state.seenRelay["relay-copy"] = clock.date.addingTimeInterval(3_600)
             state.deletedMessageIDs = ["deleted-message": clock.date.addingTimeInterval(3_600)]
         }
-        let untouched = try Data(contentsOf: url)
+        let untouched = store.committedTransactions
 
         for _ in 0..<30 { service.tick(connected: [], active: false) }
-        #expect(try Data(contentsOf: url) == untouched, "Nothing expired, so the store is not rewritten")
+        #expect(store.committedTransactions == untouched, "Nothing expired, so the store is not rewritten")
         #expect(store.state.seenRelay.count == 1)
 
         clock.date.addTimeInterval(7_200)
         for _ in 0..<30 { service.tick(connected: [], active: false) }
-        #expect(try Data(contentsOf: url) != untouched, "Expired entries are removed and saved")
+        #expect(store.committedTransactions > untouched, "Expired entries are removed and saved")
         #expect(store.state.seenRelay.isEmpty)
         #expect(store.state.deletedMessageIDs?.isEmpty == true)
 

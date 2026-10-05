@@ -14,9 +14,15 @@ protocol ShumInternetTransport: AnyObject {
     var connected: Bool { get }
     func start()
     func stop()
+    /// Final teardown drains writes before account deletion removes its files.
+    func flushPendingPersistence()
     func send(_ packet: ShumPacket, to card: ShumContactCard, completion: @escaping (Bool) -> Void)
     func resolve(_ locator: ShumContactLocator, completion: @escaping (Result<ShumResolvedContact, Error>) -> Void)
     func configureContactLookup(card: @escaping () -> ShumContactCard?, profile: @escaping () -> ShumProfile?)
+}
+
+extension ShumInternetTransport {
+    func flushPendingPersistence() {}
 }
 
 @MainActor
@@ -92,7 +98,8 @@ final class ShumNostrService: ShumInternetTransport {
             self?.receive(event)
         }
     }
-    func stop() { started = false; manager.disconnect(); handled.save(synchronously: true) }
+    func stop() { started = false; manager.disconnect(); handled.save() }
+    func flushPendingPersistence() { handled.save(synchronously: true) }
     private func receive(_ event: NostrEvent) {
         guard !seen.contains(event.id), !handled.contains(event.id) else { return }
         // A full queue drops the event without marking it seen, so the same

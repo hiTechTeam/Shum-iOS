@@ -1,4 +1,5 @@
 import BitFoundation
+import Combine
 import CoreBluetooth
 import Foundation
 import Testing
@@ -21,6 +22,47 @@ struct ShumRuntimeTests {
     private func receive(_ model: ShumRuntime, from peer: PeerID, id: String, text: String) throws {
         let data = try #require(PrivateMessagePacket(messageID: id, content: text).encode())
         model.didReceiveTransportEvent(.noisePayloadReceived(peerID: peer, type: .privateMessage, payload: data, timestamp: Date()))
+    }
+
+    @Test("Resume does not republish every historical message")
+    func permanentHistoryIsNotRepublishedOnResume() throws {
+        let clock = ShumPermanentTests.Clock()
+        let node = try ShumPermanentTests.Node("Alice", clock: clock)
+        try node.store.transaction { state in
+            state.legacyHistory = ShumLegacyArchive(contacts: [], messages: (0..<500).map { index in
+                ShumLegacyMessage(id: "old-\(index)", contactID: "old-contact", text: "History",
+                    date: clock.date, outgoing: false,
+                    status: .delivered(to: "Alice", at: clock.date), unread: false)
+            })
+        }
+        let runtime = make(node.wire, now: { clock.date })
+        runtime.configurePermanentStore(node.service)
+        #expect(runtime.messages.count == 500)
+        var publications = 0
+        let observer = runtime.$messages.dropFirst().sink { _ in publications += 1 }
+        defer { observer.cancel() }
+        runtime.setAppActive(false)
+        clock.date.addTimeInterval(60)
+        runtime.setAppActive(true)
+        #expect(publications == 0, "History is unchanged by a foreground transition")
+        #expect(runtime.messages.count == 500)
+    }
+
+    @Test("Directory changes preserve history; new messages still reach the UI")
+    func permanentProjectionUpdatesOnlyWhenHistoryChanges() throws {
+        let clock = ShumPermanentTests.Clock()
+        let a = try ShumPermanentTests.Node("Alice", clock: clock)
+        let b = try ShumPermanentTests.Node("Bob", clock: clock)
+        let runtime = make(a.wire, now: { clock.date })
+        runtime.configurePermanentStore(a.service)
+        var publications = 0
+        let observer = runtime.$messages.dropFirst().sink { _ in publications += 1 }
+        defer { observer.cancel() }
+        try ShumPermanentTests().allow(a, to: b, clock: clock)
+        #expect(publications == 0)
+        #expect(runtime.send("New message", to: b.card.peerID))
+        #expect(publications == 1)
+        #expect(runtime.messages.first?.text == "New message")
     }
 
     @Test func visibilityOffRejectsLateSnapshotsAndRepeatedUpdatesDoNotRestartRadio() {

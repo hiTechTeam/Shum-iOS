@@ -85,7 +85,11 @@ struct ShumChatsUI: View {
                 .padding(.top, 6)
                 .padding(.bottom, 8)
         } empty: {
-            emptyState
+            if runtime.isLoadingHistory {
+                ProgressView("Загружаем переписку…".localized)
+            } else {
+                emptyState
+            }
         }
         .refreshable { runtime.tick() }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -121,6 +125,7 @@ struct ShumChatsUI: View {
                 .tint(.primary)
                 .accessibilityLabel("Написать сообщение".localized)
                 .accessibilityIdentifier("shum.newMessage")
+                .disabled(runtime.isLoadingHistory)
             }
         }
         .sheet(isPresented: $showsNewMessage) {

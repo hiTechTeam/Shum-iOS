@@ -5,7 +5,7 @@ import Foundation
 /// The first build stored no signed Nostr contact cards. Preserve those messages
 /// as local history, then join by the authenticated Noise-key fingerprint when
 /// the same contact is encountered again. Never fabricate a signed contact.
-struct ShumLegacyArchive: Codable {
+struct ShumLegacyArchive: Codable, Equatable {
     var contacts: [ShumLegacyContact]
     var messages: [ShumLegacyMessage]
     static func peerID(_ contactID: String) -> PeerID { PeerID(str: "legacy-" + contactID) }

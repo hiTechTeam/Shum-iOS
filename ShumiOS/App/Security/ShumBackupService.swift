@@ -252,11 +252,11 @@ final class ShumBackupService {
             createdAt: Date(),
             profileName: manifest.body.name,
             keys: material,
-            storedFiles: try collectFiles()
+            storedFiles: try collectFiles(storageKey: material.shumStorage)
         )
     }
 
-    private func collectFiles() throws -> [StoredFile] {
+    private func collectFiles(storageKey: Data) throws -> [StoredFile] {
         let support = supportDirectory
         var result: [StoredFile] = []
 
@@ -270,12 +270,11 @@ final class ShumBackupService {
             prefix: "ShumProfiles",
             to: &result
         )
-        try appendFile(
-            support.appendingPathComponent("ShumConversations/state.enc"),
-            path: "ShumConversations/state.enc",
-            required: false,
-            to: &result
-        )
+        let historyURL = support.appendingPathComponent("ShumConversations/state.enc")
+        if FileManager.default.fileExists(atPath: historyURL.path) {
+            let encrypted = try ShumConversationStore.encryptedSnapshot(at: historyURL, key: SymmetricKey(data: storageKey))
+            result.append(StoredFile(path: "ShumConversations/state.enc", data: encrypted))
+        }
         try appendFile(
             support.appendingPathComponent("shum-chats-v1.enc"),
             path: "shum-chats-v1.enc",

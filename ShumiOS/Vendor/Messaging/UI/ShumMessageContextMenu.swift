@@ -166,9 +166,15 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            // Buttons inside the bubble wait for the hold to fail: a quick
+            // quote tap still works, while holding it opens the message menu.
+            if gestureRecognizer === hold, other !== hold, other !== replyPanGesture,
+               let view = other.view, view.isDescendant(of: self) {
+                return true
+            }
             // Scrolling starts once the reply swipe declines a vertical drag,
             // at the same movement threshold, so it gains no noticeable delay.
-            gestureRecognizer === replyPanGesture && isEnclosingScrollPan(other)
+            return gestureRecognizer === replyPanGesture && isEnclosingScrollPan(other)
         }
 
         private func isEnclosingScrollPan(_ recognizer: UIGestureRecognizer) -> Bool {

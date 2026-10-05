@@ -25,12 +25,15 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     private let nearbyPeopleNotifier = NearbyPeopleNotifier()
     private var photoObserver: NSObjectProtocol?
     private var chatObserver: AnyCancellable?
+    private var notificationRefreshTask: Task<Void, Never>?
     private var notificationSnapshotInitialized = false
     private var notifiedIncomingMessageIDs: Set<String> = []
     private var notifiedInvitationIDs: Set<String> = []
     private var notifiedNearbyPeerIDs: Set<String> = []
     private var didSynchronizeBackgroundNearby = false
     private var active = false
+    private var storageTeardownInProgress = false
+    private var pendingInvitationURL: URL?
 
     init() {
         let store = LocalCardStore.shared
@@ -83,7 +86,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         } else if isRegistered {
             prepareMessaging()
         } else if needsSecuritySetup {
-            _ = prepareRegistrationSecurity()
+            createMessaging(bluetoothEnabled: false, deferHistoryLoading: true)
         }
         photoObserver = NotificationCenter.default.addObserver(forName: .localCardChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
@@ -118,12 +121,22 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             bluetoothEnabled: isScaning && !ShumAppLock.shared.isLocked
         )
     }
-    private func createMessaging(bluetoothEnabled: Bool) {
+    private func createMessaging(bluetoothEnabled: Bool, deferHistoryLoading: Bool? = nil) {
         guard chat == nil else {
             chat?.setBluetoothEnabled(bluetoothEnabled)
             return
         }
-        let model = ShumRuntime.live()
+        let model = ShumRuntime.live(deferHistoryLoading: deferHistoryLoading ?? isRegistered)
+        model.onReady = { [weak self] in
+            guard let self, !self.deletingProfile else { return }
+            self.synchronizeProfile()
+            self.objectWillChange.send()
+            self.updateApplicationState(isActive: self.active)
+            if let pending = self.pendingInvitationURL {
+                self.pendingInvitationURL = nil
+                self.handleInvitationURL(pending)
+            }
+        }
         model.deleteProfileHandler = { [weak self] in
             Task { @MainActor in try? await self?.deleteAccount() }
         }
@@ -212,7 +225,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
 
     @discardableResult
-    func prepareRestoredProfileForSecurity() -> Bool {
+    func prepareRestoredProfileForSecurity() async -> Bool {
         guard !isRegistered, !deletingProfile else { return false }
         LocalCardStore.shared.reloadFromDisk()
         guard LocalCardStore.shared.ownManifest != nil else { return false }
@@ -226,6 +239,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             chat?.retireForDeletion()
             chat = nil
         }
+        createMessaging(bluetoothEnabled: false, deferHistoryLoading: true)
+        await chat?.waitUntilHistoryLoaded()
         return prepareRegistrationSecurity()
     }
     var needsRestoredPasscodeSetup: Bool {
@@ -241,6 +256,10 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         synchronizeProfile()
     }
     func handleInvitationURL(_ url: URL) {
+        if isRegistered, chat?.isLoadingHistory == true {
+            pendingInvitationURL = url
+            return
+        }
         guard isRegistered,
               LocalCardStore.shared.ownManifest != nil,
               chat?.isReady == true else {
@@ -273,13 +292,21 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     func deleteAccount() async throws {
         try deletion.begin()
         deletingProfile = true
+        pendingInvitationURL = nil
         ShumPushService.shared.unregisterCurrentDevice()
         chatObserver?.cancel()
-        chat?.retireForDeletion(); chat = nil
+        let retiringChat = chat
+        retiringChat?.retireForDeletion(); chat = nil
+        // Migration may still be committing on its worker. Delete files only
+        // after it has stopped; it must never recreate an erased account.
+        storageTeardownInProgress = true
+        await retiringChat?.waitForStoragePreparation()
+        storageTeardownInProgress = false
         finishDeletion()
         if deletingProfile { throw ShumFailure.storage }
     }
     func finishDeletion() {
+        guard !storageTeardownInProgress else { return }
         do {
             try deletion.finish()
             try LocalCardStore.shared.reset()
@@ -332,16 +359,23 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
 
     private func observeNotifications(in runtime: ShumRuntime) {
+        notificationRefreshTask?.cancel()
+        notificationRefreshTask = nil
         notificationSnapshotInitialized = false
         notifiedIncomingMessageIDs.removeAll()
         notifiedInvitationIDs.removeAll()
         notifiedNearbyPeerIDs.removeAll()
         chatObserver = runtime.objectWillChange.sink { [weak self, weak runtime] _ in
-            Task { @MainActor in
+            guard let self, self.notificationRefreshTask == nil else { return }
+            // Published changes arrive in bursts. Scan the final state once
+            // after the burst instead of queuing a full scan for every field.
+            self.notificationRefreshTask = Task { @MainActor [weak self, weak runtime] in
                 await Task.yield()
+                guard !Task.isCancelled else { return }
                 guard let self, let runtime, self.chat === runtime else {
                     return
                 }
+                self.notificationRefreshTask = nil
                 self.refreshNotificationState(for: runtime)
             }
         }
@@ -417,6 +451,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
 
     private func resetNotificationState() {
+        notificationRefreshTask?.cancel()
+        notificationRefreshTask = nil
         chatObserver?.cancel()
         chatObserver = nil
         notificationSnapshotInitialized = false

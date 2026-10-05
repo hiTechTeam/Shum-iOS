@@ -1,4 +1,7 @@
 import Foundation
+#if os(iOS)
+import UIKit
+#endif
 
 /// Nostr events this device has already handled, kept on disk for as long as
 /// relays may send them again. Without it every launch replays the whole fetch
@@ -15,12 +18,16 @@ final class ShumHandledEvents {
 
     private let url: URL?
     private let now: () -> Date
+    private let writeQueue: DispatchQueue
     private var handled: [Data: UInt32] = [:]
     private var saveScheduled = false
+    private var revision: UInt64 = 0
+    private var enqueuedRevision: UInt64 = 0
 
-    init(url: URL?, now: @escaping () -> Date = Date.init) {
+    init(url: URL?, now: @escaping () -> Date = Date.init, writeQueue: DispatchQueue? = nil) {
         self.url = url
         self.now = now
+        self.writeQueue = writeQueue ?? Self.queue
         guard let url, let data = try? Data(contentsOf: url),
               data.count % Self.recordSize == 0 else { return }
         let oldest = Self.seconds(now().addingTimeInterval(-Self.lifetime))
@@ -49,31 +56,72 @@ final class ShumHandledEvents {
         guard let key = Self.key(eventID), handled[key] == nil else { return }
         handled[key] = Self.seconds(now())
         if handled.count > Self.limit + 1_000 { trim() }
+        revision &+= 1
         scheduleSave()
     }
 
-    /// Writes the list now; the app calls it before going to the background.
+    /// Queue a changed snapshot, including its serialization, off the main
+    /// thread. iOS background time lets the write finish after suspension.
+    /// Synchronous flushing is reserved for tests and account deletion,
+    /// never normal foreground/background transitions.
     func save(synchronously: Bool = false) {
         guard let url else { return }
-        var data = Data(capacity: handled.count * Self.recordSize)
-        for (id, time) in handled {
-            data.append(id)
-            withUnsafeBytes(of: time.bigEndian) { data.append(contentsOf: $0) }
+        guard revision != enqueuedRevision else {
+            if synchronously { writeQueue.sync {} }
+            return
         }
-        let bytes = data
+        let snapshot = handled
+        let generation = revision
+        let recordSize = Self.recordSize
+        enqueuedRevision = generation
+        #if os(iOS)
+        let backgroundWrite = synchronously ? nil : BackgroundWrite()
+        #endif
         let write: @Sendable () -> Void = {
-            try? FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
+            var bytes = Data(capacity: snapshot.count * recordSize)
+            for (id, time) in snapshot {
+                bytes.append(id)
+                withUnsafeBytes(of: time.bigEndian) { bytes.append(contentsOf: $0) }
+            }
+            do {
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
             #if os(iOS)
-            try? bytes.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+                try bytes.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             #else
-            try? bytes.write(to: url, options: .atomic)
+                try bytes.write(to: url, options: .atomic)
+            #endif
+            } catch {
+                Task { @MainActor [weak self] in
+                    if self?.enqueuedRevision == generation { self?.enqueuedRevision = 0 }
+                }
+            }
+            #if os(iOS)
+            Task { @MainActor in backgroundWrite?.finish() }
             #endif
         }
-        if synchronously { Self.queue.sync(execute: write) } else { Self.queue.async(execute: write) }
+        if synchronously { writeQueue.sync(execute: write) } else { writeQueue.async(execute: write) }
     }
+
+    #if os(iOS)
+    @MainActor private final class BackgroundWrite {
+        private var id: UIBackgroundTaskIdentifier = .invalid
+
+        init() {
+            id = UIApplication.shared.beginBackgroundTask(withName: "shum.handled-events") { [weak self] in
+                Task { @MainActor in self?.finish() }
+            }
+        }
+
+        func finish() {
+            guard id != .invalid else { return }
+            UIApplication.shared.endBackgroundTask(id)
+            id = .invalid
+        }
+    }
+    #endif
 
     /// A burst of events is written once, a moment after it ends, off the main thread.
     private func scheduleSave() {

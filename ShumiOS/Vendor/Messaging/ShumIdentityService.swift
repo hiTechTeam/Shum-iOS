@@ -22,8 +22,32 @@ struct ShumContactCard: Codable, Equatable {
     var profileRevision: UInt64?
     var profileSignature: Data?
     var id: String { Self.userID(noiseKey) }
-    var peerID: PeerID { PeerID(hexData: noiseKey) }
-    static func userID(_ key: Data) -> String { SHA256.hash(data: key).map { String(format: "%02x", $0) }.joined() }
+    var peerID: PeerID {
+        let key = noiseKey as NSData
+        if noiseKey.count == 32, let cached = Self.identityHashes.peers.object(forKey: key) { return cached.value }
+        let peer = PeerID(hexData: noiseKey)
+        if noiseKey.count == 32 { Self.identityHashes.peers.setObject(PeerValue(peer), forKey: key) }
+        return peer
+    }
+    private final class PeerValue: NSObject {
+        let value: PeerID
+        init(_ value: PeerID) { self.value = value }
+    }
+    private final class IdentityHashes: @unchecked Sendable {
+        let values = NSCache<NSData, NSString>()
+        let peers = NSCache<NSData, PeerValue>()
+        init() { values.countLimit = 4096; peers.countLimit = 4096 }
+    }
+    private static let identityHashes = IdentityHashes()
+    static func userID(_ key: Data) -> String {
+        // Identity keys recur in every historical envelope and receipt.
+        // Cache only fixed-size public keys; ciphertext digests stay uncached
+        // so untrusted message payloads cannot fill this bounded cache.
+        if key.count == 32, let cached = identityHashes.values.object(forKey: key as NSData) { return cached as String }
+        let id = SHA256.hash(data: key).map { String(format: "%02x", $0) }.joined()
+        if key.count == 32 { identityHashes.values.setObject(id as NSString, forKey: key as NSData) }
+        return id
+    }
     func signedBytes() throws -> Data {
         var unsigned = self
         unsigned.signature = Data()

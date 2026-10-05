@@ -62,6 +62,50 @@ struct ShumReplayTests {
         #expect(!ShumHandledEvents(url: url, now: { clock.date }).contains(eventID(1)))
     }
 
+    @Test func backgroundSaveDoesNotWaitForTheDiskQueueAndKeepsTheLatestSnapshot() throws {
+        let url = temporaryURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let queue = DispatchQueue(label: "ShumReplayTests.blocked-write")
+        let gate = DispatchSemaphore(value: 0)
+        queue.async { _ = gate.wait(timeout: .now() + 2) }
+        let events = ShumHandledEvents(url: url, writeQueue: queue)
+        events.insert(eventID(1))
+        let started = Date()
+        events.save()
+        let elapsed = Date().timeIntervalSince(started)
+        events.insert(eventID(2))
+        events.save()
+        gate.signal()
+        #expect(elapsed < 0.5, "Backgrounding must not wait for a busy disk queue")
+        // Explicit teardown must also drain an already queued snapshot.
+        events.save(synchronously: true)
+        let restarted = ShumHandledEvents(url: url)
+        #expect(restarted.contains(eventID(1)))
+        #expect(restarted.contains(eventID(2)))
+    }
+
+    @Test func resumeDoesNotRequeueAcknowledgedProfilesOrRewriteTheDatabase() throws {
+        let url = temporaryURL().deletingLastPathComponent().appendingPathComponent("state.enc")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let clock = ShumPermanentTests.Clock()
+        let a = try ShumPermanentTests.Node("Alice", clock: clock, url: url)
+        let b = try ShumPermanentTests.Node("Bob", clock: clock)
+        try helpers.allowBoth(a, b, clock: clock)
+        helpers.connect(a, b, clock: clock)
+        clock.date.addTimeInterval(2)
+        a.service.tick(connected: [b.wire.myPeerID], active: true)
+        b.service.tick(connected: [a.wire.myPeerID], active: true)
+        helpers.drain([a, b])
+        #expect(a.store.state.profileOutbox?.isEmpty == true)
+        let saved = a.store.committedTransactions
+        a.service.setActive(false)
+        a.service.setActive(true)
+        a.service.setActive(false)
+        a.service.setActive(true)
+        #expect(a.store.state.profileOutbox?.isEmpty == true)
+        #expect(a.store.committedTransactions == saved, "Returning must not rewrite an unchanged encrypted snapshot")
+    }
+
     @Test func handledEventsIgnoreMalformedIDsAndStayBounded() {
         let clock = ShumPermanentTests.Clock()
         let events = ShumHandledEvents(url: nil, now: { clock.date })

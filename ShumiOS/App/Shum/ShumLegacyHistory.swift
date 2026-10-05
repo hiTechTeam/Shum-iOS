@@ -6,7 +6,7 @@ struct ShumLegacyContact: Identifiable, Codable, Hashable {
     let id: String // SHA256 of the authenticated Noise public key, never the advertised name.
     var name: String
 }
-struct ShumLegacyMessage: Identifiable, Codable {
+struct ShumLegacyMessage: Identifiable, Codable, Equatable {
     let id: String
     let contactID: String
     let text: String

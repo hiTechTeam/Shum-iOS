@@ -177,7 +177,8 @@ final class ShumMessageStore: ObservableObject {
         if active {
             foreground = true
             finishPresenceFlush()
-            do { try queueProfileReconciliation() } catch { fail(error) }
+            // Reconciliation is queued at initialization, contact creation
+            // and profile changes. Resume only retries that durable outbox.
             internet?.start()
             // The chat still open on return is announced on the next tick,
             // not after the regular renewal interval.
@@ -282,7 +283,10 @@ final class ShumMessageStore: ObservableObject {
                 let rebased = try identity.card(name: ownCard.name, bio: ownCard.bio,
                     avatarSeed: ownCard.avatarSeed, revision: nextProfileRevision(known.profileRevision ?? 0))
                 try commitOwnProfile(rebased)
-            } else if known.profileID == ownCard.profileID {
+            } else if known.profileID == ownCard.profileID,
+                      state.profileOutbox?.contains(where: {
+                          $0.recipientID == sender.id && $0.profileID == known.profileID
+                      }) == true {
                 try store.transaction { state in
                     state.profileOutbox?.removeAll {
                         $0.recipientID == sender.id && $0.profileID == known.profileID
@@ -1387,9 +1391,13 @@ final class ShumMessageStore: ObservableObject {
     }
     /// Reuse the same validation for network receipts and a batch of local reads.
     @discardableResult
-    private func applyReceipt(_ receipt: ShumReceipt, to state: inout ShumDatabase) throws -> Bool {
+    private func applyReceipt(_ receipt: ShumReceipt, to state: inout ShumDatabase,
+                              messageIndices: [String: Int]? = nil) throws -> Bool {
         try receipt.validate(at: now())
-        if let i = state.messages.firstIndex(where: { $0.id == receipt.envelopeID && $0.outgoing }) {
+        let messageIndex: Int?
+        if let messageIndices { messageIndex = messageIndices[receipt.envelopeID] }
+        else { messageIndex = state.messages.firstIndex(where: { $0.id == receipt.envelopeID }) }
+        if let i = messageIndex, state.messages[i].outgoing {
             let message = state.messages[i]
             guard message.envelope.digest == receipt.digest, message.envelope.recipient.id == receipt.sender.id,
                   message.envelope.recipient.signingKey == receipt.sender.signingKey, receipt.destination.id == ownCard.id else { throw ShumFailure.invalidMessage }
@@ -1398,7 +1406,7 @@ final class ShumMessageStore: ObservableObject {
         if let old, old.receipt.read || !receipt.read { return false }
         // Only the message's recipient may issue a deletion proof. Carry ACKs
         // along the original carrier graph, not arbitrary unsolicited proofs.
-        let original = state.messages.first(where: { $0.id == receipt.envelopeID })?.envelope
+        let original = messageIndex.map { state.messages[$0].envelope }
             ?? state.relay.first(where: { $0.envelope.id == receipt.envelopeID })?.envelope
         if let original {
             guard original.digest == receipt.digest,
@@ -1416,7 +1424,7 @@ final class ShumMessageStore: ObservableObject {
         state.receipts.removeAll { $0.receipt.key == receipt.key }
         state.receipts.append(ShumStoredReceipt(receipt: receipt))
         state.relay.removeAll { $0.envelope.id == receipt.envelopeID && $0.envelope.digest == receipt.digest && $0.envelope.recipient.id == receipt.sender.id && $0.envelope.recipient.signingKey == receipt.sender.signingKey }
-        if let i = state.messages.firstIndex(where: { $0.id == receipt.envelopeID && $0.outgoing }) {
+        if let i = messageIndex, state.messages[i].outgoing {
             if state.messages[i].status != .read { state.messages[i].status = receipt.read ? .read : .delivered }
             state.messages[i].deliveredAt = Date(timeIntervalSince1970: Double(receipt.timestamp) / 1000)
             if receipt.read { state.messages[i].readAt = state.messages[i].deliveredAt }
@@ -1426,17 +1434,21 @@ final class ShumMessageStore: ObservableObject {
     private func markRead() {
         guard foreground, let activeContact else { return }
         let unread = state.messages.filter {
-            !$0.outgoing && $0.envelope.sender.id == activeContact && $0.unread
+            $0.unread && !$0.outgoing && $0.envelope.sender.id == activeContact
         }
         guard !unread.isEmpty else { return }
         do {
             var next = state
+            // Read receipts only change flags, never the message order. Reuse
+            // one index instead of searching the entire history per receipt.
+            let messageIndices = Dictionary(next.messages.enumerated().map { ($0.element.id, $0.offset) },
+                                            uniquingKeysWith: { first, _ in first })
             for message in unread {
                 if message.envelope.expiresAt > Int64(now().timeIntervalSince1970 * 1000),
                    !next.receipts.contains(where: {
                        $0.receipt.envelopeID == message.id && $0.receipt.digest == message.envelope.digest && $0.receipt.read
                    }) {
-                    try applyReceipt(signedReceipt(for: message, read: true), to: &next)
+                    try applyReceipt(signedReceipt(for: message, read: true), to: &next, messageIndices: messageIndices)
                 }
             }
             let readIDs = Set(unread.map(\.id))
@@ -1768,6 +1780,7 @@ final class ShumMessageStore: ObservableObject {
         heldPushes.removeAll()
         heldReactionPushes.removeAll()
         internet?.received = nil; internet?.stop()
+        internet?.flushPendingPersistence()
         nearby.removeAll(); helloTimes.removeAll(); ingressRate.removeAll()
         typingDeadlines.removeAll(); latestTypingEvents.removeAll(); lastTypingSent.removeAll()
         presenceDeadlines.removeAll(); latestPresenceEvents.removeAll()

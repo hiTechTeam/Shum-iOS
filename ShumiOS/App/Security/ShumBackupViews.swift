@@ -343,7 +343,7 @@ struct ShumBackupRestoreView: View {
                     )
                     hasInstalledBackup = true
                 }
-                guard coordinator.prepareRestoredProfileForSecurity() else {
+                guard await coordinator.prepareRestoredProfileForSecurity() else {
                     throw ShumBackupError.couldNotSave
                 }
                 password = ""
