@@ -1289,6 +1289,18 @@ final class ShumMessageStore: ObservableObject {
         guard envelope.recipient.noiseKey == ownCard.noiseKey,
               envelope.recipient.signingKey == ownCard.signingKey,
               envelope.recipient.nostrKey == ownCard.nostrKey else { throw ShumFailure.invalidMessage }
+        // A copy of a message already kept: the sender retrying, or a relay
+        // sending it again. The signed ciphertext is the same, so it is not
+        // opened again; the receipt is offered again in case it was lost.
+        if let existing = state.messages.first(where: { $0.id == envelope.id }),
+           existing.envelope.sender.id == envelope.sender.id,
+           let contact = state.contacts.first(where: { $0.id == envelope.sender.id }),
+           contact.card.signingKey == envelope.sender.signingKey,
+           contact.card.nostrKey == envelope.sender.nostrKey {
+            guard !existing.outgoing, existing.envelope.digest == envelope.digest else { throw ShumFailure.invalidMessage }
+            guard canMessage(contact.card) else { return }
+            try makeReceipt(for: existing, read: !existing.unread, force: true); return
+        }
         let opened = try crypto.open(envelope.ciphertext)
         guard opened.senderStaticKey == envelope.sender.noiseKey else { throw ShumFailure.invalidMessage }
         let plain = try JSONDecoder().decode(ShumPlaintext.self, from: opened.payload)

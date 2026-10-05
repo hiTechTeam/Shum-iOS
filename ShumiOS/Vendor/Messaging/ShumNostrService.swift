@@ -58,6 +58,8 @@ final class ShumNostrService: ShumInternetTransport {
     private var cardProvider: (() -> ShumContactCard?)?
     private var profileProvider: (() -> ShumProfile?)?
     private var seen: Set<String> = []
+    /// Events handled on earlier launches; relays send the last days again on every start.
+    private let handled: ShumHandledEvents
     private var queuedEvents: [NostrEvent] = []
     private var lookups: [String: Lookup] = [:]
     private var responseRate: [String: Date] = [:]
@@ -68,8 +70,9 @@ final class ShumNostrService: ShumInternetTransport {
     nonisolated private static let chunkPrefix = "shum-contact-chunk-v1:"
     private static let lookupTimeout: TimeInterval = 20
 
-    init(identity: NostrIdentity, manager: NostrRelayManager) {
+    init(identity: NostrIdentity, manager: NostrRelayManager, handled: ShumHandledEvents? = nil) {
         self.identity = identity; self.manager = manager
+        self.handled = handled ?? ShumHandledEvents(url: nil)
     }
     var connected: Bool { manager.isDMRelayConnected }
 
@@ -89,13 +92,16 @@ final class ShumNostrService: ShumInternetTransport {
             self?.receive(event)
         }
     }
-    func stop() { started = false; manager.disconnect() }
+    func stop() { started = false; manager.disconnect(); handled.save(synchronously: true) }
     private func receive(_ event: NostrEvent) {
-        guard !seen.contains(event.id) else { return }
+        guard !seen.contains(event.id), !handled.contains(event.id) else { return }
+        // A full queue drops the event without marking it seen, so the same
+        // event from another relay can still get through.
+        if pending >= 4, queuedEvents.count >= 128 { return }
         if seen.count >= 1000 { seen.removeAll(keepingCapacity: true) }
         seen.insert(event.id)
         if pending >= 4 {
-            if queuedEvents.count < 128 { queuedEvents.append(event) }
+            queuedEvents.append(event)
             return
         }
         decode(event)
@@ -139,6 +145,7 @@ final class ShumNostrService: ShumInternetTransport {
             }.value
             guard let self else { return }; self.pending -= 1
             if let decoded { self.receive(decoded) }
+            self.handled.insert(event.id)
             self.drainQueue()
         }
     }

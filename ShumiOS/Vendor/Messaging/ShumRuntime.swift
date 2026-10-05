@@ -90,7 +90,11 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                 #endif
                 let store = try ShumConversationStore(ownerID: card.id, key: identity.storageKey, url: preview ? nil : ShumConversationStore.liveURL)
                 if !preview { try ShumHistoryMigration.live(into: store) }
-                let internet = preview ? nil : ShumNostrService(identity: identity.nostr, manager: .shum())
+                let internet = preview ? nil : ShumNostrService(
+                    identity: identity.nostr,
+                    manager: .shum(),
+                    handled: ShumHandledEvents(url: ShumHandledEvents.liveURL)
+                )
                 let permanent = try ShumMessageStore(identity: identity, store: store, transport: ble, wire: ble, card: card, internet: internet)
                 model.permanent = permanent
                 permanent.configureContactLookup { [weak model] in model?.profiles.own }
