@@ -594,12 +594,16 @@ final class ShumChatTableController: UIViewController, UITableViewDelegate {
                     in: CGSize(width: UIScreen.main.bounds.width, height: .greatestFiniteMagnitude)
                 )
                 preview.preferredContentSize = size
-                // The row has no surface of its own; the lifted card gets the
-                // screen's canvas in the same capsule the row is clipped to.
+                // The row has no surface of its own, so the lifted card gets the
+                // screen's canvas. Before iOS 26 the system draws its own rounded
+                // platter behind the preview; a capsule on top of it would show
+                // that platter at the corners as a second background.
                 preview.view.backgroundColor = UIColor(state.palette.canvas)
-                preview.view.layer.cornerCurve = .continuous
-                preview.view.layer.cornerRadius = size.height / 2
-                preview.view.clipsToBounds = true
+                if #available(iOS 26.0, *) {
+                    preview.view.layer.cornerCurve = .continuous
+                    preview.view.layer.cornerRadius = size.height / 2
+                    preview.view.clipsToBounds = true
+                }
                 return preview
             },
             actionProvider: { [weak self] _ in
