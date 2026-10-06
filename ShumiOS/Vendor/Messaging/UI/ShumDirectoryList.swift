@@ -20,9 +20,7 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     @State private var selectedPeer: ShumPeer?
     @State private var pendingAction: DirectoryConfirmation?
     @State private var blockRequest: ShumProfileBlockRequest?
-    @State private var elevatedPeerIDs: Set<PeerID> = []
-    @State private var pinTransitionPeerIDs: Set<PeerID> = []
-    @State private var pinTask: Task<Void, Never>?
+    @State private var pendingPin: PeerID?
     @State private var directoryScrollOffset: CGFloat = 0
     @ScaledMetric(relativeTo: .subheadline) private var folderHeight: CGFloat = 44
 
@@ -42,8 +40,6 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
             Button("Отмена".localized, role: .cancel) { pendingAction = nil }
             Button(action.buttonTitle, role: .destructive) { confirm(action); pendingAction = nil }
         } message: { action in Text(action.message) }
-        .shumOnChange(of: folder) { _, _ in cancelPinTransition() }
-        .onDisappear { cancelPinTransition() }
     }
 
     private var list: some View {
@@ -101,7 +97,8 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
             persistentSurfaceColor: pinned
                 ? palette.pinnedRowSurface
                 : nil,
-            hidesPersistentSurfaceAfterSwipe: false
+            hidesPersistentSurfaceAfterSwipe: false,
+            onSwipeSettled: { finishPendingPin(entry) }
         ) {
             ShumRowPressButton(action: { activate(entry) }) {
                 ShumDirectoryRow(
@@ -125,12 +122,9 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
         .listRowSeparator(isLast ? .hidden : .visible, edges: .bottom)
         .listRowSeparatorTint(Color.secondary.opacity(0.24))
         .alignmentGuide(.listRowSeparatorLeading) { _ in 86 }
-        // List rows live in separate UIKit cells and SwiftUI zIndex only
-        // orders views inside one cell, so the moving chat raises its cell.
-        .background(ShumDirectoryCellLift(lifted: elevatedPeerIDs.contains(entry.id)))
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             if entry.card != nil {
-                Button { togglePinned(entry) } label: {
+                Button { pinAfterSwipe(entry) } label: {
                     Label(pinned ? "Открепить".localized : "Закрепить".localized, systemImage: pinned ? "pin.slash" : "pin.fill")
                 }.tint(Color(uiColor: .systemGray))
             }
@@ -213,43 +207,32 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
     private func activate(_ entry: ShumDirectoryEntry) {
         open(.conversation(entry.peer))
     }
-    private func togglePinned(_ entry: ShumDirectoryEntry) {
-        guard let card = entry.card else { return }
-        guard pinTransitionPeerIDs.isEmpty else { return }
-        pinTransitionPeerIDs.insert(entry.id)
+    /// A swipe button only remembers the chat. List cannot animate moving a
+    /// row while its swipe is still closing, so the order changes once the
+    /// row is back in place.
+    private func pinAfterSwipe(_ entry: ShumDirectoryEntry) {
+        guard entry.card != nil else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-
-        let peerID = entry.id
-        let pinKey = folder.pinKey
-        pinTask = Task { @MainActor in
-            do {
-                // Let the system swipe/context menu close before the row changes position.
-                try await Task.sleep(for: .milliseconds(300))
-                let animates = !UIAccessibility.isReduceMotionEnabled
-                if animates {
-                    // Raise the cell before the list starts moving it.
-                    elevatedPeerIDs.insert(peerID)
-                    await Task.yield()
-                    try await Task.sleep(for: .milliseconds(35))
-                }
-                try withAnimation(animates ? .spring(response: 0.52, dampingFraction: 0.86) : nil) {
-                    _ = try runtime.permanent?.togglePinned(card, in: pinKey)
-                }
-                if animates { try await Task.sleep(for: .milliseconds(650)) }
-            } catch is CancellationError {
-                return
-            } catch {
-                runtime.error = error.localizedDescription
-            }
-            elevatedPeerIDs.remove(peerID)
-            pinTransitionPeerIDs.remove(peerID)
-        }
+        pendingPin = entry.id
+        // The row may scroll away before it reports the end of its swipe.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { finishPendingPin(entry) }
     }
-    private func cancelPinTransition() {
-        pinTask?.cancel()
-        pinTask = nil
-        elevatedPeerIDs.removeAll()
-        pinTransitionPeerIDs.removeAll()
+    private func finishPendingPin(_ entry: ShumDirectoryEntry) {
+        guard pendingPin == entry.id else { return }
+        pendingPin = nil
+        togglePinned(entry, feedback: false)
+    }
+    /// The order changes at once and List animates the move.
+    private func togglePinned(_ entry: ShumDirectoryEntry, feedback: Bool = true) {
+        guard let card = entry.card else { return }
+        if feedback { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+        do {
+            try withAnimation {
+                _ = try runtime.permanent?.togglePinned(card, in: folder.pinKey)
+            }
+        } catch {
+            runtime.error = error.localizedDescription
+        }
     }
     private func isPinned(_ entry: ShumDirectoryEntry) -> Bool {
         guard let card = entry.card else { return false }
@@ -274,62 +257,6 @@ struct ShumDirectoryList<Header: View, Empty: View>: View {
 
 }
 
-/// Keeps a moving row's UIKit cell above its neighbours. List moves the same
-/// cell, but UICollectionView restores its zPosition from the layout
-/// attributes when it applies them, so the lift is held every frame until
-/// the transition ends.
-private struct ShumDirectoryCellLift: UIViewRepresentable {
-    let lifted: Bool
-
-    func makeUIView(context: Context) -> Probe {
-        let view = Probe()
-        view.isUserInteractionEnabled = false
-        return view
-    }
-
-    func updateUIView(_ view: Probe, context: Context) { view.lifted = lifted }
-
-    static func dismantleUIView(_ view: Probe, coordinator: ()) { view.lifted = false }
-
-    final class Probe: UIView {
-        private weak var cell: UIView?
-        private var link: CADisplayLink?
-        var lifted = false {
-            didSet { if lifted != oldValue { update() } }
-        }
-
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            update()
-        }
-
-        private func update() {
-            if lifted, window != nil {
-                cell = cell ?? hostingCell()
-                raise()
-                guard link == nil else { return }
-                let link = CADisplayLink(target: self, selector: #selector(raise))
-                link.add(to: .main, forMode: .common)
-                self.link = link
-            } else {
-                link?.invalidate()
-                link = nil
-                cell?.layer.zPosition = 0
-            }
-        }
-
-        @objc private func raise() { cell?.layer.zPosition = 1_000 }
-
-        private func hostingCell() -> UIView? {
-            var view = superview
-            while let current = view {
-                if current is UICollectionViewCell || current is UITableViewCell { return current }
-                view = current.superview
-            }
-            return nil
-        }
-    }
-}
 private struct ShumDirectoryScrollInsets: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 17.0, *) {
