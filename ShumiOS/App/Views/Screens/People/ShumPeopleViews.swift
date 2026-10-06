@@ -331,7 +331,6 @@ extension Date {
     }
 }
 struct ShumEncounterHistoryView: View {
-    @Environment(\.shumThemePalette) private var palette
     @ObservedObject var runtime: ShumRuntime
     let openChat: (ShumPeer) -> Void
 
@@ -340,31 +339,9 @@ struct ShumEncounterHistoryView: View {
     @State private var blockRequest: ShumProfileBlockRequest?
     @State private var showsClearConfirmation = false
     @State private var highlightedEncounterIDs: Set<String> = []
-    @State private var elevatedEncounterIDs: Set<String> = []
-    @State private var pinTransitionEncounterIDs: Set<String> = []
 
     private var encounters: [ShumEncounter] {
-        let values = runtime.permanent?.encounterHistory ?? []
-        let pinnedIDs = runtime.permanent?.pinnedCardIDs(
-            in: ShumChatFolder.encounters.pinKey
-        ) ?? []
-        let pinnedRanks = Dictionary(
-            uniqueKeysWithValues: pinnedIDs.enumerated().map { ($1, $0) }
-        )
-        return values.enumerated().sorted { lhs, rhs in
-            let lhsRank = pinnedRanks[lhs.element.card.id]
-            let rhsRank = pinnedRanks[rhs.element.card.id]
-            switch (lhsRank, rhsRank) {
-            case let (.some(left), .some(right)):
-                return left < right
-            case (.some, .none):
-                return true
-            case (.none, .some):
-                return false
-            case (.none, .none):
-                return lhs.offset < rhs.offset
-            }
-        }.map(\.element)
+        runtime.permanent?.encounterHistory ?? []
     }
 
     var body: some View {
@@ -449,15 +426,11 @@ struct ShumEncounterHistoryView: View {
 
             ForEach(encounters) { encounter in
                 let peer = encounter.peer
-                let pinned = isPinned(encounter)
 
                 NativeSwipeInteractionRow(
                     persistentSurfaceColor: highlightedEncounterIDs.contains(encounter.id)
                         ? Color.orange.opacity(0.16)
-                        : pinned
-                            ? palette.pinnedRowSurface
-                            : nil,
-                    hidesPersistentSurfaceAfterSwipe: !pinned
+                        : nil
                 ) {
                     ShumStoredPersonRow(
                         runtime: runtime,
@@ -474,11 +447,6 @@ struct ShumEncounterHistoryView: View {
                         .tint(.primary)
                         Button { openChat(peer) } label: {
                             Label("Написать".localized, systemImage: "paperplane")
-                                .foregroundStyle(.primary)
-                        }
-                        .tint(.primary)
-                        Button { togglePinned(encounter) } label: {
-                            Label(pinned ? "Открепить".localized : "Закрепить".localized, systemImage: pinned ? "pin.slash" : "pin.fill")
                                 .foregroundStyle(.primary)
                         }
                         .tint(.primary)
@@ -514,13 +482,6 @@ struct ShumEncounterHistoryView: View {
                 .listRowBackground(ShumThemeCanvas())
                 .listRowSeparator(.hidden)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
-                .zIndex(elevatedEncounterIDs.contains(encounter.id) ? 1_000 : (pinned ? 1 : 0))
-                .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                    Button { togglePinned(encounter) } label: {
-                        Label(pinned ? "Открепить".localized : "Закрепить".localized, systemImage: pinned ? "pin.slash" : "pin.fill")
-                    }
-                    .tint(pinned ? Color(uiColor: .systemGray) : .accentColor)
-                }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { pendingDelete = encounter } label: {
                         Label("Очистить".localized, systemImage: "trash")
@@ -546,41 +507,6 @@ struct ShumEncounterHistoryView: View {
             .spring(response: 0.48, dampingFraction: 0.84),
             value: encounters.map(\.id)
         )
-    }
-
-    private func isPinned(_ encounter: ShumEncounter) -> Bool {
-        runtime.permanent?.isPinned(encounter.card, in: ShumChatFolder.encounters.pinKey) == true
-    }
-
-    private func togglePinned(_ encounter: ShumEncounter) {
-        guard pinTransitionEncounterIDs.insert(encounter.id).inserted else { return }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-
-        let encounterID = encounter.id
-        Task { @MainActor in
-            // First return the native swipe/context menu to its resting position.
-            try? await Task.sleep(for: .milliseconds(300))
-            elevatedEncounterIDs.insert(encounterID)
-
-            // Apply zIndex before the data reorder so the moving row stays on top.
-            await Task.yield()
-            try? await Task.sleep(for: .milliseconds(35))
-
-            do {
-                try withAnimation(.spring(response: 0.52, dampingFraction: 0.86)) {
-                    _ = try runtime.permanent?.togglePinned(
-                        encounter.card,
-                        in: ShumChatFolder.encounters.pinKey
-                    )
-                }
-            } catch {
-                runtime.error = error.localizedDescription
-            }
-
-            try? await Task.sleep(for: .milliseconds(650))
-            elevatedEncounterIDs.remove(encounterID)
-            pinTransitionEncounterIDs.remove(encounterID)
-        }
     }
 
     private func revealEncounterIfNeeded(_ encounter: ShumEncounter) {

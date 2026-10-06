@@ -52,6 +52,22 @@ extension Array where Element == ShumDirectoryEntry {
     var badgeCount: Int {
         reduce(0) { $0 + Swift.max($1.unread, $1.invitationAwaitingResponse ? 1 : 0) }
     }
+
+    /// The chats of one folder: pinned first in pin order, then the rest in
+    /// their usual order.
+    func ordered(in folder: ShumChatFolder, pinnedIDs: [String]) -> [ShumDirectoryEntry] {
+        let ranks = Dictionary(uniqueKeysWithValues: pinnedIDs.enumerated().map { ($1, $0) })
+        return filter { $0.belongs(to: folder) }.enumerated().sorted { lhs, rhs in
+            let lhsRank = lhs.element.card.flatMap { ranks[$0.id] }
+            let rhsRank = rhs.element.card.flatMap { ranks[$0.id] }
+            switch (lhsRank, rhsRank) {
+            case let (.some(left), .some(right)): return left < right
+            case (.some, .none): return true
+            case (.none, .some): return false
+            case (.none, .none): return lhs.offset < rhs.offset
+            }
+        }.map(\.element)
+    }
 }
 
 extension ShumRuntime {

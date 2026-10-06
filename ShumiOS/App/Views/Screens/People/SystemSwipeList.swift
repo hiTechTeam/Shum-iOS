@@ -170,20 +170,15 @@ struct NativeSwipeInteractionRow<Content: View>: View {
 
     let persistentSurfaceColor: Color?
     let hidesPersistentSurfaceAfterSwipe: Bool
-    /// Called once the swiped row is fully back in place. List cannot
-    /// animate moving a row while its swipe is still closing.
-    let onSwipeSettled: (() -> Void)?
     let content: Content
 
     init(
         persistentSurfaceColor: Color? = nil,
         hidesPersistentSurfaceAfterSwipe: Bool = true,
-        onSwipeSettled: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.persistentSurfaceColor = persistentSurfaceColor
         self.hidesPersistentSurfaceAfterSwipe = hidesPersistentSurfaceAfterSwipe
-        self.onSwipeSettled = onSwipeSettled
         self.content = content()
     }
 
@@ -204,10 +199,7 @@ struct NativeSwipeInteractionRow<Content: View>: View {
                 }
 
                 if #available(iOS 26.0, *) {
-                    NativeSwipeOffsetProbe(isActive: $isSwipeActive, onSettled: onSwipeSettled)
-                        .allowsHitTesting(false)
-                } else if onSwipeSettled != nil {
-                    NativeSwipeOffsetProbe(isActive: $isSwipeActive, onSettled: onSwipeSettled)
+                    NativeSwipeOffsetProbe(isActive: $isSwipeActive)
                         .allowsHitTesting(false)
                 }
             }
@@ -249,7 +241,6 @@ struct NativeSwipeInteractionRow<Content: View>: View {
 
 private struct NativeSwipeOffsetProbe: UIViewRepresentable {
     @Binding var isActive: Bool
-    var onSettled: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(isActive: $isActive)
@@ -265,7 +256,6 @@ private struct NativeSwipeOffsetProbe: UIViewRepresentable {
 
     func updateUIView(_ view: UIView, context: Context) {
         context.coordinator.isActive = $isActive
-        context.coordinator.onSettled = onSettled
         context.coordinator.attach(to: view)
     }
 
@@ -291,7 +281,6 @@ private struct NativeSwipeOffsetProbe: UIViewRepresentable {
         }
 
         var isActive: Binding<Bool>
-        var onSettled: (() -> Void)?
 
         private weak var probeView: UIView?
         private var displayLink: CADisplayLink?
@@ -299,7 +288,6 @@ private struct NativeSwipeOffsetProbe: UIViewRepresentable {
         private var previousOffset: CGFloat = 0
         private var maximumOffset: CGFloat = 0
         private var isReturning = false
-        private var wasSwiped = false
 
         init(isActive: Binding<Bool>) {
             self.isActive = isActive
@@ -314,7 +302,6 @@ private struct NativeSwipeOffsetProbe: UIViewRepresentable {
             previousOffset = 0
             maximumOffset = 0
             isReturning = false
-            wasSwiped = false
 
             let displayLink = CADisplayLink(
                 target: self,
@@ -336,7 +323,6 @@ private struct NativeSwipeOffsetProbe: UIViewRepresentable {
             previousOffset = 0
             maximumOffset = 0
             isReturning = false
-            wasSwiped = false
         }
 
         @objc private func observeHorizontalOffset() {
@@ -367,13 +353,8 @@ private struct NativeSwipeOffsetProbe: UIViewRepresentable {
                 maximumOffset = 0
                 isReturning = false
                 setActive(false)
-                if wasSwiped {
-                    wasSwiped = false
-                    onSettled?()
-                }
                 return
             }
-            if offset > 4 { wasSwiped = true }
 
             if !isActive.wrappedValue {
                 if offset > 4, !isReturning || isTouchActive {

@@ -49,25 +49,7 @@ struct ShumChatsUI: View {
 
     private var entries: [ShumDirectoryEntry] { runtime.directoryEntries }
     private var visible: [ShumDirectoryEntry] {
-        let matching = entries.filter { $0.belongs(to: folder) }
-        let pinnedIDs = runtime.permanent?.pinnedCardIDs(in: folder.pinKey) ?? []
-        let pinnedRanks = Dictionary(
-            uniqueKeysWithValues: pinnedIDs.enumerated().map { ($1, $0) }
-        )
-        return matching.enumerated().sorted { lhs, rhs in
-            let lhsRank = lhs.element.card.flatMap { pinnedRanks[$0.id] }
-            let rhsRank = rhs.element.card.flatMap { pinnedRanks[$0.id] }
-            switch (lhsRank, rhsRank) {
-            case let (.some(left), .some(right)):
-                return left < right
-            case (.some, .none):
-                return true
-            case (.none, .some):
-                return false
-            case (.none, .none):
-                return lhs.offset < rhs.offset
-            }
-        }.map(\.element)
+        entries.ordered(in: folder, pinnedIDs: runtime.permanent?.pinnedCardIDs(in: folder.pinKey) ?? [])
     }
 
     private func isPinned(_ entry: ShumDirectoryEntry) -> Bool {
@@ -76,9 +58,9 @@ struct ShumChatsUI: View {
     }
 
     var body: some View {
-        ShumDirectoryList(
+        ShumChatTableList(
             runtime: runtime, folder: folder, entries: visible, open: open,
-            pinsHeader: true
+            refresh: { runtime.tick() }
         ) {
             ShumChatFolderBar(selection: $folder, entries: entries)
                 .padding(.horizontal, 16)
@@ -91,7 +73,7 @@ struct ShumChatsUI: View {
                 emptyState
             }
         }
-        .refreshable { runtime.tick() }
+        .ignoresSafeArea()
         .safeAreaInset(edge: .bottom, spacing: 0) {
             Button { showsNetworkInfo = true } label: {
                 HStack(spacing: 6) {
