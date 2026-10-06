@@ -190,26 +190,26 @@ private final class ShumChatCell: UITableViewCell {
             background.backgroundColor = pinnedSurface ?? Self.swipeSurface
             background.cornerRadius = 26
         }
+        // The dim follows the cell's real highlight state, so a highlight
+        // that ended while the row was moving can never leave it faded.
+        let dim: CGFloat = state.isHighlighted ? 0.3 : 1
         guard window != nil else {
             backgroundConfiguration = background
+            contentView.alpha = dim
             return
         }
         UIView.animate(
             withDuration: state.isSwiped ? 0.16 : 0.3, delay: 0,
             options: [.allowUserInteraction, .beginFromCurrentState]
         ) { self.backgroundConfiguration = background }
-    }
-
-    override func setHighlighted(_ highlighted: Bool, animated: Bool) {
-        super.setHighlighted(highlighted, animated: animated)
-        if highlighted || !animated {
+        if state.isHighlighted {
             contentView.layer.removeAllAnimations()
-            contentView.alpha = highlighted ? 0.3 : 1
+            contentView.alpha = dim
         } else {
             UIView.animate(
                 withDuration: 0.2, delay: 0,
                 options: [.allowUserInteraction, .beginFromCurrentState]
-            ) { self.contentView.alpha = 1 }
+            ) { self.contentView.alpha = dim }
         }
     }
 }
