@@ -103,7 +103,7 @@ struct ShumContactCard: Codable, Equatable {
     func validate() throws {
         guard version == 1, noiseKey.count == 32, signingKey.count == 32,
               noiseKey.contains(where: { $0 != 0 }), nostrKey.count == 64,
-              nostrKey.allSatisfy({ $0.isHexDigit && !$0.isUppercase }),
+              nostrKey.allSatisfy({ "0123456789abcdef".contains($0) }),
               !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               name.utf8.count <= 64, bio.count <= 72, bio.utf8.count <= 640 else {
             throw ShumFailure.invalidContact
@@ -315,7 +315,7 @@ struct ShumContactLocator: Equatable {
 
     init(nostrKey: String) throws {
         guard nostrKey.count == 64,
-              nostrKey.allSatisfy({ $0.isHexDigit && !$0.isUppercase }),
+              nostrKey.allSatisfy({ "0123456789abcdef".contains($0) }),
               Data(hexString: nostrKey)?.count == 32 else {
             throw ShumFailure.invalidContact
         }
