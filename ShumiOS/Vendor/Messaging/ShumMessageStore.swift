@@ -1500,7 +1500,7 @@ final class ShumMessageStore: ObservableObject {
                             ShumPushService.shared.notify(
                                 recipientID: control.recipient.id,
                                 eventID: control.id,
-                                kind: .invitation
+                                kind: control.action == .request ? .invitation : .invitationUpdate
                             )
                             self.changed()
                         } catch { self.fail(error) }

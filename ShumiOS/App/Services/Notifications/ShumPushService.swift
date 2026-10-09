@@ -6,6 +6,9 @@ import UIKit
 enum ShumPushKind: String, Encodable {
     case message
     case invitation
+    /// An accepted or declined invitation. The push only wakes the app, which
+    /// decides what to show once it has the signed answer.
+    case invitationUpdate = "invitation_update"
     case reaction
 }
 

@@ -29,6 +29,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     private var notificationSnapshotInitialized = false
     private var notifiedIncomingMessageIDs: Set<String> = []
     private var notifiedInvitationIDs: Set<String> = []
+    private var notifiedOutgoingInvitationIDs: Set<String> = []
     private var notifiedNearbyPeerIDs: Set<String> = []
     private var didSynchronizeBackgroundNearby = false
     private var active = false
@@ -364,6 +365,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         notificationSnapshotInitialized = false
         notifiedIncomingMessageIDs.removeAll()
         notifiedInvitationIDs.removeAll()
+        notifiedOutgoingInvitationIDs.removeAll()
         notifiedNearbyPeerIDs.removeAll()
         chatObserver = runtime.objectWillChange.sink { [weak self, weak runtime] _ in
             guard let self, self.notificationRefreshTask == nil else { return }
@@ -394,6 +396,10 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             permanent.invitationPhase(for: $0) == .incomingPending
         }
         let invitationIDs = Set(invitations.map(\.id))
+        let invitationStates = permanent.state.invitationStates ?? [:]
+        let outgoingInvitationIDs = Set(
+            invitationStates.filter { $0.value.phase == .outgoingPending }.keys
+        )
         let entries = runtime.directoryEntries
         let nearbyIDs = Set(
             entries.filter(\.isNearby).map { $0.peer.id.id }
@@ -426,10 +432,22 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
                     senderName: invitation.name
                 )
             }
+            // Our invitation that the other person has accepted since the last
+            // look. Its push is silent, so this is the only notice.
+            for id in notifiedOutgoingInvitationIDs.subtracting(outgoingInvitationIDs) {
+                guard invitationStates[id]?.phase == .accepted,
+                      let card = permanent.state.contacts.first(where: { $0.id == id })?.card
+                else { continue }
+                AppNotificationRouter.shared.scheduleInvitationAccepted(
+                    peerID: card.peerID.id,
+                    senderName: card.name
+                )
+            }
         }
 
         notifiedIncomingMessageIDs = incomingMessageIDs
         notifiedInvitationIDs = invitationIDs
+        notifiedOutgoingInvitationIDs = outgoingInvitationIDs
         notificationSnapshotInitialized = true
 
         if !active || ShumAppLock.shared.isLocked {
@@ -458,6 +476,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         notificationSnapshotInitialized = false
         notifiedIncomingMessageIDs.removeAll()
         notifiedInvitationIDs.removeAll()
+        notifiedOutgoingInvitationIDs.removeAll()
         notifiedNearbyPeerIDs.removeAll()
         didSynchronizeBackgroundNearby = false
         nearbyPeopleNotifier.setScanningEnabled(false)

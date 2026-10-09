@@ -548,6 +548,15 @@ final class AppNotificationRouter: NSObject,
         )
     }
 
+    func scheduleInvitationAccepted(peerID: String, senderName: String) {
+        scheduleChatNotification(
+            identifier: "shum.invitation.accepted.\(peerID)",
+            peerID: peerID,
+            title: senderName,
+            body: "Приглашение принято. Можно писать.".localized
+        )
+    }
+
     /// Takes back notifications of messages the sender withdrew: the one shown
     /// after a Bluetooth delivery and the push for the same message.
     func removeMessages(_ ids: [String]) {
