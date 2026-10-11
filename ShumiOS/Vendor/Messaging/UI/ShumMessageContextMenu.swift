@@ -227,7 +227,7 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
         }
 
         private func presentMenu() {
-            guard presentation == nil, let window, !window.screen.isCaptured else { cancelPress(); return }
+            guard presentation == nil, let window else { cancelPress(); return }
             finishPressAnimation()
             let menu = ShumExtractedMessageMenu(source: self, bubble: bubbleView, outgoing: shape.outgoing,
                 reply: reply, copy: copy, cancelSending: cancelSending,

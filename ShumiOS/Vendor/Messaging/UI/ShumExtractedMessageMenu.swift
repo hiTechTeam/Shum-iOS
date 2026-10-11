@@ -90,7 +90,6 @@ final class ShumExtractedMessageMenu: UIView {
             reactionButtons.forEach { reactionBar.contentView.addSubview($0) }
         }
         NotificationCenter.default.addObserver(self, selector: #selector(interrupted), name: UIApplication.willResignActiveNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(interrupted), name: UIScreen.capturedDidChangeNotification, object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -215,7 +214,7 @@ final class ShumExtractedMessageMenu: UIView {
         surface.addSubview(self)
         source.accessibilityElementsHidden = true
         // Moving the existing view also preserves its SwiftUI environment,
-        // including capture redaction, palette and text measurements.
+        // including palette and text measurements.
         scroll.addSubview(bubble)
         bubble.bounds = CGRect(origin: .zero, size: sourceFrame.size)
         bubble.center = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)

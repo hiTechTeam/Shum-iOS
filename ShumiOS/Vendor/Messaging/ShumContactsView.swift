@@ -1,11 +1,5 @@
 #if os(iOS)
-import BitFoundation
-import Contacts
-import ContactsUI
-import CoreImage.CIFilterBuiltins
-import PhotosUI
 import SwiftUI
-import Vision
 
 extension ShumContactCard: Identifiable {}
 
@@ -19,13 +13,10 @@ struct ShumContactsView: View {
     var showOwnQR: (() -> Void)? = nil
     var select: (ShumPeer) -> Void
     @Environment(\.dismiss) private var dismiss
-    @ScaledMetric(relativeTo: .body) private var sheetHeight = 280
-    @ScaledMetric(relativeTo: .body) private var rowHeight = 50
+    @ScaledMetric(relativeTo: .body) private var sheetHeight = 230
     @State private var showQR = false
     @State private var showScanner = false
-    @State private var showPhoneBook = false
     @State private var invitation: ShumContactCard?
-    @State private var share: ShumShareItem?
     private var service: ShumMessageStore? { runtime.permanent }
     var body: some View {
         NavigationStack {
@@ -40,9 +31,6 @@ struct ShumContactsView: View {
                         }
                     } label: {
                         Label("Мой QR-код".localized, systemImage: "qrcode")
-                    }
-                    if ShumInviteLinks.isEnabled {
-                        Button { showPhoneBook = true } label: { Label("Пригласить".localized, systemImage: "person.badge.plus") }
                     }
                 }
             }
@@ -82,19 +70,6 @@ struct ShumContactsView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showPhoneBook) {
-                ShumPhoneBook { contact in
-                    showPhoneBook = false
-                    let name = CNContactFormatter.string(from: contact, style: .fullName) ?? ""
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        let greeting = name.isEmpty ? "Привет!".localized : String.localizedFormat("%@, привет!".localized, name)
-                        if let url = try? service?.ownCard.sharingInvitation() {
-                            share = ShumShareItem(text: String.localizedFormat("%@ Добавь меня в Shum:\n%@".localized, greeting, url.absoluteString))
-                        }
-                    }
-                }
-            }
-            .sheet(item: $share) { ShumShareSheet(items: [$0.text]) }
             .sheet(item: $invitation) { card in
                 ShumContactConfirmation(
                     card: runtime.currentProfileCard(card),
@@ -106,7 +81,7 @@ struct ShumContactsView: View {
             }
         }
         .tint(palette.accent)
-        .presentationDetents([.height(ShumInviteLinks.isEnabled ? sheetHeight : sheetHeight - rowHeight)])
+        .presentationDetents([.height(sheetHeight)])
         .presentationDragIndicator(.visible)
     }
     private func open(_ card: ShumContactCard, source: String) {
@@ -248,21 +223,4 @@ struct ShumContactConfirmation: View {
         }
     }
 }
-struct ShumPhoneBook: UIViewControllerRepresentable {
-    var selected: (CNContact) -> Void
-    func makeCoordinator() -> Coordinator { Coordinator(selected: selected) }
-    func makeUIViewController(context: Context) -> CNContactPickerViewController {
-        // The system picker grants access only to the chosen contact. No bulk
-        // CNContactStore fetch, upload or phone-number-based identity is used.
-        _ = CNContactStore.authorizationStatus(for: .contacts)
-        let picker = CNContactPickerViewController(); picker.delegate = context.coordinator; return picker
-    }
-    func updateUIViewController(_ controller: CNContactPickerViewController, context: Context) {}
-    final class Coordinator: NSObject, CNContactPickerDelegate {
-        let selected: (CNContact) -> Void
-        init(selected: @escaping (CNContact) -> Void) { self.selected = selected }
-        func contactPicker(_ picker: CNContactPickerViewController, didSelect contact: CNContact) { selected(contact) }
-    }
-}
-
 #endif

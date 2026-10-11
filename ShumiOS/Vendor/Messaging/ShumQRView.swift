@@ -2,24 +2,6 @@
 import CoreImage.CIFilterBuiltins
 import SwiftUI
 
-/// Invitation links open a web page that sends people to install Shum. Until
-/// Shum is on the App Store that page has nowhere proper to send them, so
-/// contacts are added only by QR code. Turn this on after the release.
-enum ShumInviteLinks {
-    static let isEnabled = false
-}
-
-private struct ShumQRShareToolbar: ToolbarContent {
-    let invitationURL: URL
-
-    var body: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            ShareLink(item: invitationURL)
-                .tint(.primary)
-                .accessibilityLabel("Поделиться контактом Shum".localized)
-        }
-    }
-}
 struct ShumQRView: View {
     let card: ShumContactCard
     var resolve: ShumContactResolving?
@@ -94,11 +76,6 @@ struct ShumQRView: View {
         }
         .navigationTitle("QR-код".localized)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if ShumInviteLinks.isEnabled, let invitationURL = try? card.sharingInvitation() {
-                ShumQRShareToolbar(invitationURL: invitationURL)
-            }
-        }
         .fullScreenCover(isPresented: $showScanner) {
             ShumScanView(resolve: resolve) { scannedCard in
                 showScanner = false
@@ -182,11 +159,4 @@ struct ShumQRView: View {
         return UIImage(cgImage: image)
     }
 }
-struct ShumShareItem: Identifiable { let id = UUID(); let text: String }
-struct ShumShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-    func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: items, applicationActivities: nil) }
-    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
-}
-
 #endif
