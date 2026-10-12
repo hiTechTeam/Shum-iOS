@@ -24,6 +24,8 @@ final class ShumCoreSession {
     private var timer: Timer?
     private var waiting: [UInt64: (Result<Any, Error>) -> Void] = [:]
     private var lastID: UInt64 = 0
+    /// Shum-Core's commit count when screens last read its state.
+    private var shownRevision: UInt64 = 0
     /// Called after anything Shum-Core did, so screens can read a new snapshot.
     var changed: (() -> Void)?
     /// A renamed profile, for the local profile list.
@@ -97,13 +99,16 @@ final class ShumCoreSession {
         return object["ok"] ?? NSNull()
     }
 
-    /// Feeds Shum-Core, then carries out what it decided.
+    /// Feeds Shum-Core, then carries out what it decided. Screens hear about
+    /// it when Shum-Core stored something or acted.
     private func step(_ input: (MobileSession) -> Void) {
         input(core)
         let text = core.effects(now: Self.now())
-        guard let effects = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: Any]],
-              !effects.isEmpty else { return }
+        let effects = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: Any]] ?? []
         for effect in effects { carry(effect) }
+        let revision = core.revision()
+        guard revision != shownRevision || !effects.isEmpty else { return }
+        shownRevision = revision
         changed?()
     }
 

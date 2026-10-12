@@ -1045,8 +1045,8 @@ final class ShumMessageStore: ObservableObject {
         } catch { fail(error); return false }
     }
     func tick(connected: Set<PeerID>, active: Bool) {
-        // Shum-Core keeps its own clock.
-        if core != nil { return }
+        // Shum-Core keeps its own clock; the app still says hello nearby.
+        if core != nil { return coreTick(connected: connected) }
         guard !retired else { return }
         tickNumber += 1
         let expiredTyping = typingDeadlines.filter { $0.value <= now() }.map(\.key)
@@ -1935,10 +1935,44 @@ extension ShumMessageStore {
         guard let core, data.count <= 24_000,
               let noise = transport.noiseSessionPublicKeyData(for: peer) else { return }
         if let packet = try? JSONDecoder().decode(ShumPacket.self, from: data),
-           let card = packet.card,
-           let json = try? String(decoding: JSONEncoder().encode(card), as: UTF8.self) {
-            core.nearby(routing: peer.id, card: json, noise: noise, distance: nil, direct: true)
+           let card = packet.card, card.noiseKey == noise {
+            coreNearby(card, at: peer, noise: noise)
         }
         core.packet(routing: peer.id, noise: noise, bytes: data)
+    }
+
+    /// Tells Shum-Core that `card` is reachable over Bluetooth at `peer`.
+    private func coreNearby(_ card: ShumContactCard, at peer: PeerID, noise: Data) {
+        guard let core, nearby[peer] != card,
+              let json = try? JSONEncoder().encode(card) else { return }
+        nearby[peer] = card
+        core.nearby(routing: peer.id, card: String(decoding: json, as: UTF8.self), noise: noise, distance: nil, direct: true)
+    }
+
+    /// Bluetooth links as the old session kept them: hello with our card to
+    /// connected devices, and Shum-Core hears who came and went. People we
+    /// already know by their Noise key count as nearby at once.
+    fileprivate func coreTick(connected: Set<PeerID>) {
+        guard let core, !retired else { return }
+        if localSessionID != transport.myPeerID {
+            localSessionID = transport.myPeerID
+            helloTimes.removeAll()
+        }
+        for peer in nearby.keys where !connected.contains(peer) {
+            core.gone(routing: peer.id)
+        }
+        nearby = nearby.filter { connected.contains($0.key) }
+        helloTimes = helloTimes.filter { connected.contains($0.key) }
+        let known = state.contacts.map(\.card) + (state.encounters ?? []).map(\.card) + state.requests
+        for peer in connected.sorted(by: { $0.id < $1.id }).prefix(20) {
+            if nearby[peer] == nil, let noise = transport.noiseSessionPublicKeyData(for: peer),
+               let card = known.first(where: { $0.noiseKey == noise }) {
+                coreNearby(card, at: peer, noise: noise)
+            }
+            let interval: TimeInterval = nearby[peer] == nil ? 2 : 30
+            guard now().timeIntervalSince(helloTimes[peer] ?? .distantPast) >= interval else { continue }
+            helloTimes[peer] = now()
+            sendPacket(ShumPacket(card: ownCard), to: peer)
+        }
     }
 }

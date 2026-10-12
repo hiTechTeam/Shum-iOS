@@ -570,6 +570,12 @@ public protocol MobileSessionProtocol : AnyObject {
      */
     func request(id: UInt64, request: String, now: UInt64)  -> String?
     
+    /**
+     * Grows with every change to the stored state; Swift reads `state()`
+     * again only when it did.
+     */
+    func revision()  -> UInt64
+    
     func snapshot()  -> String
     
     /**
@@ -770,6 +776,17 @@ open func request(id: UInt64, request: String, now: UInt64) -> String? {
         FfiConverterUInt64.lower(id),
         FfiConverterString.lower(request),
         FfiConverterUInt64.lower(now),$0
+    )
+})
+}
+    
+    /**
+     * Grows with every change to the stored state; Swift reads `state()`
+     * again only when it did.
+     */
+open func revision() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_shum_mobile_fn_method_mobilesession_revision(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -1287,6 +1304,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_method_mobilesession_request() != 29784) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_revision() != 41169) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_method_mobilesession_snapshot() != 30039) {
