@@ -1,6 +1,7 @@
 import BitFoundation
 import CryptoKit
 import Foundation
+import ShumCore
 
 enum ShumIdentityKeyNames {
     static let storage = "shumStorageKey"
@@ -381,6 +382,9 @@ final class ShumIdentityService {
     let transport: Transport
     let nostr: NostrIdentity
     let storageKey: SymmetricKey
+    /// The private Noise and signing keys, for Shum-Core's session.
+    private let noisePrivate: Data
+    private let signingPrivate: Data
     init(transport: Transport, keychain: KeychainManagerProtocol, bridge: NostrIdentityBridge) throws {
         self.transport = transport
         // BLE initializes its Noise service lazily. Let the existing service
@@ -393,6 +397,8 @@ final class ShumIdentityService {
               try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: raw).publicKey.rawRepresentation == noisePublicKey,
               case .success(let signing) = keychain.getIdentityKeyWithResult(forKey: "ed25519SigningKey"),
               try Curve25519.Signing.PrivateKey(rawRepresentation: signing).publicKey.rawRepresentation == signingPublicKey else { throw ShumFailure.unavailableIdentity }
+        noisePrivate = raw
+        signingPrivate = signing
         let existing = keychain.loadWithResult(key: "nostr-current-identity", service: "chat.shum.nostr")
         switch existing {
         case .success(let data): nostr = try JSONDecoder().decode(NostrIdentity.self, from: data)
@@ -441,6 +447,15 @@ final class ShumIdentityService {
             throw ShumFailure.unavailableIdentity
         }
         storageKey = SymmetricKey(data: storageBytes)
+    }
+    /// The profile's four private keys as Shum-Core takes them.
+    var coreKeys: MobileKeys {
+        MobileKeys(
+            noise: noisePrivate,
+            signing: signingPrivate,
+            nostr: nostr.privateKey,
+            storage: storageKey.withUnsafeBytes { Data($0) }
+        )
     }
     func card(name: String, bio: String, avatarSeed: UInt64? = nil, revision: UInt64 = 1) throws -> ShumContactCard {
         var card = ShumContactCard(noiseKey: transport.noiseStaticPublicKeyData(), signingKey: transport.noiseSigningPublicKeyData(), nostrKey: nostr.publicKeyHex, name: name, bio: String(bio.prefix(72)))

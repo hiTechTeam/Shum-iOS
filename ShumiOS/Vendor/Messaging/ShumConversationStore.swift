@@ -532,6 +532,18 @@ final class ShumConversationStore {
         persistence = prepared.persistence
         state = prepared.state
     }
+    /// The state Shum-Core's session keeps. The session alone writes the
+    /// database then; this store only shows what it stored.
+    private(set) var coreBacked = false
+    init(coreState: ShumDatabase) {
+        persistence = nil
+        state = coreState
+        coreBacked = true
+    }
+    /// Takes the state Shum-Core stored after a change.
+    func adopt(_ next: ShumDatabase) {
+        state = next
+    }
     init(ownerID: String, key: SymmetricKey, url: URL?) throws {
         if let url {
             let disk = try ShumSQLitePersistence(ownerID: ownerID, key: key, url: url)
@@ -545,6 +557,8 @@ final class ShumConversationStore {
     // Commit disk first, publish memory second. Only changed encrypted records
     // are written; acknowledgements still cannot precede durable COMMIT.
     func transaction(_ update: (inout ShumDatabase) throws -> Void) throws {
+        // With Shum-Core's session nothing else may write the database.
+        guard !coreBacked else { throw ShumFailure.storage }
         var next = state
         try update(&next)
         try persistence?.commit(previous: state, next: next)

@@ -28,6 +28,8 @@ final class ShumCoreSession {
     var changed: (() -> Void)?
     /// A renamed profile, for the local profile list.
     var renamed: ((String) -> Void)?
+    /// Sends a Shum packet (its JSON bytes) over Bluetooth to a routing ID.
+    var sendBle: ((String, Data) -> Void)?
 
     static func now() -> UInt64 { UInt64(Date().timeIntervalSince1970 * 1000) }
 
@@ -54,6 +56,24 @@ final class ShumCoreSession {
     /// The whole profile as Shum-Core shows it to every client.
     func snapshot() -> [String: Any] {
         (try? JSONSerialization.jsonObject(with: Data(core.snapshot().utf8))) as? [String: Any] ?? [:]
+    }
+
+    /// The stored profile state (protocol section 09) as JSON.
+    func state() -> String { core.state() }
+
+    /// Someone nearby with their signed card (JSON) and Noise session key.
+    func nearby(routing: String, card: String, noise: Data, distance: UInt32?, direct: Bool) {
+        step { try? $0.nearbyPeer(routing: routing, card: card, noise: noise, distance: distance, direct: direct) }
+    }
+
+    /// Someone nearby went out of reach.
+    func gone(routing: String) {
+        step { $0.nearbyGone(routing: routing) }
+    }
+
+    /// A Shum packet (JSON bytes) from Bluetooth.
+    func packet(routing: String, noise: Data, bytes: Data) {
+        step { try? $0.nearbyPacket(routing: routing, noise: noise, packet: bytes) }
     }
 
     /// Runs a request (the same JSON commands as the CLI and the desktop app)
@@ -122,8 +142,13 @@ final class ShumCoreSession {
             if let name = effect["name"] as? String { renamed?(name) }
         case "push":
             send(push: effect)
+        case "ble":
+            if let peer = effect["peer"] as? String,
+               let bytes = (effect["packet"] as? String).flatMap({ Data(base64Encoded: $0) }) {
+                sendBle?(peer, bytes)
+            }
         default:
-            // Relay news and Bluetooth packets: Bluetooth joins Shum-Core next.
+            // Relay news: snapshots show the connected relays.
             break
         }
     }

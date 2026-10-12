@@ -1,6 +1,7 @@
 import BitFoundation
 import Combine
 import Foundation
+import ShumCore
 
 /// Application-level outbox/relay coordinator. It never controls CoreBluetooth.
 /// All message crypto and link writes delegate to the existing bitchat stack.
@@ -63,6 +64,30 @@ final class ShumMessageStore: ObservableObject {
     private var backgroundFetchTask: Task<Void, Never>?
     private var backgroundFetchCompletions:
         [(eventID: String, completion: (Bool) -> Void)] = []
+    /// Shum-Core's session, when it runs this profile. It alone writes the
+    /// database then; every change below becomes a request to it.
+    private(set) var core: ShumCoreSession?
+    /// People as Shum-Core's snapshot shows them, for typing and "in chat".
+    private var corePeople: [String: [String: Any]] = [:]
+
+    /// The store over Shum-Core's session: state comes from the session, and
+    /// changes go to it.
+    init(core: ShumCoreSession, identity: ShumIdentityService, transport: Transport,
+         wire: ShumSecureTransport, now: @escaping () -> Date = Date.init) throws {
+        let state = try Self.decodeCoreState(core.state())
+        guard let card = state.ownProfileCard else { throw ShumFailure.unavailableIdentity }
+        let store = ShumConversationStore(coreState: state)
+        self.identity = identity; self.store = store; self.transport = transport; self.wire = wire
+        self.crypto = ShumCryptoService(wire: wire); self.ownCard = card
+        self.contacts = ShumContactsService(store: store); self.internet = nil; self.now = now
+        self.core = core
+        core.changed = { [weak self] in self?.coreChanged() }
+        core.sendBle = { [weak wire] peer, bytes in wire?.sendShumPacket(bytes, to: PeerID(str: peer)) }
+        coreChanged()
+        ShumPushService.shared.configure(card: ownCard) { [weak transport] data in
+            transport?.noiseSignData(data)
+        }
+    }
 
     init(identity: ShumIdentityService, store: ShumConversationStore, transport: Transport,
          wire: ShumSecureTransport, card: ShumContactCard,
@@ -122,11 +147,19 @@ final class ShumMessageStore: ObservableObject {
         let visibleIDs = Set(encounterHistory.map(\.id))
         return (state.unviewedEncounterIDs ?? []).intersection(visibleIDs)
     }
-    func start() { if !retired && foreground { internet?.start() } }
+    func start() { if core == nil, !retired && foreground { internet?.start() } }
     func fetchRemoteEvents(
         eventID: String,
         completion: @escaping (Bool) -> Void
     ) {
+        // Shum-Core's relays deliver what woke the app; give them a moment.
+        if core != nil {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                completion(true)
+            }
+            return
+        }
         guard !retired, internet != nil else {
             completion(false)
             return
@@ -173,6 +206,7 @@ final class ShumMessageStore: ObservableObject {
         // closing the socket here can cancel its relay acknowledgement.
     }
     func setActive(_ active: Bool) {
+        if core != nil { coreSetActive(active); return }
         guard !retired else { return }
         if active {
             foreground = true
@@ -216,6 +250,11 @@ final class ShumMessageStore: ObservableObject {
         onPresenceFlushFinished?()
     }
     func updateProfile(name: String, bio: String, avatarSeed: UInt64? = nil) throws {
+        if core != nil {
+            var request: [String: Any] = ["command": "profile", "name": name, "bio": bio]
+            request["seed"] = avatarSeed.map { NSNumber(value: $0) } ?? NSNull()
+            return coreRequest(request)
+        }
         guard !retired else { throw ShumFailure.unavailableIdentity }
         if state.ownProfileCard != nil, ownCard.name == name, ownCard.bio == bio,
            ownCard.avatarSeed == avatarSeed { return }
@@ -355,6 +394,7 @@ final class ShumMessageStore: ObservableObject {
             ?? state.encounters?.first(where: { $0.id == card.id })?.avatar
     }
     func add(_ card: ShumContactCard, source: String, avatar: Data? = nil) throws {
+        if core != nil { return coreRequest(["command": "add", "link": try card.invitation().absoluteString]) }
         guard !retired else { throw ShumFailure.unavailableIdentity }
         guard !isBlocked(card) else { throw ShumFailure.blocked }
         let isNew = !state.contacts.contains { $0.id == card.id }
@@ -384,6 +424,7 @@ final class ShumMessageStore: ObservableObject {
         state.contacts.first(where: { $0.card.peerID == peer })?.isAddressBookEntry == true
     }
     func removeFromContacts(_ card: ShumContactCard) throws {
+        if core != nil { return coreRequest(["command": "remove_contact", "contact": card.id]) }
         guard !retired else { throw ShumFailure.unavailableIdentity }
         try store.transaction { state in
             guard let index = state.contacts.firstIndex(where: { $0.id == card.id }) else { return }
@@ -403,7 +444,8 @@ final class ShumMessageStore: ObservableObject {
         invitationPhase(for: card) == .accepted
     }
     func isTyping(_ card: ShumContactCard) -> Bool {
-        typingDeadlines[card.id].map { $0 > now() } == true
+        if core != nil { return corePeople[card.id]?["typing"] as? Bool == true }
+        return typingDeadlines[card.id].map { $0 > now() } == true
     }
     /// Contacts currently typing to this device.
     var typingCards: [ShumContactCard] {
@@ -411,10 +453,12 @@ final class ShumMessageStore: ObservableObject {
     }
     /// The contact has this conversation open, per its signed presence.
     func isInChat(_ card: ShumContactCard) -> Bool {
-        presenceDeadlines[card.id].map { $0 > now() } == true
+        if core != nil { return corePeople[card.id]?["online"] as? Bool == true }
+        return presenceDeadlines[card.id].map { $0 > now() } == true
     }
 
     func setTyping(_ active: Bool, for card: ShumContactCard) {
+        if core != nil { return coreRequest(["command": "typing", "contact": card.id, "active": active]) }
         guard !retired, foreground, !isBlocked(card), canMessage(card),
               state.contacts.contains(where: { $0.id == card.id }) else { return }
         let timestamp = now()
@@ -445,6 +489,7 @@ final class ShumMessageStore: ObservableObject {
     }
     @discardableResult
     func sendInvitation(_ card: ShumContactCard) -> Bool {
+        if core != nil { coreRequest(["command": "invite", "contact": card.id]); return true }
         guard !retired, !isBlocked(card), invitationPhase(for: card) == .ready else { return false }
         do {
             try contacts.add(
@@ -460,6 +505,7 @@ final class ShumMessageStore: ObservableObject {
     }
     @discardableResult
     func acceptInvitation(_ card: ShumContactCard) -> Bool {
+        if core != nil { coreRequest(["command": "accept", "contact": card.id]); return true }
         let phase = invitationPhase(for: card)
         guard !retired, !isBlocked(card), phase == .incomingPending || phase == .declinedLocally else { return false }
         do {
@@ -477,6 +523,7 @@ final class ShumMessageStore: ObservableObject {
     }
     @discardableResult
     func declineInvitation(_ card: ShumContactCard) -> Bool {
+        if core != nil { coreRequest(["command": "decline", "contact": card.id]); return true }
         guard !retired, !isBlocked(card), invitationPhase(for: card) == .incomingPending else { return false }
         do {
             try transitionInvitation(with: card, action: .decline, phase: .declinedLocally)
@@ -671,6 +718,7 @@ final class ShumMessageStore: ObservableObject {
         changed()
     }
     func open(_ card: ShumContactCard?) {
+        if core != nil { return coreRequest(["command": "focus", "contact": card?.id ?? NSNull()]) }
         guard !retired else { return }
         if let previous = activeContact, previous != card?.id, foreground {
             // Switching or leaving ends "in chat" for the previous contact now.
@@ -690,10 +738,12 @@ final class ShumMessageStore: ObservableObject {
     /// A chat reports disappearing after the next one may have appeared, so
     /// only the chat that is still open is closed.
     func close(_ card: ShumContactCard) {
+        if core != nil { return coreRequest(["command": "focus", "contact": NSNull()]) }
         guard !retired, activeContact == card.id else { return }
         open(nil)
     }
     func updateAvatar(_ avatar: Data?, for peer: PeerID) {
+        if core != nil { return }
         guard !retired else { return }
         guard (avatar?.count ?? 0) <= 40_960, let card = nearby[peer] else { return }
         let contactNeedsUpdate = state.contacts.first(where: { $0.id == card.id })?.avatar != avatar
@@ -715,6 +765,8 @@ final class ShumMessageStore: ObservableObject {
     }
 
     func recordEncounter(_ incoming: ShumContactCard, avatar: Data? = nil) throws {
+        // Shum-Core records encounters itself when Bluetooth reports someone.
+        if core != nil { return }
         guard !retired else { throw ShumFailure.unavailableIdentity }
         guard incoming.id != ownCard.id, !isBlocked(incoming), (avatar?.count ?? 0) <= 40_960 else { return }
         let card = try mergeProfile(incoming)
@@ -768,6 +820,7 @@ final class ShumMessageStore: ObservableObject {
     }
 
     func markEncountersViewed() {
+        if core != nil { return coreRequest(["command": "view_encounters", "contact": NSNull()]) }
         guard !retired, !(state.unviewedEncounterIDs ?? []).isEmpty else { return }
         do {
             try store.transaction { $0.unviewedEncounterIDs = [] }
@@ -776,6 +829,7 @@ final class ShumMessageStore: ObservableObject {
     }
 
     func markEncounterViewed(_ id: String) {
+        if core != nil { return coreRequest(["command": "view_encounters", "contact": id]) }
         guard !retired,
               state.unviewedEncounterIDs?.contains(id) == true else { return }
         do {
@@ -794,6 +848,11 @@ final class ShumMessageStore: ObservableObject {
 
     @discardableResult
     func togglePinned(_ card: ShumContactCard, in directory: String) throws -> Bool {
+        if core != nil {
+            let pinned = !isPinned(card, in: directory)
+            coreRequest(["command": "pin", "contact": card.id, "directory": directory])
+            return pinned
+        }
         guard !retired else { throw ShumFailure.unavailableIdentity }
         try card.validate()
         guard card.id != ownCard.id, !isBlocked(card), !directory.isEmpty else {
@@ -822,6 +881,7 @@ final class ShumMessageStore: ObservableObject {
     }
 
     func deleteEncounter(_ card: ShumContactCard) {
+        if core != nil { return coreRequest(["command": "delete_encounters", "contact": card.id]) }
         guard !retired, state.encounters?.contains(where: { $0.id == card.id }) == true else { return }
         do {
             try store.transaction { state in
@@ -834,6 +894,7 @@ final class ShumMessageStore: ObservableObject {
     }
 
     func clearEncounters() {
+        if core != nil { return coreRequest(["command": "delete_encounters", "contact": NSNull()]) }
         guard !retired, !(state.encounters ?? []).isEmpty else { return }
         do {
             try store.transaction { state in
@@ -846,6 +907,14 @@ final class ShumMessageStore: ObservableObject {
     }
     @discardableResult
     func send(_ text: String, to card: ShumContactCard, reply: ShumReplyReference? = nil) -> Bool {
+        if core != nil {
+            var request: [String: Any] = ["command": "send", "contact": card.id, "text": text]
+            if let reply {
+                request["reply"] = ["messageID": reply.messageID, "senderID": reply.senderID, "text": reply.text]
+            }
+            coreRequest(request)
+            return true
+        }
         guard !retired else { return false }
         guard !isBlocked(card) else { fail(ShumFailure.blocked); return false }
         guard canMessage(card) else { return false }
@@ -877,6 +946,8 @@ final class ShumMessageStore: ObservableObject {
     /// failed one, so repeated taps on "Retry" never leave duplicates.
     @discardableResult
     func resend(_ messageID: String, to card: ShumContactCard) -> Bool {
+        // Shum-Core retries on its own schedule.
+        if core != nil { return false }
         guard !retired,
               let failed = state.messages.first(where: { $0.id == messageID && $0.outgoing }),
               failed.status == .expired,
@@ -894,6 +965,10 @@ final class ShumMessageStore: ObservableObject {
     /// is already there takes it back. The contact gets it without a push.
     @discardableResult
     func toggleReaction(_ reaction: ShumReaction, on messageID: String) -> Bool {
+        if core != nil {
+            coreRequest(["command": "reaction", "message": messageID, "reaction": reaction.rawValue])
+            return true
+        }
         guard !retired, let message = state.messages.first(where: { $0.id == messageID }) else { return false }
         let peer = message.outgoing ? message.envelope.recipient : message.envelope.sender
         guard let contact = state.contacts.first(where: { $0.id == peer.id })?.card,
@@ -933,6 +1008,7 @@ final class ShumMessageStore: ObservableObject {
     /// contact gets a signed withdrawal so the copy is dropped there as well.
     @discardableResult
     func cancelSending(_ messageID: String) -> Bool {
+        if core != nil { coreRequest(["command": "cancel", "message": messageID]); return true }
         guard !retired,
               let message = state.messages.first(where: { $0.id == messageID && $0.outgoing }),
               [.queued, .forwarding].contains(message.status) else { return false }
@@ -969,6 +1045,8 @@ final class ShumMessageStore: ObservableObject {
         } catch { fail(error); return false }
     }
     func tick(connected: Set<PeerID>, active: Bool) {
+        // Shum-Core keeps its own clock.
+        if core != nil { return }
         guard !retired else { return }
         tickNumber += 1
         let expiredTyping = typingDeadlines.filter { $0.value <= now() }.map(\.key)
@@ -1023,6 +1101,7 @@ final class ShumMessageStore: ObservableObject {
         if active { markRead() }
     }
     func receiveBytes(_ data: Data, from peer: PeerID) {
+        if core != nil { return coreReceive(data, from: peer) }
         guard data.count <= 24_000, let packet = try? JSONDecoder().decode(ShumPacket.self, from: data) else { return }
         receive(packet, from: peer, nostrSender: nil)
     }
@@ -1705,6 +1784,11 @@ final class ShumMessageStore: ObservableObject {
     }
     func isBlocked(_ card: ShumContactCard) -> Bool { state.blocked?[card.id] != nil }
     func deleteConversation(with card: ShumContactCard, removeContact: Bool = false) throws {
+        if core != nil {
+            coreRequest(["command": "clear", "contact": card.id])
+            if removeContact { coreRequest(["command": "remove_contact", "contact": card.id]) }
+            return
+        }
         guard !retired else { throw ShumFailure.unavailableIdentity }
         let conversationID = ShumConversation.identifier(ownCard.id, card.id)
         try store.transaction { state in
@@ -1743,6 +1827,7 @@ final class ShumMessageStore: ObservableObject {
         try deleteConversation(with: card)
     }
     func setBlocked(_ card: ShumContactCard, blocked: Bool) throws {
+        if core != nil { return coreRequest(["command": "block", "contact": card.id, "blocked": blocked]) }
         guard !retired else { throw ShumFailure.unavailableIdentity }
         try card.validate()
         try store.transaction { state in
@@ -1769,6 +1854,7 @@ final class ShumMessageStore: ObservableObject {
     }
     // Prevent all delayed callbacks from saving or sending after profile deletion.
     func retire() {
+        core?.close()
         sendPresence(online: false, to: activeContact)
         ShumPushService.shared.clearIdentity(ownCard.id)
         backgroundFetchTask?.cancel()
@@ -1796,4 +1882,63 @@ final class ShumMessageStore: ObservableObject {
         }
     }
     private func fail(_ error: Error) { onError?(error.localizedDescription) }
+}
+
+// MARK: - Shum-Core session
+
+extension ShumMessageStore {
+    /// Decodes the state Shum-Core stored: the same section 09 layout this
+    /// app writes, dates as seconds since 2001.
+    static func decodeCoreState(_ json: String) throws -> ShumDatabase {
+        try JSONDecoder().decode(ShumDatabase.self, from: Data(json.utf8))
+    }
+
+    /// Shum-Core changed something: show its stored state.
+    fileprivate func coreChanged() {
+        guard let core else { return }
+        do {
+            let next = try Self.decodeCoreState(core.state())
+            store.adopt(next)
+            if let card = next.ownProfileCard { ownCard = card }
+        } catch { fail(error) }
+        let snapshot = core.snapshot()
+        var people: [String: [String: Any]] = [:]
+        for contact in snapshot["contacts"] as? [[String: Any]] ?? [] {
+            if let id = contact["id"] as? String { people[id] = contact }
+        }
+        corePeople = people
+        changed()
+    }
+
+    /// Sends a request to Shum-Core; a failure reaches the person as an error.
+    fileprivate func coreRequest(_ request: [String: Any]) {
+        guard let core else { return }
+        Task { @MainActor [weak self] in
+            do { _ = try await core.request(request) } catch { self?.fail(error) }
+        }
+    }
+
+    fileprivate func coreSetActive(_ active: Bool) {
+        foreground = active
+        guard !active else { return }
+        // Leaving the app ends "in chat"; the session sends that right away.
+        coreRequest(["command": "focus", "contact": NSNull()])
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            self?.onPresenceFlushFinished?()
+        }
+    }
+
+    /// A Shum packet from Bluetooth goes to Shum-Core with the sender's
+    /// Noise session key; a card in it tells Shum-Core who is nearby.
+    fileprivate func coreReceive(_ data: Data, from peer: PeerID) {
+        guard let core, data.count <= 24_000,
+              let noise = transport.noiseSessionPublicKeyData(for: peer) else { return }
+        if let packet = try? JSONDecoder().decode(ShumPacket.self, from: data),
+           let card = packet.card,
+           let json = try? String(decoding: JSONEncoder().encode(card), as: UTF8.self) {
+            core.nearby(routing: peer.id, card: json, noise: noise, distance: nil, direct: true)
+        }
+        core.packet(routing: peer.id, noise: noise, bytes: data)
+    }
 }

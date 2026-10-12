@@ -3,6 +3,7 @@ import Combine
 import CryptoKit
 import CoreBluetooth
 import Foundation
+import ShumCore
 import UIKit
 
 struct ShumPeer: Identifiable, Hashable {
@@ -115,9 +116,17 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                         do {
                             let prepared = try await preparation.value
                             guard let model, !model.retired else { return }
-                            let store = ShumConversationStore(prepared: prepared)
-                            let internet = ShumNostrService(identity: identity.nostr, manager: .shum(), handled: ShumHandledEvents(url: ShumHandledEvents.liveURL))
-                            let permanent = try ShumMessageStore(identity: identity, store: store, transport: ble, wire: ble, card: card, internet: internet)
+                            let permanent: ShumMessageStore
+                            if ShumRuntime.usesSharedCore {
+                                // The app's own storage only migrated old history; Shum-Core's
+                                // session runs the profile from here on.
+                                _ = prepared
+                                permanent = try ShumRuntime.coreStore(identity: identity, card: card, ble: ble, name: model.nickname)
+                            } else {
+                                let store = ShumConversationStore(prepared: prepared)
+                                let internet = ShumNostrService(identity: identity.nostr, manager: .shum(), handled: ShumHandledEvents(url: ShumHandledEvents.liveURL))
+                                permanent = try ShumMessageStore(identity: identity, store: store, transport: ble, wire: ble, card: card, internet: internet)
+                            }
                             model.configurePermanentStore(permanent)
                             permanent.setActive(model.appActive)
                             model.isLoadingHistory = false
@@ -149,6 +158,41 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             } catch { model.setupFailed = true; model.isLoadingHistory = false; model.error = error.localizedDescription }
         }
         return model
+    }
+
+    /// Runs the profile on Shum-Core, the core every Shum client shares,
+    /// instead of this app's own session. Off by default while it is checked
+    /// on devices; the database stays the same either way.
+    static var usesSharedCore: Bool {
+        UserDefaults.standard.bool(forKey: "ShumCoreSession")
+    }
+
+    private static let sharedCoreRelays = [
+        "wss://nostr.oxtr.dev",
+        "wss://soloco.nl",
+        "wss://relay.snort.social",
+        "wss://nostr.bitcoiner.social",
+    ]
+
+    private static func coreStore(identity: ShumIdentityService, card: ShumContactCard,
+                                  ble: Transport & ShumSecureTransport, name: String) throws -> ShumMessageStore {
+        let push = (Bundle.main.object(forInfoDictionaryKey: "ShumPushAPIBaseURL") as? String)
+            .flatMap { $0.contains("$(") ? nil : URL(string: $0) }
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        let session = try ShumCoreSession(
+            profile: MobileProfile(
+                database: ShumConversationStore.liveURL.path,
+                id: card.id,
+                name: name,
+                relays: sharedCoreRelays,
+                push: push != nil,
+                client: "{\"owner\":\"ios\",\"version\":\"\(version)\"}",
+                encounterRetentionHours: UInt32(ShumMessageStore.encounterRetention / 3600)
+            ),
+            keys: identity.coreKeys,
+            push: push
+        )
+        return try ShumMessageStore(core: session, identity: identity, transport: ble, wire: ble)
     }
 
     func configurePermanentStore(_ store: ShumMessageStore) {

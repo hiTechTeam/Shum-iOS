@@ -519,6 +519,11 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
  */
 public protocol MobileSessionProtocol : AnyObject {
     
+    /**
+     * Bluetooth state for snapshots: `role` is "scan" or "advertise".
+     */
+    func bluetooth(role: String, state: String) 
+    
     func closed(relay: UInt32, attempt: UInt64, now: UInt64) 
     
     /**
@@ -527,9 +532,27 @@ public protocol MobileSessionProtocol : AnyObject {
      * `close` (relay); news `connected`, `disconnected`, `eose` (url);
      * `renamed` (name); `reply` (id, ok or error); `push` (event, path,
      * headers, body in base64) to POST to the push service; `ble` (peer,
-     * packet) for a nearby device.
+     * packet bytes in base64) for a nearby device.
      */
     func effects(now: UInt64)  -> String
+    
+    /**
+     * Someone nearby went out of reach.
+     */
+    func nearbyGone(routing: String) 
+    
+    /**
+     * A Shum packet (its JSON bytes) arrived over Bluetooth from `routing`,
+     * whose Noise session key is `noise`.
+     */
+    func nearbyPacket(routing: String, noise: Data, packet: Data) throws 
+    
+    /**
+     * Someone nearby over Bluetooth: their routing ID, signed card (JSON),
+     * Noise session key, estimated distance in metres and whether the link
+     * is direct. The session records the encounter and can deliver to them.
+     */
+    func nearbyPeer(routing: String, card: String, noise: Data, distance: UInt32?, direct: Bool) throws 
     
     func opened(relay: UInt32, attempt: UInt64, now: UInt64) 
     
@@ -548,6 +571,12 @@ public protocol MobileSessionProtocol : AnyObject {
     func request(id: UInt64, request: String, now: UInt64)  -> String?
     
     func snapshot()  -> String
+    
+    /**
+     * The stored profile state (protocol section 09) as JSON, the same
+     * layout the iOS app decodes into its own model.
+     */
+    func state()  -> String
     
     /**
      * Call about once a second.
@@ -625,6 +654,17 @@ public static func `open`(profile: MobileProfile, keys: MobileKeys, now: UInt64)
     
 
     
+    /**
+     * Bluetooth state for snapshots: `role` is "scan" or "advertise".
+     */
+open func bluetooth(role: String, state: String) {try! rustCall() {
+    uniffi_shum_mobile_fn_method_mobilesession_bluetooth(self.uniffiClonePointer(),
+        FfiConverterString.lower(role),
+        FfiConverterString.lower(state),$0
+    )
+}
+}
+    
 open func closed(relay: UInt32, attempt: UInt64, now: UInt64) {try! rustCall() {
     uniffi_shum_mobile_fn_method_mobilesession_closed(self.uniffiClonePointer(),
         FfiConverterUInt32.lower(relay),
@@ -640,7 +680,7 @@ open func closed(relay: UInt32, attempt: UInt64, now: UInt64) {try! rustCall() {
      * `close` (relay); news `connected`, `disconnected`, `eose` (url);
      * `renamed` (name); `reply` (id, ok or error); `push` (event, path,
      * headers, body in base64) to POST to the push service; `ble` (peer,
-     * packet) for a nearby device.
+     * packet bytes in base64) for a nearby device.
      */
 open func effects(now: UInt64) -> String {
     return try!  FfiConverterString.lift(try! rustCall() {
@@ -648,6 +688,45 @@ open func effects(now: UInt64) -> String {
         FfiConverterUInt64.lower(now),$0
     )
 })
+}
+    
+    /**
+     * Someone nearby went out of reach.
+     */
+open func nearbyGone(routing: String) {try! rustCall() {
+    uniffi_shum_mobile_fn_method_mobilesession_nearby_gone(self.uniffiClonePointer(),
+        FfiConverterString.lower(routing),$0
+    )
+}
+}
+    
+    /**
+     * A Shum packet (its JSON bytes) arrived over Bluetooth from `routing`,
+     * whose Noise session key is `noise`.
+     */
+open func nearbyPacket(routing: String, noise: Data, packet: Data)throws  {try rustCallWithError(FfiConverterTypeMobileError.lift) {
+    uniffi_shum_mobile_fn_method_mobilesession_nearby_packet(self.uniffiClonePointer(),
+        FfiConverterString.lower(routing),
+        FfiConverterData.lower(noise),
+        FfiConverterData.lower(packet),$0
+    )
+}
+}
+    
+    /**
+     * Someone nearby over Bluetooth: their routing ID, signed card (JSON),
+     * Noise session key, estimated distance in metres and whether the link
+     * is direct. The session records the encounter and can deliver to them.
+     */
+open func nearbyPeer(routing: String, card: String, noise: Data, distance: UInt32?, direct: Bool)throws  {try rustCallWithError(FfiConverterTypeMobileError.lift) {
+    uniffi_shum_mobile_fn_method_mobilesession_nearby_peer(self.uniffiClonePointer(),
+        FfiConverterString.lower(routing),
+        FfiConverterString.lower(card),
+        FfiConverterData.lower(noise),
+        FfiConverterOptionUInt32.lower(distance),
+        FfiConverterBool.lower(direct),$0
+    )
+}
 }
     
 open func opened(relay: UInt32, attempt: UInt64, now: UInt64) {try! rustCall() {
@@ -698,6 +777,17 @@ open func request(id: UInt64, request: String, now: UInt64) -> String? {
 open func snapshot() -> String {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_shum_mobile_fn_method_mobilesession_snapshot(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * The stored profile state (protocol section 09) as JSON, the same
+     * layout the iOS app decodes into its own model.
+     */
+open func state() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_shum_mobile_fn_method_mobilesession_state(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -1059,6 +1149,30 @@ extension MobileError: Foundation.LocalizedError {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = UInt32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -1145,10 +1259,22 @@ private var initializationResult: InitializationResult = {
     if (uniffi_shum_mobile_checksum_func_command_schema_version() != 8287) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_bluetooth() != 49280) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_shum_mobile_checksum_method_mobilesession_closed() != 46824) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_shum_mobile_checksum_method_mobilesession_effects() != 64097) {
+    if (uniffi_shum_mobile_checksum_method_mobilesession_effects() != 22963) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_nearby_gone() != 57759) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_nearby_packet() != 7152) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_nearby_peer() != 40364) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_method_mobilesession_opened() != 47872) {
@@ -1164,6 +1290,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_method_mobilesession_snapshot() != 30039) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_state() != 28065) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_method_mobilesession_tick() != 17623) {
