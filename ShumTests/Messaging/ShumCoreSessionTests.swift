@@ -128,4 +128,19 @@ struct ShumCoreSessionTests {
         #expect(reopened.state.pinnedDirectoryEntries?["contacts"] == [boris.card.id])
         #expect(reopened.state.contacts.first { $0.id == boris.card.id }?.isAddressBookEntry == false)
     }
+
+    @Test func backupsComeFromShumCoreInTheFormatEveryClientReads() async throws {
+        let clock = ShumPermanentTests.Clock()
+        let url = try folder().appendingPathComponent("anya.sqlite")
+        let anya = try Node("Аня", clock: clock, url: url)
+        let core = try switchToCore(anya, url: url)
+        let backups = ShumBackupService()
+        backups.core = core.core
+        let file = try await backups.create(password: "длинный пароль 1")
+        #expect(file.starts(with: Data("SHUM-BACKUP-2\n".utf8)))
+        #expect(try backups.metadata(for: file).profileName == anya.card.name)
+        let opened = try openBackup(file: file, password: "длинный пароль 1")
+        #expect(opened.ownerId == anya.card.id)
+        core.retire()
+    }
 }

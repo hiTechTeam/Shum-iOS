@@ -152,11 +152,16 @@ final class ShumMessageStore: ObservableObject {
         eventID: String,
         completion: @escaping (Bool) -> Void
     ) {
-        // Shum-Core's relays deliver what woke the app; give them a moment.
-        if core != nil {
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 8_000_000_000)
-                completion(true)
+        // Shum-Core's relays deliver what woke the app; wait until it is
+        // stored, as long as the old session waits.
+        if let core {
+            core.wake()
+            Task { @MainActor [weak self] in
+                for _ in 0..<80 {
+                    if self?.containsRemoteEvent(eventID) == true { return completion(true) }
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                }
+                completion(false)
             }
             return
         }
@@ -946,8 +951,11 @@ final class ShumMessageStore: ObservableObject {
     /// failed one, so repeated taps on "Retry" never leave duplicates.
     @discardableResult
     func resend(_ messageID: String, to card: ShumContactCard) -> Bool {
-        // Shum-Core retries on its own schedule.
-        if core != nil { return false }
+        if core != nil {
+            guard state.messages.contains(where: { $0.id == messageID && $0.outgoing && $0.status == .expired }) else { return false }
+            coreRequest(["command": "resend", "message": messageID])
+            return true
+        }
         guard !retired,
               let failed = state.messages.first(where: { $0.id == messageID && $0.outgoing }),
               failed.status == .expired,
@@ -1920,7 +1928,10 @@ extension ShumMessageStore {
 
     fileprivate func coreSetActive(_ active: Bool) {
         foreground = active
-        guard !active else { return }
+        if active {
+            core?.wake()
+            return
+        }
         // Leaving the app ends "in chat"; the session sends that right away.
         coreRequest(["command": "focus", "contact": NSNull()])
         Task { @MainActor [weak self] in

@@ -2,6 +2,7 @@ import BitFoundation
 import CryptoKit
 import Foundation
 import Security
+import ShumCore
 import UniformTypeIdentifiers
 
 extension UTType {
@@ -52,12 +53,18 @@ final class ShumBackupService {
     static let lastBackupDateKey = "shum.backup.lastCreatedAt"
 
     private static let magic = Data("SHUM-BACKUP-1\n".utf8)
+    /// Backups every Shum client writes (protocol section 13). Shum-Core seals
+    /// and opens them; version 1 above stays this app's own.
+    private static let coreMagic = Data("SHUM-BACKUP-2\n".utf8)
     private static let associatedData = Data("hiTeam.ShumiOS.backup.v1".utf8)
     private static let iterations = 210_000
     private static let maximumPlaintextBytes = 130 * 1024 * 1024
     private static let maximumFileBytes = 100 * 1024 * 1024
 
     private let files = FileManager.default
+    /// Shum-Core's session while the profile runs on it. Backups then come
+    /// from Shum-Core, in the format every client reads.
+    @MainActor weak var core: ShumCoreSession?
     private let localCardSigningKey = "shum.local-card.signing-key.v1"
     private let legacyChatStorageKey = "shum.chat.storage-key"
     private let nostrService = "chat.shum.nostr"
@@ -164,6 +171,7 @@ final class ShumBackupService {
         guard Self.validPassword(password) else {
             throw ShumBackupError.invalidPassword
         }
+        if let file = try await coreBackup(password: password) { return file }
 
         let payload = try collectPayload()
         let plaintext = try JSONEncoder().encode(payload)
@@ -184,6 +192,13 @@ final class ShumBackupService {
     }
 
     func metadata(for data: Data) throws -> ShumBackupMetadata {
+        if data.starts(with: Self.coreMagic) {
+            guard let summary = try? backupSummary(file: data) else { throw ShumBackupError.invalidBackup }
+            return ShumBackupMetadata(
+                profileName: summary.profileName,
+                createdAt: ISO8601DateFormatter().date(from: summary.createdAt) ?? Date()
+            )
+        }
         let envelope = try Self.decodeEnvelope(data)
         return ShumBackupMetadata(
             profileName: envelope.profileName,
@@ -199,6 +214,10 @@ final class ShumBackupService {
             throw ShumBackupError.invalidPassword
         }
 
+        if data.starts(with: Self.coreMagic) {
+            return try await restoreCore(data, password: password)
+        }
+
         let payloadData = try await Task.detached(priority: .userInitiated) {
             try Self.decrypt(data, password: password)
         }.value
@@ -212,6 +231,77 @@ final class ShumBackupService {
         return ShumBackupMetadata(
             profileName: payload.profileName,
             createdAt: payload.createdAt
+        )
+    }
+
+    @MainActor private func coreBackup(password: String) async throws -> Data? {
+        guard let core else { return nil }
+        let createdAt = ISO8601DateFormatter().string(from: Date())
+        let answer = try await core.request(["command": "backup", "password": password, "created_at": createdAt])
+        guard let text = (answer as? [String: Any])?["file"] as? String,
+              let file = Data(base64Encoded: text) else {
+            throw ShumBackupError.invalidBackup
+        }
+        return file
+    }
+
+    /// Restores a backup from any Shum client: its keys go to the Keychain
+    /// and its records to a new profile database, as registration leaves them.
+    private func restoreCore(_ data: Data, password: String) async throws -> ShumBackupMetadata {
+        let opened: MobileBackup
+        do {
+            opened = try await Task.detached(priority: .userInitiated) {
+                try openBackup(file: data, password: password)
+            }.value
+        } catch {
+            throw ShumBackupError.invalidPassword
+        }
+        let database = ShumConversationStore.liveURL
+        guard !files.fileExists(atPath: database.path) else {
+            throw ShumBackupError.restoreRequiresEmptyProfile
+        }
+        let state = (try? JSONSerialization.jsonObject(with: Data(opened.state.utf8))) as? [String: Any]
+        let card = state?["ownProfileCard"] as? [String: Any]
+        let keychain = KeychainManager.makeDefault()
+        do {
+            try saveIdentityKey(opened.keys.noise, name: "noiseStaticKey", keychain: keychain)
+            try saveIdentityKey(opened.keys.signing, name: "ed25519SigningKey", keychain: keychain)
+            try saveIdentityKey(opened.keys.storage, name: ShumIdentityKeyNames.storage, keychain: keychain)
+            try saveCustomKey(
+                JSONEncoder().encode(NostrIdentity(privateKeyData: opened.keys.nostr)),
+                name: nostrIdentityKey,
+                service: nostrService,
+                keychain: keychain
+            )
+            try files.createDirectory(at: database.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try writeDatabase(
+                database: database.path,
+                ownerId: opened.ownerId,
+                storage: opened.keys.storage,
+                state: opened.state
+            )
+            try LocalCardStore.shared.saveOwn(
+                name: opened.name,
+                bio: card?["bio"] as? String,
+                photo: nil,
+                avatarSeed: (card?["avatarSeed"] as? NSNumber)?.uint64Value
+            )
+            UserDefaults.standard.set(opened.name, forKey: "shum.nickname")
+        } catch {
+            for suffix in ["", "-wal", "-shm", ".lock"] {
+                try? files.removeItem(atPath: database.path + suffix)
+            }
+            try? LocalCardStore.shared.reset()
+            _ = keychain.deleteIdentityKey(forKey: "noiseStaticKey")
+            _ = keychain.deleteIdentityKey(forKey: "ed25519SigningKey")
+            _ = keychain.deleteIdentityKey(forKey: ShumIdentityKeyNames.storage)
+            keychain.delete(key: nostrIdentityKey, service: nostrService)
+            throw ShumBackupError.couldNotSave
+        }
+        let summary = try? backupSummary(file: data)
+        return ShumBackupMetadata(
+            profileName: opened.name,
+            createdAt: summary.flatMap { ISO8601DateFormatter().date(from: $0.createdAt) } ?? Date()
         )
     }
 

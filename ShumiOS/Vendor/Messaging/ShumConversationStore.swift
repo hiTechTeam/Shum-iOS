@@ -570,7 +570,7 @@ final class ShumConversationStore {
         let state = try ShumSQLitePersistence.snapshot(at: url, key: key)
         return try ChaChaPoly.seal(ShumCoding.encode(state), using: key).combined
     }
-    static var liveURL: URL {
+    nonisolated static var liveURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ShumConversations/state.enc")
     }

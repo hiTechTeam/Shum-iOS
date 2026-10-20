@@ -192,6 +192,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             keys: identity.coreKeys,
             push: push
         )
+        ShumBackupService.shared.core = session
         return try ShumMessageStore(core: session, identity: identity, transport: ble, wire: ble)
     }
 

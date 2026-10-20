@@ -63,6 +63,12 @@ final class ShumCoreSession {
     /// The stored profile state (protocol section 09) as JSON.
     func state() -> String { core.state() }
 
+    /// The app is back in the foreground, or a push woke it: relays
+    /// reconnect at once instead of after their retry pause.
+    func wake() {
+        step { $0.wake(now: Self.now()) }
+    }
+
     /// Someone nearby with their signed card (JSON) and Noise session key.
     func nearby(routing: String, card: String, noise: Data, distance: UInt32?, direct: Bool) {
         step { try? $0.nearbyPeer(routing: routing, card: card, noise: noise, distance: distance, direct: direct) }

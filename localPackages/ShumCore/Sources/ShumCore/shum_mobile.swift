@@ -591,6 +591,12 @@ public protocol MobileSessionProtocol : AnyObject {
     
     func url(relay: UInt32)  -> String?
     
+    /**
+     * The app is back in the foreground, or a push woke it: relays
+     * reconnect at once.
+     */
+    func wake(now: UInt64) 
+    
 }
 
 /**
@@ -827,6 +833,17 @@ open func url(relay: UInt32) -> String? {
 })
 }
     
+    /**
+     * The app is back in the foreground, or a push woke it: relays
+     * reconnect at once.
+     */
+open func wake(now: UInt64) {try! rustCall() {
+    uniffi_shum_mobile_fn_method_mobilesession_wake(self.uniffiClonePointer(),
+        FfiConverterUInt64.lower(now),$0
+    )
+}
+}
+    
 
 }
 
@@ -879,6 +896,174 @@ public func FfiConverterTypeMobileSession_lift(_ pointer: UnsafeMutableRawPointe
 #endif
 public func FfiConverterTypeMobileSession_lower(_ value: MobileSession) -> UnsafeMutableRawPointer {
     return FfiConverterTypeMobileSession.lower(value)
+}
+
+
+/**
+ * A backup opened with its password (protocol section 13): the profile, its
+ * keys and its stored state. The storage key is new; the database written
+ * from this backup uses it.
+ */
+public struct MobileBackup {
+    public var name: String
+    public var ownerId: String
+    public var keys: MobileKeys
+    /**
+     * The stored profile state (protocol section 09) as JSON.
+     */
+    public var state: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, ownerId: String, keys: MobileKeys, 
+        /**
+         * The stored profile state (protocol section 09) as JSON.
+         */state: String) {
+        self.name = name
+        self.ownerId = ownerId
+        self.keys = keys
+        self.state = state
+    }
+}
+
+
+
+extension MobileBackup: Equatable, Hashable {
+    public static func ==(lhs: MobileBackup, rhs: MobileBackup) -> Bool {
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.ownerId != rhs.ownerId {
+            return false
+        }
+        if lhs.keys != rhs.keys {
+            return false
+        }
+        if lhs.state != rhs.state {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(ownerId)
+        hasher.combine(keys)
+        hasher.combine(state)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMobileBackup: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MobileBackup {
+        return
+            try MobileBackup(
+                name: FfiConverterString.read(from: &buf), 
+                ownerId: FfiConverterString.read(from: &buf), 
+                keys: FfiConverterTypeMobileKeys.read(from: &buf), 
+                state: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MobileBackup, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.ownerId, into: &buf)
+        FfiConverterTypeMobileKeys.write(value.keys, into: &buf)
+        FfiConverterString.write(value.state, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMobileBackup_lift(_ buf: RustBuffer) throws -> MobileBackup {
+    return try FfiConverterTypeMobileBackup.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMobileBackup_lower(_ value: MobileBackup) -> RustBuffer {
+    return FfiConverterTypeMobileBackup.lower(value)
+}
+
+
+/**
+ * What a backup file says about itself before the password is entered.
+ */
+public struct MobileBackupSummary {
+    public var profileName: String
+    /**
+     * RFC 3339 UTC.
+     */
+    public var createdAt: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(profileName: String, 
+        /**
+         * RFC 3339 UTC.
+         */createdAt: String) {
+        self.profileName = profileName
+        self.createdAt = createdAt
+    }
+}
+
+
+
+extension MobileBackupSummary: Equatable, Hashable {
+    public static func ==(lhs: MobileBackupSummary, rhs: MobileBackupSummary) -> Bool {
+        if lhs.profileName != rhs.profileName {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(profileName)
+        hasher.combine(createdAt)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMobileBackupSummary: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MobileBackupSummary {
+        return
+            try MobileBackupSummary(
+                profileName: FfiConverterString.read(from: &buf), 
+                createdAt: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MobileBackupSummary, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.profileName, into: &buf)
+        FfiConverterString.write(value.createdAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMobileBackupSummary_lift(_ buf: RustBuffer) throws -> MobileBackupSummary {
+    return try FfiConverterTypeMobileBackupSummary.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMobileBackupSummary_lower(_ value: MobileBackupSummary) -> RustBuffer {
+    return FfiConverterTypeMobileBackupSummary.lower(value)
 }
 
 
@@ -1246,6 +1431,16 @@ public func avatarPixels(seed: UInt64) -> Data {
 })
 }
 /**
+ * Reads the profile name and date of a backup file.
+ */
+public func backupSummary(file: Data)throws  -> MobileBackupSummary {
+    return try  FfiConverterTypeMobileBackupSummary.lift(try rustCallWithError(FfiConverterTypeMobileError.lift) {
+    uniffi_shum_mobile_fn_func_backup_summary(
+        FfiConverterData.lower(file),$0
+    )
+})
+}
+/**
  * Shum-Core's version of the request API, for checks from Swift.
  */
 public func commandSchemaVersion() -> UInt64 {
@@ -1253,6 +1448,30 @@ public func commandSchemaVersion() -> UInt64 {
     uniffi_shum_mobile_fn_func_command_schema_version($0
     )
 })
+}
+/**
+ * Opens and checks a backup file.
+ */
+public func openBackup(file: Data, password: String)throws  -> MobileBackup {
+    return try  FfiConverterTypeMobileBackup.lift(try rustCallWithError(FfiConverterTypeMobileError.lift) {
+    uniffi_shum_mobile_fn_func_open_backup(
+        FfiConverterData.lower(file),
+        FfiConverterString.lower(password),$0
+    )
+})
+}
+/**
+ * Writes a restored profile state into a new database file, sealed with
+ * the restored storage key. An existing database is refused.
+ */
+public func writeDatabase(database: String, ownerId: String, storage: Data, state: String)throws  {try rustCallWithError(FfiConverterTypeMobileError.lift) {
+    uniffi_shum_mobile_fn_func_write_database(
+        FfiConverterString.lower(database),
+        FfiConverterString.lower(ownerId),
+        FfiConverterData.lower(storage),
+        FfiConverterString.lower(state),$0
+    )
+}
 }
 
 private enum InitializationResult {
@@ -1273,7 +1492,16 @@ private var initializationResult: InitializationResult = {
     if (uniffi_shum_mobile_checksum_func_avatar_pixels() != 34386) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_shum_mobile_checksum_func_backup_summary() != 5331) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_shum_mobile_checksum_func_command_schema_version() != 8287) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_func_open_backup() != 55062) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_func_write_database() != 46585) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_method_mobilesession_bluetooth() != 49280) {
@@ -1319,6 +1547,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_method_mobilesession_url() != 20661) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_wake() != 56447) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_constructor_mobilesession_open() != 13876) {
