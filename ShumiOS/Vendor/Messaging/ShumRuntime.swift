@@ -1,4 +1,5 @@
 import BitFoundation
+import BitLogger
 import Combine
 import CryptoKit
 import CoreBluetooth
@@ -117,11 +118,12 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                             let prepared = try await preparation.value
                             guard let model, !model.retired else { return }
                             let permanent: ShumMessageStore
-                            if ShumRuntime.usesSharedCore {
+                            if ShumRuntime.usesSharedCore,
+                               let core = ShumRuntime.openCore(identity: identity, card: card, ble: ble, name: model.nickname) {
                                 // The app's own storage only migrated old history; Shum-Core's
                                 // session runs the profile from here on.
                                 _ = prepared
-                                permanent = try ShumRuntime.coreStore(identity: identity, card: card, ble: ble, name: model.nickname)
+                                permanent = core
                             } else {
                                 let store = ShumConversationStore(prepared: prepared)
                                 let internet = ShumNostrService(identity: identity.nostr, manager: .shum(), handled: ShumHandledEvents(url: ShumHandledEvents.liveURL))
@@ -161,10 +163,22 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     }
 
     /// Runs the profile on Shum-Core, the core every Shum client shares,
-    /// instead of this app's own session. Off by default while it is checked
-    /// on devices; the database stays the same either way.
+    /// instead of this app's own session. On unless `ShumCoreSession` is set
+    /// to false for diagnosis; the database stays the same either way.
     static var usesSharedCore: Bool {
-        UserDefaults.standard.bool(forKey: "ShumCoreSession")
+        UserDefaults.standard.object(forKey: "ShumCoreSession") as? Bool ?? true
+    }
+
+    /// Shum-Core's session, or nil when it cannot open the profile: the
+    /// app's own session then keeps the phone working.
+    private static func openCore(identity: ShumIdentityService, card: ShumContactCard,
+                                 ble: Transport & ShumSecureTransport, name: String) -> ShumMessageStore? {
+        do {
+            return try coreStore(identity: identity, card: card, ble: ble, name: name)
+        } catch {
+            SecureLogger.error(error, context: "Shum-Core could not open the profile; using the app's own session", category: .session)
+            return nil
+        }
     }
 
     private static let sharedCoreRelays = [

@@ -30,7 +30,7 @@ struct ShumDeliveryReceipt: View {
 
     static func description(for status: DeliveryStatus) -> String {
         switch symbol(for: status) {
-        case .clock: "Отправляется".localized
+        case .clock: "Передаётся".localized
         case .check: "Доставлено".localized
         case .doubleCheck: "Прочитано".localized
         case .failed: "Не доставлено".localized
