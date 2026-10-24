@@ -23,6 +23,11 @@ final class ShumMessageStore: ObservableObject {
     /// People as Shum-Core's snapshot shows them, for typing, "in chat" and distance.
     private var people: [String: [String: Any]] = [:]
     private(set) var internetConnected = false
+    /// What screens last showed of people nearby, typing and "in chat".
+    private var shownPeople = ""
+    /// The last typing signal per contact, so it goes out on a start or a
+    /// stop and while typing at most every four seconds.
+    private var typingSent: [String: (active: Bool, at: Date)] = [:]
     private var retired = false
 
     init(core: ShumCoreSession, identity: ShumIdentityService, now: @escaping () -> Date = Date.init) throws {
@@ -34,7 +39,7 @@ final class ShumMessageStore: ObservableObject {
         self.now = now
         ownCard = card
         core.changed = { [weak self] stored in self?.coreChanged(stored: stored) }
-        coreChanged(stored: true)
+        show(state: .success(state), snapshot: core.snapshot())
         ShumPushService.shared.configure(card: ownCard) { [weak identity] data in
             identity?.sign(data)
         }
@@ -44,7 +49,7 @@ final class ShumMessageStore: ObservableObject {
 
     /// Decodes the state Shum-Core stored: the section 09 layout, dates as
     /// seconds since 2001.
-    static func decodeCoreState(_ json: String) throws -> ShumDatabase {
+    nonisolated static func decodeCoreState(_ json: String) throws -> ShumDatabase {
         try JSONDecoder().decode(ShumDatabase.self, from: Data(json.utf8))
     }
 
@@ -157,6 +162,9 @@ final class ShumMessageStore: ObservableObject {
         people[card.id]?["online"] as? Bool == true
     }
     func setTyping(_ active: Bool, for card: ShumContactCard) {
+        let last = typingSent[card.id]
+        if last.map({ $0.active == active && (!active || now().timeIntervalSince($0.at) < 4) }) ?? !active { return }
+        typingSent[card.id] = (active, now())
         request(["command": "typing", "contact": card.id, "active": active])
     }
     @discardableResult
@@ -263,18 +271,28 @@ final class ShumMessageStore: ObservableObject {
         people.removeAll()
     }
 
-    /// Shum-Core changed something: show who is nearby, typing and in chat,
-    /// and its stored state again when it stored something.
+    /// Shum-Core changed something: read its snapshot, and its stored state
+    /// when it stored something, off the main thread.
     private func coreChanged(stored: Bool) {
         guard !retired else { return }
-        if stored {
-            do {
-                let next = try Self.decodeCoreState(core.state())
-                store.adopt(next)
-                if let card = next.ownProfileCard { ownCard = card }
-            } catch { fail(error) }
+        core.read(stored: stored) { [weak self] state, snapshot in
+            self?.show(state: state, snapshot: snapshot)
         }
-        let snapshot = core.snapshot()
+    }
+
+    /// Shows a new stored state and who is nearby, typing and in chat.
+    /// Screens redraw only when something they show changed.
+    private func show(state: Result<ShumDatabase, Error>?, snapshot: [String: Any]) {
+        guard !retired else { return }
+        switch state {
+        case .success(let next):
+            store.adopt(next)
+            if let card = next.ownProfileCard { ownCard = card }
+        case .failure(let error):
+            fail(error)
+        case nil:
+            break
+        }
         var people: [String: [String: Any]] = [:]
         var found: [PeerID: ShumContactCard] = [:]
         for contact in snapshot["contacts"] as? [[String: Any]] ?? [] {
@@ -285,9 +303,16 @@ final class ShumMessageStore: ObservableObject {
                   let card = try? JSONDecoder().decode(ShumContactCard.self, from: json) else { continue }
             found[card.peerID] = card
         }
+        let internet = !(snapshot["relays"] as? [Any] ?? []).isEmpty
+        let shown = people.keys.sorted().map { id -> String in
+            let person = people[id] ?? [:]
+            return "\(id):\(person["nearby"] ?? ""):\(person["distance"] ?? ""):\(person["typing"] ?? ""):\(person["online"] ?? "")"
+        }.joined(separator: ",") + "|\(internet)"
+        guard state != nil || shown != shownPeople else { return }
+        shownPeople = shown
         self.people = people
         nearby = found
-        internetConnected = !(snapshot["relays"] as? [Any] ?? []).isEmpty
+        internetConnected = internet
         revision &+= 1
     }
 

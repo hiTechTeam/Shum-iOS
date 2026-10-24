@@ -2,10 +2,20 @@ import CoreBluetooth
 import Foundation
 import ShumCore
 
+/// Shum-Core's session object. It locks itself (a mutex in Rust), so it can
+/// be used from the core queue while the main thread holds this reference.
+private struct CoreHandle: @unchecked Sendable {
+    let session: MobileSession
+}
+
 /// The profile session of Shum-Core, the core every Shum client shares (the
 /// CLI, the desktop app, the browser and this app). Shum-Core decides what to
 /// store, send and answer; this class keeps the relay WebSockets, the clock
 /// and push requests, and carries out Shum-Core's effects in order.
+///
+/// Shum-Core works on its own serial queue, as it does on its own thread in
+/// the other clients: every call checks and stores the whole profile, which
+/// must never hold up typing or animations on the main thread.
 @MainActor
 final class ShumCoreSession {
     enum Failure: LocalizedError {
@@ -20,6 +30,7 @@ final class ShumCoreSession {
     }
 
     private let core: MobileSession
+    private let queue = DispatchQueue(label: "shum.core", qos: .userInitiated)
     private let push: URL?
     private var sockets: [UInt32: ShumRelaySocket] = [:]
     private var timer: Timer?
@@ -40,7 +51,7 @@ final class ShumCoreSession {
     /// Whether Bluetooth is on, while Shum-Core's radio runs.
     var radioPower: ((CBManagerState) -> Void)?
 
-    static func now() -> UInt64 { UInt64(Date().timeIntervalSince1970 * 1000) }
+    nonisolated static func now() -> UInt64 { UInt64(Date().timeIntervalSince1970 * 1000) }
 
     init(profile: MobileProfile, keys: MobileKeys, push: URL?) throws {
         do {
@@ -65,11 +76,28 @@ final class ShumCoreSession {
 
     /// The whole profile as Shum-Core shows it to every client.
     func snapshot() -> [String: Any] {
-        (try? JSONSerialization.jsonObject(with: Data(core.snapshot().utf8))) as? [String: Any] ?? [:]
+        let handle = CoreHandle(session: core)
+        let text = queue.sync { handle.session.snapshot() }
+        return (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
     }
 
     /// The stored profile state (protocol section 09) as JSON.
-    func state() -> String { core.state() }
+    func state() -> String {
+        let handle = CoreHandle(session: core)
+        return queue.sync { handle.session.state() }
+    }
+
+    /// Reads the snapshot, and the stored state when `stored`, on the core
+    /// queue, decodes both there and hands them to the main thread.
+    func read(stored: Bool, _ done: @escaping @MainActor (Result<ShumDatabase, Error>?, [String: Any]) -> Void) {
+        let handle = CoreHandle(session: core)
+        queue.async {
+            let state = stored ? Result { try ShumMessageStore.decodeCoreState(handle.session.state()) } : nil
+            let snapshot = (try? JSONSerialization.jsonObject(with: Data(handle.session.snapshot().utf8))) as? [String: Any] ?? [:]
+            let result = Unchecked((state, snapshot))
+            DispatchQueue.main.async { MainActor.assumeIsolated { done(result.value.0, result.value.1) } }
+        }
+    }
 
     /// The app is back in the foreground, or a push woke it: relays
     /// reconnect at once instead of after their retry pause.
@@ -119,38 +147,64 @@ final class ShumCoreSession {
         let json = String(decoding: try JSONSerialization.data(withJSONObject: request), as: UTF8.self)
         lastID += 1
         let id = lastID
-        var immediate: String?
-        step { immediate = $0.request(id: id, request: json, now: Self.now()) }
-        if let immediate { return try Self.answer(immediate) }
         return try await withCheckedThrowingContinuation { continuation in
             waiting[id] = { continuation.resume(with: $0) }
+            run(answering: id) { $0.request(id: id, request: json, now: Self.now()) }
         }
     }
 
-    private static func answer(_ text: String) throws -> Any {
+    nonisolated private static func answer(_ text: String) throws -> Any {
         let value = try JSONSerialization.jsonObject(with: Data(text.utf8), options: .fragmentsAllowed)
         guard let object = value as? [String: Any] else { throw Failure.core(text) }
         if let error = object["error"] { throw Failure.answer(error) }
         return object["ok"] ?? NSNull()
     }
 
-    /// Feeds Shum-Core, then carries out what it decided. Screens hear about
-    /// a stored change at once; about anything else at most twice a second,
-    /// and not about Bluetooth frames, which come many times a second.
-    private func step(news: Bool = false, _ input: (MobileSession) -> Void) {
-        let nearby = core.nearbyRevision()
-        input(core)
-        let text = core.effects(now: Self.now())
-        let effects = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: Any]] ?? []
+    private func step(news: Bool = false, _ input: @escaping (MobileSession) -> Void) {
+        run(news: news) { input($0); return nil }
+    }
+
+    /// Feeds Shum-Core on its queue, then carries out what it decided, in
+    /// order, on the main thread. Screens hear about a stored change at once;
+    /// about anything else at most twice a second, and not about Bluetooth
+    /// frames, which come many times a second.
+    private func run(news: Bool = false, answering id: UInt64? = nil, _ input: @escaping (MobileSession) -> String?) {
+        let handle = CoreHandle(session: core)
+        let work = Unchecked(input)
+        queue.async { [weak self] in
+            let core = handle.session
+            let nearby = core.nearbyRevision()
+            let answer = work.value(core)
+            let text = core.effects(now: Self.now())
+            var effects = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: Any]] ?? []
+            // Relay addresses are read here too, so the main thread never
+            // waits for Shum-Core.
+            for index in effects.indices where effects[index]["type"] as? String == "connect" {
+                let relay = (effects[index]["relay"] as? NSNumber)?.uint32Value ?? 0
+                effects[index]["url"] = core.url(relay: relay)
+            }
+            let revision = core.revision()
+            let moved = core.nearbyRevision() != nearby
+            let result = Unchecked(effects)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.finish(news: news || moved, id: id, answer: answer, effects: result.value, revision: revision)
+                }
+            }
+        }
+    }
+
+    private func finish(news: Bool, id: UInt64?, answer: String?, effects: [[String: Any]], revision: UInt64) {
+        if let id, let answer, let waiter = waiting.removeValue(forKey: id) {
+            waiter(Result { try Self.answer(answer) })
+        }
         for effect in effects { carry(effect) }
-        let revision = core.revision()
         if revision != shownRevision {
             shownRevision = revision
             changed?(true)
             return
         }
-        let shown = news || core.nearbyRevision() != nearby
-            || effects.contains { $0["type"] as? String != "ble-frames" }
+        let shown = news || effects.contains { $0["type"] as? String != "ble-frames" }
         guard shown, !refreshDue else { return }
         refreshDue = true
         Task { @MainActor [weak self] in
@@ -167,7 +221,7 @@ final class ShumCoreSession {
         case "connect":
             let attempt = (effect["attempt"] as? NSNumber)?.uint64Value ?? 0
             sockets[relay]?.close()
-            guard let url = core.url(relay: relay).flatMap(URL.init(string:)) else {
+            guard let url = (effect["url"] as? String).flatMap(URL.init(string:)) else {
                 step { $0.closed(relay: relay, attempt: attempt, now: Self.now()) }
                 return
             }
@@ -213,7 +267,7 @@ final class ShumCoreSession {
         guard let base = push, let path = effect["path"] as? String,
               let url = URL(string: path, relativeTo: base),
               let body = (effect["body"] as? String).flatMap({ Data(base64Encoded: $0) }) else {
-            core.pushed(event: event, error: "push service is not configured")
+            step { $0.pushed(event: event, error: "push service is not configured") }
             return
         }
         var request = URLRequest(url: url, timeoutInterval: 10)
@@ -228,6 +282,12 @@ final class ShumCoreSession {
             Task { @MainActor in self?.step { $0.pushed(event: event, error: failure) } }
         }.resume()
     }
+}
+
+/// Carries a value that is only read on one side of a queue hop.
+private struct Unchecked<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
 }
 
 /// One relay WebSocket. It reports opening, text messages and closing.
