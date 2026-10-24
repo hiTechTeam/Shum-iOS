@@ -73,10 +73,17 @@ struct ProfileOverviewView: View {
             }
 
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { open(.ownQR) } label: { Image(systemName: "qrcode") }
-                    .accessibilityLabel("Мой QR-код".localized)
-                Button { showSettings = true } label: { Image(systemName: "gearshape") }
-                    .accessibilityLabel("Настройки".localized)
+                // Monochrome in every theme.
+                Button { open(.ownQR) } label: {
+                    Image(systemName: "qrcode").foregroundStyle(.primary)
+                }
+                .tint(.primary)
+                .accessibilityLabel("Мой QR-код".localized)
+                Button { showSettings = true } label: {
+                    Image(systemName: "gearshape").foregroundStyle(.primary)
+                }
+                .tint(.primary)
+                .accessibilityLabel("Настройки".localized)
             }
         }
         .navigationDestination(isPresented: $showSettings) {
@@ -88,9 +95,16 @@ struct ProfileOverviewView: View {
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $editingAvatar) {
-            ShumAvatarSheet(profile: authCodeViewModel)
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
+            PixelAvatarGeneratorSheet(currentSeed: photoVM.avatarSeed) { seed in
+                if photoVM.usePixelAvatar(seed: seed) {
+                    editingAvatar = false
+                }
+            }
+            .presentationDetents([.height(470)])
+            .presentationDragIndicator(.visible)
+        }
+        .alert("local.photo.save.error", isPresented: $photoVM.saveFailed) {
+            Button(Inc.Common.okey.localized, role: .cancel) { }
         }
     }
 
@@ -228,75 +242,6 @@ private struct ShumNameSheet: View {
     private func save() {
         guard let value = ShumProfileValidation.name(name) else { return }
         if profile.updateName(value) { dismiss() }
-    }
-}
-
-/// The pixel avatar: everyone sees it, contacts and people nearby.
-private struct ShumAvatarSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject var profile: LocalProfileViewModel
-
-    private var name: String { profile.localName ?? "" }
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 8) {
-                Button(action: change) {
-                    HStack(spacing: 12) {
-                        ShumAvatar(name: name, size: 34, imageData: ShumOwnProfile.avatar)
-                        Text("Пиксельный аватар".localized)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        Text("Сменить".localized)
-                            .foregroundStyle(.secondary)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.horizontal, 16)
-                    .frame(height: 58)
-                    .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                Text("Его видят все: контакты и люди рядом".localized)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
-
-                if let error = profile.saveError {
-                    Text(error)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .padding(.horizontal, 16)
-                }
-                Spacer()
-            }
-            .padding(16)
-            .background(ShumThemeCanvas().ignoresSafeArea())
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 10) {
-                        ShumAvatar(name: name, size: 32, imageData: ShumOwnProfile.avatar)
-                        Text("Изменить аватар".localized)
-                            .font(.headline)
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
-                        .accessibilityLabel(Inc.Common.close.localized)
-                }
-            }
-            .onAppear { profile.saveError = nil }
-        }
-    }
-
-    /// Another pixel avatar; the profile is signed and sent again with it.
-    private func change() {
-        UISelectionFeedbackGenerator().selectionChanged()
-        profile.save(name: name, photo: nil, avatarSeed: UInt64.random(in: .min ... .max))
     }
 }
 

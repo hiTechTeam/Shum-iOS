@@ -47,7 +47,8 @@ struct ProfilePhotoView: View {
     }
 }
 
-private struct PixelAvatarGeneratorSheet: View {
+/// The pixel avatar generator: another variant until one fits, then set it.
+struct PixelAvatarGeneratorSheet: View {
     @Environment(\.dismiss) private var dismiss
     let currentSeed: UInt64?
     let onUse: (UInt64) -> Void
