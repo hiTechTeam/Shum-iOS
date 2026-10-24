@@ -84,8 +84,8 @@ final class ShumMessageStore: ObservableObject {
         core.changed = { [weak self] in self?.coreChanged() }
         core.sendBle = { [weak wire] peer, bytes in wire?.sendShumPacket(bytes, to: PeerID(str: peer)) }
         coreChanged()
-        ShumPushService.shared.configure(card: ownCard) { [weak transport] data in
-            transport?.noiseSignData(data)
+        ShumPushService.shared.configure(card: ownCard) { [weak identity] data in
+            identity?.sign(data)
         }
     }
 

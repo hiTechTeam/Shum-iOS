@@ -385,20 +385,26 @@ final class ShumIdentityService {
     /// The private Noise and signing keys, for Shum-Core's session.
     private let noisePrivate: Data
     private let signingPrivate: Data
+    let noisePublicKey: Data
+    let signingPublicKey: Data
+    private nonisolated let signingKey: Curve25519.Signing.PrivateKey
     init(transport: Transport, keychain: KeychainManagerProtocol, bridge: NostrIdentityBridge) throws {
         self.transport = transport
-        // BLE initializes its Noise service lazily. Let the existing service
-        // create first-launch keys before verifying their durable copies.
-        let noisePublicKey = transport.noiseStaticPublicKeyData()
-        let signingPublicKey = transport.noiseSigningPublicKeyData()
-        // Upstream may temporarily generate an ephemeral identity when locked.
-        // Never bind permanent contacts/history to that fallback identity.
-        guard case .success(let raw) = keychain.getIdentityKeyWithResult(forKey: "noiseStaticKey"),
-              try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: raw).publicKey.rawRepresentation == noisePublicKey,
-              case .success(let signing) = keychain.getIdentityKeyWithResult(forKey: "ed25519SigningKey"),
-              try Curve25519.Signing.PrivateKey(rawRepresentation: signing).publicKey.rawRepresentation == signingPublicKey else { throw ShumFailure.unavailableIdentity }
-        noisePrivate = raw
-        signingPrivate = signing
+        noisePrivate = try Self.key("noiseStaticKey", in: keychain) {
+            Curve25519.KeyAgreement.PrivateKey().rawRepresentation
+        }
+        signingPrivate = try Self.key("ed25519SigningKey", in: keychain) {
+            Curve25519.Signing.PrivateKey().rawRepresentation
+        }
+        noisePublicKey = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: noisePrivate).publicKey.rawRepresentation
+        signingKey = try Curve25519.Signing.PrivateKey(rawRepresentation: signingPrivate)
+        signingPublicKey = signingKey.publicKey.rawRepresentation
+        // The app's own Bluetooth may fall back to a temporary identity while
+        // the iPhone is locked; never bind contacts and history to that one.
+        if !ShumRuntime.usesCoreRadio {
+            guard transport.noiseStaticPublicKeyData() == noisePublicKey,
+                  transport.noiseSigningPublicKeyData() == signingPublicKey else { throw ShumFailure.unavailableIdentity }
+        }
         let existing = keychain.loadWithResult(key: "nostr-current-identity", service: "chat.shum.nostr")
         switch existing {
         case .success(let data): nostr = try JSONDecoder().decode(NostrIdentity.self, from: data)
@@ -448,6 +454,28 @@ final class ShumIdentityService {
         }
         storageKey = SymmetricKey(data: storageBytes)
     }
+    /// A profile key from the Keychain, made on first launch. A key that
+    /// cannot be read now, as on a locked iPhone, is never replaced.
+    private static func key(_ name: String, in keychain: KeychainManagerProtocol, make: () -> Data) throws -> Data {
+        switch keychain.getIdentityKeyWithResult(forKey: name) {
+        case .success(let raw):
+            return raw
+        case .itemNotFound:
+            let raw = make()
+            guard case .success = keychain.saveIdentityKeyWithResult(raw, forKey: name),
+                  case .success(let saved) = keychain.getIdentityKeyWithResult(forKey: name),
+                  saved == raw else { throw ShumFailure.unavailableIdentity }
+            return saved
+        default:
+            throw ShumFailure.unavailableIdentity
+        }
+    }
+
+    /// Signs with the profile's Ed25519 key.
+    nonisolated func sign(_ data: Data) -> Data? {
+        try? signingKey.signature(for: data)
+    }
+
     /// The profile's four private keys as Shum-Core takes them.
     var coreKeys: MobileKeys {
         MobileKeys(
@@ -458,18 +486,18 @@ final class ShumIdentityService {
         )
     }
     func card(name: String, bio: String, avatarSeed: UInt64? = nil, revision: UInt64 = 1) throws -> ShumContactCard {
-        var card = ShumContactCard(noiseKey: transport.noiseStaticPublicKeyData(), signingKey: transport.noiseSigningPublicKeyData(), nostrKey: nostr.publicKeyHex, name: name, bio: String(bio.prefix(72)))
-        guard let signature = transport.noiseSignData(try card.signedBytes()) else { throw ShumFailure.unavailableIdentity }
+        var card = ShumContactCard(noiseKey: noisePublicKey, signingKey: signingPublicKey, nostrKey: nostr.publicKeyHex, name: name, bio: String(bio.prefix(72)))
+        guard let signature = sign(try card.signedBytes()) else { throw ShumFailure.unavailableIdentity }
         card.signature = signature
         card.avatarSeed = avatarSeed ?? ShumPixelAvatarGenerator.seed(for: card.noiseKey)
         card.avatarVersion = ShumPixelAvatarGenerator.version
         guard let signedSeed = card.avatarSeedBytes(),
-              let seedSignature = transport.noiseSignData(signedSeed) else {
+              let seedSignature = sign(signedSeed) else {
             throw ShumFailure.unavailableIdentity
         }
         card.avatarSeedSignature = seedSignature
         card.profileRevision = revision
-        guard let profileSignature = transport.noiseSignData(try card.profileBytes()) else {
+        guard let profileSignature = sign(try card.profileBytes()) else {
             throw ShumFailure.unavailableIdentity
         }
         card.profileSignature = profileSignature
