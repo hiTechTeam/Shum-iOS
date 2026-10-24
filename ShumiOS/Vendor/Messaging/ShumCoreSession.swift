@@ -31,9 +31,6 @@ final class ShumCoreSession {
     var changed: (() -> Void)?
     /// A renamed profile, for the local profile list.
     var renamed: ((String) -> Void)?
-    /// Sends a Shum packet (its JSON bytes) over Bluetooth to a routing ID,
-    /// through the app's own Bluetooth while Shum-Core's radio is off.
-    var sendBle: ((String, Data) -> Void)?
     /// Shum-Core's Bluetooth mesh on this phone's radio, while it runs.
     private var radio: ShumCoreRadio?
     /// Whether Bluetooth is on, while Shum-Core's radio runs.
@@ -112,21 +109,6 @@ final class ShumCoreSession {
         step { $0.bleStop() }
     }
 
-    /// Someone nearby with their signed card (JSON) and Noise session key.
-    func nearby(routing: String, card: String, noise: Data, distance: UInt32?, direct: Bool) {
-        step { try? $0.nearbyPeer(routing: routing, card: card, noise: noise, distance: distance, direct: direct) }
-    }
-
-    /// Someone nearby went out of reach.
-    func gone(routing: String) {
-        step { $0.nearbyGone(routing: routing) }
-    }
-
-    /// A Shum packet (JSON bytes) from Bluetooth.
-    func packet(routing: String, noise: Data, bytes: Data) {
-        step { try? $0.nearbyPacket(routing: routing, noise: noise, packet: bytes) }
-    }
-
     /// Runs a request (the same JSON commands as the CLI and the desktop app)
     /// and returns its answer.
     func request(_ request: [String: Any]) async throws -> Any {
@@ -196,11 +178,6 @@ final class ShumCoreSession {
             if let name = effect["name"] as? String { renamed?(name) }
         case "push":
             send(push: effect)
-        case "ble":
-            if let peer = effect["peer"] as? String,
-               let bytes = (effect["packet"] as? String).flatMap({ Data(base64Encoded: $0) }) {
-                sendBle?(peer, bytes)
-            }
         case "ble-frames":
             if let link = effect["link"] as? String {
                 let frames = (effect["frames"] as? [String] ?? []).compactMap { Data(base64Encoded: $0) }

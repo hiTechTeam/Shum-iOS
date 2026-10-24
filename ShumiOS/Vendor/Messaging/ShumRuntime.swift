@@ -31,10 +31,11 @@ struct ShumMessage: Identifiable {
     var theirReaction: ShumReaction? = nil
 }
 
-/// Shum composition. Radio/session management stays inside the transport;
-/// permanent identity, history and routing belong to the application services.
+/// Shum on this iPhone: Shum-Core runs the profile, its Bluetooth mesh and
+/// its relays; this class shows what Shum-Core stored and passes on what the
+/// person does.
 @MainActor
-final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeerEventsDelegate {
+final class ShumRuntime: ObservableObject {
     private static let nicknameKey = "shum.nickname"
     private static let legacyNicknameKey = "spotchat.nickname"
     @Published private(set) var peers: [ShumPeer] = []
@@ -57,7 +58,6 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     private var projectedPermanentMessages: [String: (stored: ShumStoredMessage, message: ShumMessage)] = [:]
     private var permanentMessageSnapshot: PermanentMessageSnapshot?
     @Published private(set) var isLoadingHistory = false
-    private var storagePreparation: Task<ShumConversationStore.Prepared, Error>?
     private var historyLoadingCompletion: Task<Void, Never>?
     private var shouldStartAfterLoading = false
     private var shouldRunTimerAfterLoading = true
@@ -71,164 +71,84 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     private var bluetoothEnabled = true
     private var connectedPeerIDs: Set<PeerID> = []
     var isReady: Bool { !setupFailed && !retired && !isLoadingHistory }
-    private var readAttempts: [String: (count: Int, sentAt: Date)] = [:]
-    private let transport: Transport
     private let defaults: UserDefaults
     private let now: () -> Date
     private var timer: AnyCancellable?
     private var started = false
     private var knownPeers: [PeerID: ShumPeer] = [:]
-    private var receivedIDs: Set<String> = []
-    private var receivedOrder: [String] = []
-    static let disappearanceDelay: TimeInterval = 6
-    static let retryInterval: TimeInterval = 10
-    static let maxAttempts = 3
-    static let connectionWaitLimit: TimeInterval = 120
 
+    /// Opens the profile on Shum-Core. With `deferHistoryLoading` the first
+    /// screen appears before Shum-Core has read the database.
     static func live(deferHistoryLoading: Bool = false) -> ShumRuntime {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-ShumPreview") { return preview() }
-        #endif
+        let model = ShumRuntime(profileStore: .live())
         let keychain = KeychainManager.makeDefault()
-        let ble = BitchatTransportFactory.make(
-            keychain: keychain,
-            deferBluetoothStartup: true
-        )
-        let model = ShumRuntime(transport: ble, profileStore: .live())
-        // Legacy synthetic radio diagnostics remain isolated from real history.
-        if UserDefaults.standard.string(forKey: "ShumSelfTestRun") == nil {
-            do {
-                let identity = try ShumIdentityService(transport: ble, keychain: keychain, bridge: NostrIdentityBridge(keychain: keychain))
-                let card = try identity.card(name: model.nickname, bio: model.profiles.own.bio, avatarSeed: model.profiles.own.avatarSeed)
-                var preview = false
-                #if DEBUG && targetEnvironment(simulator)
-                preview = ProcessInfo.processInfo.arguments.contains("-ShumPermanentPreview")
-                #endif
-                if deferHistoryLoading && !preview {
-                    model.isLoadingHistory = true
-                    let ownerID = card.id, key = identity.storageKey, url = ShumConversationStore.liveURL
-                    let legacyURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("shum-chats-v1.enc")
-                    let legacyKey = try? KeychainStore.shared.data(for: "shum.chat.storage-key")
-                    let preparation = Task.detached(priority: .userInitiated) {
-                        try ShumConversationStore.prepare(ownerID: ownerID, key: key, url: url, legacyURL: legacyURL, legacyKey: legacyKey)
-                    }
-                    model.storagePreparation = preparation
-                    model.historyLoadingCompletion = Task { @MainActor [weak model] in
-                        do {
-                            let prepared = try await preparation.value
-                            guard let model, !model.retired else { return }
-                            let permanent: ShumMessageStore
-                            if ShumRuntime.usesSharedCore {
-                                // The app's own storage only migrated old history. Its
-                                // connection closes before Shum-Core opens the database:
-                                // closing checkpoints the journal, which Shum-Core would
-                                // see as a change by someone else and stop writing.
-                                prepared.persistence.close()
-                            }
-                            if ShumRuntime.usesSharedCore,
-                               let core = ShumRuntime.openCore(identity: identity, card: card, ble: ble, name: model.nickname) {
-                                // Shum-Core's session runs the profile from here on.
-                                permanent = core
-                            } else {
-                                let store = ShumRuntime.usesSharedCore
-                                    ? try ShumConversationStore(ownerID: ownerID, key: key, url: url)
-                                    : ShumConversationStore(prepared: prepared)
-                                let internet = ShumNostrService(identity: identity.nostr, manager: .shum(), handled: ShumHandledEvents(url: ShumHandledEvents.liveURL))
-                                permanent = try ShumMessageStore(identity: identity, store: store, transport: ble, wire: ble, card: card, internet: internet)
-                            }
-                            model.configurePermanentStore(permanent)
-                            permanent.setActive(model.appActive)
-                            model.isLoadingHistory = false
-                            model.storagePreparation = nil
-                            model.onReady?()
-                            if model.shouldStartAfterLoading { model.start(runTimer: model.shouldRunTimerAfterLoading) }
-                        } catch {
-                            guard let model, !model.retired else { return }
-                            model.setupFailed = true
-                            model.isLoadingHistory = false
-                            model.error = error.localizedDescription
-                        }
-                    }
-                    return model
+        do {
+            let identity = try ShumIdentityService(keychain: keychain, bridge: NostrIdentityBridge(keychain: keychain))
+            let card = try identity.card(name: model.nickname, bio: model.profiles.own.bio, avatarSeed: model.profiles.own.avatarSeed)
+            guard deferHistoryLoading else {
+                model.configurePermanentStore(try coreStore(identity: identity, card: card, name: model.nickname))
+                return model
+            }
+            model.isLoadingHistory = true
+            model.historyLoadingCompletion = Task { @MainActor [weak model] in
+                await Task.yield()
+                guard let model, !model.retired else { return }
+                do {
+                    let permanent = try coreStore(identity: identity, card: card, name: model.nickname)
+                    model.configurePermanentStore(permanent)
+                    permanent.setActive(model.appActive)
+                    model.isLoadingHistory = false
+                    model.onReady?()
+                    if model.shouldStartAfterLoading { model.start(runTimer: model.shouldRunTimerAfterLoading) }
+                } catch {
+                    model.setupFailed = true
+                    model.isLoadingHistory = false
+                    model.error = error.localizedDescription
                 }
-                let store = try ShumConversationStore(ownerID: card.id, key: identity.storageKey, url: preview ? nil : ShumConversationStore.liveURL)
-                if !preview { try ShumHistoryMigration.live(into: store) }
-                let internet = preview ? nil : ShumNostrService(
-                    identity: identity.nostr,
-                    manager: .shum(),
-                    handled: ShumHandledEvents(url: ShumHandledEvents.liveURL)
-                )
-                let permanent = try ShumMessageStore(identity: identity, store: store, transport: ble, wire: ble, card: card, internet: internet)
-                model.configurePermanentStore(permanent)
-                #if DEBUG && targetEnvironment(simulator)
-                if preview { try model.seedPermanentPreview() }
-                #endif
-                model.syncPermanentMessages()
-            } catch { model.setupFailed = true; model.isLoadingHistory = false; model.error = error.localizedDescription }
+            }
+        } catch {
+            model.setupFailed = true
+            model.isLoadingHistory = false
+            model.error = error.localizedDescription
         }
         return model
     }
 
-    /// Runs the profile on Shum-Core, the core every Shum client shares,
-    /// instead of this app's own session. On unless `ShumCoreSession` is set
-    /// to false for diagnosis; the database stays the same either way.
-    static var usesSharedCore: Bool {
-        UserDefaults.standard.object(forKey: "ShumCoreSession") as? Bool ?? true
-    }
-
-    /// Bluetooth by Shum-Core's mesh on its own radio, the same mesh as Shum
-    /// on desktops, instead of the app's own Bluetooth. On unless
-    /// `ShumCoreRadio` is set to false for diagnosis.
-    static var usesCoreRadio: Bool {
-        UserDefaults.standard.object(forKey: "ShumCoreRadio") as? Bool ?? true
-    }
-
-    /// Shum-Core's radio runs this profile: the flag is on and Shum-Core
-    /// opened it. Otherwise the app's own Bluetooth does.
-    private var coreRadio: ShumCoreSession? {
-        Self.usesCoreRadio ? permanent?.core : nil
-    }
-
-    private func startRadio() {
-        guard let core = coreRadio else { return transport.startServices() }
-        core.radioPower = { [weak self] in self?.didReceiveTransportEvent(.bluetoothStateUpdated($0)) }
-        core.startRadio()
-    }
-
-    private func stopRadio() {
-        if let core = coreRadio { core.stopRadio() } else { transport.stopServices() }
-    }
-
-    /// Shum-Core's session, or nil when it cannot open the profile: the
-    /// app's own session then keeps the phone working.
-    private static func openCore(identity: ShumIdentityService, card: ShumContactCard,
-                                 ble: Transport & ShumSecureTransport, name: String) -> ShumMessageStore? {
-        do {
-            return try coreStore(identity: identity, card: card, ble: ble, name: name)
-        } catch {
-            SecureLogger.error(error, context: "Shum-Core could not open the profile; using the app's own session", category: .session)
-            return nil
-        }
-    }
-
-    private static let sharedCoreRelays = [
+    nonisolated static let sharedCoreRelays = [
         "wss://nostr.oxtr.dev",
         "wss://soloco.nl",
         "wss://relay.snort.social",
         "wss://nostr.bitcoiner.social",
     ]
 
-    private static func coreStore(identity: ShumIdentityService, card: ShumContactCard,
-                                  ble: Transport & ShumSecureTransport, name: String) throws -> ShumMessageStore {
-        let push = (Bundle.main.object(forInfoDictionaryKey: "ShumPushAPIBaseURL") as? String)
-            .flatMap { $0.contains("$(") ? nil : URL(string: $0) }
+    /// Shum-Core's session for this profile. A new profile first gets its
+    /// database with the signed card, the way a restored backup does.
+    static func coreStore(identity: ShumIdentityService, card: ShumContactCard, name: String,
+                          database: URL = ShumConversationStore.liveURL,
+                          relays: [String] = sharedCoreRelays,
+                          push: URL? = ShumRuntime.pushURL) throws -> ShumMessageStore {
+        if !FileManager.default.fileExists(atPath: database.path) {
+            try FileManager.default.createDirectory(at: database.deletingLastPathComponent(), withIntermediateDirectories: true)
+            var state: [String: Any] = [
+                "version": 1, "ownerID": card.id, "contacts": [], "requests": [], "conversations": [],
+                "messages": [], "relay": [], "receipts": [], "seenRelay": [:], "invitationStates": [:],
+                "invitationOutbox": [],
+            ]
+            state["ownProfileCard"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(card))
+            try writeDatabase(
+                database: database.path,
+                ownerId: card.id,
+                storage: identity.storageKey.withUnsafeBytes { Data($0) },
+                state: String(decoding: try JSONSerialization.data(withJSONObject: state), as: UTF8.self)
+            )
+        }
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         let session = try ShumCoreSession(
             profile: MobileProfile(
-                database: ShumConversationStore.liveURL.path,
+                database: database.path,
                 id: card.id,
                 name: name,
-                relays: sharedCoreRelays,
+                relays: relays,
                 push: push != nil,
                 client: "{\"owner\":\"ios\",\"version\":\"\(version)\"}",
                 encounterRetentionHours: UInt32(ShumMessageStore.encounterRetention / 3600)
@@ -236,110 +156,46 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             keys: identity.coreKeys,
             push: push
         )
-        ShumBackupService.shared.core = session
-        return try ShumMessageStore(core: session, identity: identity, transport: ble, wire: ble)
+        return try ShumMessageStore(core: session, identity: identity)
+    }
+
+    /// The push service this build talks to, from its configuration.
+    nonisolated static var pushURL: URL? {
+        (Bundle.main.object(forInfoDictionaryKey: "ShumPushAPIBaseURL") as? String)
+            .flatMap { $0.contains("$(") ? nil : URL(string: $0) }
+    }
+
+    private func startRadio() {
+        guard let core = permanent?.core else { return }
+        core.radioPower = { [weak self] in self?.bluetoothPowered($0) }
+        core.startRadio()
+    }
+
+    private func stopRadio() {
+        permanent?.core.stopRadio()
+    }
+
+    private func bluetoothPowered(_ state: CBManagerState) {
+        guard !retired else { return }
+        bluetoothState = state
+        if state != .poweredOn { knownPeers.removeAll(); peers = []; nearbyDistances = [:] }
     }
 
     func configurePermanentStore(_ store: ShumMessageStore) {
+        ShumBackupService.shared.core = store.core
         permanentChanges?.cancel()
         permanentMessageSnapshot = nil
         projectedPermanentMessages.removeAll()
         permanent = store
-        store.configureContactLookup { [weak self] in self?.profiles.own }
         store.onError = { [weak self] in self?.error = $0 }
         store.onPresenceFlushFinished = { [weak self] in self?.endPresenceFlushTime() }
-        store.onMessagesRetracted = { AppNotificationRouter.shared.removeMessages($0) }
         permanentChanges = store.$revision.sink { [weak self] _ in self?.syncPermanentMessages() }
+        syncPermanentMessages()
     }
 
-    #if DEBUG && targetEnvironment(simulator)
-    private static func preview() -> ShumRuntime {
-        let wire = ShumPreviewTransport()
-        let model = ShumRuntime(transport: wire, defaults: UserDefaults(suiteName: "Shum.UI.Preview")!)
-        model.nickname = "Руслан"
-        try? model.profiles.save(ShumProfile(name: "Руслан", bio: "Люблю знакомиться и создавать новое"))
-        model.profiles.seedPreview(ShumProfile(name: "Аня", bio: "Кофе, прогулки и хорошие разговоры"), for: wire.samples[0].peerID)
-        model.didReceiveTransportEvent(.bluetoothStateUpdated(.poweredOn))
-        model.didUpdatePeerSnapshots(wire.samples)
-        let peer = wire.samples[0].peerID
-        let lines: [(String, Bool)] = [
-            ("Привет!", false), ("Привет", true),
-            ("Ты тоже пробуешь Shum?", false),
-            ("Да", true),
-            ("Прикольно, что можно просто написать человеку рядом. Даже без интернета", true),
-            ("Ага! Давай проверим", false),
-            ("Раз, два…\nВсё долетело?", false),
-            ("Всё работает!", true)
-        ]
-        model.messages = lines.enumerated().map { index, line in
-            ShumMessage(id: "preview-\(index)", peerID: peer, text: line.0,
-                date: Date().addingTimeInterval(Double(index - lines.count) * 30),
-                outgoing: line.1, status: .read(by: "Аня", at: Date()))
-        }
-        for (index, text) in ["Увидимся!", "Привет, я тоже здесь", "Отличная идея 👍"].enumerated() {
-            let sample = wire.samples[index + 1]
-            let id = "preview-peer-\(index)"
-            model.messages.append(ShumMessage(id: id, peerID: sample.peerID, text: text,
-                date: Date().addingTimeInterval(-600), outgoing: false, status: .delivered(to: "Руслан", at: Date())))
-            if index == 1 { model.unreadMessageIDs.insert("\(sample.peerID.id):\(id)") }
-        }
-        let previews = ["Договорились, до встречи!", "Спасибо, всё получилось", "Я уже рядом", "Напишу чуть позже", "Как твои дела?", "Отличная идея"]
-        for (index, sample) in wire.samples.dropFirst(4).enumerated() {
-            let id = "preview-directory-\(index)"
-            model.messages.append(ShumMessage(
-                id: id, peerID: sample.peerID, text: previews[index % previews.count],
-                date: Date().addingTimeInterval(-Double(index + 2) * 600),
-                outgoing: index % 3 == 0, status: .delivered(to: "Руслан", at: Date())
-            ))
-            if index % 5 == 0 { model.unreadMessageIDs.insert("\(sample.peerID.id):\(id)") }
-        }
-        if ProcessInfo.processInfo.arguments.contains("-ShumPreviewEmptyChat") { model.messages = [] }
-        if ProcessInfo.processInfo.arguments.contains("-ShumPreviewLongBio") {
-            let bio = String(String(repeating: "Люблю прогулки, новые знакомства и разговоры о том, что вдохновляет. ", count: 3).prefix(ShumProfile.maxBioCharacters))
-            model.profiles.seedPreview(ShumProfile(name: "Аня", bio: bio, avatarSeed: 64), for: peer)
-        }
-        return model
-    }
-    #endif
-
-    #if DEBUG && targetEnvironment(simulator)
-    private func seedPermanentPreview() throws {
-        guard let permanent else { return }
-        let names = ["Аня", "Максим", "Соня", "Дима"]
-            + (ProcessInfo.processInfo.arguments.contains("-ShumPreviewLongList")
-               ? (1...24).map { "Контакт \($0)" } : [])
-        for name in names {
-            let noise = Curve25519.KeyAgreement.PrivateKey()
-            let signing = Curve25519.Signing.PrivateKey()
-            var card = ShumContactCard(noiseKey: noise.publicKey.rawRepresentation, signingKey: signing.publicKey.rawRepresentation,
-                nostrKey: try NostrIdentity.generate().publicKeyHex, name: name, bio: "Кофе, прогулки и хорошие разговоры")
-            card.signature = try signing.signature(for: card.signedBytes())
-            try permanent.add(card, source: "preview")
-            try permanent.recordEncounter(card)
-            _ = permanent.send(name == "Максим" ? "Буду через десять минут" : "До встречи!", to: card)
-            if name == "Дима", ProcessInfo.processInfo.arguments.contains("-ShumPreviewLongChat") {
-                for index in 1...35 {
-                    _ = permanent.send("Сообщение \(index). Проверяем прокрутку переписки и прозрачность верхней панели.", to: card)
-                }
-            }
-            if ProcessInfo.processInfo.arguments.contains("-ShumPreviewBlocked"),
-               name == "Аня" || name == "Дима" {
-                try permanent.setBlocked(card, blocked: true)
-            }
-        }
-        let noise = Curve25519.KeyAgreement.PrivateKey()
-        let signing = Curve25519.Signing.PrivateKey()
-        var invitation = ShumContactCard(noiseKey: noise.publicKey.rawRepresentation, signingKey: signing.publicKey.rawRepresentation,
-            nostrKey: try NostrIdentity.generate().publicKeyHex, name: "Александра", bio: "")
-        invitation.signature = try signing.signature(for: invitation.signedBytes())
-        try permanent.store.transaction { $0.requests.append(invitation) }
-    }
-    #endif
-
-    init(transport: Transport, defaults: UserDefaults = .standard,
+    init(defaults: UserDefaults = .standard,
          profileStore: ShumProfileStore = ShumProfileStore(),
          now: @escaping () -> Date = Date.init) {
-        self.transport = transport
         self.defaults = defaults
         self.now = now
         let storedName = defaults.string(forKey: Self.nicknameKey)
@@ -348,57 +204,29 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
            let storedName {
             defaults.set(storedName, forKey: Self.nicknameKey)
         }
-        var initialName = storedName
-            .flatMap(InputValidator.validateNickname) ?? String.localizedFormat("Гость %@".localized, String(transport.myPeerID.id.prefix(4)))
-        #if DEBUG
-        if let testName = defaults.string(forKey: "ShumSelfTestName"),
-           let run = defaults.string(forKey: "ShumSelfTestRun") {
-            initialName = "SC-\(run) \(testName)"
-        }
-        #endif
-        var activeStore = profileStore
-        #if DEBUG
-        if defaults.string(forKey: "ShumSelfTestRun") != nil { activeStore = ShumProfileStore() }
-        #endif
-        let profileModel = ShumProfiles(name: initialName, store: activeStore, now: now,
-            connected: { transport.isPeerConnected($0) },
-            send: { data, peer in (transport as? ShumProfileTransporting)?.sendShumProfile(data, to: peer) })
-        profiles = profileModel
-        nickname = profileModel.own.name
-        transport.eventDelegate = self
-        transport.peerEventsDelegate = self
-        transport.setNickname(nickname)
+        let initialName = storedName
+            .flatMap(InputValidator.validateNickname) ?? String.localizedFormat("Гость %@".localized, String(UUID().uuidString.prefix(4)))
+        profiles = ShumProfiles(name: initialName, store: profileStore)
+        nickname = profiles.own.name
         profileChanges = profiles.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
-        #if DEBUG && os(iOS)
-        if let run = defaults.string(forKey: "ShumSelfTestRun") {
-            let seed = ShumPixelAvatarGenerator.seed(for: Data(nickname.utf8))
-            try? profiles.save(ShumProfile(name: nickname, bio: "Проверка профиля \(run)", avatarSeed: seed))
-        }
-        #endif
     }
 
     func waitUntilHistoryLoaded() async {
         await historyLoadingCompletion?.value
     }
 
+    /// Waits until a deferred opening of the profile has finished, so that
+    /// a deleted profile's database is never created again.
     func waitForStoragePreparation() async {
-        if let storagePreparation {
-            let prepared = try? await storagePreparation.value
-            prepared?.persistence.close()
-            self.storagePreparation = nil
-        }
+        await historyLoadingCompletion?.value
     }
 
     func retireForDeletion() {
-        storagePreparation?.cancel()
         retired = true; setupFailed = true
         timer?.cancel(); timer = nil
+        stopRadio()
         permanent?.retire()
         profiles.retire()
-        transport.eventDelegate = nil; transport.peerEventsDelegate = nil
-        permanent?.core?.stopRadio()
-        if let ble = transport as? BLEService { ble.suspendForPanicReset() }
-        else { transport.stopServices() }
         permanentChanges?.cancel(); profileChanges?.cancel()
         permanentMessageSnapshot = nil
         projectedPermanentMessages.removeAll()
@@ -413,7 +241,6 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         guard !started, !setupFailed, !retired else { return }
         started = true
         if bluetoothEnabled { startRadio() }
-        permanent?.start()
         if runTimer {
             timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
                 .sink { [weak self] _ in self?.tick() }
@@ -430,8 +257,8 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         else if !enabled {
             stopRadio()
             knownPeers.removeAll()
-            didUpdatePeerSnapshots([])
-            permanent?.tick(connected: [], active: appActive)
+            peers = []
+            nearbyDistances = [:]
         }
     }
 
@@ -439,37 +266,14 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         guard !retired, !setupFailed else { return }
         guard appActive != active else { return }
         appActive = active
-        profiles.setAppActive(active)
         if isLoadingHistory { return }
         // Ask iOS for a few seconds so the "left chat" signal reaches the relay.
         if !active, permanent != nil { beginPresenceFlushTime() }
         permanent?.setActive(active)
-        // Suspension is not a delivery failure. On return give the BLE/Noise
-        // session a fresh acknowledgement interval before retrying.
-        // Permanent delivery has its own persisted retry state. Mutating its
-        // UI projection here published once per field per historical message,
-        // causing observers to scan the whole history thousands of times.
-        if permanent == nil {
-            var pending = messages
-            let current = now()
-            for index in pending.indices where pending[index].outgoing {
-                switch pending[index].status { case .sending, .sent: break; default: continue }
-                pending[index].lastProgress = current
-                if active { pending[index].lastAttempt = current }
-            }
-            if !pending.isEmpty { messages = pending }
-        }
         if active {
             if bluetoothEnabled { startRadio() }
             tick()
-            markVisibleRead()
-        } else {
-            serviceBackgroundTransport()
         }
-        #if DEBUG
-        recordSelfTestEvent(active ? "foreground" : "background")
-        writeSelfTestResult()
-        #endif
     }
 
     private var presenceFlushTask: UIBackgroundTaskIdentifier = .invalid
@@ -502,7 +306,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         }
         let seed = profiles.own.avatarSeed
             ?? permanent?.ownCard.avatarSeed
-            ?? ShumPixelAvatarGenerator.seed(for: transport.noiseStaticPublicKeyData())
+            ?? ShumPixelAvatarGenerator.seed(for: Data(valid.utf8))
         return saveProfile(name: valid, bio: profiles.own.bio, avatarSeed: seed)
     }
 
@@ -519,7 +323,6 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                 avatarSeed: avatarSeed)
             nickname = valid
             defaults.set(valid, forKey: Self.nicknameKey)
-            transport.setNickname(valid)
             return true
         } catch { return false }
     }
@@ -527,7 +330,6 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     func displayName(_ peer: ShumPeer) -> String {
         permanent?.card(for: peer.id)?.name
             ?? permanent?.state.encounters?.first(where: { $0.card.peerID == peer.id })?.card.name
-            ?? profiles.remote[peer.id]?.name
             ?? peers.first(where: { $0.id == peer.id })?.name
             ?? peer.name
     }
@@ -573,11 +375,6 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             return ShumProfile(name: encounter.card.name, bio: encounter.card.bio,
                 avatarSeed: seed).rendered()
         }
-        if let remote = profiles.remote[peer] {
-            let seed = remote.avatarSeed ?? ShumPixelAvatarGenerator.seed(for: Data(peer.id.utf8))
-            return ShumProfile(name: remote.name, bio: remote.bio,
-                avatarSeed: seed).rendered()
-        }
         return nil
     }
     func currentProfileCard(_ card: ShumContactCard) -> ShumContactCard {
@@ -604,6 +401,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             return false
         }
     }
+    /// A contact from a short link: someone nearby with that Nostr key.
     func resolveContact(
         _ locator: ShumContactLocator,
         completion: @escaping (Result<ShumContactCard, Error>) -> Void
@@ -612,31 +410,16 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             completion(.failure(ShumFailure.unavailableIdentity))
             return
         }
-        let nearbyCard = permanent.nearby.values.first {
-            $0.nostrKey == locator.nostrKey
-        }
-        if let nearbyCard,
-           profile(for: nearbyCard.peerID)?.avatar != nil {
-            completion(.success(nearbyCard))
-            return
-        }
-        permanent.resolve(locator) { [weak self] result in
-            switch result {
-            case .success(let resolved):
-                self?.profiles.acceptResolved(resolved.profile, for: resolved.card.peerID)
-                completion(.success(resolved.card))
-            case .failure(let error):
-                if let nearbyCard {
-                    completion(.success(nearbyCard))
-                } else {
-                    completion(.failure(error))
-                }
-            }
+        if let card = permanent.nearby.values.first(where: { $0.nostrKey == locator.nostrKey }) {
+            completion(.success(card))
+        } else {
+            completion(.failure(ShumFailure.contactUnavailable))
         }
     }
     private func syncPermanentMessages() {
         guard let permanent else { return }
-        if coreRadio != nil { showCoreNearby(permanent) }
+        internetConnected = permanent.internetConnected
+        showCoreNearby(permanent)
         ShumTypingPixels.shared.update(typing: Set(permanent.typingCards.map { $0.peerID.id }))
         let state = permanent.state
         let snapshot = PermanentMessageSnapshot(
@@ -706,9 +489,8 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
 
     func openConversation(_ peer: PeerID?) {
         activePeer = peer
-        if let permanent { permanent.open(peer.flatMap { permanent.card(for: $0) }); return }
-        if let peer, transport.isPeerConnected(peer) { transport.triggerHandshake(with: peer) }
-        markVisibleRead()
+        guard let permanent else { return }
+        permanent.open(peer.flatMap { permanent.card(for: $0) })
     }
 
     /// A chat may report disappearing after the next chat appeared; only the
@@ -729,9 +511,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         ShumChatProtectionState(
             isReady: isReady,
             isArchive: isLegacyOnly(peer),
-            hasRecipientKey: permanent?.card(for: peer) != nil,
-            session: transport.getNoiseSessionState(for: peer),
-            hasSessionKey: transport.noiseSessionPublicKeyData(for: peer) != nil
+            hasRecipientKey: permanent?.card(for: peer) != nil
         )
     }
 
@@ -778,14 +558,10 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         guard let permanent, let card = permanent.card(for: peer) else { return false }
         return permanent.declineInvitation(card)
     }
-    private func isBlockedSession(_ peer: PeerID) -> Bool {
-        guard let key = transport.noiseSessionPublicKeyData(for: peer) else { return false }
-        return permanent?.state.blocked?[ShumContactCard.userID(key)] != nil
-    }
     func isNearby(_ peer: PeerID) -> Bool {
         guard bluetoothState == .poweredOn else { return false }
-        if let permanent, let card = permanent.card(for: peer) { return permanent.session(for: card) != nil }
-        return transport.isPeerConnected(peer)
+        guard let permanent, let card = permanent.card(for: peer) else { return false }
+        return permanent.session(for: card) != nil
     }
 
     func isTyping(_ peer: PeerID) -> Bool {
@@ -805,46 +581,19 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
 
     func distanceMeters(for peer: PeerID) -> Int? {
         guard isNearby(peer) else { return nil }
-        let session = permanent?.card(for: peer).flatMap { permanent?.session(for: $0) } ?? peer
-        return nearbyDistances[session]
+        return nearbyDistances[peer]
     }
 
     @discardableResult
     func send(_ text: String, to peer: PeerID, replyingTo original: ShumMessage? = nil) -> Bool {
-        guard isReady else { return false }
-        if let permanent {
-            guard let card = permanent.card(for: peer) else { error = "Дождитесь проверки профиля собеседника.".localized; return false }
-            let reply = original.map {
-                ShumReplyReference(messageID: $0.id,
-                    senderID: $0.outgoing ? permanent.ownCard.id : card.id,
-                    text: $0.text)
-            }
-            return permanent.send(text, to: card, reply: reply)
-        }
-        let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty else { return false }
-        // Upstream private-message TLV has a one-byte length. Reject visibly
-        // rather than silently dropping Cyrillic/emoji payloads above 255 bytes.
-        guard content.utf8.count <= 255 else {
-            error = "Для этой тестовой версии сократите сообщение или отправьте его частями.".localized
-            return false
-        }
-        guard isNearby(peer) else {
-            error = "Собеседник сейчас недоступен. Подойдите ближе и попробуйте снова.".localized
-            return false
-        }
+        guard isReady, let permanent else { return false }
+        guard let card = permanent.card(for: peer) else { error = "Дождитесь проверки профиля собеседника.".localized; return false }
         let reply = original.map {
             ShumReplyReference(messageID: $0.id,
-                senderID: $0.outgoing ? "self" : peer.id,
+                senderID: $0.outgoing ? permanent.ownCard.id : card.id,
                 text: $0.text)
         }
-        let message = ShumMessage(id: UUID().uuidString, peerID: peer,
-                                      text: content, date: now(), outgoing: true,
-                                      status: .sending, reply: reply)
-        messages.append(message)
-        trimMessages()
-        transmit(id: message.id)
-        return true
+        return permanent.send(text, to: card, reply: reply)
     }
 
     /// Sets the user's one reaction on a message; the same reaction again takes it back.
@@ -859,133 +608,19 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     }
 
     func retry(_ message: ShumMessage) {
-        if let permanent, let card = permanent.card(for: message.peerID) {
-            if case .failed = message.status { permanent.resend(message.id, to: card) }
-            return
-        }
-        guard message.outgoing, isNearby(message.peerID),
-              let index = messages.firstIndex(where: { $0.id == message.id && $0.outgoing }) else { return }
-        guard case .failed = messages[index].status else { return }
-        messages[index].attempts = 0
-        messages[index].disconnectedWait = 0
-        messages[index].status = .sending
-        transmit(id: message.id)
-    }
-
-    private func transmit(id: String) {
-        guard let index = messages.firstIndex(where: { $0.id == id && $0.outgoing }) else { return }
-        messages[index].attempts += 1
-        messages[index].lastAttempt = now()
-        messages[index].lastProgress = now()
-        messages[index].waitingForConnection = false
-        let message = messages[index]
-        transport.sendPrivateMessage(message.text, to: message.peerID,
-                                     recipientNickname: knownPeers[message.peerID]?.name ?? "Гость".localized,
-                                     messageID: message.id)
+        guard let permanent, let card = permanent.card(for: message.peerID),
+              case .failed = message.status else { return }
+        permanent.resend(message.id, to: card)
     }
 
     func tick() {
-        guard !isLoadingHistory, !retired else { return }
-        guard !retired else { return }
-        internetConnected = permanent?.internetConnected == true
-        if coreRadio != nil, let permanent { showCoreNearby(permanent) } else { didUpdatePeerSnapshots(transport.currentPeerSnapshots()) }
-        if transport is ShumProfileTransporting,
-           bluetoothState == .poweredOn,
-           appActive {
-            profiles.tick()
-        }
-        if let permanent, appActive {
-            permanent.tick(
-                connected: Set(peers.filter {
-                    transport.isPeerConnected($0.id)
-                }.map(\.id)),
-                active: true
-            )
-        } else if permanent == nil, appActive {
-            advancePendingMessages()
-        }
-        if appActive {
-            markVisibleRead()
-        }
-        #if DEBUG
-        runSelfTestIfRequested()
-        #endif
+        guard !isLoadingHistory, !retired, let permanent else { return }
+        internetConnected = permanent.internetConnected
+        showCoreNearby(permanent)
     }
 
-    private func advancePendingMessages() {
-        // Only foreground time counts. A disconnect pauses transport attempts,
-        // while a bounded wait prevents an endless "waiting for connection".
-        for index in messages.indices where messages[index].outgoing {
-            switch messages[index].status { case .sending, .sent: break; default: continue }
-            let elapsed = max(0, now().timeIntervalSince(messages[index].lastProgress))
-            messages[index].lastProgress = now()
-            if !isNearby(messages[index].peerID) {
-                messages[index].disconnectedWait += elapsed
-                messages[index].waitingForConnection = true
-                if messages[index].disconnectedWait >= Self.connectionWaitLimit {
-                    messages[index].waitingForConnection = false
-                    messages[index].status = .failed(reason: "Связь не восстановилась".localized)
-                }
-                continue
-            }
-            if messages[index].waitingForConnection {
-                messages[index].waitingForConnection = false
-                if messages[index].attempts < Self.maxAttempts {
-                    transmit(id: messages[index].id)
-                } else {
-                    // A flapping link must not replenish an exhausted retry budget.
-                    messages[index].lastAttempt = now()
-                }
-            } else if now().timeIntervalSince(messages[index].lastAttempt) >= Self.retryInterval {
-                if messages[index].attempts < Self.maxAttempts {
-                    transmit(id: messages[index].id)
-                } else {
-                    messages[index].status = .failed(reason: "Нет подтверждения".localized)
-                }
-            }
-        }
-    }
-
-    func didUpdatePeerSnapshots(_ snapshots: [TransportPeerSnapshot]) {
-        guard !retired else { return }
-        let current = now()
-        let connected = snapshots.filter { bluetoothEnabled && bluetoothState == .poweredOn && $0.peerID != transport.myPeerID && $0.isConnected && !isBlockedSession($0.peerID) }
-        let ids = Set(connected.map(\.peerID))
-        let connectionsChanged = connectedPeerIDs != ids
-        if connectionsChanged { ShumDiscoveryTrace.record("runtime-connected-count-\(ids.count)") }
-        connectedPeerIDs = ids
-        let distances = Dictionary(connected.compactMap { snapshot -> (PeerID, Int)? in
-            guard let meters = snapshot.distanceMeters, meters > 0 else { return nil }
-            return (snapshot.peerID, meters)
-        }, uniquingKeysWith: { _, latest in latest })
-        if nearbyDistances != distances { nearbyDistances = distances }
-        #if DEBUG
-        if defaults.string(forKey: "ShumSelfTestRun") != nil {
-            for peer in ids.subtracting(testConnectedPeers) { recordSelfTestEvent("peer-connected", messageID: peer.id) }
-            for peer in testConnectedPeers.subtracting(ids) { recordSelfTestEvent("peer-disconnected", messageID: peer.id) }
-            testConnectedPeers = ids
-        }
-        #endif
-        profiles.updatePeers(ids)
-        for peer in connected.prefix(100) {
-            knownPeers[peer.peerID] = ShumPeer(id: peer.peerID, name: peer.nickname, lastConnected: current)
-        }
-        knownPeers = knownPeers.filter { ids.contains($0.key) || current.timeIntervalSince($0.value.lastConnected) < Self.disappearanceDelay }
-        peers = knownPeers.values.sorted { $0.name == $1.name ? $0.id.id < $1.id.id : $0.name < $1.name }
-        if connectionsChanged, appActive {
-            // Start the signed-card exchange on the connection event itself,
-            // including reconnects with the same persistent identity.
-            permanent?.tick(connected: ids, active: true)
-            if bluetoothEnabled { profiles.tick() }
-        }
-        if !appActive {
-            serviceBackgroundTransport(connected: ids)
-        }
-    }
-
-    /// People nearby as Shum-Core's mesh sees them, in place of the app's
-    /// Bluetooth peers. Shum-Core already waits a moment before someone
-    /// counts as gone.
+    /// People nearby as Shum-Core's mesh sees them. Shum-Core already waits
+    /// a moment before someone counts as gone.
     private func showCoreNearby(_ permanent: ShumMessageStore) {
         let on = bluetoothEnabled && bluetoothState == .poweredOn
         let cards = on ? permanent.nearby.values.filter { !permanent.isBlocked($0) } : []
@@ -1007,225 +642,4 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         knownPeers = Dictionary(next.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         if peers != next { peers = next }
     }
-
-    /// CoreBluetooth can wake the process briefly while its UI remains
-    /// inactive. Use that window for encrypted card handshakes, queued local
-    /// messages and delivery receipts, while keeping read state and Internet
-    /// presence strictly tied to the foreground.
-    private func serviceBackgroundTransport(connected: Set<PeerID>? = nil) {
-        guard !retired, !appActive, bluetoothEnabled,
-              bluetoothState == .poweredOn,
-              let permanent else { return }
-        let connectedPeers = connected ?? Set(
-            transport.currentPeerSnapshots()
-                .filter { $0.isConnected }
-                .map(\.peerID)
-        )
-        permanent.tick(connected: connectedPeers, active: false)
-    }
-
-    func didReceiveTransportEvent(_ event: TransportEvent) {
-        guard !retired else { return }
-        switch event {
-        case .bluetoothStateUpdated(let state):
-            bluetoothState = state
-            if state != .poweredOn { knownPeers.removeAll(); peers = []; nearbyDistances = [:]; profiles.updatePeers([]) }
-        case .peerSnapshotsUpdated(let snapshots): didUpdatePeerSnapshots(snapshots)
-        case .peerConnected, .peerDisconnected, .peerListUpdated:
-            internetConnected = permanent?.internetConnected == true
-        didUpdatePeerSnapshots(transport.currentPeerSnapshots())
-        case .noisePayloadReceived(let peer, let type, let data, let date):
-            guard !isBlockedSession(peer) else { return }
-            if type == .shumEnvelope {
-                permanent?.receiveBytes(data, from: peer)
-                if !appActive { serviceBackgroundTransport() }
-                return
-            }
-            if permanent != nil && type != .shumProfile { return }
-            switch type {
-            case .shumProfile:
-                profiles.receive(data, from: peer)
-            case .privateMessage:
-                guard let packet = PrivateMessagePacket.decode(from: data),
-                      !packet.messageID.isEmpty, packet.messageID.utf8.count <= 255,
-                      !packet.content.isEmpty else { return }
-                let dedupID = "\(peer.id):\(packet.messageID)"
-                if receivedIDs.insert(dedupID).inserted {
-                    if !appActive || activePeer != peer { unreadMessageIDs.insert(dedupID) }
-                    receivedOrder.append(dedupID)
-                    if receivedOrder.count > 4000 { receivedIDs.remove(receivedOrder.removeFirst()) }
-                    messages.append(ShumMessage(id: packet.messageID, peerID: peer,
-                                                   text: packet.content, date: date,
-                                                   outgoing: false, status: .delivered(to: nickname, at: now())))
-                    trimMessages()
-                }
-                #if DEBUG
-                recordSelfTestEvent("received", messageID: packet.messageID)
-                #endif
-                transport.sendDeliveryAck(for: packet.messageID, to: peer)
-                if appActive && activePeer == peer { sendRead(packet.messageID, to: peer) }
-            case .delivered, .readReceipt:
-                guard let id = String(data: data, encoding: .utf8),
-                      let index = messages.firstIndex(where: { $0.id == id && $0.outgoing && $0.peerID == peer }) else { return }
-                if case .read = messages[index].status { return }
-                let name = knownPeers[peer]?.name ?? "Собеседник".localized
-                messages[index].waitingForConnection = false
-                messages[index].status = type == .readReceipt
-                    ? .read(by: name, at: now()) : .delivered(to: name, at: now())
-            default: break
-            }
-        case .messageDeliveryStatusUpdated(let id, let status):
-            guard permanent == nil else { return }
-            guard let index = messages.firstIndex(where: { $0.id == id && $0.outgoing }) else { return }
-            // A local write or a late retry callback cannot override a receipt
-            // or turn a timed-out message back into an endless spinner.
-            switch messages[index].status {
-            case .sending, .sent:
-                switch status {
-                case .sent: messages[index].status = .sent
-                case .failed:
-                    if !isNearby(messages[index].peerID) {
-                        messages[index].waitingForConnection = true
-                        messages[index].lastProgress = now()
-                    } else { messages[index].status = status }
-                default: break
-                }
-            default: break
-            }
-        default: break
-        }
-        #if DEBUG
-        writeSelfTestResult()
-        #endif
-    }
-
-    @discardableResult
-    private func sendRead(_ id: String, to peer: PeerID) -> Bool {
-        guard appActive, activePeer == peer, isNearby(peer) else { return false }
-        let key = "\(peer.id):\(id)"
-        let progress = readAttempts[key] ?? (count: 0, sentAt: Date.distantPast)
-        guard progress.count < 3, now().timeIntervalSince(progress.sentAt) >= Self.retryInterval else { return false }
-        readAttempts[key] = (progress.count + 1, now())
-        transport.sendReadReceipt(ReadReceipt(originalMessageID: id,
-            readerID: transport.myPeerID, readerNickname: nickname), to: peer)
-        #if DEBUG
-        recordSelfTestEvent("read-sent", messageID: id)
-        #endif
-        return true
-    }
-
-    private func markVisibleRead() {
-        guard permanent == nil else { return }
-        guard appActive, let peer = activePeer else { return }
-        var sent = 0
-        for message in conversation(peer) where !message.outgoing {
-            unreadMessageIDs.remove("\(peer.id):\(message.id)")
-            if sent < 20, sendRead(message.id, to: peer) { sent += 1 }
-        }
-    }
-
-    private func trimMessages() {
-        if messages.count > 1000 {
-            for message in messages.prefix(messages.count - 1000) {
-                unreadMessageIDs.remove("\(message.peerID.id):\(message.id)")
-                readAttempts["\(message.peerID.id):\(message.id)"] = nil
-            }
-            messages.removeFirst(messages.count - 1000)
-        }
-    }
-
-    #if DEBUG
-    // Explicit opt-in only, for the two owner-controlled test phones. Synthetic
-    // messages target only another device advertising the same random test run.
-    private var testedPeers: Set<PeerID> = []
-    private let testSession = UUID().uuidString
-    private var testConnectedPeers: Set<PeerID> = []
-    private var testEvents: [[String: Any]] = []
-    private var testCommands: Set<String> = []
-    private var testRadioResumeAt: Date?
-    private func recordSelfTestEvent(_ event: String, messageID: String? = nil) {
-        guard defaults.string(forKey: "ShumSelfTestRun") != nil else { return }
-        var row: [String: Any] = ["event": event, "active": appActive, "at": ISO8601DateFormatter().string(from: now())]
-        if let messageID { row["id"] = messageID }
-        testEvents.append(row)
-        if testEvents.count > 200 { testEvents.removeFirst(testEvents.count - 200) }
-    }
-    private func processSelfTestCommand(run: String) {
-        guard ProcessInfo.processInfo.arguments.contains("-ShumSelfTestStage5"), appActive,
-              let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
-              let data = try? Data(contentsOf: directory.appendingPathComponent("shum-test-command.json")), data.count < 2048,
-              let command = try? JSONSerialization.jsonObject(with: data) as? [String: String],
-              command["run"] == run, let id = command["id"], id.utf8.count <= 40, !testCommands.contains(id) else { return }
-        switch command["action"] {
-        case "send":
-            guard let peer = peers.first(where: { $0.name.hasPrefix("SC-\(run) ") && isNearby($0.id) }),
-                  send("Shum BLE test \(run) phase:\(id)", to: peer.id) else { return }
-            testCommands.insert(id)
-            recordSelfTestEvent("command-send", messageID: id)
-        case "pause-radio":
-            testCommands.insert(id)
-            testRadioResumeAt = now().addingTimeInterval(20)
-            stopRadio()
-            recordSelfTestEvent("radio-stop")
-        default: break
-        }
-    }
-    private func runSelfTestIfRequested() {
-        guard let run = defaults.string(forKey: "ShumSelfTestRun"), !run.isEmpty else { return }
-        if let resumeAt = testRadioResumeAt {
-            if now() < resumeAt { writeSelfTestResult(); return }
-            testRadioResumeAt = nil
-            if bluetoothEnabled { startRadio() }
-            recordSelfTestEvent("radio-start")
-        }
-        processSelfTestCommand(run: run)
-        for peer in peers where peer.name.hasPrefix("SC-\(run) ") && !testedPeers.contains(peer.id) {
-            if send("Shum BLE test \(run) от \(nickname)", to: peer.id) { testedPeers.insert(peer.id) }
-        }
-        writeSelfTestResult()
-    }
-
-    private func writeSelfTestResult() {
-        guard let run = defaults.string(forKey: "ShumSelfTestRun"), !run.isEmpty else { return }
-        let synthetic = messages.filter { $0.text.hasPrefix("Shum BLE test \(run) ") }
-        let confirmed = synthetic.filter {
-            guard $0.outgoing else { return false }
-            switch $0.status { case .delivered, .read: return true; default: return false }
-        }
-        let receivedProfiles = profiles.remote.values.filter { $0.name.hasPrefix("SC-\(run) ") && $0.bio == "Проверка профиля \(run)" }
-        let receivedPhotos = receivedProfiles.compactMap(\.avatar)
-        let result: [String: Any] = [
-            "run": run, "name": nickname, "transport": "BLEService",
-            "session": testSession, "appActive": appActive,
-            "activePeer": activePeer?.id ?? "",
-            "events": testEvents,
-            "messages": synthetic.map { message -> [String: Any] in
-                let state: String
-                switch message.status {
-                case .read: state = "read"
-                case .delivered: state = "delivered"
-                case .failed: state = "failed"
-                default: state = message.waitingForConnection ? "waiting" : "sending"
-                }
-                return ["id": message.id, "text": message.text, "outgoing": message.outgoing,
-                        "status": state, "attempts": message.attempts,
-                        "unread": unreadMessageIDs.contains("\(message.peerID.id):\(message.id)")]
-            },
-            "bluetoothPoweredOn": bluetoothState == .poweredOn,
-            "nearbyCount": peers.count,
-            "profileReceivedCount": receivedProfiles.count,
-            "avatarReceivedCount": receivedPhotos.count,
-            "ownAvatarHash": profiles.own.avatar.map(ShumProfile.digest) ?? "",
-            "receivedAvatarHashes": receivedPhotos.map(ShumProfile.digest),
-            "receivedAvatarBytes": receivedPhotos.map(\.count),
-            "sentCount": synthetic.filter(\.outgoing).count,
-            "receivedCount": synthetic.filter { !$0.outgoing }.count,
-            "confirmedCount": confirmed.count,
-            "updatedAt": ISO8601DateFormatter().string(from: now())
-        ]
-        guard let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]),
-              let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-        try? data.write(to: directory.appendingPathComponent("shum-test-result.json"), options: .atomic)
-    }
-    #endif
 }

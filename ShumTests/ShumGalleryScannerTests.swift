@@ -43,7 +43,7 @@ struct ShumGalleryScannerTests {
     }
 
     @Test func selfContainedProfileQRIsReadableAtPhoneDisplaySize() throws {
-        let node = try ShumPermanentTests.Node("Alice", clock: ShumPermanentTests.Clock())
+        let node = try ShumCoreSessionTests.Person("Alice")
         let payload = try node.card.invitation().absoluteString
         let photo = try #require(makePhoto(size: CGSize(width: 756, height: 756),
             payload: payload, qrRect: CGRect(x: 60, y: 60, width: 636, height: 636), obscuresCenter: true))
@@ -55,7 +55,7 @@ struct ShumGalleryScannerTests {
     /// under the centered logo. Scanning it must produce the name and avatar
     /// seed directly, so adding the contact needs no network exchange.
     @Test func profileQRAddsContactWithoutNetwork() throws {
-        let node = try ShumPermanentTests.Node("Alice", clock: ShumPermanentTests.Clock())
+        let node = try ShumCoreSessionTests.Person("Alice")
         let url = try node.card.invitation()
         #expect(url.host == "c4")
         // 212 pt code on a 2x screen, photographed or saved from the library.

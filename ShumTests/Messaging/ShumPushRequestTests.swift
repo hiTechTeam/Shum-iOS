@@ -62,8 +62,8 @@ struct ShumPushRequestTests {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ShumPushStubProtocol.self]
         let service = ShumPushService(session: URLSession(configuration: configuration), baseURL: URL(string: "https://push.test")!)
-        let wire = MockTransport()
-        let identity = try ShumIdentityService(transport: wire, keychain: wire.mockKeychain, bridge: NostrIdentityBridge(keychain: wire.mockKeychain))
+        let keychain = MockKeychain()
+        let identity = try ShumIdentityService(keychain: keychain, bridge: NostrIdentityBridge(keychain: keychain))
         let card = try identity.card(name: "Аня", bio: "Привет")
         let signatures = Signatures()
         service.configure(card: card) { input in

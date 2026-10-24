@@ -171,24 +171,9 @@ final class ShumBackupService {
         guard Self.validPassword(password) else {
             throw ShumBackupError.invalidPassword
         }
-        if let file = try await coreBackup(password: password) { return file }
-
-        let payload = try collectPayload()
-        let plaintext = try JSONEncoder().encode(payload)
-        guard plaintext.count <= Self.maximumPlaintextBytes else {
-            throw ShumBackupError.backupTooLarge
-        }
-
-        let createdAt = payload.createdAt
-        let profileName = payload.profileName
-        return try await Task.detached(priority: .userInitiated) {
-            try Self.encrypt(
-                plaintext,
-                password: password,
-                createdAt: createdAt,
-                profileName: profileName
-            )
-        }.value
+        // Shum-Core writes the backup in the format every Shum client restores.
+        guard let file = try await coreBackup(password: password) else { throw ShumBackupError.profileUnavailable }
+        return file
     }
 
     func metadata(for data: Data) throws -> ShumBackupMetadata {
@@ -303,116 +288,6 @@ final class ShumBackupService {
             profileName: opened.name,
             createdAt: summary.flatMap { ISO8601DateFormatter().date(from: $0.createdAt) } ?? Date()
         )
-    }
-
-    private func collectPayload() throws -> Payload {
-        guard let manifest = LocalCardStore.shared.ownManifest else {
-            throw ShumBackupError.profileUnavailable
-        }
-
-        let keychain = KeychainManager.makeDefault()
-        let material = KeyMaterial(
-            localCardSigning: try requiredLocalKey(localCardSigningKey),
-            noiseStatic: try requiredIdentityKey("noiseStaticKey", keychain: keychain),
-            noiseSigning: try requiredIdentityKey("ed25519SigningKey", keychain: keychain),
-            nostrIdentity: try requiredCustomKey(
-                nostrIdentityKey,
-                service: nostrService,
-                keychain: keychain
-            ),
-            shumStorage: try requiredShumStorageKey(keychain: keychain),
-            nostrDeviceSeed: optionalCustomKey(
-                nostrDeviceSeedKey,
-                service: nostrService,
-                keychain: keychain
-            ),
-            identityCacheEncryption: optionalIdentityKey(
-                "identityCacheEncryptionKey",
-                keychain: keychain
-            ),
-            identityCache: optionalIdentityKey(
-                "bitchat.identityCache.v2",
-                keychain: keychain
-            ),
-            legacyChatStorage: try? KeychainStore.shared.data(for: legacyChatStorageKey)
-        )
-
-        return Payload(
-            version: 1,
-            createdAt: Date(),
-            profileName: manifest.body.name,
-            keys: material,
-            storedFiles: try collectFiles(storageKey: material.shumStorage)
-        )
-    }
-
-    private func collectFiles(storageKey: Data) throws -> [StoredFile] {
-        let support = supportDirectory
-        var result: [StoredFile] = []
-
-        try appendDirectory(
-            support.appendingPathComponent("LocalCards-v1", isDirectory: true),
-            prefix: "LocalCards-v1",
-            to: &result
-        )
-        try appendDirectory(
-            support.appendingPathComponent("ShumProfiles", isDirectory: true),
-            prefix: "ShumProfiles",
-            to: &result
-        )
-        let historyURL = support.appendingPathComponent("ShumConversations/state.enc")
-        if FileManager.default.fileExists(atPath: historyURL.path) {
-            let encrypted = try ShumConversationStore.encryptedSnapshot(at: historyURL, key: SymmetricKey(data: storageKey))
-            result.append(StoredFile(path: "ShumConversations/state.enc", data: encrypted))
-        }
-        try appendFile(
-            support.appendingPathComponent("shum-chats-v1.enc"),
-            path: "shum-chats-v1.enc",
-            required: false,
-            to: &result
-        )
-
-        guard result.contains(where: { $0.path == "LocalCards-v1/own.json" }) else {
-            throw ShumBackupError.profileUnavailable
-        }
-        return result.sorted { $0.path < $1.path }
-    }
-
-    private func appendDirectory(
-        _ directory: URL,
-        prefix: String,
-        to result: inout [StoredFile]
-    ) throws {
-        guard files.fileExists(atPath: directory.path) else { return }
-        let entries = try files.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]
-        )
-        for url in entries {
-            let values = try url.resourceValues(forKeys: [.isRegularFileKey])
-            guard values.isRegularFile == true else { continue }
-            let name = url.lastPathComponent
-            guard Self.allowedFileName(name, in: prefix) else { continue }
-            try appendFile(url, path: "\(prefix)/\(name)", required: false, to: &result)
-        }
-    }
-
-    private func appendFile(
-        _ url: URL,
-        path: String,
-        required: Bool,
-        to result: inout [StoredFile]
-    ) throws {
-        guard files.fileExists(atPath: url.path) else {
-            if required { throw ShumBackupError.profileUnavailable }
-            return
-        }
-        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size >= 0, size <= Self.maximumFileBytes else {
-            throw ShumBackupError.backupTooLarge
-        }
-        result.append(StoredFile(path: path, data: try Data(contentsOf: url)))
     }
 
     private func validate(_ payload: Payload) throws {

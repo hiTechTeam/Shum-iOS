@@ -3,18 +3,13 @@ import SwiftUI
 enum ShumChatProtectionState: Equatable {
     case encrypted, preparing, unavailable, archive
 
-    init(isReady: Bool, isArchive: Bool, hasRecipientKey: Bool,
-         session: LazyHandshakeState, hasSessionKey: Bool) {
+    /// A chat is end-to-end encrypted once the contact's signed card, with
+    /// its keys, is known.
+    init(isReady: Bool, isArchive: Bool, hasRecipientKey: Bool) {
         if isArchive { self = .archive }
         else if !isReady { self = .unavailable }
         else if hasRecipientKey { self = .encrypted }
-        else {
-            switch session {
-            case .established: self = hasSessionKey ? .encrypted : .preparing
-            case .failed: self = .unavailable
-            default: self = .preparing
-            }
-        }
+        else { self = .preparing }
     }
 
     var title: String {

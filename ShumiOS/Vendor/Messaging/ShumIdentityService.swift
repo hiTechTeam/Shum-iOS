@@ -379,7 +379,6 @@ enum ShumFailure: LocalizedError {
 
 @MainActor
 final class ShumIdentityService {
-    let transport: Transport
     let nostr: NostrIdentity
     let storageKey: SymmetricKey
     /// The private Noise and signing keys, for Shum-Core's session.
@@ -388,8 +387,7 @@ final class ShumIdentityService {
     let noisePublicKey: Data
     let signingPublicKey: Data
     private nonisolated let signingKey: Curve25519.Signing.PrivateKey
-    init(transport: Transport, keychain: KeychainManagerProtocol, bridge: NostrIdentityBridge) throws {
-        self.transport = transport
+    init(keychain: KeychainManagerProtocol, bridge: NostrIdentityBridge) throws {
         noisePrivate = try Self.key("noiseStaticKey", in: keychain) {
             Curve25519.KeyAgreement.PrivateKey().rawRepresentation
         }
@@ -399,12 +397,6 @@ final class ShumIdentityService {
         noisePublicKey = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: noisePrivate).publicKey.rawRepresentation
         signingKey = try Curve25519.Signing.PrivateKey(rawRepresentation: signingPrivate)
         signingPublicKey = signingKey.publicKey.rawRepresentation
-        // The app's own Bluetooth may fall back to a temporary identity while
-        // the iPhone is locked; never bind contacts and history to that one.
-        if !ShumRuntime.usesCoreRadio {
-            guard transport.noiseStaticPublicKeyData() == noisePublicKey,
-                  transport.noiseSigningPublicKeyData() == signingPublicKey else { throw ShumFailure.unavailableIdentity }
-        }
         let existing = keychain.loadWithResult(key: "nostr-current-identity", service: "chat.shum.nostr")
         switch existing {
         case .success(let data): nostr = try JSONDecoder().decode(NostrIdentity.self, from: data)
@@ -504,19 +496,4 @@ final class ShumIdentityService {
         try card.validate()
         return card
     }
-}
-
-protocol ShumSecureTransport: AnyObject {
-    func sendShumPacket(_ data: Data, to peer: PeerID)
-    func sealShumPayload(_ data: Data, recipient: Data) throws -> Data
-    func openShumPayload(_ data: Data) throws -> (payload: Data, senderStaticKey: Data)
-}
-extension BLEService: ShumSecureTransport {}
-
-@MainActor
-final class ShumCryptoService {
-    private let wire: ShumSecureTransport
-    init(wire: ShumSecureTransport) { self.wire = wire }
-    func seal(_ data: Data, to recipient: Data) throws -> Data { try wire.sealShumPayload(data, recipient: recipient) }
-    func open(_ data: Data) throws -> (payload: Data, senderStaticKey: Data) { try wire.openShumPayload(data) }
 }

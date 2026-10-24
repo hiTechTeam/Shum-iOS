@@ -42,7 +42,7 @@ struct InputValidator {
     /// Validates nickname and returns it in canonical (NFC) form so
     /// visually identical names always compare equal.
     static func validateNickname(_ nickname: String) -> String? {
-        return validateUserString(nickname, maxLength: Limits.maxNicknameLength)?.normalizedNickname
+        return validateUserString(nickname, maxLength: Limits.maxNicknameLength)?.precomposedStringWithCanonicalMapping
     }
     
     // MARK: - Protocol Field Validation

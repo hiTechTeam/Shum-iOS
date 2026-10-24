@@ -499,76 +499,17 @@ struct ShumDatabase: Equatable, Codable {
     var reactionOutbox: [ShumStoredReaction]?
 }
 
+/// The profile state Shum-Core stored, as screens read it. Only Shum-Core
+/// writes the database; this keeps its latest state.
 @MainActor
 final class ShumConversationStore {
     private(set) var state: ShumDatabase
-    private let persistence: ShumSQLitePersistence?
-    var committedTransactions: Int { persistence?.committedTransactions ?? 0 }
-    var committedRows: Int { persistence?.committedRows ?? 0 }
-    struct Prepared: @unchecked Sendable {
-        let persistence: ShumSQLitePersistence
-        fileprivate let state: ShumDatabase
-    }
-    private nonisolated static let preparationQueue = DispatchQueue(label: "shum.storage.prepare", qos: .userInitiated)
-    nonisolated static func prepare(ownerID: String, key: SymmetricKey, url: URL,
-                                    legacyURL: URL, legacyKey: Data?) throws -> Prepared {
-        try preparationQueue.sync {
-            let persistence = try ShumSQLitePersistence(ownerID: ownerID, key: key, url: url)
-            var state = try persistence.read()
-            if state.legacyHistory == nil, FileManager.default.fileExists(atPath: legacyURL.path) {
-                guard let legacyKey, legacyKey.count == 32 else { throw ShumFailure.unavailableIdentity }
-                let encrypted = try Data(contentsOf: legacyURL)
-                guard encrypted.count <= 100_000_000 else { throw ShumFailure.storage }
-                let plain = try AES.GCM.open(AES.GCM.SealedBox(combined: encrypted), using: SymmetricKey(data: legacyKey))
-                var migrated = state
-                migrated.legacyHistory = try JSONDecoder().decode(ShumLegacyArchive.self, from: plain)
-                try persistence.commit(previous: state, next: migrated)
-                state = migrated
-            }
-            return Prepared(persistence: persistence, state: state)
-        }
-    }
-    init(prepared: Prepared) {
-        persistence = prepared.persistence
-        state = prepared.state
-    }
-    /// The state Shum-Core's session keeps. The session alone writes the
-    /// database then; this store only shows what it stored.
-    private(set) var coreBacked = false
     init(coreState: ShumDatabase) {
-        persistence = nil
         state = coreState
-        coreBacked = true
     }
     /// Takes the state Shum-Core stored after a change.
     func adopt(_ next: ShumDatabase) {
         state = next
-    }
-    init(ownerID: String, key: SymmetricKey, url: URL?) throws {
-        if let url {
-            let disk = try ShumSQLitePersistence(ownerID: ownerID, key: key, url: url)
-            persistence = disk
-            state = try disk.read()
-        } else {
-            persistence = nil
-            state = ShumDatabase(ownerID: ownerID, invitationStates: [:], invitationOutbox: [])
-        }
-    }
-    // Commit disk first, publish memory second. Only changed encrypted records
-    // are written; acknowledgements still cannot precede durable COMMIT.
-    func transaction(_ update: (inout ShumDatabase) throws -> Void) throws {
-        // With Shum-Core's session nothing else may write the database.
-        guard !coreBacked else { throw ShumFailure.storage }
-        var next = state
-        try update(&next)
-        try persistence?.commit(previous: state, next: next)
-        state = next
-    }
-    /// Backups retain the portable encrypted v1 snapshot format. SQLite and
-    /// its live WAL must never be copied individually into a backup.
-    nonisolated static func encryptedSnapshot(at url: URL, key: SymmetricKey) throws -> Data {
-        let state = try ShumSQLitePersistence.snapshot(at: url, key: key)
-        return try ChaChaPoly.seal(ShumCoding.encode(state), using: key).combined
     }
     nonisolated static var liveURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -586,73 +527,5 @@ final class ShumContactsService {
             + (store.state.encounters ?? []).filter { $0.id == card.id }.map(\.card)
             + store.state.requests.filter { $0.id == card.id }
         return try candidates.reduce(card) { try $0.preferred(over: $1) }
-    }
-    static func apply(_ card: ShumContactCard, to state: inout ShumDatabase) {
-        if let index = state.contacts.firstIndex(where: { $0.id == card.id }) {
-            state.contacts[index].card = card
-            if card.avatarSeed != nil { state.contacts[index].avatar = nil }
-        }
-        if let index = state.encounters?.firstIndex(where: { $0.id == card.id }) {
-            state.encounters?[index].card = card
-            if card.avatarSeed != nil { state.encounters?[index].avatar = nil }
-        }
-        if let index = state.requests.firstIndex(where: { $0.id == card.id }) {
-            state.requests[index] = card
-        }
-    }
-    @discardableResult
-    func merge(_ incoming: ShumContactCard) throws -> ShumContactCard {
-        let card = try freshest(incoming)
-        let needsSave = store.state.contacts.contains { $0.id == card.id && $0.card != card }
-            || store.state.encounters?.contains { $0.id == card.id && $0.card != card } == true
-            || store.state.requests.contains { $0.id == card.id && $0 != card }
-        if needsSave { try store.transaction { Self.apply(card, to: &$0) } }
-        return card
-    }
-    func add(
-        _ incoming: ShumContactCard,
-        source: String,
-        avatar: Data? = nil,
-        now: Date = Date(),
-        includeInAddressBook: Bool = true
-    ) throws {
-        let card = try freshest(incoming)
-        guard card.id != store.state.ownerID else { throw ShumFailure.invalidContact }
-        if let existing = store.state.contacts.first(where: { $0.id == card.id }),
-           existing.card == card,
-           avatar == nil || existing.avatar == avatar,
-           !includeInAddressBook || existing.isAddressBookEntry {
-            return
-        }
-        try store.transaction { state in
-            Self.apply(card, to: &state)
-            if let index = state.contacts.firstIndex(where: { $0.id == card.id }) {
-                // Identity bindings are pinned. Name/bio updates cannot rotate authentication keys.
-                guard state.contacts[index].card.signingKey == card.signingKey,
-                      state.contacts[index].card.nostrKey == card.nostrKey else { throw ShumFailure.invalidContact }
-                state.contacts[index].card = card
-                if let avatar, avatar.count <= 40_960 { state.contacts[index].avatar = avatar }
-                if includeInAddressBook {
-                    state.contacts[index].metadata["addressBook"] = "true"
-                    state.contacts[index].metadata["source"] = source
-                }
-            } else {
-                guard state.contacts.count < 2000 else { throw ShumFailure.quota }
-                state.contacts.append(ShumContact(
-                    card: card,
-                    addedAt: now,
-                    avatar: avatar,
-                    metadata: [
-                        "source": source,
-                        "addressBook": includeInAddressBook ? "true" : "false"
-                    ]
-                ))
-            }
-        }
-    }
-    func conversation(with card: ShumContactCard, now: Date) throws {
-        let id = ShumConversation.identifier(store.state.ownerID, card.id)
-        guard !store.state.conversations.contains(where: { $0.id == id }) else { return }
-        try store.transaction { $0.conversations.append(ShumConversation(id: id, contactID: card.id, createdAt: now)) }
     }
 }
