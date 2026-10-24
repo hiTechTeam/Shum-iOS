@@ -11,6 +11,11 @@ struct RegistrationSecurityCreationView: View {
     @State private var ceremonyCompleted = false
     @State private var showProfileDetails = false
     @State private var showError = false
+    /// Creates the keys while the ceremony runs; false when the iPhone is
+    /// locked. Registration makes the first profile's keys by default.
+    var prepare: (@MainActor () -> Bool)? = nil
+    /// What "Continue" does; registration goes on to the profile details.
+    var onContinue: (() -> Void)? = nil
 
     private let stageTitles = [
         "Криптографические ключи".localized,
@@ -110,7 +115,7 @@ struct RegistrationSecurityCreationView: View {
                     isEnabled: true,
                     accentColor: Color.accentColor
                 ) {
-                    showProfileDetails = true
+                    if let onContinue { onContinue() } else { showProfileDetails = true }
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .padding(.bottom, 20)
@@ -169,7 +174,7 @@ struct RegistrationSecurityCreationView: View {
             guard !Task.isCancelled else { return }
             softFeedback.impactOccurred(intensity: 0.65)
 
-            let prepared = coordinator.prepareInitialRegistrationIdentity()
+            let prepared = prepare?() ?? coordinator.prepareInitialRegistrationIdentity()
 
             try await Task.sleep(nanoseconds: 1_150_000_000)
             guard !Task.isCancelled else { return }

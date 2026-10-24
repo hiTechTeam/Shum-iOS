@@ -511,9 +511,10 @@ final class ShumConversationStore {
     func adopt(_ next: ShumDatabase) {
         state = next
     }
-    nonisolated static var liveURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ShumConversations/state.enc")
+    nonisolated static var liveURL: URL { databaseURL(for: .active) }
+
+    nonisolated static func databaseURL(for space: ShumProfileSpace) -> URL {
+        space.root.appendingPathComponent("ShumConversations/state.enc")
     }
 }
 

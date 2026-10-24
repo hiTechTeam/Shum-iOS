@@ -42,8 +42,7 @@ final class ShumProfileStore {
     private let directory: URL?
     init(directory: URL? = nil) { self.directory = directory }
     static func live() -> ShumProfileStore {
-        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return ShumProfileStore(directory: root.appendingPathComponent("ShumProfiles", isDirectory: true))
+        ShumProfileStore(directory: ShumProfileSpace.active.root.appendingPathComponent("ShumProfiles", isDirectory: true))
     }
     func loadOwn() -> ShumProfile? {
         guard let directory, let data = try? Data(contentsOf: directory.appendingPathComponent("own.json")),

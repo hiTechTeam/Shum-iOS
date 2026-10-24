@@ -36,7 +36,7 @@ struct ShumMessage: Identifiable {
 /// person does.
 @MainActor
 final class ShumRuntime: ObservableObject {
-    private static let nicknameKey = "shum.nickname"
+    private static var nicknameKey: String { ShumProfileSpace.active.key("shum.nickname") }
     private static let legacyNicknameKey = "spotchat.nickname"
     @Published private(set) var peers: [ShumPeer] = []
     @Published private var nearbyDistances: [PeerID: Int] = [:]
@@ -128,19 +128,7 @@ final class ShumRuntime: ObservableObject {
                           relays: [String] = sharedCoreRelays,
                           push: URL? = ShumRuntime.pushURL) throws -> ShumMessageStore {
         if !FileManager.default.fileExists(atPath: database.path) {
-            try FileManager.default.createDirectory(at: database.deletingLastPathComponent(), withIntermediateDirectories: true)
-            var state: [String: Any] = [
-                "version": 1, "ownerID": card.id, "contacts": [], "requests": [], "conversations": [],
-                "messages": [], "relay": [], "receipts": [], "seenRelay": [:], "invitationStates": [:],
-                "invitationOutbox": [],
-            ]
-            state["ownProfileCard"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(card))
-            try writeDatabase(
-                database: database.path,
-                ownerId: card.id,
-                storage: identity.storageKey.withUnsafeBytes { Data($0) },
-                state: String(decoding: try JSONSerialization.data(withJSONObject: state), as: UTF8.self)
-            )
+            try createDatabase(identity: identity, card: card, at: database)
         }
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         let session = try ShumCoreSession(
@@ -157,6 +145,23 @@ final class ShumRuntime: ObservableObject {
             push: push
         )
         return try ShumMessageStore(core: session, identity: identity)
+    }
+
+    /// A new profile's database, holding only its signed card.
+    static func createDatabase(identity: ShumIdentityService, card: ShumContactCard, at database: URL) throws {
+        try FileManager.default.createDirectory(at: database.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var state: [String: Any] = [
+            "version": 1, "ownerID": card.id, "contacts": [], "requests": [], "conversations": [],
+            "messages": [], "relay": [], "receipts": [], "seenRelay": [:], "invitationStates": [:],
+            "invitationOutbox": [],
+        ]
+        state["ownProfileCard"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(card))
+        try writeDatabase(
+            database: database.path,
+            ownerId: card.id,
+            storage: identity.storageKey.withUnsafeBytes { Data($0) },
+            state: String(decoding: try JSONSerialization.data(withJSONObject: state), as: UTF8.self)
+        )
     }
 
     /// The push service this build talks to, from its configuration.
@@ -199,7 +204,7 @@ final class ShumRuntime: ObservableObject {
         self.defaults = defaults
         self.now = now
         let storedName = defaults.string(forKey: Self.nicknameKey)
-            ?? defaults.string(forKey: Self.legacyNicknameKey)
+            ?? (ShumProfileSpace.active.id.isEmpty ? defaults.string(forKey: Self.legacyNicknameKey) : nil)
         if defaults.string(forKey: Self.nicknameKey) == nil,
            let storedName {
             defaults.set(storedName, forKey: Self.nicknameKey)

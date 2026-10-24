@@ -387,22 +387,23 @@ final class ShumIdentityService {
     let noisePublicKey: Data
     let signingPublicKey: Data
     private nonisolated let signingKey: Curve25519.Signing.PrivateKey
-    init(keychain: KeychainManagerProtocol, bridge: NostrIdentityBridge) throws {
-        noisePrivate = try Self.key("noiseStaticKey", in: keychain) {
+    init(keychain: KeychainManagerProtocol, bridge: NostrIdentityBridge,
+         space: ShumProfileSpace = .active) throws {
+        noisePrivate = try Self.key(space.key("noiseStaticKey"), in: keychain) {
             Curve25519.KeyAgreement.PrivateKey().rawRepresentation
         }
-        signingPrivate = try Self.key("ed25519SigningKey", in: keychain) {
+        signingPrivate = try Self.key(space.key("ed25519SigningKey"), in: keychain) {
             Curve25519.Signing.PrivateKey().rawRepresentation
         }
         noisePublicKey = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: noisePrivate).publicKey.rawRepresentation
         signingKey = try Curve25519.Signing.PrivateKey(rawRepresentation: signingPrivate)
         signingPublicKey = signingKey.publicKey.rawRepresentation
-        let existing = keychain.loadWithResult(key: "nostr-current-identity", service: "chat.shum.nostr")
+        let existing = keychain.loadWithResult(key: space.key("nostr-current-identity"), service: "chat.shum.nostr")
         switch existing {
         case .success(let data): nostr = try JSONDecoder().decode(NostrIdentity.self, from: data)
         case .itemNotFound:
             guard let generated = try bridge.getCurrentNostrIdentity(),
-                  let saved = keychain.load(key: "nostr-current-identity", service: "chat.shum.nostr"),
+                  let saved = keychain.load(key: space.key("nostr-current-identity"), service: "chat.shum.nostr"),
                   try JSONDecoder().decode(NostrIdentity.self, from: saved).publicKey == generated.publicKey else { throw ShumFailure.unavailableIdentity }
             nostr = generated
         default: throw ShumFailure.unavailableIdentity
@@ -410,18 +411,18 @@ final class ShumIdentityService {
         guard try NostrIdentity(privateKeyData: nostr.privateKey).publicKey == nostr.publicKey else { throw ShumFailure.unavailableIdentity }
         let storageBytes: Data
         switch keychain.getIdentityKeyWithResult(
-            forKey: ShumIdentityKeyNames.storage
+            forKey: space.key(ShumIdentityKeyNames.storage)
         ) {
         case .success(let bytes):
             storageBytes = bytes
         case .itemNotFound:
-            if case .success(let legacyBytes) = keychain
+            if space.id.isEmpty, case .success(let legacyBytes) = keychain
                 .getIdentityKeyWithResult(
                     forKey: ShumIdentityKeyNames.legacyStorage
                 ) {
                 guard case .success = keychain.saveIdentityKeyWithResult(
                     legacyBytes,
-                    forKey: ShumIdentityKeyNames.storage
+                    forKey: space.key(ShumIdentityKeyNames.storage)
                 ) else { throw ShumFailure.unavailableIdentity }
                 storageBytes = legacyBytes
                 break
@@ -430,11 +431,11 @@ final class ShumIdentityService {
             let bytes = key.withUnsafeBytes { Data($0) }
             _ = keychain.saveIdentityKeyWithResult(
                 bytes,
-                forKey: ShumIdentityKeyNames.storage
+                forKey: space.key(ShumIdentityKeyNames.storage)
             )
             guard case .success(let saved) = keychain
                 .getIdentityKeyWithResult(
-                    forKey: ShumIdentityKeyNames.storage
+                    forKey: space.key(ShumIdentityKeyNames.storage)
                 ), saved == bytes else {
                 throw ShumFailure.unavailableIdentity
             }

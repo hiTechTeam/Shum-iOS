@@ -181,6 +181,63 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             }
             .joined(separator: " ")
     }
+    /// Opens another profile: the open one stops, with its pushes, and the
+    /// app reopens on `id` with that profile's keys, contacts and chats.
+    func switchProfile(to id: String) {
+        let profiles = ShumProfileList.shared
+        guard id != profiles.active, !deletingProfile, isRegistered,
+              profiles.entries.contains(where: { $0.id == id }) else { return }
+        closeProfile()
+        openProfile(id)
+    }
+
+    /// Makes a new profile's keys, card and database while the open profile
+    /// keeps running, and lists it. Returns its ID; `switchProfile` opens it.
+    func prepareProfile(name: String, avatarSeed: UInt64) -> String? {
+        guard !deletingProfile, isRegistered, let name = ShumProfileValidation.name(name) else { return nil }
+        let profiles = ShumProfileList.shared
+        let space = profiles.newSpace()
+        do {
+            let keychain = KeychainManager.makeDefault()
+            let identity = try ShumIdentityService(
+                keychain: keychain,
+                bridge: NostrIdentityBridge(keychain: keychain, space: space),
+                space: space
+            )
+            try LocalCardStore(space: space).saveOwn(name: name, bio: nil, photo: nil, avatarSeed: avatarSeed)
+            let card = try identity.card(name: name, bio: "", avatarSeed: avatarSeed)
+            try ShumRuntime.createDatabase(identity: identity, card: card,
+                                           at: ShumConversationStore.databaseURL(for: space))
+        } catch {
+            try? FileManager.default.removeItem(at: space.root)
+            return nil
+        }
+        UserDefaults.standard.set(name, forKey: space.key("shum.nickname"))
+        profiles.add(.init(id: space.id, name: name, avatarSeed: avatarSeed))
+        return space.id
+    }
+
+    /// Stops the open profile without deleting anything.
+    private func closeProfile() {
+        ShumPushService.shared.unregisterCurrentDevice()
+        pendingInvitationURL = nil
+        chatObserver?.cancel()
+        chat?.retireForDeletion()
+        chat = nil
+        resetNotificationState()
+    }
+
+    private func openProfile(_ id: String) {
+        let profiles = ShumProfileList.shared
+        profiles.activate(id)
+        LocalCardStore.shared.open(profiles.activeSpace)
+        authCodeViewModel.restoreLocalProfile()
+        profilePhotoViewModel.resetAccountScopedState()
+        profilePhotoViewModel.loadPhotoIfNeeded()
+        prepareMessaging()
+        updateApplicationState(isActive: active)
+    }
+
     func retryMessaging() {
         chatObserver?.cancel()
         chat?.retireForDeletion()
@@ -197,6 +254,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             profilePhotoViewModel.loadPhotoIfNeeded()
         }
         guard let seed = own.body.avatarSeed else { return }
+        ShumProfileList.shared.update(name: own.body.name, avatarSeed: seed)
         let profile = ShumProfile(name: own.body.name, bio: own.body.bio ?? "",
             avatarSeed: seed).rendered()
         if chat.profiles.own != profile {

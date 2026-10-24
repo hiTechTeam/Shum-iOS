@@ -241,6 +241,8 @@ final class ShumBackupService {
         } catch {
             throw ShumBackupError.invalidPassword
         }
+        // The backup becomes the open profile, with that profile's key names.
+        let space = ShumProfileSpace.active
         let database = ShumConversationStore.liveURL
         guard !files.fileExists(atPath: database.path) else {
             throw ShumBackupError.restoreRequiresEmptyProfile
@@ -249,12 +251,12 @@ final class ShumBackupService {
         let card = state?["ownProfileCard"] as? [String: Any]
         let keychain = KeychainManager.makeDefault()
         do {
-            try saveIdentityKey(opened.keys.noise, name: "noiseStaticKey", keychain: keychain)
-            try saveIdentityKey(opened.keys.signing, name: "ed25519SigningKey", keychain: keychain)
-            try saveIdentityKey(opened.keys.storage, name: ShumIdentityKeyNames.storage, keychain: keychain)
+            try saveIdentityKey(opened.keys.noise, name: space.key("noiseStaticKey"), keychain: keychain)
+            try saveIdentityKey(opened.keys.signing, name: space.key("ed25519SigningKey"), keychain: keychain)
+            try saveIdentityKey(opened.keys.storage, name: space.key(ShumIdentityKeyNames.storage), keychain: keychain)
             try saveCustomKey(
                 JSONEncoder().encode(NostrIdentity(privateKeyData: opened.keys.nostr)),
-                name: nostrIdentityKey,
+                name: space.key(nostrIdentityKey),
                 service: nostrService,
                 keychain: keychain
             )
@@ -271,16 +273,16 @@ final class ShumBackupService {
                 photo: nil,
                 avatarSeed: (card?["avatarSeed"] as? NSNumber)?.uint64Value
             )
-            UserDefaults.standard.set(opened.name, forKey: "shum.nickname")
+            UserDefaults.standard.set(opened.name, forKey: space.key("shum.nickname"))
         } catch {
             for suffix in ["", "-wal", "-shm", ".lock"] {
                 try? files.removeItem(atPath: database.path + suffix)
             }
             try? LocalCardStore.shared.reset()
-            _ = keychain.deleteIdentityKey(forKey: "noiseStaticKey")
-            _ = keychain.deleteIdentityKey(forKey: "ed25519SigningKey")
-            _ = keychain.deleteIdentityKey(forKey: ShumIdentityKeyNames.storage)
-            keychain.delete(key: nostrIdentityKey, service: nostrService)
+            _ = keychain.deleteIdentityKey(forKey: space.key("noiseStaticKey"))
+            _ = keychain.deleteIdentityKey(forKey: space.key("ed25519SigningKey"))
+            _ = keychain.deleteIdentityKey(forKey: space.key(ShumIdentityKeyNames.storage))
+            keychain.delete(key: space.key(nostrIdentityKey), service: nostrService)
             throw ShumBackupError.couldNotSave
         }
         let summary = try? backupSummary(file: data)

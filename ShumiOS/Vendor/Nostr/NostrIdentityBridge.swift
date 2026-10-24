@@ -5,8 +5,8 @@ import CryptoKit
 /// Bridge between Noise and Nostr identities
 final class NostrIdentityBridge {
     private let keychainService = "chat.shum.nostr"
-    private let currentIdentityKey = "nostr-current-identity"
-    private let deviceSeedKey = "nostr-device-seed"
+    private let currentIdentityKey: String
+    private let deviceSeedKey: String
     // In-memory cache to avoid transient keychain access issues
     private var deviceSeedCache: Data?
     // Cache derived identities to avoid repeated crypto during view rendering
@@ -15,8 +15,11 @@ final class NostrIdentityBridge {
 
     private let keychain: KeychainManagerProtocol
 
-    init(keychain: KeychainManagerProtocol = KeychainManager.makeDefault()) {
+    init(keychain: KeychainManagerProtocol = KeychainManager.makeDefault(),
+         space: ShumProfileSpace = .active) {
         self.keychain = keychain
+        currentIdentityKey = space.key("nostr-current-identity")
+        deviceSeedKey = space.key("nostr-device-seed")
     }
     
     /// Get or create the current Nostr identity

@@ -152,19 +152,38 @@ private struct LocalOwnCardExtras: Decodable {
 final class LocalCardStore: @unchecked Sendable {
     static let shared = LocalCardStore()
     private let lock = NSRecursiveLock()
-    private let directory: URL
+    /// The open profile's cards folder and signing key; another profile
+    /// opens with `open(_:)`.
+    private var directory: URL
     private let defaults: UserDefaults
     private let secureStore: SecureStoring
-    private let keyName = "shum.local-card.signing-key.v1"
+    private var keyName: String
+    private let fixedDirectory: Bool
     private var own: LocalCardManifest?
     private var photoEditing: LocalPhotoEditingState?
     private var peers: [String: LocalCardManifest] = [:]
 
-    init(directory: URL? = nil, defaults: UserDefaults = .standard, secureStore: SecureStoring = KeychainStore.shared) {
-        self.directory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LocalCards-v1", isDirectory: true)
+    init(directory: URL? = nil, defaults: UserDefaults = .standard, secureStore: SecureStoring = KeychainStore.shared,
+         space: ShumProfileSpace = .active) {
+        self.directory = directory ?? Self.directory(for: space)
+        keyName = space.key("shum.local-card.signing-key.v1")
+        fixedDirectory = directory != nil
         self.defaults = defaults
         self.secureStore = secureStore
         loadFromDisk()
+    }
+
+    private static func directory(for space: ShumProfileSpace) -> URL {
+        space.root.appendingPathComponent("LocalCards-v1", isDirectory: true)
+    }
+
+    /// Opens another profile's cards.
+    func open(_ space: ShumProfileSpace) {
+        lock.withLock {
+            if !fixedDirectory { directory = Self.directory(for: space) }
+            keyName = space.key("shum.local-card.signing-key.v1")
+            loadFromDisk()
+        }
     }
 
     func reloadFromDisk() {

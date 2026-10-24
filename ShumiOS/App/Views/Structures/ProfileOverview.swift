@@ -29,6 +29,8 @@ struct ProfileOverviewView: View {
     @State private var showSettings = false
     @State private var editingName = false
     @State private var editingAvatar = false
+    @State private var choosingProfile = false
+    @State private var creatingProfile = false
 
     init(
         chat: ShumRuntime,
@@ -94,6 +96,19 @@ struct ProfileOverviewView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $choosingProfile) {
+            ShumProfilePickerSheet {
+                choosingProfile = false
+                creatingProfile = true
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $creatingProfile) {
+            ShumNewProfileSheet()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $editingAvatar) {
             PixelAvatarGeneratorSheet(currentSeed: photoVM.avatarSeed) { seed in
                 if photoVM.usePixelAvatar(seed: seed) {
@@ -112,6 +127,12 @@ struct ProfileOverviewView: View {
         Menu {
             Button { editingAvatar = true } label: {
                 Label("Изменить аватар".localized, systemImage: "pencil")
+            }
+            Button { choosingProfile = true } label: {
+                Label("Выбрать профиль".localized, systemImage: "arrow.left.arrow.right")
+            }
+            Button { creatingProfile = true } label: {
+                Label("Создать новый профиль".localized, systemImage: "plus")
             }
         } label: {
             ShumAvatar(name: displayName, size: 34, imageData: ShumOwnProfile.avatar)
@@ -244,6 +265,224 @@ private struct ShumNameSheet: View {
     private func save() {
         guard let value = ShumProfileValidation.name(name) else { return }
         if profile.updateName(value) { dismiss() }
+    }
+}
+
+/// The profiles on this iPhone: tap one to open it.
+private struct ShumProfilePickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @ObservedObject private var profiles = ShumProfileList.shared
+    let create: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(profiles.entries) { entry in
+                        Button {
+                            dismiss()
+                            coordinator.switchProfile(to: entry.id)
+                        } label: {
+                            HStack(spacing: 14) {
+                                ShumAvatar(name: entry.name, size: 40,
+                                           imageData: entry.avatarSeed.flatMap(ShumPixelAvatarGenerator.data(seed:)))
+                                Text(entry.name)
+                                    .font(.system(size: 17, weight: entry.id == profiles.active ? .semibold : .regular))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                Spacer()
+                                if entry.id == profiles.active {
+                                    Image(systemName: "checkmark")
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Button(action: create) {
+                        HStack(spacing: 14) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 17, weight: .semibold))
+                                .frame(width: 40, height: 40)
+                                .background(Color(uiColor: .tertiarySystemFill), in: Circle())
+                            Text("Создать новый профиль".localized)
+                        }
+                        .foregroundStyle(.primary)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } footer: {
+                    Text("У каждого профиля свои чаты, контакты и ключи".localized)
+                        .frame(maxWidth: .infinity)
+                        .multilineTextAlignment(.center)
+                        .textCase(nil)
+                }
+            }
+            .shumGroupedScreenBackground()
+            .navigationTitle("Профили".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(Inc.Common.close.localized) { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+/// A new profile in two steps: its name, then its pixel avatar.
+private struct ShumNewProfileSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @State private var name = ""
+    @State private var choosingAvatar = false
+    @State private var seed = UInt64.random(in: .min ... .max)
+    @State private var showCeremony = false
+    /// The prepared profile, kept when the ceremony is retried.
+    @State private var createdID: String?
+    @FocusState private var focused: Bool
+    private static let limit = 50
+
+    private var valid: Bool { ShumProfileValidation.name(name) != nil }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if choosingAvatar { avatarStep } else { nameStep }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(ShumThemeCanvas().ignoresSafeArea())
+            .navigationDestination(isPresented: $showCeremony) {
+                // The same key ceremony as registration; the new profile's
+                // keys are made while it runs and it opens on "Continue".
+                RegistrationSecurityCreationView(
+                    prepare: {
+                        if createdID == nil {
+                            createdID = coordinator.prepareProfile(name: name, avatarSeed: seed)
+                        }
+                        return createdID != nil
+                    },
+                    onContinue: {
+                        let id = createdID
+                        dismiss()
+                        if let id {
+                            DispatchQueue.main.async { coordinator.switchProfile(to: id) }
+                        }
+                    }
+                )
+            }
+            .navigationTitle("Новый профиль".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if choosingAvatar {
+                        Button("Назад".localized) { choosingAvatar = false }
+                    } else {
+                        Button(Inc.Common.close.localized) { dismiss() }
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Text(choosingAvatar ? "2 из 2".localized : "1 из 2".localized)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var nameStep: some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 6) {
+                Text("Имя".localized)
+                    .font(.system(size: 30, weight: .bold))
+                Text("Так вас увидят собеседники в этом профиле".localized)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.top, 12)
+
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Имя пользователя".localized, text: $name)
+                    .textContentType(.nickname)
+                    .textInputAutocapitalization(.never)
+                    .focused($focused)
+                    .submitLabel(.next)
+                    .onSubmit { if valid { choosingAvatar = true } }
+                    .padding(.horizontal, 16)
+                    .frame(height: 50)
+                    .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .shumOnChange(of: name) { _, value in
+                        if value.count > Self.limit { name = String(value.prefix(Self.limit)) }
+                    }
+                HStack {
+                    Text("Можно не своё настоящее имя".localized)
+                    Spacer()
+                    Text("\(name.count) / \(Self.limit)").monospacedDigit()
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+            }
+
+            Button { choosingAvatar = true } label: { Text("Далее".localized) }
+                .buttonStyle(ShumPrimaryButtonStyle())
+                .disabled(!valid)
+                .opacity(valid ? 1 : 0.45)
+        }
+        .onAppear { focused = true }
+    }
+
+    private var avatarStep: some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 6) {
+                Text("Аватар".localized)
+                    .font(.system(size: 30, weight: .bold))
+                Text("Найди аватар себе по душе. Свой характер, свой стиль.".localized)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.top, 12)
+
+            Image(uiImage: ShumPixelAvatarGenerator.image(seed: seed))
+                .resizable()
+                .interpolation(.none)
+                .frame(width: 184, height: 184)
+                .clipShape(Circle())
+                .accessibilityLabel("Предпросмотр аватара".localized)
+
+            Text(name.trimmingCharacters(in: .whitespacesAndNewlines))
+                .font(.title2.weight(.semibold))
+                .lineLimit(1)
+
+            Button {
+                var next = UInt64.random(in: .min ... .max)
+                if next == seed { next &+= 1 }
+                seed = next
+            } label: {
+                Label("Другой вариант".localized, systemImage: "arrow.clockwise")
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color(uiColor: .tertiarySystemFill), in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Button { showCeremony = true } label: { Text("Создать профиль".localized) }
+                .buttonStyle(ShumPrimaryButtonStyle())
+
+            Text("Отдельные контакты, чаты и ключ шифрования. Переключаться можно в любой момент.".localized)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
     }
 }
 

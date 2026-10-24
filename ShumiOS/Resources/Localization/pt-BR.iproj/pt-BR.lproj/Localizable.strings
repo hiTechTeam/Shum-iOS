@@ -740,3 +740,16 @@
 /* Profile tab */
 "Изменить аватар" = "Alterar avatar";
 "Так вас видят в чатах" = "É assim que você aparece nos chats";
+
+/* Profiles */
+"Выбрать профиль" = "Trocar de perfil";
+"Создать новый профиль" = "Criar novo perfil";
+"Профили" = "Perfis";
+"У каждого профиля свои чаты, контакты и ключи" = "Cada perfil tem seus próprios chats, contatos e chaves";
+"Новый профиль" = "Novo perfil";
+"1 из 2" = "1 de 2";
+"2 из 2" = "2 de 2";
+"Так вас увидят собеседники в этом профиле" = "É assim que vão te ver neste perfil";
+"Можно не своё настоящее имя" = "Não precisa ser seu nome real";
+"Далее" = "Avançar";
+"Отдельные контакты, чаты и ключ шифрования. Переключаться можно в любой момент." = "Contatos, chats e chave de criptografia separados. Troque quando quiser.";
