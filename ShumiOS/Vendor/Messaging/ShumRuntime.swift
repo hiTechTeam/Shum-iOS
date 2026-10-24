@@ -169,6 +169,20 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         UserDefaults.standard.object(forKey: "ShumCoreSession") as? Bool ?? true
     }
 
+    /// Bluetooth by Shum-Core's mesh on its own radio instead of the app's
+    /// Bluetooth. Off until screens show nearby people from Shum-Core.
+    static var usesCoreRadio: Bool {
+        UserDefaults.standard.object(forKey: "ShumCoreRadio") as? Bool ?? false
+    }
+
+    private func startRadio() {
+        if Self.usesCoreRadio, let core = permanent?.core { core.startRadio() } else { transport.startServices() }
+    }
+
+    private func stopRadio() {
+        if Self.usesCoreRadio, let core = permanent?.core { core.stopRadio() } else { transport.stopServices() }
+    }
+
     /// Shum-Core's session, or nil when it cannot open the profile: the
     /// app's own session then keeps the phone working.
     private static func openCore(identity: ShumIdentityService, card: ShumContactCard,
@@ -366,6 +380,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         permanent?.retire()
         profiles.retire()
         transport.eventDelegate = nil; transport.peerEventsDelegate = nil
+        permanent?.core?.stopRadio()
         if let ble = transport as? BLEService { ble.suspendForPanicReset() }
         else { transport.stopServices() }
         permanentChanges?.cancel(); profileChanges?.cancel()
@@ -381,7 +396,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         }
         guard !started, !setupFailed, !retired else { return }
         started = true
-        if bluetoothEnabled { transport.startServices() }
+        if bluetoothEnabled { startRadio() }
         permanent?.start()
         if runTimer {
             timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
@@ -395,9 +410,9 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         ShumDiscoveryTrace.record(enabled ? "visibility-on" : "visibility-off")
         bluetoothEnabled = enabled
         if isLoadingHistory { return }
-        if enabled && started && appActive { transport.startServices() }
+        if enabled && started && appActive { startRadio() }
         else if !enabled {
-            transport.stopServices()
+            stopRadio()
             knownPeers.removeAll()
             didUpdatePeerSnapshots([])
             permanent?.tick(connected: [], active: appActive)
@@ -429,7 +444,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
             if !pending.isEmpty { messages = pending }
         }
         if active {
-            if bluetoothEnabled { transport.startServices() }
+            if bluetoothEnabled { startRadio() }
             tick()
             markVisibleRead()
         } else {
@@ -1108,7 +1123,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         case "pause-radio":
             testCommands.insert(id)
             testRadioResumeAt = now().addingTimeInterval(20)
-            transport.stopServices()
+            stopRadio()
             recordSelfTestEvent("radio-stop")
         default: break
         }
@@ -1118,7 +1133,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         if let resumeAt = testRadioResumeAt {
             if now() < resumeAt { writeSelfTestResult(); return }
             testRadioResumeAt = nil
-            if bluetoothEnabled { transport.startServices() }
+            if bluetoothEnabled { startRadio() }
             recordSelfTestEvent("radio-start")
         }
         processSelfTestCommand(run: run)

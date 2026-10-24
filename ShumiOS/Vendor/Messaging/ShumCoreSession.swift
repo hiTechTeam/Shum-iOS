@@ -30,8 +30,11 @@ final class ShumCoreSession {
     var changed: (() -> Void)?
     /// A renamed profile, for the local profile list.
     var renamed: ((String) -> Void)?
-    /// Sends a Shum packet (its JSON bytes) over Bluetooth to a routing ID.
+    /// Sends a Shum packet (its JSON bytes) over Bluetooth to a routing ID,
+    /// through the app's own Bluetooth while Shum-Core's radio is off.
     var sendBle: ((String, Data) -> Void)?
+    /// Shum-Core's Bluetooth mesh on this phone's radio, while it runs.
+    private var radio: ShumCoreRadio?
 
     static func now() -> UInt64 { UInt64(Date().timeIntervalSince1970 * 1000) }
 
@@ -49,6 +52,7 @@ final class ShumCoreSession {
     }
 
     func close() {
+        stopRadio()
         timer?.invalidate()
         timer = nil
         sockets.values.forEach { $0.close() }
@@ -67,6 +71,42 @@ final class ShumCoreSession {
     /// reconnect at once instead of after their retry pause.
     func wake() {
         step { $0.wake(now: Self.now()) }
+    }
+
+    /// Bluetooth on: Shum-Core's mesh runs on this phone's radio, the same
+    /// mesh as Shum on desktops. Its links, bytes and signal strength go to
+    /// Shum-Core; the frames it returns go out on their links.
+    func startRadio() {
+        guard radio == nil else { return }
+        let radio = ShumCoreRadio()
+        radio.onEvent = { [weak self] event in
+            guard let self else { return }
+            let now = Self.now()
+            switch event {
+            case .connected(let link, let budget, let rssi):
+                self.step { $0.bleConnected(link: link, budget: UInt32(budget), rssi: rssi.map(Int16.init(clamping:)), now: now) }
+            case .received(let link, let bytes):
+                self.step { $0.bleReceived(link: link, bytes: bytes, now: now) }
+            case .disconnected(let link):
+                self.step { $0.bleDisconnected(link: link) }
+            case .rssi(let link, let value):
+                self.step { $0.bleRssi(link: link, rssi: Int16(clamping: value), now: now) }
+            case .state:
+                break
+            }
+        }
+        self.radio = radio
+        step { try? $0.bleStart(now: Self.now()) }
+        radio.start()
+    }
+
+    /// Bluetooth off: the radio stops and everyone nearby is gone.
+    func stopRadio() {
+        guard let radio else { return }
+        self.radio = nil
+        radio.onEvent = nil
+        radio.stop()
+        step { $0.bleStop() }
     }
 
     /// Someone nearby with their signed card (JSON) and Noise session key.
@@ -157,6 +197,11 @@ final class ShumCoreSession {
             if let peer = effect["peer"] as? String,
                let bytes = (effect["packet"] as? String).flatMap({ Data(base64Encoded: $0) }) {
                 sendBle?(peer, bytes)
+            }
+        case "ble-frames":
+            if let link = effect["link"] as? String {
+                let frames = (effect["frames"] as? [String] ?? []).compactMap { Data(base64Encoded: $0) }
+                radio?.write(link: link, frames: frames)
             }
         default:
             // Relay news: snapshots show the connected relays.

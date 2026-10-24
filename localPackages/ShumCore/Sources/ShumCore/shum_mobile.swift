@@ -399,6 +399,22 @@ fileprivate class UniffiHandleMap<T> {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterInt16: FfiConverterPrimitive {
+    typealias FfiType = Int16
+    typealias SwiftType = Int16
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int16 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int16, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
     typealias FfiType = UInt32
     typealias SwiftType = UInt32
@@ -520,6 +536,35 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 public protocol MobileSessionProtocol : AnyObject {
     
     /**
+     * A link opened. `budget` is the largest write in bytes; `rssi` the
+     * signal strength when known.
+     */
+    func bleConnected(link: String, budget: UInt32, rssi: Int16?, now: UInt64) 
+    
+    func bleDisconnected(link: String) 
+    
+    /**
+     * Bytes a link received (one GATT write or notification).
+     */
+    func bleReceived(link: String, bytes: Data, now: UInt64) 
+    
+    /**
+     * A signal strength reading of a link, for distance.
+     */
+    func bleRssi(link: String, rssi: Int16, now: UInt64) 
+    
+    /**
+     * Bluetooth is on: Shum-Core's mesh starts for this profile. Until
+     * then `ble` effects carry whole packets for the app's own Bluetooth.
+     */
+    func bleStart(now: UInt64) throws 
+    
+    /**
+     * Bluetooth is off: everyone nearby is gone.
+     */
+    func bleStop() 
+    
+    /**
      * Bluetooth state for snapshots: `role` is "scan" or "advertise".
      */
     func bluetooth(role: String, state: String) 
@@ -531,8 +576,10 @@ public protocol MobileSessionProtocol : AnyObject {
      * `connect` (relay, attempt), `send` (relay, text), `ping` (relay),
      * `close` (relay); news `connected`, `disconnected`, `eose` (url);
      * `renamed` (name); `reply` (id, ok or error); `push` (event, path,
-     * headers, body in base64) to POST to the push service; `ble` (peer,
-     * packet bytes in base64) for a nearby device.
+     * headers, body in base64) to POST to the push service; `ble-frames`
+     * (link, frames in base64) for the radio to write while Shum-Core's mesh
+     * runs, or `ble` (peer, packet bytes in base64) for the app's own
+     * Bluetooth before it does.
      */
     func effects(now: UInt64)  -> String
     
@@ -667,6 +714,71 @@ public static func `open`(profile: MobileProfile, keys: MobileKeys, now: UInt64)
 
     
     /**
+     * A link opened. `budget` is the largest write in bytes; `rssi` the
+     * signal strength when known.
+     */
+open func bleConnected(link: String, budget: UInt32, rssi: Int16?, now: UInt64) {try! rustCall() {
+    uniffi_shum_mobile_fn_method_mobilesession_ble_connected(self.uniffiClonePointer(),
+        FfiConverterString.lower(link),
+        FfiConverterUInt32.lower(budget),
+        FfiConverterOptionInt16.lower(rssi),
+        FfiConverterUInt64.lower(now),$0
+    )
+}
+}
+    
+open func bleDisconnected(link: String) {try! rustCall() {
+    uniffi_shum_mobile_fn_method_mobilesession_ble_disconnected(self.uniffiClonePointer(),
+        FfiConverterString.lower(link),$0
+    )
+}
+}
+    
+    /**
+     * Bytes a link received (one GATT write or notification).
+     */
+open func bleReceived(link: String, bytes: Data, now: UInt64) {try! rustCall() {
+    uniffi_shum_mobile_fn_method_mobilesession_ble_received(self.uniffiClonePointer(),
+        FfiConverterString.lower(link),
+        FfiConverterData.lower(bytes),
+        FfiConverterUInt64.lower(now),$0
+    )
+}
+}
+    
+    /**
+     * A signal strength reading of a link, for distance.
+     */
+open func bleRssi(link: String, rssi: Int16, now: UInt64) {try! rustCall() {
+    uniffi_shum_mobile_fn_method_mobilesession_ble_rssi(self.uniffiClonePointer(),
+        FfiConverterString.lower(link),
+        FfiConverterInt16.lower(rssi),
+        FfiConverterUInt64.lower(now),$0
+    )
+}
+}
+    
+    /**
+     * Bluetooth is on: Shum-Core's mesh starts for this profile. Until
+     * then `ble` effects carry whole packets for the app's own Bluetooth.
+     */
+open func bleStart(now: UInt64)throws  {try rustCallWithError(FfiConverterTypeMobileError.lift) {
+    uniffi_shum_mobile_fn_method_mobilesession_ble_start(self.uniffiClonePointer(),
+        FfiConverterUInt64.lower(now),$0
+    )
+}
+}
+    
+    /**
+     * Bluetooth is off: everyone nearby is gone.
+     */
+open func bleStop() {try! rustCall() {
+    uniffi_shum_mobile_fn_method_mobilesession_ble_stop(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
+    /**
      * Bluetooth state for snapshots: `role` is "scan" or "advertise".
      */
 open func bluetooth(role: String, state: String) {try! rustCall() {
@@ -691,8 +803,10 @@ open func closed(relay: UInt32, attempt: UInt64, now: UInt64) {try! rustCall() {
      * `connect` (relay, attempt), `send` (relay, text), `ping` (relay),
      * `close` (relay); news `connected`, `disconnected`, `eose` (url);
      * `renamed` (name); `reply` (id, ok or error); `push` (event, path,
-     * headers, body in base64) to POST to the push service; `ble` (peer,
-     * packet bytes in base64) for a nearby device.
+     * headers, body in base64) to POST to the push service; `ble-frames`
+     * (link, frames in base64) for the radio to write while Shum-Core's mesh
+     * runs, or `ble` (peer, packet bytes in base64) for the app's own
+     * Bluetooth before it does.
      */
 open func effects(now: UInt64) -> String {
     return try!  FfiConverterString.lift(try! rustCall() {
@@ -1351,6 +1465,30 @@ extension MobileError: Foundation.LocalizedError {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionInt16: FfiConverterRustBuffer {
+    typealias SwiftType = Int16?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterInt16.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterInt16.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
     typealias SwiftType = UInt32?
 
@@ -1504,13 +1642,31 @@ private var initializationResult: InitializationResult = {
     if (uniffi_shum_mobile_checksum_func_write_database() != 46585) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_ble_connected() != 8206) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_ble_disconnected() != 31163) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_ble_received() != 52124) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_ble_rssi() != 32235) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_ble_start() != 61997) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_ble_stop() != 40695) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_shum_mobile_checksum_method_mobilesession_bluetooth() != 49280) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_method_mobilesession_closed() != 46824) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_shum_mobile_checksum_method_mobilesession_effects() != 22963) {
+    if (uniffi_shum_mobile_checksum_method_mobilesession_effects() != 38842) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_method_mobilesession_nearby_gone() != 57759) {
