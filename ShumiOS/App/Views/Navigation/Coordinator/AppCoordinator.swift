@@ -19,6 +19,9 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     @Published var invitationError: String?
     @Published var deletingProfile = false
     @Published private(set) var showsDeletionCeremony = false
+    /// The profile just deleted while others remain; its ceremony then
+    /// offers the other profiles.
+    @Published private(set) var deletedProfileName: String?
     let authCodeViewModel: LocalProfileViewModel
     let profilePhotoViewModel: ProfilePhotoViewModel
     private let deletion = ShumDeletionService.live()
@@ -228,6 +231,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
 
     private func openProfile(_ id: String) {
+        deletedProfileName = nil
         let profiles = ShumProfileList.shared
         profiles.activate(id)
         LocalCardStore.shared.open(profiles.activeSpace)
@@ -349,6 +353,10 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         }
     }
     func deleteAccount() async throws {
+        let profiles = ShumProfileList.shared
+        if profiles.entries.contains(where: { $0.id != profiles.active }) {
+            return await deleteOpenProfile()
+        }
         try deletion.begin()
         deletingProfile = true
         pendingInvitationURL = nil
@@ -364,6 +372,37 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         finishDeletion()
         if deletingProfile { throw ShumFailure.storage }
     }
+    /// Deletes only the open profile while others remain: its keys, files
+    /// and settings go, and the other profiles stay as they are.
+    private func deleteOpenProfile() async {
+        let profiles = ShumProfileList.shared
+        let space = profiles.activeSpace
+        let name = profiles.entries.first(where: { $0.id == space.id })?.name
+            ?? authCodeViewModel.localName ?? ""
+        let retiring = chat
+        closeProfile()
+        // The profile may still be opening; nothing may write it after this.
+        await retiring?.waitForStoragePreparation()
+        do {
+            try ShumProfileEraser.erase(space)
+        } catch {
+            openProfile(space.id)
+            chat?.error = "Не удалось удалить профиль. Разблокируйте iPhone и повторите.".localized
+            return
+        }
+        profiles.remove(space.id)
+        if let next = profiles.entries.first { profiles.activate(next.id) }
+        LocalCardStore.shared.open(profiles.activeSpace)
+        authCodeViewModel.clearProfile()
+        profilePhotoViewModel.resetAccountScopedState()
+        deletedProfileName = name
+    }
+
+    /// Opens a remaining profile after another one was deleted.
+    func openAfterDeletion(_ id: String) {
+        openProfile(id)
+    }
+
     func finishDeletion() {
         guard !storageTeardownInProgress else { return }
         do {

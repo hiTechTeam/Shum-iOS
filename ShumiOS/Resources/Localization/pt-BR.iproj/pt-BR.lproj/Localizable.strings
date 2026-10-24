@@ -753,3 +753,8 @@
 "Можно не своё настоящее имя" = "Não precisa ser seu nome real";
 "Далее" = "Avançar";
 "Отдельные контакты, чаты и ключ шифрования. Переключаться можно в любой момент." = "Contatos, chats e chave de criptografia separados. Troque quando quiser.";
+
+/* Deleting one profile */
+"Профиль удалён" = "Perfil excluído";
+"Ключи и переписка «%@» уничтожены. Выберите другой профиль или создайте новый." = "As chaves e os chats de “%@” foram destruídos. Escolha outro perfil ou crie um novo.";
+"Не удалось удалить профиль. Разблокируйте iPhone и повторите." = "Não foi possível excluir o perfil. Desbloqueie o iPhone e tente de novo.";

@@ -97,3 +97,31 @@ final class ShumProfileList: ObservableObject {
         }
     }
 }
+
+/// Deletes one profile while others stay: its files, Keychain items and
+/// settings. The first profile's files sit among the app's own, so only its
+/// folders go; every other profile's folder goes as a whole.
+@MainActor
+enum ShumProfileEraser {
+    static func erase(_ space: ShumProfileSpace) throws {
+        let files = FileManager.default
+        if space.id.isEmpty {
+            for name in ["LocalCards-v1", "ShumProfiles", "ShumConversations"] {
+                let folder = space.root.appendingPathComponent(name, isDirectory: true)
+                if files.fileExists(atPath: folder.path) { try files.removeItem(at: folder) }
+            }
+        } else if files.fileExists(atPath: space.root.path) {
+            try files.removeItem(at: space.root)
+        }
+        let keychain = KeychainManager.makeDefault()
+        var identityKeys = ["noiseStaticKey", "ed25519SigningKey", ShumIdentityKeyNames.storage].map(space.key)
+        if space.id.isEmpty { identityKeys.append(ShumIdentityKeyNames.legacyStorage) }
+        for key in identityKeys { _ = keychain.deleteIdentityKey(forKey: key) }
+        for key in ["nostr-current-identity", "nostr-device-seed"] {
+            keychain.delete(key: space.key(key), service: "chat.shum.nostr")
+        }
+        try? KeychainStore.shared.remove(space.key("shum.local-card.signing-key.v1"))
+        UserDefaults.standard.removeObject(forKey: space.key("shum.nickname"))
+        if space.id.isEmpty { UserDefaults.standard.removeObject(forKey: "spotchat.nickname") }
+    }
+}

@@ -14,7 +14,11 @@ struct AppCoordinatorView: View {
     var body: some View {
         ZStack {
             Group {
-                if coordinator.showsDeletionCeremony {
+                if let deleted = coordinator.deletedProfileName {
+                    ShumDeletionCeremonyView(deletedProfile: deleted, completion: {}) { id in
+                        coordinator.openAfterDeletion(id)
+                    }
+                } else if coordinator.showsDeletionCeremony {
                     ShumDeletionCeremonyView {
                         coordinator.completeDeletionCeremony()
                     }
@@ -157,66 +161,37 @@ struct AppCoordinatorView: View {
 private struct ShumDeletionCeremonyView: View {
     @Environment(\.shumThemePalette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @ObservedObject private var profiles = ShumProfileList.shared
 
+    /// The deleted profile's name when other profiles remain on the iPhone.
+    var deletedProfile: String? = nil
     let completion: () -> Void
+    /// Opens a remaining profile.
+    var open: (String) -> Void = { _ in }
 
     @State private var animationStartedAt = Date()
     @State private var completed = false
+    @State private var creating = false
 
     var body: some View {
         ZStack {
             ShumThemeCanvas().ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                Spacer()
-
-                Text(completed ? "Данные уничтожены".localized : "Уничтожаем данные".localized)
-                    .font(.title2.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                    .contentTransition(.opacity)
-
-                Group {
-                    if completed {
-                        ShumDeletionCompleteIllustration()
-                            .transition(.opacity.combined(with: .scale(scale: 0.92)))
-                    } else {
-                        ShumDeletionIllustration(
-                            animationStartedAt: animationStartedAt,
-                            reduceMotion: reduceMotion
-                        )
-                        .transition(.opacity)
-                    }
-                }
-                .frame(width: 220, height: 210)
-                .padding(.top, 30)
-
-                Text(completed
-                    ? "На устройстве не осталось профиля, ключей и переписки.".localized
-                    : "Личные данные удалены с устройства.".localized)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(3)
-                    .frame(maxWidth: 350)
-                    .contentTransition(.opacity)
-
-                Spacer()
-
-                if completed {
-                    RegistrationPrimaryButton(
-                        title: "Начать заново".localized,
-                        isEnabled: true,
-                        accentColor: palette.accent,
-                        action: completion
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 20)
-                }
+            if completed, let deletedProfile {
+                remaining(deletedProfile)
+                    .transition(.opacity)
+            } else {
+                wiped
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .animation(.easeOut(duration: 0.28), value: completed)
+        .sheet(isPresented: $creating) {
+            ShumNewProfileSheet()
+                .environmentObject(coordinator)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
         .task {
             animationStartedAt = Date()
             let soft = UIImpactFeedbackGenerator(style: .soft)
@@ -232,6 +207,120 @@ private struct ShumDeletionCeremonyView: View {
             success.notificationOccurred(.success)
             completed = true
         }
+    }
+
+    /// Other profiles remain: open one of them or create another.
+    private func remaining(_ name: String) -> some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 40)
+
+            ShumDeletionCompleteIllustration()
+                .frame(width: 140, height: 134)
+
+            Text("Профиль удалён".localized)
+                .font(.title2.weight(.semibold))
+                .padding(.top, 20)
+
+            Text(String.localizedFormat("Ключи и переписка «%@» уничтожены. Выберите другой профиль или создайте новый.".localized, name))
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+                .padding(.top, 10)
+
+            VStack(spacing: 0) {
+                ForEach(profiles.entries) { entry in
+                    Button { open(entry.id) } label: {
+                        HStack(spacing: 14) {
+                            ShumAvatar(name: entry.name, size: 40,
+                                       imageData: entry.avatarSeed.flatMap(ShumPixelAvatarGenerator.data(seed:)))
+                            Text(entry.name)
+                                .font(.system(size: 17))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(height: 58)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if entry.id != profiles.entries.last?.id {
+                        Divider().padding(.leading, 70)
+                    }
+                }
+            }
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .padding(.top, 24)
+
+            Text("У каждого профиля свои чаты, контакты и ключи".localized)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.top, 8)
+
+            Spacer()
+
+            RegistrationPrimaryButton(
+                title: "Создать новый профиль".localized,
+                isEnabled: true,
+                accentColor: palette.accent
+            ) {
+                creating = true
+            }
+            .padding(.bottom, 20)
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var wiped: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            Text(completed ? "Данные уничтожены".localized : "Уничтожаем данные".localized)
+                .font(.title2.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .contentTransition(.opacity)
+
+            Group {
+                if completed {
+                    ShumDeletionCompleteIllustration()
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                } else {
+                    ShumDeletionIllustration(
+                        animationStartedAt: animationStartedAt,
+                        reduceMotion: reduceMotion
+                    )
+                    .transition(.opacity)
+                }
+            }
+            .frame(width: 220, height: 210)
+            .padding(.top, 30)
+
+            Text(completed
+                ? "На устройстве не осталось профиля, ключей и переписки.".localized
+                : "Личные данные удалены с устройства.".localized)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+                .frame(maxWidth: 350)
+                .contentTransition(.opacity)
+
+            Spacer()
+
+            if completed && deletedProfile == nil {
+                RegistrationPrimaryButton(
+                    title: "Начать заново".localized,
+                    isEnabled: true,
+                    accentColor: palette.accent,
+                    action: completion
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .padding(.horizontal, 24)
+                .padding(.bottom, 20)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

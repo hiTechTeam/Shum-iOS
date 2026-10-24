@@ -334,7 +334,7 @@ private struct ShumProfilePickerSheet: View {
 }
 
 /// A new profile in two steps: its name, then its pixel avatar.
-private struct ShumNewProfileSheet: View {
+struct ShumNewProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var coordinator: AppCoordinator
     @State private var name = ""

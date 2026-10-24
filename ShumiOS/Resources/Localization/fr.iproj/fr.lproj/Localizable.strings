@@ -753,3 +753,8 @@
 "Можно не своё настоящее имя" = "Pas besoin que ce soit votre vrai nom";
 "Далее" = "Suivant";
 "Отдельные контакты, чаты и ключ шифрования. Переключаться можно в любой момент." = "Contacts, discussions et clé de chiffrement séparés. Changez à tout moment.";
+
+/* Deleting one profile */
+"Профиль удалён" = "Profil supprimé";
+"Ключи и переписка «%@» уничтожены. Выберите другой профиль или создайте новый." = "Les clés et les discussions de « %@ » sont détruites. Choisissez un autre profil ou créez-en un nouveau.";
+"Не удалось удалить профиль. Разблокируйте iPhone и повторите." = "Impossible de supprimer le profil. Déverrouillez l’iPhone et réessayez.";
