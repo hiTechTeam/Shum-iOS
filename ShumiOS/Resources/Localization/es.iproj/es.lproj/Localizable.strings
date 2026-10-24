@@ -734,3 +734,10 @@
 "Ожидаем сеть" = "Esperando conexión";
 "Сейчас нет связи с ретрансляторами. Как только появится интернет, Shum подключится сам и отправит сообщения из очереди. Рядом Bluetooth работает и без сети." = "Ahora no hay conexión con los repetidores. En cuanto vuelva internet, Shum se conectará solo y enviará los mensajes en cola. Cerca, Bluetooth funciona sin red.";
 "Узнать, как работает связь" = "Saber cómo se conecta Shum";
+
+/* Profile tab */
+"Изменить аватар" = "Cambiar avatar";
+"Пиксельный аватар" = "Avatar de píxeles";
+"Сменить" = "Cambiar";
+"Так вас видят в чатах" = "Así te ven en los chats";
+"Его видят все: контакты и люди рядом" = "Lo ven todos: contactos y personas cercanas";

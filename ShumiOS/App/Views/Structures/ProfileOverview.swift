@@ -14,8 +14,9 @@ enum ShumProfileRoute: Hashable {
     }
 }
 
+/// The Profile tab: the own avatar, name and people met, with settings
+/// behind the gear.
 struct ProfileOverviewView: View {
-    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var coordinator: AppCoordinator
 
     @ObservedObject var chat: ShumRuntime
@@ -23,16 +24,11 @@ struct ProfileOverviewView: View {
     @ObservedObject private var photoVM: ProfilePhotoViewModel
     let open: (ShumProfileRoute) -> Void
     @ObservedObject private var appearance = ShumAppearanceStore.shared
-    @ObservedObject private var language = ShumLanguageStore.shared
 
-    @State private var showScanningSettings = false
-    @State private var showInfoSheet = false
     @Binding var showSecurity: Bool
-    @State private var showAppearance = false
-    @State private var showLanguage = false
-    @State private var showPhotoPreview = false
-    @State private var notificationAuthorizationStatus:
-        UNAuthorizationStatus = .notDetermined
+    @State private var showSettings = false
+    @State private var editingName = false
+    @State private var editingAvatar = false
 
     init(
         chat: ShumRuntime,
@@ -49,23 +45,8 @@ struct ProfileOverviewView: View {
     }
 
     private var displayName: String {
-        normalized(authCodeViewModel.localName)
+        authCodeViewModel.localName.flatMap(ShumOwnProfile.normalized)
             ?? Inc.Profile.notSpecified.localized
-    }
-
-    private var messengerUsername: String? {
-        normalized(authCodeViewModel.localUsername)
-    }
-
-    private func openPhotoPreview() {
-        guard photoVM.uiImage != nil else { return }
-
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-
-        withTransaction(transaction) {
-            showPhotoPreview = true
-        }
     }
 
     var body: some View {
@@ -73,12 +54,12 @@ struct ProfileOverviewView: View {
             appearance.palette.canvas.ignoresSafeArea()
 
             ScrollView {
-                VStack(spacing: 20) {
-                    profileSection("Общение".localized) { communicationCard }
-                    profileSection("Приложение".localized) { applicationCard }
+                VStack(spacing: 12) {
+                    nameCard
+                    encountersCard
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 30)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
                 .padding(.bottom, 36)
             }
             .shumAlwaysBounce()
@@ -86,9 +67,272 @@ struct ProfileOverviewView: View {
         }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .shumOnChange(of: authCodeViewModel.localPhotoURL) { _, value in
-            photoVM.loadPhotoFromURL(value)
+        .toolbar {
+            ProfileAvatarToolbarItem {
+                avatarMenu
+            }
+
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button { open(.ownQR) } label: { Image(systemName: "qrcode") }
+                    .accessibilityLabel("Мой QR-код".localized)
+                Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                    .accessibilityLabel("Настройки".localized)
+            }
         }
+        .navigationDestination(isPresented: $showSettings) {
+            ShumSettingsView(chat: chat, showSecurity: $showSecurity)
+        }
+        .sheet(isPresented: $editingName) {
+            ShumNameSheet(profile: authCodeViewModel)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $editingAvatar) {
+            ShumAvatarSheet(profile: authCodeViewModel)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
+    }
+
+    private var avatarMenu: some View {
+        Menu {
+            Button { editingAvatar = true } label: {
+                Label("Изменить аватар".localized, systemImage: "pencil")
+            }
+        } label: {
+            ShumAvatar(name: displayName, size: 34, imageData: ShumOwnProfile.avatar)
+                .frame(width: 34, height: 34)
+                .contentShape(Circle())
+        }
+        .accessibilityLabel("Изменить аватар".localized)
+    }
+
+    private var nameCard: some View {
+        ProfileMenuButton(position: .single, action: { editingName = true }) {
+            HStack(spacing: 12) {
+                Text("Имя".localized)
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 12)
+                Text(displayName)
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .padding(.horizontal, 20)
+            .frame(height: 58)
+            .contentShape(Rectangle())
+        }
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .accessibilityLabel("Имя".localized)
+        .accessibilityValue(displayName)
+    }
+
+    private var encountersCard: some View {
+        ProfileOverviewRow(
+            title: Inc.Tabs.metTitle.localized,
+            systemImage: "clock.arrow.circlepath",
+            accentValue: (chat.permanent?.unviewedEncounterCount ?? 0) > 0
+                ? "+\(chat.permanent?.unviewedEncounterCount ?? 0)"
+                : nil,
+            value: String(chat.permanent?.encounterHistory.count ?? 0),
+            position: .single
+        ) {
+            open(.encounters)
+        }
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+}
+
+/// The own profile as this device keeps it: its pixel avatar and name.
+@MainActor
+enum ShumOwnProfile {
+    static var avatar: Data? {
+        LocalCardStore.shared.ownManifest?.body.avatarSeed.flatMap(ShumPixelAvatarGenerator.data(seed:))
+    }
+
+    static func normalized(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+/// The name, as the contact sees it in chats.
+private struct ShumNameSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var profile: LocalProfileViewModel
+    @State private var name = ""
+    @FocusState private var focused: Bool
+    private static let limit = 50
+
+    private var valid: Bool { ShumProfileValidation.name(name) != nil }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Имя пользователя".localized, text: $name)
+                    .textContentType(.nickname)
+                    .textInputAutocapitalization(.never)
+                    .focused($focused)
+                    .submitLabel(.done)
+                    .onSubmit(save)
+                    .padding(.horizontal, 16)
+                    .frame(height: 50)
+                    .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .accessibilityIdentifier("local.name")
+                    .shumOnChange(of: name) { _, value in
+                        if value.count > Self.limit { name = String(value.prefix(Self.limit)) }
+                    }
+
+                HStack {
+                    Text("Так вас видят в чатах".localized)
+                    Spacer()
+                    Text("\(name.count) / \(Self.limit)")
+                        .monospacedDigit()
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+
+                if let error = profile.saveError {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 16)
+                }
+                Spacer()
+            }
+            .padding(16)
+            .background(ShumThemeCanvas().ignoresSafeArea())
+            .navigationTitle("Имя".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена".localized) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Готово".localized, action: save)
+                        .fontWeight(.semibold)
+                        .disabled(!valid)
+                }
+            }
+            .onAppear {
+                name = profile.localName ?? ""
+                profile.saveError = nil
+                focused = true
+            }
+        }
+    }
+
+    private func save() {
+        guard let value = ShumProfileValidation.name(name) else { return }
+        if profile.updateName(value) { dismiss() }
+    }
+}
+
+/// The pixel avatar: everyone sees it, contacts and people nearby.
+private struct ShumAvatarSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var profile: LocalProfileViewModel
+
+    private var name: String { profile.localName ?? "" }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 8) {
+                Button(action: change) {
+                    HStack(spacing: 12) {
+                        ShumAvatar(name: name, size: 34, imageData: ShumOwnProfile.avatar)
+                        Text("Пиксельный аватар".localized)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Text("Сменить".localized)
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(height: 58)
+                    .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Text("Его видят все: контакты и люди рядом".localized)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 16)
+
+                if let error = profile.saveError {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 16)
+                }
+                Spacer()
+            }
+            .padding(16)
+            .background(ShumThemeCanvas().ignoresSafeArea())
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 10) {
+                        ShumAvatar(name: name, size: 32, imageData: ShumOwnProfile.avatar)
+                        Text("Изменить аватар".localized)
+                            .font(.headline)
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel(Inc.Common.close.localized)
+                }
+            }
+            .onAppear { profile.saveError = nil }
+        }
+    }
+
+    /// Another pixel avatar; the profile is signed and sent again with it.
+    private func change() {
+        UISelectionFeedbackGenerator().selectionChanged()
+        profile.save(name: name, photo: nil, avatarSeed: UInt64.random(in: .min ... .max))
+    }
+}
+
+/// Settings behind the gear on the Profile tab.
+struct ShumSettingsView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @ObservedObject var chat: ShumRuntime
+    @Binding var showSecurity: Bool
+    @ObservedObject private var appearance = ShumAppearanceStore.shared
+    @ObservedObject private var language = ShumLanguageStore.shared
+
+    @State private var showScanningSettings = false
+    @State private var showInfoSheet = false
+    @State private var showAppearance = false
+    @State private var showLanguage = false
+    @State private var notificationAuthorizationStatus:
+        UNAuthorizationStatus = .notDetermined
+
+    var body: some View {
+        ZStack {
+            appearance.palette.canvas.ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 20) {
+                    section("Общение".localized) { communicationCard }
+                    section("Приложение".localized) { applicationCard }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 36)
+            }
+            .shumAlwaysBounce()
+        }
+        .navigationTitle("Настройки".localized)
+        .navigationBarTitleDisplayMode(.inline)
         .shumOnChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task {
@@ -98,30 +342,6 @@ struct ProfileOverviewView: View {
         }
         .task {
             await refreshNotificationAuthorizationStatus()
-        }
-        .toolbar {
-            ProfileAvatarToolbarItem {
-                profileAvatarButton
-            }
-
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { open(.ownQR) } label: { Image(systemName: "qrcode") }
-                    .accessibilityLabel("Мой QR-код".localized)
-
-                NavigationLink {
-                    ProfileDataView(
-                        authCodeViewModel: authCodeViewModel,
-                        photoViewModel: photoVM
-                    )
-                    .navigationTitle(Inc.Tabs.profile.localized)
-                    .navigationBarTitleDisplayMode(.inline)
-                } label: {
-                    Image(systemName: "pencil")
-                        .foregroundStyle(.primary)
-                }
-                .tint(.primary)
-                .accessibilityLabel(Inc.Profile.editProfile.localized)
-            }
         }
         .sheet(isPresented: $showScanningSettings) {
             ScanningSettingsSheet()
@@ -146,51 +366,9 @@ struct ProfileOverviewView: View {
         .navigationDestination(isPresented: $showLanguage) {
             ShumLanguageSettingsView()
         }
-        .fullScreenCover(isPresented: $showPhotoPreview) {
-            if let image = photoVM.uiImage {
-                FullScreenPhotoView(isPresented: $showPhotoPreview) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                }
-            }
-        }
     }
 
-    private var profileAvatarButton: some View {
-        Group {
-            if #available(iOS 26.0, *) {
-                avatarButton
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-            } else {
-                avatarButton
-                    .buttonStyle(.plain)
-            }
-        }
-        .accessibilityLabel(Inc.Profile.openPhoto.localized)
-    }
-
-    private var avatarButton: some View {
-        Button(action: openPhotoPreview) {
-            Group {
-                if let image = photoVM.uiImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .background(Color(uiColor: .secondarySystemBackground))
-                } else {
-                    ShumInitialsAvatar(name: displayName, size: 34)
-                }
-            }
-            .frame(width: 34, height: 34)
-            .clipShape(Circle())
-            .contentShape(Circle())
-        }
-        .foregroundStyle(.primary)
-    }
-
-    private func profileSection<Content: View>(
+    private func section<Content: View>(
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
@@ -209,22 +387,12 @@ struct ProfileOverviewView: View {
             ProfileOverviewRow(
                 title: Inc.Scanning.scanning.localized,
                 systemImage: "dot.radiowaves.left.and.right",
-                value: scanningStatusTitle,
+                value: coordinator.isScaning
+                    ? Inc.Settings.statusOn.localized
+                    : Inc.Settings.statusOff.localized,
                 position: .top
             ) {
                 showScanningSettings = true
-            }
-            Divider().padding(.leading, 60).padding(.trailing, 20)
-            ProfileOverviewRow(
-                title: Inc.Tabs.metTitle.localized,
-                systemImage: "clock.arrow.circlepath",
-                accentValue: (chat.permanent?.unviewedEncounterCount ?? 0) > 0
-                    ? "+\(chat.permanent?.unviewedEncounterCount ?? 0)"
-                    : nil,
-                value: String(chat.permanent?.encounterHistory.count ?? 0),
-                position: .middle
-            ) {
-                open(.encounters)
             }
             Divider().padding(.leading, 60).padding(.trailing, 20)
             ProfileOverviewRow(
@@ -280,12 +448,6 @@ struct ProfileOverviewView: View {
         )
     }
 
-    private func normalized(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
     private var notificationStatusTitle: String {
         switch notificationAuthorizationStatus {
         case .authorized, .provisional, .ephemeral:
@@ -295,12 +457,6 @@ struct ProfileOverviewView: View {
         @unknown default:
             Inc.Settings.statusOff.localized
         }
-    }
-
-    private var scanningStatusTitle: String {
-        coordinator.isScaning
-            ? Inc.Settings.statusOn.localized
-            : Inc.Settings.statusOff.localized
     }
 
     private func manageNotificationAuthorization() {
@@ -329,7 +485,6 @@ struct ProfileOverviewView: View {
             .notificationSettings()
         notificationAuthorizationStatus = settings.authorizationStatus
     }
-
 }
 
 private struct ShumLanguageSettingsView: View {
