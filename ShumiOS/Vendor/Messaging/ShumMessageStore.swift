@@ -391,7 +391,12 @@ final class ShumMessageStore: ObservableObject {
             ?? state.blocked?.values.first(where: { $0.peerID == peer })
     }
     func session(for card: ShumContactCard) -> PeerID? {
-        nearby.first(where: { $0.value.id == card.id && transport.isPeerConnected($0.key) && transport.noiseSessionPublicKeyData(for: $0.key) == card.noiseKey })?.key
+        if core != nil, ShumRuntime.usesCoreRadio { return nearby[card.peerID]?.id == card.id ? card.peerID : nil }
+        return nearby.first(where: { $0.value.id == card.id && transport.isPeerConnected($0.key) && transport.noiseSessionPublicKeyData(for: $0.key) == card.noiseKey })?.key
+    }
+    /// Metres to someone nearby, as Shum-Core estimates it from the signal.
+    func distance(for card: ShumContactCard) -> Int? {
+        (corePeople[card.id]?["distance"] as? NSNumber)?.intValue
     }
     func avatar(for card: ShumContactCard) -> Data? {
         state.invitationStates?[card.id]?.avatar
@@ -1915,6 +1920,16 @@ extension ShumMessageStore {
             if let id = contact["id"] as? String { people[id] = contact }
         }
         corePeople = people
+        if ShumRuntime.usesCoreRadio {
+            // Shum-Core's mesh knows who is nearby; screens find them by card.
+            var found: [PeerID: ShumContactCard] = [:]
+            for contact in people.values where contact["nearby"] as? Bool == true {
+                guard let json = contact["card"].flatMap({ try? JSONSerialization.data(withJSONObject: $0) }),
+                      let card = try? JSONDecoder().decode(ShumContactCard.self, from: json) else { continue }
+                found[card.peerID] = card
+            }
+            nearby = found
+        }
         changed()
     }
 
@@ -1964,7 +1979,8 @@ extension ShumMessageStore {
     /// connected devices, and Shum-Core hears who came and went. People we
     /// already know by their Noise key count as nearby at once.
     fileprivate func coreTick(connected: Set<PeerID>) {
-        guard let core, !retired else { return }
+        // Shum-Core's own radio says hello and tracks links itself.
+        guard let core, !retired, !ShumRuntime.usesCoreRadio else { return }
         if localSessionID != transport.myPeerID {
             localSessionID = transport.myPeerID
             helloTimes.removeAll()

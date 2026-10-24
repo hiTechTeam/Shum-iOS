@@ -14,7 +14,8 @@ final class ShumCoreRadio: NSObject {
         case received(link: String, bytes: Data)
         case disconnected(link: String)
         case rssi(link: String, value: Int)
-        case state(role: String, state: String)
+        /// Whether Bluetooth is on, as scanning sees it.
+        case power(CBManagerState)
     }
 
     nonisolated(unsafe) static let service = CBUUID(string: "F85FC602-7866-4F4C-90AB-4F14E107792B")
@@ -118,23 +119,12 @@ final class ShumCoreRadio: NSObject {
         retryAfter[id] = Date().addingTimeInterval(10)
         if link.ready { onEvent?(.disconnected(link: "c:" + id.uuidString)) }
     }
-
-    private static func describe(_ state: CBManagerState) -> String {
-        switch state {
-        case .poweredOn: "poweredOn"
-        case .poweredOff: "poweredOff"
-        case .unauthorized: "unauthorized"
-        case .unsupported: "unsupported"
-        case .resetting: "resetting"
-        default: "unknown"
-        }
-    }
 }
 
 extension ShumCoreRadio: CBCentralManagerDelegate, CBPeripheralDelegate {
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         MainActor.assumeIsolated {
-            onEvent?(.state(role: "scan", state: Self.describe(central.state)))
+            onEvent?(.power(central.state))
             if central.state == .poweredOn {
                 central.scanForPeripherals(withServices: [Self.service], options: nil)
             } else {
@@ -231,7 +221,6 @@ extension ShumCoreRadio: CBCentralManagerDelegate, CBPeripheralDelegate {
 extension ShumCoreRadio: CBPeripheralManagerDelegate {
     nonisolated func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
         MainActor.assumeIsolated {
-            onEvent?(.state(role: "advertise", state: Self.describe(peripheral.state)))
             if peripheral.state == .poweredOn {
                 let value = CBMutableCharacteristic(
                     type: Self.characteristic,
@@ -254,19 +243,8 @@ extension ShumCoreRadio: CBPeripheralManagerDelegate {
     }
 
     nonisolated func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: Error?) {
-        MainActor.assumeIsolated {
-            if let error {
-                onEvent?(.state(role: "advertise", state: error.localizedDescription))
-                return
-            }
-            peripheral.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [Self.service]])
-        }
-    }
-
-    nonisolated func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: Error?) {
-        MainActor.assumeIsolated {
-            onEvent?(.state(role: "advertise", state: error?.localizedDescription ?? "advertising"))
-        }
+        guard error == nil else { return }
+        peripheral.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [Self.service]])
     }
 
     nonisolated func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral,

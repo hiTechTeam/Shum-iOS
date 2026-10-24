@@ -176,7 +176,9 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     }
 
     private func startRadio() {
-        if Self.usesCoreRadio, let core = permanent?.core { core.startRadio() } else { transport.startServices() }
+        guard Self.usesCoreRadio, let core = permanent?.core else { return transport.startServices() }
+        core.radioPower = { [weak self] in self?.didReceiveTransportEvent(.bluetoothStateUpdated($0)) }
+        core.startRadio()
     }
 
     private func stopRadio() {
@@ -620,6 +622,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     }
     private func syncPermanentMessages() {
         guard let permanent else { return }
+        if Self.usesCoreRadio { showCoreNearby(permanent) }
         ShumTypingPixels.shared.update(typing: Set(permanent.typingCards.map { $0.peerID.id }))
         let state = permanent.state
         let snapshot = PermanentMessageSnapshot(
@@ -964,6 +967,31 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         if !appActive {
             serviceBackgroundTransport(connected: ids)
         }
+    }
+
+    /// People nearby as Shum-Core's mesh sees them, in place of the app's
+    /// Bluetooth peers. Shum-Core already waits a moment before someone
+    /// counts as gone.
+    private func showCoreNearby(_ permanent: ShumMessageStore) {
+        let on = bluetoothEnabled && bluetoothState == .poweredOn
+        let cards = on ? permanent.nearby.values.filter { !permanent.isBlocked($0) } : []
+        let ids = Set(cards.map(\.peerID))
+        if connectedPeerIDs != ids { ShumDiscoveryTrace.record("runtime-connected-count-\(ids.count)") }
+        connectedPeerIDs = ids
+        let distances = Dictionary(cards.compactMap { card in
+            permanent.distance(for: card).flatMap { $0 > 0 ? (card.peerID, $0) : nil }
+        }, uniquingKeysWith: { _, latest in latest })
+        if nearbyDistances != distances { nearbyDistances = distances }
+        let current = now()
+        let found: [ShumPeer] = cards.map { (card: ShumContactCard) -> ShumPeer in
+            let since: Date = knownPeers[card.peerID]?.lastConnected ?? current
+            return ShumPeer(id: card.peerID, name: card.name, lastConnected: since)
+        }
+        let next = found.sorted { (a: ShumPeer, b: ShumPeer) -> Bool in
+            a.name == b.name ? a.id.id < b.id.id : a.name < b.name
+        }
+        knownPeers = Dictionary(next.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        if peers != next { peers = next }
     }
 
     /// CoreBluetooth can wake the process briefly while its UI remains

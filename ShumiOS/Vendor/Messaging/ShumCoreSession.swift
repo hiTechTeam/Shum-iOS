@@ -1,3 +1,4 @@
+import CoreBluetooth
 import Foundation
 import ShumCore
 
@@ -35,6 +36,8 @@ final class ShumCoreSession {
     var sendBle: ((String, Data) -> Void)?
     /// Shum-Core's Bluetooth mesh on this phone's radio, while it runs.
     private var radio: ShumCoreRadio?
+    /// Whether Bluetooth is on, while Shum-Core's radio runs.
+    var radioPower: ((CBManagerState) -> Void)?
 
     static func now() -> UInt64 { UInt64(Date().timeIntervalSince1970 * 1000) }
 
@@ -91,8 +94,8 @@ final class ShumCoreSession {
                 self.step { $0.bleDisconnected(link: link) }
             case .rssi(let link, let value):
                 self.step { $0.bleRssi(link: link, rssi: Int16(clamping: value), now: now) }
-            case .state:
-                break
+            case .power(let state):
+                self.radioPower?(state)
             }
         }
         self.radio = radio
