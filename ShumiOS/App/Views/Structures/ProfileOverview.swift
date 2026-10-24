@@ -118,6 +118,8 @@ struct ProfileOverviewView: View {
                 .frame(width: 34, height: 34)
                 .contentShape(Circle())
         }
+        // Menu icons stay monochrome in every theme.
+        .tint(.primary)
         .accessibilityLabel("Изменить аватар".localized)
     }
 
