@@ -601,6 +601,12 @@ public protocol MobileSessionProtocol : AnyObject {
      */
     func nearbyPeer(routing: String, card: String, noise: Data, distance: UInt32?, direct: Bool) throws 
     
+    /**
+     * Grows when someone comes or goes nearby or their distance changes,
+     * which stores nothing; Swift then reads `snapshot()` alone.
+     */
+    func nearbyRevision()  -> UInt64
+    
     func opened(relay: UInt32, attempt: UInt64, now: UInt64) 
     
     /**
@@ -618,8 +624,8 @@ public protocol MobileSessionProtocol : AnyObject {
     func request(id: UInt64, request: String, now: UInt64)  -> String?
     
     /**
-     * Grows with every change to the stored state or to who is nearby;
-     * Swift reads `state()` and `snapshot()` again only when it did.
+     * Grows with every change to the stored state; Swift reads `state()`
+     * again only when it did.
      */
     func revision()  -> UInt64
     
@@ -855,6 +861,17 @@ open func nearbyPeer(routing: String, card: String, noise: Data, distance: UInt3
 }
 }
     
+    /**
+     * Grows when someone comes or goes nearby or their distance changes,
+     * which stores nothing; Swift then reads `snapshot()` alone.
+     */
+open func nearbyRevision() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_shum_mobile_fn_method_mobilesession_nearby_revision(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func opened(relay: UInt32, attempt: UInt64, now: UInt64) {try! rustCall() {
     uniffi_shum_mobile_fn_method_mobilesession_opened(self.uniffiClonePointer(),
         FfiConverterUInt32.lower(relay),
@@ -901,8 +918,8 @@ open func request(id: UInt64, request: String, now: UInt64) -> String? {
 }
     
     /**
-     * Grows with every change to the stored state or to who is nearby;
-     * Swift reads `state()` and `snapshot()` again only when it did.
+     * Grows with every change to the stored state; Swift reads `state()`
+     * again only when it did.
      */
 open func revision() -> UInt64 {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
@@ -1678,6 +1695,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_shum_mobile_checksum_method_mobilesession_nearby_peer() != 40364) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_nearby_revision() != 29560) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_shum_mobile_checksum_method_mobilesession_opened() != 47872) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -1690,7 +1710,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_shum_mobile_checksum_method_mobilesession_request() != 29784) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_shum_mobile_checksum_method_mobilesession_revision() != 56624) {
+    if (uniffi_shum_mobile_checksum_method_mobilesession_revision() != 41169) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_method_mobilesession_snapshot() != 30039) {

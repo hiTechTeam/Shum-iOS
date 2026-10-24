@@ -27,8 +27,12 @@ final class ShumCoreSession {
     private var lastID: UInt64 = 0
     /// Shum-Core's commit count when screens last read its state.
     private var shownRevision: UInt64 = 0
-    /// Called after anything Shum-Core did, so screens can read a new snapshot.
-    var changed: (() -> Void)?
+    /// A snapshot-only refresh is due within half a second.
+    private var refreshDue = false
+    /// Called with true after Shum-Core stored something, so screens read its
+    /// state again; with false when only the snapshot changed: people nearby,
+    /// typing, "in chat" or relays.
+    var changed: ((Bool) -> Void)?
     /// A renamed profile, for the local profile list.
     var renamed: ((String) -> Void)?
     /// Shum-Core's Bluetooth mesh on this phone's radio, while it runs.
@@ -131,16 +135,30 @@ final class ShumCoreSession {
     }
 
     /// Feeds Shum-Core, then carries out what it decided. Screens hear about
-    /// it when Shum-Core stored something or acted.
-    private func step(_ input: (MobileSession) -> Void) {
+    /// a stored change at once; about anything else at most twice a second,
+    /// and not about Bluetooth frames, which come many times a second.
+    private func step(news: Bool = false, _ input: (MobileSession) -> Void) {
+        let nearby = core.nearbyRevision()
         input(core)
         let text = core.effects(now: Self.now())
         let effects = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: Any]] ?? []
         for effect in effects { carry(effect) }
         let revision = core.revision()
-        guard revision != shownRevision || !effects.isEmpty else { return }
-        shownRevision = revision
-        changed?()
+        if revision != shownRevision {
+            shownRevision = revision
+            changed?(true)
+            return
+        }
+        let shown = news || core.nearbyRevision() != nearby
+            || effects.contains { $0["type"] as? String != "ble-frames" }
+        guard shown, !refreshDue else { return }
+        refreshDue = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard let self else { return }
+            self.refreshDue = false
+            self.changed?(false)
+        }
     }
 
     private func carry(_ effect: [String: Any]) {
@@ -157,7 +175,7 @@ final class ShumCoreSession {
                 guard let self else { return }
                 switch event {
                 case .opened: self.step { $0.opened(relay: relay, attempt: attempt, now: Self.now()) }
-                case .text(let text): self.step { $0.received(relay: relay, attempt: attempt, text: text, now: Self.now()) }
+                case .text(let text): self.step(news: true) { $0.received(relay: relay, attempt: attempt, text: text, now: Self.now()) }
                 case .closed:
                     self.sockets[relay] = nil
                     self.step { $0.closed(relay: relay, attempt: attempt, now: Self.now()) }

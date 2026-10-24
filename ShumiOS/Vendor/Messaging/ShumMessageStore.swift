@@ -33,8 +33,8 @@ final class ShumMessageStore: ObservableObject {
         self.core = core
         self.now = now
         ownCard = card
-        core.changed = { [weak self] in self?.coreChanged() }
-        coreChanged()
+        core.changed = { [weak self] stored in self?.coreChanged(stored: stored) }
+        coreChanged(stored: true)
         ShumPushService.shared.configure(card: ownCard) { [weak identity] data in
             identity?.sign(data)
         }
@@ -263,14 +263,17 @@ final class ShumMessageStore: ObservableObject {
         people.removeAll()
     }
 
-    /// Shum-Core changed something: show its stored state and who is nearby.
-    private func coreChanged() {
+    /// Shum-Core changed something: show who is nearby, typing and in chat,
+    /// and its stored state again when it stored something.
+    private func coreChanged(stored: Bool) {
         guard !retired else { return }
-        do {
-            let next = try Self.decodeCoreState(core.state())
-            store.adopt(next)
-            if let card = next.ownProfileCard { ownCard = card }
-        } catch { fail(error) }
+        if stored {
+            do {
+                let next = try Self.decodeCoreState(core.state())
+                store.adopt(next)
+                if let card = next.ownProfileCard { ownCard = card }
+            } catch { fail(error) }
+        }
         let snapshot = core.snapshot()
         var people: [String: [String: Any]] = [:]
         var found: [PeerID: ShumContactCard] = [:]
