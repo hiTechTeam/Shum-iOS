@@ -118,14 +118,21 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
                             let prepared = try await preparation.value
                             guard let model, !model.retired else { return }
                             let permanent: ShumMessageStore
+                            if ShumRuntime.usesSharedCore {
+                                // The app's own storage only migrated old history. Its
+                                // connection closes before Shum-Core opens the database:
+                                // closing checkpoints the journal, which Shum-Core would
+                                // see as a change by someone else and stop writing.
+                                prepared.persistence.close()
+                            }
                             if ShumRuntime.usesSharedCore,
                                let core = ShumRuntime.openCore(identity: identity, card: card, ble: ble, name: model.nickname) {
-                                // The app's own storage only migrated old history; Shum-Core's
-                                // session runs the profile from here on.
-                                _ = prepared
+                                // Shum-Core's session runs the profile from here on.
                                 permanent = core
                             } else {
-                                let store = ShumConversationStore(prepared: prepared)
+                                let store = ShumRuntime.usesSharedCore
+                                    ? try ShumConversationStore(ownerID: ownerID, key: key, url: url)
+                                    : ShumConversationStore(prepared: prepared)
                                 let internet = ShumNostrService(identity: identity.nostr, manager: .shum(), handled: ShumHandledEvents(url: ShumHandledEvents.liveURL))
                                 permanent = try ShumMessageStore(identity: identity, store: store, transport: ble, wire: ble, card: card, internet: internet)
                             }
