@@ -169,20 +169,27 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         UserDefaults.standard.object(forKey: "ShumCoreSession") as? Bool ?? true
     }
 
-    /// Bluetooth by Shum-Core's mesh on its own radio instead of the app's
-    /// Bluetooth. Off until screens show nearby people from Shum-Core.
+    /// Bluetooth by Shum-Core's mesh on its own radio, the same mesh as Shum
+    /// on desktops, instead of the app's own Bluetooth. On unless
+    /// `ShumCoreRadio` is set to false for diagnosis.
     static var usesCoreRadio: Bool {
-        UserDefaults.standard.object(forKey: "ShumCoreRadio") as? Bool ?? false
+        UserDefaults.standard.object(forKey: "ShumCoreRadio") as? Bool ?? true
+    }
+
+    /// Shum-Core's radio runs this profile: the flag is on and Shum-Core
+    /// opened it. Otherwise the app's own Bluetooth does.
+    private var coreRadio: ShumCoreSession? {
+        Self.usesCoreRadio ? permanent?.core : nil
     }
 
     private func startRadio() {
-        guard Self.usesCoreRadio, let core = permanent?.core else { return transport.startServices() }
+        guard let core = coreRadio else { return transport.startServices() }
         core.radioPower = { [weak self] in self?.didReceiveTransportEvent(.bluetoothStateUpdated($0)) }
         core.startRadio()
     }
 
     private func stopRadio() {
-        if Self.usesCoreRadio, let core = permanent?.core { core.stopRadio() } else { transport.stopServices() }
+        if let core = coreRadio { core.stopRadio() } else { transport.stopServices() }
     }
 
     /// Shum-Core's session, or nil when it cannot open the profile: the
@@ -622,7 +629,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
     }
     private func syncPermanentMessages() {
         guard let permanent else { return }
-        if Self.usesCoreRadio { showCoreNearby(permanent) }
+        if coreRadio != nil { showCoreNearby(permanent) }
         ShumTypingPixels.shared.update(typing: Set(permanent.typingCards.map { $0.peerID.id }))
         let state = permanent.state
         let snapshot = PermanentMessageSnapshot(
@@ -874,7 +881,7 @@ final class ShumRuntime: ObservableObject, TransportEventDelegate, TransportPeer
         guard !isLoadingHistory, !retired else { return }
         guard !retired else { return }
         internetConnected = permanent?.internetConnected == true
-        didUpdatePeerSnapshots(transport.currentPeerSnapshots())
+        if coreRadio != nil, let permanent { showCoreNearby(permanent) } else { didUpdatePeerSnapshots(transport.currentPeerSnapshots()) }
         if transport is ShumProfileTransporting,
            bluetoothState == .poweredOn,
            appActive {
