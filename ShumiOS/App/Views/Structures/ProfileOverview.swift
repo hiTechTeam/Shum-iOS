@@ -139,6 +139,9 @@ struct ProfileOverviewView: View {
                 .frame(width: 34, height: 34)
                 .contentShape(Circle())
         }
+        // A plain label: no padding of its own, on every iOS.
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         // Menu icons stay monochrome in every theme.
         .tint(.primary)
         .accessibilityLabel("Изменить аватар".localized)
@@ -923,14 +926,10 @@ private struct ProfileAvatarToolbarItem<Content: View>: ToolbarContent {
             }
             .sharedBackgroundVisibility(.hidden)
         } else {
+            // The avatar is round itself; a menu label would shift a
+            // background circle off it.
             ToolbarItem(placement: .topBarLeading) {
                 content
-                    .frame(width: 40, height: 40)
-                    .background(
-                        Color(uiColor: .secondarySystemBackground),
-                        in: Circle()
-                    )
-                    .contentShape(Circle())
             }
         }
     }
