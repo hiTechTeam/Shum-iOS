@@ -99,18 +99,7 @@ struct Welcome: View {
             allowedContentTypes: [.shumBackup, .data]
         ) { result in
             do {
-                let url = try result.get()
-                let accessed = url.startAccessingSecurityScopedResource()
-                defer {
-                    if accessed { url.stopAccessingSecurityScopedResource() }
-                }
-                let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-                guard size > 0, size <= 131 * 1024 * 1024 else {
-                    throw ShumBackupError.backupTooLarge
-                }
-                let data = try Data(contentsOf: url, options: .mappedIfSafe)
-                _ = try ShumBackupService.shared.metadata(for: data)
-                importedBackup = data
+                importedBackup = try ShumBackupService.shared.read(result)
                 showRestore = true
             } catch {
                 importError = error.localizedDescription

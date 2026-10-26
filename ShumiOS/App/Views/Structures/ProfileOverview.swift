@@ -31,6 +31,7 @@ struct ProfileOverviewView: View {
     @State private var editingAvatar = false
     @State private var choosingProfile = false
     @State private var creatingProfile = false
+    @State private var restoringProfile = false
 
     init(
         chat: ShumRuntime,
@@ -100,10 +101,14 @@ struct ProfileOverviewView: View {
             ShumProfilePickerSheet {
                 choosingProfile = false
                 creatingProfile = true
+            } restore: {
+                choosingProfile = false
+                restoringProfile = true
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        .shumRestoresProfile(isPresented: $restoringProfile)
         .sheet(isPresented: $creatingProfile) {
             ShumNewProfileSheet()
                 .presentationDetents([.large])
@@ -277,6 +282,7 @@ private struct ShumProfilePickerSheet: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @ObservedObject private var profiles = ShumProfileList.shared
     let create: () -> Void
+    let restore: () -> Void
 
     var body: some View {
         NavigationStack {
@@ -312,6 +318,18 @@ private struct ShumProfilePickerSheet: View {
                                 .frame(width: 40, height: 40)
                                 .background(Color(uiColor: .tertiarySystemFill), in: Circle())
                             Text("Создать новый профиль".localized)
+                        }
+                        .foregroundStyle(.primary)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    Button(action: restore) {
+                        HStack(spacing: 14) {
+                            Image(systemName: "externaldrive.badge.timemachine")
+                                .font(.system(size: 17, weight: .semibold))
+                                .frame(width: 40, height: 40)
+                                .background(Color(uiColor: .tertiarySystemFill), in: Circle())
+                            Text("Восстановить из копии".localized)
                         }
                         .foregroundStyle(.primary)
                         .contentShape(Rectangle())

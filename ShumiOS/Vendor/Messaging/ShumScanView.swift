@@ -10,6 +10,8 @@ import Vision
 struct ShumScanView: View {
     var resolve: ShumContactResolving?
     var allowsPhotoImport: Bool
+    /// The open profile's own ID: its own code is never taken as a contact.
+    var ownID: String?
     var scanned: (ShumContactCard) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.shumThemePalette) private var palette
@@ -29,10 +31,12 @@ struct ShumScanView: View {
     init(
         resolve: ShumContactResolving? = nil,
         allowsPhotoImport: Bool = true,
+        ownID: String? = nil,
         scanned: @escaping (ShumContactCard) -> Void
     ) {
         self.resolve = resolve
         self.allowsPhotoImport = allowsPhotoImport
+        self.ownID = ownID
         self.scanned = scanned
     }
 
@@ -270,14 +274,14 @@ struct ShumScanView: View {
             guard let url = URL(string: text) else { throw ShumFailure.invalidContact }
             switch try ShumInvitationPayload.parse(url) {
             case .card(let card):
-                scanned(card)
+                deliver(card)
             case .locator(let locator):
                 guard let resolve else { throw ShumFailure.contactUnavailable }
                 resolving = true
                 resolve(locator) { result in
                     resolving = false
                     switch result {
-                    case .success(let card): scanned(card)
+                    case .success(let card): deliver(card)
                     case .failure(let error):
                         self.error = error.localizedDescription
                         done = false
@@ -288,6 +292,15 @@ struct ShumScanView: View {
             self.error = error.localizedDescription
             done = false
         }
+    }
+
+    private func deliver(_ card: ShumContactCard) {
+        guard card.id != ownID else {
+            error = ShumFailure.ownProfile.localizedDescription
+            done = false
+            return
+        }
+        scanned(card)
     }
 
     @MainActor

@@ -19,6 +19,7 @@ enum ShumBackupError: LocalizedError {
     case invalidBackup
     case backupTooLarge
     case restoreRequiresEmptyProfile
+    case profileAlreadyExists
     case couldNotSave
 
     var errorDescription: String? {
@@ -35,6 +36,8 @@ enum ShumBackupError: LocalizedError {
             return "Резервная копия слишком большая или повреждена.".localized
         case .restoreRequiresEmptyProfile:
             return "Восстановление доступно только до создания нового профиля.".localized
+        case .profileAlreadyExists:
+            return "Этот профиль уже есть на устройстве.".localized
         case .couldNotSave:
             return "Не удалось сохранить восстановленные данные на устройстве.".localized
         }
@@ -44,6 +47,7 @@ enum ShumBackupError: LocalizedError {
 struct ShumBackupMetadata {
     let profileName: String
     let createdAt: Date
+    var avatarSeed: UInt64? = nil
 }
 
 final class ShumBackupService {
@@ -176,6 +180,22 @@ final class ShumBackupService {
         return file
     }
 
+    /// Reads a backup file picked in Files and checks that Shum can open it.
+    func read(_ picked: Result<URL, Error>) throws -> Data {
+        let url = try picked.get()
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessed { url.stopAccessingSecurityScopedResource() }
+        }
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size > 0, size <= 131 * 1024 * 1024 else {
+            throw ShumBackupError.backupTooLarge
+        }
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        _ = try metadata(for: data)
+        return data
+    }
+
     func metadata(for data: Data) throws -> ShumBackupMetadata {
         if data.starts(with: Self.coreMagic) {
             guard let summary = try? backupSummary(file: data) else { throw ShumBackupError.invalidBackup }
@@ -200,7 +220,7 @@ final class ShumBackupService {
         }
 
         if data.starts(with: Self.coreMagic) {
-            return try await restoreCore(data, password: password)
+            return try await restoreCore(data, password: password, into: .active, among: [])
         }
 
         let payloadData = try await Task.detached(priority: .userInitiated) {
@@ -219,6 +239,16 @@ final class ShumBackupService {
         )
     }
 
+    /// Restores a backup as another profile in `space`, next to the profiles
+    /// in `existing`, which it must not repeat.
+    func restore(data: Data, password: String, into space: ShumProfileSpace,
+                 among existing: [ShumProfileSpace]) async throws -> ShumBackupMetadata {
+        guard Self.validPassword(password) else { throw ShumBackupError.invalidPassword }
+        // Only backups in the shared format; this app's old one fills an empty device.
+        guard data.starts(with: Self.coreMagic) else { throw ShumBackupError.restoreRequiresEmptyProfile }
+        return try await restoreCore(data, password: password, into: space, among: existing)
+    }
+
     @MainActor private func coreBackup(password: String) async throws -> Data? {
         guard let core else { return nil }
         let createdAt = ISO8601DateFormatter().string(from: Date())
@@ -232,7 +262,8 @@ final class ShumBackupService {
 
     /// Restores a backup from any Shum client: its keys go to the Keychain
     /// and its records to a new profile database, as registration leaves them.
-    private func restoreCore(_ data: Data, password: String) async throws -> ShumBackupMetadata {
+    private func restoreCore(_ data: Data, password: String, into space: ShumProfileSpace,
+                             among existing: [ShumProfileSpace]) async throws -> ShumBackupMetadata {
         let opened: MobileBackup
         do {
             opened = try await Task.detached(priority: .userInitiated) {
@@ -241,15 +272,23 @@ final class ShumBackupService {
         } catch {
             throw ShumBackupError.invalidPassword
         }
-        // The backup becomes the open profile, with that profile's key names.
-        let space = ShumProfileSpace.active
-        let database = ShumConversationStore.liveURL
+        // The backup takes that profile's key names and files.
+        let database = ShumConversationStore.databaseURL(for: space)
         guard !files.fileExists(atPath: database.path) else {
             throw ShumBackupError.restoreRequiresEmptyProfile
         }
         let state = (try? JSONSerialization.jsonObject(with: Data(opened.state.utf8))) as? [String: Any]
         let card = state?["ownProfileCard"] as? [String: Any]
+        let avatarSeed = (card?["avatarSeed"] as? NSNumber)?.uint64Value
         let keychain = KeychainManager.makeDefault()
+        // A profile is its Noise key: one already here is not added again.
+        for other in existing {
+            if case .success(let key) = keychain.getIdentityKeyWithResult(forKey: other.key("noiseStaticKey")),
+               key == opened.keys.noise {
+                throw ShumBackupError.profileAlreadyExists
+            }
+        }
+        let cards = space == .active ? LocalCardStore.shared : LocalCardStore(space: space)
         do {
             try saveIdentityKey(opened.keys.noise, name: space.key("noiseStaticKey"), keychain: keychain)
             try saveIdentityKey(opened.keys.signing, name: space.key("ed25519SigningKey"), keychain: keychain)
@@ -267,18 +306,19 @@ final class ShumBackupService {
                 storage: opened.keys.storage,
                 state: opened.state
             )
-            try LocalCardStore.shared.saveOwn(
+            try cards.saveOwn(
                 name: opened.name,
                 bio: card?["bio"] as? String,
                 photo: nil,
-                avatarSeed: (card?["avatarSeed"] as? NSNumber)?.uint64Value
+                avatarSeed: avatarSeed
             )
             UserDefaults.standard.set(opened.name, forKey: space.key("shum.nickname"))
         } catch {
             for suffix in ["", "-wal", "-shm", ".lock"] {
                 try? files.removeItem(atPath: database.path + suffix)
             }
-            try? LocalCardStore.shared.reset()
+            try? cards.reset()
+            if !space.id.isEmpty { try? files.removeItem(at: space.root) }
             _ = keychain.deleteIdentityKey(forKey: space.key("noiseStaticKey"))
             _ = keychain.deleteIdentityKey(forKey: space.key("ed25519SigningKey"))
             _ = keychain.deleteIdentityKey(forKey: space.key(ShumIdentityKeyNames.storage))
@@ -288,7 +328,8 @@ final class ShumBackupService {
         let summary = try? backupSummary(file: data)
         return ShumBackupMetadata(
             profileName: opened.name,
-            createdAt: summary.flatMap { ISO8601DateFormatter().date(from: $0.createdAt) } ?? Date()
+            createdAt: summary.flatMap { ISO8601DateFormatter().date(from: $0.createdAt) } ?? Date(),
+            avatarSeed: avatarSeed
         )
     }
 

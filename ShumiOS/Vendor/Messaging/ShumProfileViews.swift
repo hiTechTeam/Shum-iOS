@@ -129,7 +129,8 @@ struct ShumKeyVerificationView: View {
                 resolve: { locator, completion in
                     runtime.resolveContact(locator, completion: completion)
                 },
-                allowsPhotoImport: false
+                allowsPhotoImport: false,
+                ownID: runtime.permanent?.ownCard.id
             ) { scannedCard in
                 showScanner = false
                 verify(scannedCard)

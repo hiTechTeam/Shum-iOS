@@ -363,7 +363,7 @@ enum ShumCoding {
     }
 }
 enum ShumFailure: LocalizedError {
-    case invalidContact, contactUnavailable, unavailableIdentity, invalidMessage, storage, quota, blocked
+    case invalidContact, contactUnavailable, unavailableIdentity, invalidMessage, storage, quota, blocked, ownProfile
     var errorDescription: String? {
         switch self {
         case .invalidContact: return "Не удалось проверить контакт Shum. Попробуйте обменяться QR-кодами ещё раз.".localized
@@ -373,6 +373,7 @@ enum ShumFailure: LocalizedError {
         case .storage: return "Не удалось сохранить данные. Проверьте свободное место на iPhone.".localized
         case .blocked: return "Контакт заблокирован. Сначала разблокируйте его в настройках профиля.".localized
         case .quota: return "Очередь заполнена. Дождитесь доставки сообщений.".localized
+        case .ownProfile: return "Это ваш профиль. Добавить себя в контакты нельзя.".localized
         }
     }
 }

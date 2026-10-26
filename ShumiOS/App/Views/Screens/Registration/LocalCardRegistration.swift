@@ -31,6 +31,7 @@ private struct LocalCardPhotoRegistration: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @State private var showPasscode = false
     @State private var showSaveError = false
+    @State private var preparing = false
 
     var body: some View {
         VStack(spacing: 28) {
@@ -44,7 +45,7 @@ private struct LocalCardPhotoRegistration: View {
             )
             Spacer()
             RegistrationPrimaryButton(title: Inc.Onboarding.photoNext.localized,
-                isEnabled: photoViewModel.avatarSeed != nil, accentColor: .accentColor) {
+                isEnabled: photoViewModel.avatarSeed != nil && !preparing, accentColor: .accentColor) {
                     continueRegistration()
                 }
                 .padding(.bottom, 20)
@@ -63,12 +64,16 @@ private struct LocalCardPhotoRegistration: View {
 
     private func continueRegistration() {
         guard let seed = photoViewModel.avatarSeed,
-              coordinator.authCodeViewModel.save(name: name, photo: nil, avatarSeed: seed),
-              coordinator.prepareRegistrationSecurity() else {
+              coordinator.authCodeViewModel.save(name: name, photo: nil, avatarSeed: seed) else {
             showSaveError = true
             return
         }
-        showPasscode = true
+        preparing = true
+        Task {
+            let ready = await coordinator.prepareRegistrationSecurity()
+            preparing = false
+            if ready { showPasscode = true } else { showSaveError = true }
+        }
     }
 }
 

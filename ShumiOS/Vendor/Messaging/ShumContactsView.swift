@@ -63,7 +63,7 @@ struct ShumContactsView: View {
             .fullScreenCover(isPresented: $showScanner) {
                 ShumScanView(resolve: { locator, completion in
                     runtime.resolveContact(locator, completion: completion)
-                }) { card in
+                }, ownID: service?.ownCard.id) { card in
                     showScanner = false
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                         invitation = card

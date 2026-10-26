@@ -756,3 +756,7 @@
 "Профиль удалён" = "Perfil eliminado";
 "Ключи и переписка «%@» уничтожены. Выберите другой профиль или создайте новый." = "Las claves y los chats de «%@» se han destruido. Elige otro perfil o crea uno nuevo.";
 "Не удалось удалить профиль. Разблокируйте iPhone и повторите." = "No se pudo eliminar el perfil. Desbloquea el iPhone e inténtalo de nuevo.";
+"Это ваш профиль. Добавить себя в контакты нельзя." = "Este es tu perfil. No puedes añadirte como contacto.";
+"Восстановить из копии" = "Restaurar desde copia";
+"Этот профиль уже есть на устройстве." = "Este perfil ya está en este dispositivo.";
+"Профиль и переписка восстановлены." = "Perfil y conversaciones restaurados.";

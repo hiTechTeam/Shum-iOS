@@ -82,6 +82,11 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     private var composerHost: UIHostingController<AnyView>?
     private var composerContent: AnyView?
     private var composerWidth: CGFloat = 0
+    /// The composer's own height as SwiftUI lays it out.
+    private var composerMeasured: CGFloat = 0
+    /// Holds the composer at its measured height once the hosting view stops
+    /// reporting it (reported on iOS 27, where the composer vanished).
+    private var composerHeight: NSLayoutConstraint?
     private var accessoryHost: UIHostingController<AnyView>?
     private var accessoryBottom: NSLayoutConstraint?
     static let accessoryGap: CGFloat = 8
@@ -174,7 +179,29 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     /// for a vertical text field is a single unbounded line. Proposing the
     /// real width lets a long draft wrap and grow the capsule upward.
     private func sizedComposer(_ content: AnyView) -> AnyView {
-        AnyView(content.frame(width: composerWidth > 0 ? composerWidth : nil))
+        AnyView(
+            content
+                .frame(width: composerWidth > 0 ? composerWidth : nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { [weak self] height in
+                    guard let self else { return }
+                    composerMeasured = height
+                    if let composerHeight { composerHeight.constant = height } else { view.setNeedsLayout() }
+                }
+        )
+    }
+
+    /// The hosting view normally sizes the composer by itself. When a layout
+    /// pass leaves it flat although SwiftUI measured a real composer, the
+    /// measured height takes over and keeps following it.
+    private func holdComposerHeight() {
+        guard composerHeight == nil, let host = composerHost, composerMeasured > 0,
+              host.view.window != nil, host.view.bounds.height < 1 else { return }
+        host.view.setContentHuggingPriority(.defaultLow, for: .vertical)
+        let height = host.view.heightAnchor.constraint(equalToConstant: composerMeasured)
+        height.isActive = true
+        composerHeight = height
+        view.setNeedsLayout()
     }
 
     /// Hosted apart from the composer so the control receives taps within its
@@ -234,6 +261,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
             composerWidth = view.bounds.width
             composerHost?.rootView = sizedComposer(composerContent)
         }
+        holdComposerHeight()
         guard !leaving, view.bounds.width > 0, view.bounds.height > 0, !adjusting else { return }
         adjusting = true
         defer { adjusting = false }

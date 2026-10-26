@@ -243,6 +243,8 @@ private struct ShumBackupSavePicker: UIViewControllerRepresentable {
 
 struct ShumBackupRestoreView: View {
     let data: Data
+    /// Restores next to the profiles already here and opens it on "Continue".
+    var addsProfile = false
     let onRestored: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -251,6 +253,7 @@ struct ShumBackupRestoreView: View {
     @State private var showsProgress = false
     @State private var progress: ShumBackupProgressState = .working
     @State private var hasInstalledBackup = false
+    @State private var restoredID: String?
 
     private var metadata: ShumBackupMetadata? {
         try? ShumBackupService.shared.metadata(for: data)
@@ -259,9 +262,12 @@ struct ShumBackupRestoreView: View {
     var body: some View {
         NavigationStack {
             if showsProgress {
-                ShumBackupProgressView(operation: .restore, state: progress) {
+                ShumBackupProgressView(operation: .restore, state: progress, addsProfile: addsProfile) {
                     if case .success = progress {
                         onRestored()
+                        if let restoredID {
+                            DispatchQueue.main.async { coordinator.switchProfile(to: restoredID) }
+                        }
                     } else if hasInstalledBackup {
                         restore()
                     } else {
@@ -336,15 +342,19 @@ struct ShumBackupRestoreView: View {
             do {
                 // If installing succeeded but opening the profile failed, retry
                 // that last step without attempting to overwrite the profile.
-                if !hasInstalledBackup {
-                    _ = try await ShumBackupService.shared.restore(
-                        data: data,
-                        password: backupPassword
-                    )
-                    hasInstalledBackup = true
-                }
-                guard await coordinator.prepareRestoredProfileForSecurity() else {
-                    throw ShumBackupError.couldNotSave
+                if addsProfile {
+                    restoredID = try await coordinator.restoreProfile(data: data, password: backupPassword)
+                } else {
+                    if !hasInstalledBackup {
+                        _ = try await ShumBackupService.shared.restore(
+                            data: data,
+                            password: backupPassword
+                        )
+                        hasInstalledBackup = true
+                    }
+                    guard await coordinator.prepareRestoredProfileForSecurity() else {
+                        throw ShumBackupError.couldNotSave
+                    }
                 }
                 password = ""
                 result = .success
@@ -385,6 +395,8 @@ private struct ShumBackupProgressView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let operation: Operation
     let state: ShumBackupProgressState
+    /// The passcode is already set when a backup joins other profiles.
+    var addsProfile = false
     let onContinue: () -> Void
     @State private var startedAt = Date()
     @State private var creationStage = 0
@@ -487,8 +499,11 @@ private struct ShumBackupProgressView: View {
                 ? "Резервная копия зашифрована и сохранена в выбранную папку.".localized
                 : "Проверяем пароль и возвращаем ключи и переписку на устройство.".localized
         case .success:
-            return operation == .create
-                ? "Файл сохранён в выбранную папку. Храните его и пароль отдельно.".localized
+            if operation == .create {
+                return "Файл сохранён в выбранную папку. Храните его и пароль отдельно.".localized
+            }
+            return addsProfile
+                ? "Профиль и переписка восстановлены.".localized
                 : "Профиль и переписка восстановлены. Продолжите, чтобы настроить код Shum на этом устройстве.".localized
         case .failure(let message):
             return message
@@ -511,5 +526,50 @@ private struct ShumBackupProgressView: View {
     private var buttonTitle: String {
         if operation == .create, case .success = state { return "Отлично".localized }
         return "Продолжить".localized
+    }
+}
+
+/// Restores a backup next to the profiles already here: picks the file in
+/// Files, asks its password and opens the restored profile.
+private struct ShumProfileFromBackup: ViewModifier {
+    @Binding var isPresented: Bool
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @State private var backup: Data?
+    @State private var importError: String?
+
+    func body(content: Content) -> some View {
+        content
+            .fileImporter(isPresented: $isPresented, allowedContentTypes: [.shumBackup, .data]) { result in
+                do {
+                    backup = try ShumBackupService.shared.read(result)
+                } catch {
+                    importError = error.localizedDescription
+                }
+            }
+            .fullScreenCover(isPresented: Binding(
+                get: { backup != nil },
+                set: { if !$0 { backup = nil } }
+            )) {
+                if let backup {
+                    ShumBackupRestoreView(data: backup, addsProfile: true) {
+                        self.backup = nil
+                    }
+                    .environmentObject(coordinator)
+                }
+            }
+            .alert("Не удалось открыть копию".localized, isPresented: Binding(
+                get: { importError != nil },
+                set: { if !$0 { importError = nil } }
+            )) {
+                Button("Понятно".localized, role: .cancel) { }
+            } message: {
+                Text(importError ?? "")
+            }
+    }
+}
+
+extension View {
+    func shumRestoresProfile(isPresented: Binding<Bool>) -> some View {
+        modifier(ShumProfileFromBackup(isPresented: isPresented))
     }
 }

@@ -162,12 +162,22 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         return profilePhotoViewModel.avatarSeed != nil
     }
     @discardableResult
-    func prepareRegistrationSecurity() -> Bool {
+    func prepareRegistrationSecurity() async -> Bool {
         guard !deletingProfile, LocalCardStore.shared.ownManifest != nil else {
             return false
         }
         createMessaging(bluetoothEnabled: false)
+        // The core opens the profile and takes its name on its own queue.
+        await chat?.waitUntilHistoryLoaded()
         synchronizeProfile()
+        var waited = 0
+        while !registrationProfileReady, waited < 50 {
+            try? await Task.sleep(for: .milliseconds(100))
+            waited += 1
+        }
+        return registrationProfileReady
+    }
+    private var registrationProfileReady: Bool {
         guard let own = LocalCardStore.shared.ownManifest else { return false }
         return chat?.isReady == true
             && chat?.permanent?.ownCard.name == own.body.name
@@ -217,6 +227,19 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         }
         UserDefaults.standard.set(name, forKey: space.key("shum.nickname"))
         profiles.add(.init(id: space.id, name: name, avatarSeed: avatarSeed))
+        return space.id
+    }
+
+    /// Restores a backup as another profile while the open one keeps running,
+    /// and lists it. Returns its ID; `switchProfile` opens it.
+    func restoreProfile(data: Data, password: String) async throws -> String {
+        guard !deletingProfile, isRegistered else { throw ShumBackupError.profileUnavailable }
+        let profiles = ShumProfileList.shared
+        let space = profiles.newSpace()
+        let existing = Set(profiles.entries.map(\.id) + [ShumProfileSpace.first.id]).map(ShumProfileSpace.init(id:))
+        let restored = try await ShumBackupService.shared.restore(data: data, password: password,
+                                                                  into: space, among: existing)
+        profiles.add(.init(id: space.id, name: restored.profileName, avatarSeed: restored.avatarSeed))
         return space.id
     }
 
@@ -303,8 +326,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             chat = nil
         }
         createMessaging(bluetoothEnabled: false, deferHistoryLoading: true)
-        await chat?.waitUntilHistoryLoaded()
-        return prepareRegistrationSecurity()
+        return await prepareRegistrationSecurity()
     }
     var needsRestoredPasscodeSetup: Bool {
         needsSecuritySetup && UserDefaults.standard.bool(forKey: Self.restoredPasscodeSetupKey)
@@ -334,6 +356,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         do {
             switch try ShumInvitationPayload.parse(url) {
             case .card(let card):
+                guard card.id != chat?.permanent?.ownCard.id else { throw ShumFailure.ownProfile }
                 invitationError = nil
                 invitation = card
             case .locator(let locator):
@@ -341,6 +364,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
                 invitationError = nil
                 chat.resolveContact(locator) { [weak self] result in
                     switch result {
+                    case .success(let card) where card.id == chat.permanent?.ownCard.id:
+                        self?.invitationError = ShumFailure.ownProfile.localizedDescription
                     case .success(let card):
                         self?.invitation = card
                     case .failure(let error):

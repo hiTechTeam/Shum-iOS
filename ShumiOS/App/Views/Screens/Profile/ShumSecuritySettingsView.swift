@@ -10,6 +10,7 @@ struct ShumSecuritySettingsView: View {
     @State private var showChangeCode = false
     @State private var showBlockedProfiles = false
     @State private var confirmDelete = false
+    @State private var restoringBackup = false
     @State private var lastBackupDate: Date? = {
         let value = UserDefaults.standard.double(
             forKey: ShumBackupService.lastBackupDateKey
@@ -99,6 +100,20 @@ struct ShumSecuritySettingsView: View {
                             .foregroundStyle(Color.primary)
                     }
                 }
+                Button {
+                    restoringBackup = true
+                } label: {
+                    Label {
+                        Text("Восстановить из копии".localized)
+                            .foregroundStyle(.primary)
+                    } icon: {
+                        Image(systemName: "externaldrive.badge.timemachine")
+                            .symbolRenderingMode(.monochrome)
+                            .foregroundStyle(Color.primary)
+                    }
+                    .foregroundStyle(.primary)
+                }
+                .buttonStyle(.plain)
             } header: {
                 Text("Восстановление".localized)
             } footer: {
@@ -170,6 +185,7 @@ struct ShumSecuritySettingsView: View {
         } message: {
             Text("local.delete.message".localized)
         }
+        .shumRestoresProfile(isPresented: $restoringBackup)
         .navigationDestination(isPresented: $showChangeCode) {
             ShumChangePasscodeView()
         }
