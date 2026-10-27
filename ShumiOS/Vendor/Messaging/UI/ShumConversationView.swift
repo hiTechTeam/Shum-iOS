@@ -169,7 +169,7 @@ struct ShumConversationView: View {
                     .accessibilityIdentifier("shum.chat.avatar")
             }
         }
-        .sheet(isPresented: $showProtection) {
+        .shumSheet(isPresented: $showProtection) {
             ShumChatProtectionSheet(runtime: runtime, peer: peer)
         }
         #if DEBUG && targetEnvironment(simulator)

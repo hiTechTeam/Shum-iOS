@@ -14,7 +14,7 @@ private struct ShumProfileBlockSheetModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: $activeRequest) { pending in
+            .shumSheet(item: $activeRequest) { pending in
                 ShumProfileBlockOptionsSheet(
                     runtime: runtime,
                     request: pending,

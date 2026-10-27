@@ -58,7 +58,7 @@ struct ProfileDataView: View {
         .shumOnChange(of: authCodeViewModel.localPhotoURL) { _, value in
             photoVM.loadPhotoFromURL(value)
         }
-        .sheet(item: $profileEditor) { mode in
+        .shumSheet(item: $profileEditor) { mode in
             NavigationStack {
                 LocalCardDetailsView(profile: authCodeViewModel, photo: photoVM, mode: mode) {
                     profileEditor = nil

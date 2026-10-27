@@ -49,7 +49,7 @@ struct ShumBackupCreateView: View {
         }
         .toolbar(.hidden, for: .tabBar)
         .interactiveDismissDisabled(isPreparing || showsProgress)
-        .sheet(isPresented: $isChoosingDestination, onDismiss: {
+        .shumSheet(isPresented: $isChoosingDestination, onDismiss: {
             finishSavePicker(ifReady: pickerCompletion.didDismiss())
         }) {
             if let preparedFile {
@@ -546,7 +546,7 @@ private struct ShumProfileFromBackup: ViewModifier {
                     importError = error.localizedDescription
                 }
             }
-            .fullScreenCover(isPresented: Binding(
+            .shumFullScreenCover(isPresented: Binding(
                 get: { backup != nil },
                 set: { if !$0 { backup = nil } }
             )) {

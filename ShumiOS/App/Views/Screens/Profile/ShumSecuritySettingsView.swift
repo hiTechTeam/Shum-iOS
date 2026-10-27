@@ -161,7 +161,7 @@ struct ShumSecuritySettingsView: View {
         .fontWeight(.regular)
         .navigationTitle("Безопасность и данные".localized)
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showBlockedProfiles) {
+        .shumSheet(isPresented: $showBlockedProfiles) {
             BlockedProfilesView(runtime: runtime)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)

@@ -104,6 +104,17 @@ private extension UIColor {
     }
 }
 
+/// Lists fade under the bars as on iOS 26; iOS 27 drew a hard plate there.
+private struct ShumSoftScrollEdges: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectStyle(.soft, for: .all)
+        } else {
+            content
+        }
+    }
+}
+
 private struct ShumThemePaletteKey: EnvironmentKey {
     static let defaultValue = ShumThemePalette(
         accentUIColor: .systemGreen,
@@ -122,6 +133,36 @@ extension EnvironmentValues {
 }
 
 extension View {
+    func shumSoftScrollEdges() -> some View {
+        modifier(ShumSoftScrollEdges())
+    }
+
+    // Presented content does not inherit the root's scroll edge style, so
+    // every sheet and cover goes through these to fade softly as well.
+    func shumSheet<Content: View>(
+        isPresented: Binding<Bool>,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        sheet(isPresented: isPresented, onDismiss: onDismiss) { content().shumSoftScrollEdges() }
+    }
+
+    func shumSheet<Item: Identifiable, Content: View>(
+        item: Binding<Item?>,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping (Item) -> Content
+    ) -> some View {
+        sheet(item: item, onDismiss: onDismiss) { content($0).shumSoftScrollEdges() }
+    }
+
+    func shumFullScreenCover<Content: View>(
+        isPresented: Binding<Bool>,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        fullScreenCover(isPresented: isPresented, onDismiss: onDismiss) { content().shumSoftScrollEdges() }
+    }
+
     func shumGroupedScreenBackground() -> some View {
         scrollContentBackground(.hidden)
             .background(ShumThemeCanvas().ignoresSafeArea())
@@ -132,7 +173,8 @@ extension View {
     /// presented system views and embedded UIKit controls inherit the same
     /// accent instead of keeping separate green constants.
     func shumTheme(_ palette: ShumThemePalette, followsSystem: Bool = false) -> some View {
-        tint(palette.accent)
+        shumSoftScrollEdges()
+            .tint(palette.accent)
             .accentColor(palette.accent)
             .preferredColorScheme(followsSystem ? nil : palette.colorScheme)
             .environment(\.shumThemePalette, palette)

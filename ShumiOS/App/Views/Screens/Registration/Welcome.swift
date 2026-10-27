@@ -89,7 +89,7 @@ struct Welcome: View {
                 return .discarded
             }
         })
-        .sheet(item: $legalDocument) { document in
+        .shumSheet(item: $legalDocument) { document in
             NavigationStack {
                 ShumLegalDocumentView(document: document)
             }
@@ -105,7 +105,7 @@ struct Welcome: View {
                 importError = error.localizedDescription
             }
         }
-        .fullScreenCover(isPresented: $showRestore, onDismiss: {
+        .shumFullScreenCover(isPresented: $showRestore, onDismiss: {
             importedBackup = nil
         }) {
             if let importedBackup {

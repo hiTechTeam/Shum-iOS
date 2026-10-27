@@ -116,7 +116,7 @@ struct ShumChatProtectionSheet: View {
         }
         .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(470), .large])
         .presentationDragIndicator(.visible)
-        .sheet(isPresented: $showVerification) {
+        .shumSheet(isPresented: $showVerification) {
             if let card {
                 ShumKeyVerificationView(runtime: runtime, peerCard: card)
             }

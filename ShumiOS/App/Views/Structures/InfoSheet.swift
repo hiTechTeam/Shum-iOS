@@ -77,12 +77,12 @@ struct InfoSheetView: View {
                     Button(Inc.Common.close.localized) { dismiss() }
                 }
             }
-            .sheet(item: $legalDocument) { document in
+            .shumSheet(item: $legalDocument) { document in
                 NavigationStack {
                     ShumLegalDocumentView(document: document)
                 }
             }
-            .sheet(isPresented: $showThirdPartyLicenses) {
+            .shumSheet(isPresented: $showThirdPartyLicenses) {
                 NavigationStack {
                     ShumThirdPartyLicensesView()
                 }

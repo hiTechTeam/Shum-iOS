@@ -76,7 +76,7 @@ struct ShumQRView: View {
         }
         .navigationTitle("QR-код".localized)
         .navigationBarTitleDisplayMode(.inline)
-        .fullScreenCover(isPresented: $showScanner) {
+        .shumFullScreenCover(isPresented: $showScanner) {
             ShumScanView(resolve: resolve, ownID: card.id) { scannedCard in
                 showScanner = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {

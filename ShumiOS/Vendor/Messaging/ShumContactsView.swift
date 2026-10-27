@@ -44,7 +44,7 @@ struct ShumContactsView: View {
                         .tint(.primary)
                 }
             }
-            .fullScreenCover(isPresented: $showQR) {
+            .shumFullScreenCover(isPresented: $showQR) {
                 if let card = service?.ownCard {
                     NavigationStack {
                         ShumQRView(
@@ -60,7 +60,7 @@ struct ShumContactsView: View {
                     }
                 }
             }
-            .fullScreenCover(isPresented: $showScanner) {
+            .shumFullScreenCover(isPresented: $showScanner) {
                 ShumScanView(resolve: { locator, completion in
                     runtime.resolveContact(locator, completion: completion)
                 }, ownID: service?.ownCard.id) { card in
@@ -70,7 +70,7 @@ struct ShumContactsView: View {
                     }
                 }
             }
-            .sheet(item: $invitation) { card in
+            .shumSheet(item: $invitation) { card in
                 ShumContactConfirmation(
                     card: runtime.currentProfileCard(card),
                     imageData: runtime.profile(for: card.peerID)?.avatar,
@@ -123,7 +123,7 @@ struct ShumContactRequestsView: View {
         }
         .navigationTitle("Приглашения".localized)
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $invitation) { card in
+        .shumSheet(item: $invitation) { card in
             ShumContactConfirmation(
                 card: runtime.currentProfileCard(card),
                 imageData: runtime.profile(for: card.peerID)?.avatar
@@ -200,7 +200,7 @@ struct ShumContactConfirmation: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .padding(.bottom, 8)
         }
-        .fullScreenCover(isPresented: $showPhoto) {
+        .shumFullScreenCover(isPresented: $showPhoto) {
             if let displayedAvatar, let image = UIImage(data: displayedAvatar) {
                 FullScreenPhotoView(isPresented: $showPhoto) {
                     Image(uiImage: image)

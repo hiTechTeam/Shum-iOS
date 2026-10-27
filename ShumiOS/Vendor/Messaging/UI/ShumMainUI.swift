@@ -92,7 +92,7 @@ struct ShumChatsUI: View {
             .buttonStyle(.plain)
             .accessibilityHint("Узнать, как работает связь".localized)
         }
-        .sheet(isPresented: $showsNetworkInfo) { ShumNetworkInfoSheet(runtime: runtime) }
+        .shumSheet(isPresented: $showsNetworkInfo) { ShumNetworkInfoSheet(runtime: runtime) }
         .background(ShumThemeCanvas().ignoresSafeArea())
         .navigationTitle("Чаты".localized)
         .navigationBarTitleDisplayMode(.inline)
@@ -110,7 +110,7 @@ struct ShumChatsUI: View {
                 .disabled(runtime.isLoadingHistory)
             }
         }
-        .sheet(isPresented: $showsNewMessage) {
+        .shumSheet(isPresented: $showsNewMessage) {
             ShumNewMessageSheet(runtime: runtime) { peer in
                 guard showsNewMessage else { return }
                 showsNewMessage = false

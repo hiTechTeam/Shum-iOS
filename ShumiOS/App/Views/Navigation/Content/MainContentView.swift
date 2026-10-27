@@ -67,7 +67,7 @@ struct MainContentView: View {
                 }
             }
         }
-        .sheet(isPresented: $showContacts) {
+        .shumSheet(isPresented: $showContacts) {
             ShumContactsView(runtime: chat, showOwnQR: {
                 let sourceTab = selectedTab
                 showContacts = false
@@ -83,7 +83,7 @@ struct MainContentView: View {
                 chatsPath.push(.conversation(peer))
             }
         }
-        .sheet(item: $coordinator.invitation) { card in
+        .shumSheet(item: $coordinator.invitation) { card in
             ShumContactConfirmation(
                 card: chat.currentProfileCard(card),
                 imageData: chat.profile(for: card.peerID)?.avatar,

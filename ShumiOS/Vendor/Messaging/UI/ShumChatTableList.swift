@@ -55,7 +55,7 @@ struct ShumChatTableList<Header: View, Empty: View>: View {
             header: header,
             empty: empty
         )
-        .sheet(item: $selectedPeer) { peer in
+        .shumSheet(item: $selectedPeer) { peer in
             ShumPeerCard(runtime: runtime, peer: peer) {
                 selectedPeer = nil
                 open(.conversation(peer))
@@ -311,6 +311,11 @@ final class ShumChatTableController: UIViewController, UITableViewDelegate {
         tableView.tableFooterView = UIView(frame: .zero)
         tableView.alwaysBounceVertical = true
         tableView.keyboardDismissMode = .interactive
+        if #available(iOS 26.0, *) {
+            // Fade under the bars as on iOS 26; iOS 27 drew a hard plate there.
+            tableView.topEdgeEffect.style = .soft
+            tableView.bottomEdgeEffect.style = .soft
+        }
         tableView.accessibilityIdentifier = "shum.chatDirectory"
         tableView.delegate = self
         tableView.register(ShumChatCell.self, forCellReuseIdentifier: "row")

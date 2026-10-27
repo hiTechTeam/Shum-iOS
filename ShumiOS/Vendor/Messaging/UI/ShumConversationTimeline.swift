@@ -87,6 +87,13 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     /// Holds the composer at its measured height once the hosting view stops
     /// reporting it (reported on iOS 27, where the composer vanished).
     private var composerHeight: NSLayoutConstraint?
+    /// On iOS 27 the keyboard layout guide stays put in a pushed chat while the
+    /// keyboard moves (measured on an iPhone 11), so there the composer follows
+    /// the system keyboard notifications instead.
+    private let followsKeyboardNotifications = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27
+    private var composerBottom: NSLayoutConstraint?
+    private var keyboardOverlap: CGFloat = 0
+    private var keyboardObserver: NSObjectProtocol?
     private var accessoryHost: UIHostingController<AnyView>?
     private var accessoryBottom: NSLayoutConstraint?
     static let accessoryGap: CGFloat = 8
@@ -131,6 +138,11 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         if #available(iOS 16.4, *) { measurementHost.safeAreaRegions = [] }
         table.sectionHeaderTopPadding = 0
         table.keyboardDismissMode = .interactive
+        if #available(iOS 26.0, *) {
+            // Fade under the bars as on iOS 26; iOS 27 drew a hard plate there.
+            table.topEdgeEffect.style = .soft
+            table.bottomEdgeEffect.style = .soft
+        }
         table.delaysContentTouches = false
         table.dataSource = self
         table.delegate = self
@@ -148,9 +160,9 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     }
 
     /// Apple's keyboard layout guide moves the composer inside the system
-    /// keyboard animation on every supported iOS version, including
-    /// interactive dismissal. The history follows the composer's frame in the
-    /// same layout pass, so both share one animation.
+    /// keyboard animation, including interactive dismissal; on iOS 27 the
+    /// keyboard notifications move it instead. The history follows the
+    /// composer's frame in the same layout pass, so both share one animation.
     func updateComposer(_ content: AnyView?) {
         guard let content else { return }
         composerContent = content
@@ -166,13 +178,46 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         if #available(iOS 16.4, *) { host.safeAreaRegions = [] }
         addChild(host)
         view.addSubview(host.view)
+        let bottom = followsKeyboardNotifications
+            ? host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -keyboardBottomInset)
+            : host.view.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         NSLayoutConstraint.activate([
             host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            host.view.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+            bottom
         ])
         host.didMove(toParent: self)
         composerHost = host
+        if followsKeyboardNotifications {
+            composerBottom = bottom
+            keyboardObserver = NotificationCenter.default.addObserver(
+                forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main
+            ) { [weak self] note in self?.keyboardWillChangeFrame(note) }
+        }
+    }
+
+    /// Where the keyboard layout guide would put the composer: on the keyboard,
+    /// or on the bottom safe area while the keyboard is away.
+    private var keyboardBottomInset: CGFloat {
+        max(view.safeAreaInsets.bottom, keyboardOverlap)
+    }
+
+    private func keyboardWillChangeFrame(_ note: Notification) {
+        guard let composerBottom, let window = view.window,
+              let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+        let frame = view.convert(end, from: window.screen.coordinateSpace)
+        keyboardOverlap = max(0, view.bounds.maxY - frame.minY)
+        let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
+        let curve = note.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt ?? 7
+        UIView.animate(withDuration: duration, delay: 0, options: UIView.AnimationOptions(rawValue: curve << 16)) {
+            composerBottom.constant = -self.keyboardBottomInset
+            self.view.layoutIfNeeded()
+        }
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        composerBottom?.constant = -keyboardBottomInset
     }
 
     /// A hosting controller sizes itself from its content's ideal size, which
@@ -236,6 +281,7 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         saveWork?.cancel()
         highlightWork?.cancel()
         if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
+        if let keyboardObserver { NotificationCenter.default.removeObserver(keyboardObserver) }
     }
 
     override func viewWillAppear(_ animated: Bool) {

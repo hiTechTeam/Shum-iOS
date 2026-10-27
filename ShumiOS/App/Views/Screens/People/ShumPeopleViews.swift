@@ -161,14 +161,14 @@ struct ShumPeerCard: View {
                 .padding(.top, 8)
             }
         }
-        .fullScreenCover(isPresented: $showPhoto) {
+        .shumFullScreenCover(isPresented: $showPhoto) {
             if let avatar, let image = UIImage(data: avatar) {
                 FullScreenPhotoView(isPresented: $showPhoto) {
                     Image(uiImage: image).resizable().scaledToFit()
                 }
             }
         }
-        .sheet(isPresented: $showVerification) {
+        .shumSheet(isPresented: $showVerification) {
             if let card {
                 ShumKeyVerificationView(
                     runtime: runtime,
@@ -370,7 +370,7 @@ struct ShumEncounterHistoryView: View {
                 .accessibilityLabel("Очистить историю".localized)
             }
         }
-        .sheet(item: $selectedEncounter) { encounter in
+        .shumSheet(item: $selectedEncounter) { encounter in
             let peer = encounter.peer
             ShumPeerCard(
                 runtime: runtime,

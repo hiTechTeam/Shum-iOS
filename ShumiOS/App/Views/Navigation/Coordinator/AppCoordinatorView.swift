@@ -186,7 +186,7 @@ private struct ShumDeletionCeremonyView: View {
             }
         }
         .animation(.easeOut(duration: 0.28), value: completed)
-        .sheet(isPresented: $creating) {
+        .shumSheet(isPresented: $creating) {
             ShumNewProfileSheet()
                 .environmentObject(coordinator)
                 .presentationDetents([.large])

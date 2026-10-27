@@ -124,7 +124,7 @@ struct ShumKeyVerificationView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showScanner) {
+        .shumFullScreenCover(isPresented: $showScanner) {
             ShumScanView(
                 resolve: { locator, completion in
                     runtime.resolveContact(locator, completion: completion)

@@ -92,12 +92,12 @@ struct ProfileOverviewView: View {
         .navigationDestination(isPresented: $showSettings) {
             ShumSettingsView(chat: chat, showSecurity: $showSecurity)
         }
-        .sheet(isPresented: $editingName) {
+        .shumSheet(isPresented: $editingName) {
             ShumNameSheet(profile: authCodeViewModel)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $choosingProfile) {
+        .shumSheet(isPresented: $choosingProfile) {
             ShumProfilePickerSheet {
                 choosingProfile = false
                 creatingProfile = true
@@ -109,12 +109,12 @@ struct ProfileOverviewView: View {
             .presentationDragIndicator(.visible)
         }
         .shumRestoresProfile(isPresented: $restoringProfile)
-        .sheet(isPresented: $creatingProfile) {
+        .shumSheet(isPresented: $creatingProfile) {
             ShumNewProfileSheet()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $editingAvatar) {
+        .shumSheet(isPresented: $editingAvatar) {
             PixelAvatarGeneratorSheet(currentSeed: photoVM.avatarSeed) { seed in
                 if photoVM.usePixelAvatar(seed: seed) {
                     editingAvatar = false
@@ -550,13 +550,13 @@ struct ShumSettingsView: View {
         .task {
             await refreshNotificationAuthorizationStatus()
         }
-        .sheet(isPresented: $showScanningSettings) {
+        .shumSheet(isPresented: $showScanningSettings) {
             ScanningSettingsSheet()
                 .environmentObject(coordinator)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $showInfoSheet) {
+        .shumSheet(isPresented: $showInfoSheet) {
             InfoSheetView()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)

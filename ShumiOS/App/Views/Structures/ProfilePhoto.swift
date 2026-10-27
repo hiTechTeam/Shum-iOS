@@ -32,7 +32,7 @@ struct ProfilePhotoView: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
         }
-        .sheet(isPresented: $showPixelAvatarGenerator) {
+        .shumSheet(isPresented: $showPixelAvatarGenerator) {
             PixelAvatarGeneratorSheet(currentSeed: viewModel.avatarSeed) { seed in
                 if viewModel.usePixelAvatar(seed: seed) {
                     showPixelAvatarGenerator = false
