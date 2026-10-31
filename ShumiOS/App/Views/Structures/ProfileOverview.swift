@@ -72,7 +72,14 @@ struct ProfileOverviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ProfileAvatarToolbarItem {
-                avatarMenu
+                ProfileAvatarMenu(
+                    name: displayName,
+                    seed: LocalCardStore.shared.ownManifest?.body.avatarSeed,
+                    editAvatar: { editingAvatar = true },
+                    chooseProfile: { choosingProfile = true },
+                    createProfile: { creatingProfile = true }
+                )
+                .equatable()
             }
 
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -128,30 +135,6 @@ struct ProfileOverviewView: View {
         }
     }
 
-    private var avatarMenu: some View {
-        Menu {
-            Button { editingAvatar = true } label: {
-                Label("Изменить аватар".localized, systemImage: "pencil")
-            }
-            Button { choosingProfile = true } label: {
-                Label("Выбрать профиль".localized, systemImage: "arrow.left.arrow.right")
-            }
-            Button { creatingProfile = true } label: {
-                Label("Создать новый профиль".localized, systemImage: "plus")
-            }
-        } label: {
-            ShumAvatar(name: displayName, size: 34, imageData: ShumOwnProfile.avatar)
-                .frame(width: 34, height: 34)
-                .contentShape(Circle())
-        }
-        // A plain label: no padding of its own, on every iOS.
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        // Menu icons stay monochrome in every theme.
-        .tint(.primary)
-        .accessibilityLabel("Изменить аватар".localized)
-    }
-
     private var nameCard: some View {
         ProfileMenuButton(position: .single, action: { editingName = true }) {
             HStack(spacing: 12) {
@@ -190,13 +173,9 @@ struct ProfileOverviewView: View {
     }
 }
 
-/// The own profile as this device keeps it: its pixel avatar and name.
+/// The own profile's name as this device keeps it.
 @MainActor
 enum ShumOwnProfile {
-    static var avatar: Data? {
-        LocalCardStore.shared.ownManifest?.body.avatarSeed.flatMap(ShumPixelAvatarGenerator.data(seed:))
-    }
-
     static func normalized(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
@@ -927,6 +906,45 @@ private struct ShumAppIconChoice: View {
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
+    }
+}
+
+/// The own avatar and its menu. The profile screen redraws whenever
+/// anything in Shum changes; rebuilding an open menu with it makes the menu
+/// flicker, so this redraws only for a new name or avatar.
+private struct ProfileAvatarMenu: View, Equatable {
+    let name: String
+    let seed: UInt64?
+    let editAvatar: () -> Void
+    let chooseProfile: () -> Void
+    let createProfile: () -> Void
+
+    static func == (a: Self, b: Self) -> Bool {
+        a.name == b.name && a.seed == b.seed
+    }
+
+    var body: some View {
+        Menu {
+            Button(action: editAvatar) {
+                Label("Изменить аватар".localized, systemImage: "pencil")
+            }
+            Button(action: chooseProfile) {
+                Label("Выбрать профиль".localized, systemImage: "arrow.left.arrow.right")
+            }
+            Button(action: createProfile) {
+                Label("Создать новый профиль".localized, systemImage: "plus")
+            }
+        } label: {
+            ShumAvatar(name: name, size: 34, imageData: seed.flatMap(ShumPixelAvatarGenerator.data(seed:)))
+                .frame(width: 34, height: 34)
+                .contentShape(Circle())
+        }
+        // A plain label: no padding of its own, on every iOS.
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        // Menu icons stay monochrome in every theme.
+        .tint(.primary)
+        .accessibilityLabel("Изменить аватар".localized)
     }
 }
 
