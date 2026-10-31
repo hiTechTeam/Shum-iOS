@@ -760,3 +760,24 @@
 "Восстановить из копии" = "Restaurar desde copia";
 "Этот профиль уже есть на устройстве." = "Este perfil ya está en este dispositivo.";
 "Профиль и переписка восстановлены." = "Perfil y conversaciones restaurados.";
+
+/* Public chat */
+"Общий чат" = "Chat público";
+"Рядом: %@" = "Cerca: %@";
+"Пишут: %@" = "Escriben: %@";
+"Видят все, кто рядом · Bluetooth" = "Lo ven todos los que están cerca · Bluetooth";
+"Здесь пока тихо. Напишите первым: сообщение увидят все, у кого рядом открыт Shum." = "Aquí todavía hay silencio. Escribe primero: lo verán todos los que tengan Shum abierto cerca.";
+"Написать всем рядом" = "Escribir a todos los que están cerca";
+"Включите Bluetooth, чтобы писать" = "Activa el Bluetooth para escribir";
+"Отправить" = "Enviar";
+"В общем чате пока никого. Люди появятся, когда откроют его у себя рядом с вами." = "Todavía no hay nadie en el chat público. Las personas aparecerán cuando lo abran cerca de ti.";
+"пишет" = "escribe";
+"в контактах" = "en contactos";
+"Рядом · %@" = "Cerca · %@";
+"Видят все, кто рядом" = "Lo ven todos los que están cerca";
+"Сообщения получают все, у кого поблизости открыт Shum и включён Bluetooth. Телефоны передают их друг другу, поэтому чат охватывает всех вокруг. Кто ушёл далеко, новых сообщений уже не увидит." = "Reciben los mensajes todos los que tienen Shum abierto cerca y el Bluetooth activado. Los teléfonos se los pasan entre sí, así que el chat llega a todos los que están alrededor. Quien se ha alejado ya no ve los mensajes nuevos.";
+"Работает без интернета" = "Funciona sin internet";
+"Сообщения идут по Bluetooth с телефона на телефон. Сервера нет, поэтому чат работает даже там, где нет сети." = "Los mensajes viajan por Bluetooth de teléfono en teléfono. No hay servidor, así que el chat funciona incluso donde no hay red.";
+"Не для секретов" = "No es para secretos";
+"Общий чат открыт всем вокруг. Личное лучше написать человеку в обычный чат: там сообщения видите только вы двое." = "El chat público está abierto a todos los que están alrededor. Lo personal es mejor escribirlo en un chat normal: ahí los mensajes solo los ven ustedes dos.";
+"Удалить у всех" = "Eliminar para todos";

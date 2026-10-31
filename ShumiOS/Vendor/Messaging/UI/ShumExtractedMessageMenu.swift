@@ -38,7 +38,8 @@ final class ShumExtractedMessageMenu: UIView {
 
     init(source: UIView, bubble: UIView, outgoing: Bool,
          reply: @escaping () -> Void, copy: @escaping () -> Void,
-         cancelSending: (() -> Void)?, reaction: ShumReaction?, react: ((ShumReaction) -> Void)?,
+         cancelSending: (() -> Void)?, cancelTitle: String = "Отменить отправку".localized,
+         reaction: ShumReaction?, react: ((ShumReaction) -> Void)?,
          restore: @escaping () -> Void) {
         self.source = source
         self.bubble = bubble
@@ -68,7 +69,7 @@ final class ShumExtractedMessageMenu: UIView {
         actions = [makeAction("Ответить".localized, symbol: "arrowshape.turn.up.left", action: reply),
                    makeAction("Скопировать".localized, symbol: "doc.on.doc", action: copy)]
         if let cancelSending {
-            actions.append(makeAction("Отменить отправку".localized, symbol: "xmark.circle",
+            actions.append(makeAction(cancelTitle, symbol: "xmark.circle",
                                       color: .systemRed, action: cancelSending))
         }
         actions.forEach { menu.contentView.addSubview($0) }

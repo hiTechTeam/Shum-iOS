@@ -33,6 +33,12 @@ struct ShumMessageBubble: View {
     var retry: () -> Void = {}
     var reply: () -> Void = {}
     var cancelSending: () -> Void = {}
+    /// Withdraws an own message from everyone, as in the open chat.
+    var withdraw: (() -> Void)?
+    /// The author's avatar column and name in a group chat. They sit inside
+    /// the hold and swipe area, so the whole message moves together.
+    var leading: AnyView?
+    var header: AnyView?
     /// Nil where the message cannot take reactions, such as an archived chat.
     var react: ((ShumReaction) -> Void)?
     var reactionPeople = ShumReactionPeople()
@@ -165,17 +171,32 @@ struct ShumMessageBubble: View {
     private var bubble: some View {
         ShumMessageContextMenu(shape: bubbleShape, maximumWidth: maximumWidth,
             reply: reply, copy: { UIPasteboard.general.string = message.text },
-            cancelSending: canCancelSending ? cancelSending : nil,
+            cancelSending: withdraw ?? (canCancelSending ? cancelSending : nil),
+            cancelTitle: withdraw == nil ? "Отменить отправку".localized : "Удалить у всех".localized,
             reaction: message.myReaction, react: react,
             dragChanged: updateReplyDrag, dragEnded: finishReplyDrag) {
-                bubbleContent
+                if leading == nil && header == nil {
+                    bubbleContent
+                } else {
+                    HStack(alignment: .bottom, spacing: 6) {
+                        leading
+                        VStack(alignment: .leading, spacing: 2) {
+                            header
+                            bubbleContent
+                        }
+                    }
+                }
             }
     }
 
-    private var hasReactions: Bool { message.myReaction != nil || message.theirReaction != nil }
+    private var hasReactions: Bool {
+        message.myReaction != nil || message.theirReaction != nil || !message.groupReactions.isEmpty
+    }
 
     private var reactionsDescription: String {
-        let names = [message.theirReaction, message.myReaction].compactMap { $0 }.map(ShumReactionArt.name(for:))
+        let names = message.groupReactions.isEmpty
+            ? [message.theirReaction, message.myReaction].compactMap { $0 }.map(ShumReactionArt.name(for:))
+            : message.groupReactions.map { "\(ShumReactionArt.name(for: $0.reaction)) \($0.people.count)" }
         return names.isEmpty ? "" : String.localizedFormat("Реакции: %@".localized, names.joined(separator: ", "))
     }
 
@@ -190,7 +211,9 @@ struct ShumMessageBubble: View {
     /// reaction from both people shares one chip with both avatars.
     private var reactionChips: some View {
         HStack(spacing: 6) {
-            if let theirs = message.theirReaction, theirs == message.myReaction {
+            if !message.groupReactions.isEmpty {
+                ForEach(message.groupReactions, id: \.self) { groupChip($0) }
+            } else if let theirs = message.theirReaction, theirs == message.myReaction {
                 reactionChip(theirs, people: [false, true])
             } else {
                 if let theirs = message.theirReaction { reactionChip(theirs, people: [false]) }
@@ -221,6 +244,37 @@ struct ShumMessageBubble: View {
             .background(Capsule().fill(mine ? themePalette.accent.opacity(message.outgoing ? 0.32 : 0.22)
                                             : Color.primary.opacity(0.1)))
             .overlay(Capsule().strokeBorder(mine ? themePalette.accent : .clear, lineWidth: 1.2))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .allowsHitTesting(react != nil)
+    }
+
+    /// A reaction left by several people: up to three faces, then a count.
+    /// Tapping sets the same reaction, or takes back the user's own.
+    private func groupChip(_ group: ShumGroupReaction) -> some View {
+        Button {
+            react?(group.reaction)
+        } label: {
+            HStack(spacing: 4) {
+                ShumReactionIcon(reaction: group.reaction, size: 18)
+                HStack(spacing: -6) {
+                    ForEach(Array(group.people.prefix(3).enumerated()), id: \.offset) { index, person in
+                        ShumAvatar(name: person.name, size: 18, imageData: person.avatar)
+                            .overlay(Circle().stroke(bubbleColor, lineWidth: index > 0 ? 1.5 : 0))
+                    }
+                }
+                if group.people.count > 3 {
+                    Text("+\(group.people.count - 3)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.leading, 6).padding(.trailing, group.people.count > 3 ? 6 : 3).padding(.vertical, 3)
+            .background(Capsule().fill(group.mine ? themePalette.accent.opacity(message.outgoing ? 0.32 : 0.22)
+                                                   : Color.primary.opacity(0.1)))
+            .overlay(Capsule().strokeBorder(group.mine ? themePalette.accent : .clear, lineWidth: 1.2))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)

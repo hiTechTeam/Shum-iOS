@@ -115,6 +115,18 @@ private struct ShumSoftScrollEdges: ViewModifier {
     }
 }
 
+/// iOS 26 fades lists under a clear bar; earlier versions need the bar's
+/// own background once content scrolls under it.
+private struct ShumGroupedBarBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.toolbarBackground(.hidden, for: .navigationBar)
+        } else {
+            content
+        }
+    }
+}
+
 private struct ShumThemePaletteKey: EnvironmentKey {
     static let defaultValue = ShumThemePalette(
         accentUIColor: .systemGreen,
@@ -166,7 +178,7 @@ extension View {
     func shumGroupedScreenBackground() -> some View {
         scrollContentBackground(.hidden)
             .background(ShumThemeCanvas().ignoresSafeArea())
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .modifier(ShumGroupedBarBackground())
     }
 
     /// Applies the theme once at the application root. SwiftUI descendants,

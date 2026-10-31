@@ -762,3 +762,24 @@
 "Восстановить из копии" = "Restore from Backup";
 "Этот профиль уже есть на устройстве." = "This profile is already on this device.";
 "Профиль и переписка восстановлены." = "Profile and conversations restored.";
+
+/* Public chat */
+"Общий чат" = "Public chat";
+"Рядом: %@" = "Nearby: %@";
+"Пишут: %@" = "Writing: %@";
+"Видят все, кто рядом · Bluetooth" = "Everyone nearby sees it · Bluetooth";
+"Здесь пока тихо. Напишите первым: сообщение увидят все, у кого рядом открыт Shum." = "It's quiet here. Write first: everyone nearby with Shum open will see it.";
+"Написать всем рядом" = "Write to everyone nearby";
+"Включите Bluetooth, чтобы писать" = "Turn on Bluetooth to write";
+"Отправить" = "Send";
+"В общем чате пока никого. Люди появятся, когда откроют его у себя рядом с вами." = "No one is in the public chat yet. People appear when they open it nearby.";
+"пишет" = "writing";
+"в контактах" = "in contacts";
+"Рядом · %@" = "Nearby · %@";
+"Видят все, кто рядом" = "Everyone nearby sees it";
+"Сообщения получают все, у кого поблизости открыт Shum и включён Bluetooth. Телефоны передают их друг другу, поэтому чат охватывает всех вокруг. Кто ушёл далеко, новых сообщений уже не увидит." = "Everyone nearby with Shum open and Bluetooth on gets the messages. Phones pass them along to each other, so the chat reaches everyone around. Whoever has gone far away no longer sees new messages.";
+"Работает без интернета" = "Works without internet";
+"Сообщения идут по Bluetooth с телефона на телефон. Сервера нет, поэтому чат работает даже там, где нет сети." = "Messages travel over Bluetooth from phone to phone. There is no server, so the chat works even where there is no network.";
+"Не для секретов" = "Not for secrets";
+"Общий чат открыт всем вокруг. Личное лучше написать человеку в обычный чат: там сообщения видите только вы двое." = "The public chat is open to everyone around. Write anything personal to the person in a regular chat: only the two of you see those messages.";
+"Удалить у всех" = "Delete for everyone";

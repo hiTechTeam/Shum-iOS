@@ -42,6 +42,23 @@ private struct ShumComposerSurface: ViewModifier {
 }
 
 
+/// The send arrow every chat shares: a light arrow in a small circle,
+/// dimmed while there is nothing to send.
+struct ShumSendButtonLabel: View {
+    let enabled: Bool
+    @Environment(\.shumThemePalette) private var palette
+
+    var body: some View {
+        Image(systemName: "arrow.up")
+            .font(.system(size: 15, weight: .bold))
+            .foregroundStyle(enabled ? palette.accentForeground : Color.secondary)
+            .frame(width: 34, height: 34)
+            .background(enabled ? Color.accentColor : Color(.tertiarySystemFill), in: Circle())
+            .padding(.trailing, 6).padding(.vertical, 6).padding(.leading, 3)
+            .contentShape(Rectangle())
+    }
+}
+
 struct ShumConversationView: View {
     @Environment(\.shumThemePalette) private var palette
     @Environment(\.shumPresentPeerPhoto) private var presentPeerPhoto
@@ -318,7 +335,7 @@ struct ShumConversationView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Button {
-                        withAnimation(.easeOut(duration: 0.16)) { self.replyingTo = nil }
+                        self.replyingTo = nil
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 13, weight: .semibold))
@@ -355,17 +372,10 @@ struct ShumConversationView: View {
                             draft.clearAfterSending()
                         }
                         scrollCommand = ShumTimelineCommand(target: .bottom)
-                        withAnimation(.easeOut(duration: 0.16)) { self.replyingTo = nil }
+                        self.replyingTo = nil
                     }
                 } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(canSend ? palette.accentForeground : Color.secondary)
-                        .frame(width: 36, height: 36)
-                        .background(canSend ? Color.accentColor : Color(.tertiarySystemFill), in: Circle())
-                        .padding(.trailing, 5).padding(.vertical, 5)
-                        .padding(.leading, 3)
-                        .contentShape(Rectangle())
+                    ShumSendButtonLabel(enabled: canSend)
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSend)
@@ -384,7 +394,6 @@ struct ShumConversationView: View {
         }
         .modifier(ShumComposerSurface())
         .animation(.easeOut(duration: 0.15), value: canSend)
-        .animation(.easeOut(duration: 0.18), value: replyingTo?.id)
         #if DEBUG && targetEnvironment(simulator)
         .task {
             if ProcessInfo.processInfo.arguments.contains("-ShumPreviewKeyboard") {
@@ -467,9 +476,9 @@ struct ShumConversationView: View {
     }
 
     private func beginReply(to message: ShumMessage) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) {
-            replyingTo = message
-        }
+        // The quote bar appears at once: the capsule's UIKit host resizes in
+        // the same frame, so content cannot slide in from below.
+        replyingTo = message
         inputFocused = true
     }
 

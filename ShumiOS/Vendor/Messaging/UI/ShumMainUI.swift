@@ -5,7 +5,7 @@ import BitFoundation
 
 // Current Shum chat list, adapted to Shum's navigation and palette.
 enum ShumUIRoute: Hashable {
-    case conversation(ShumPeer), newChat, requests, ownQR
+    case conversation(ShumPeer), newChat, requests, ownQR, publicChat
 
     var containsMessages: Bool {
         if case .conversation = self { return true }
@@ -23,6 +23,7 @@ struct ShumDestinationUI: View {
             case .conversation(let peer):
                 ShumConversationView(runtime: runtime, peer: peer)
             case .newChat: ShumContactsView(runtime: runtime) { open(.conversation($0)) }
+            case .publicChat: ShumPublicChatView(runtime: runtime)
             case .requests: ShumContactRequestsView(runtime: runtime) { open(.conversation($0)) }
             case .ownQR:
                 if let card = runtime.permanent?.ownCard {
@@ -55,6 +56,36 @@ struct ShumChatsUI: View {
     private func isPinned(_ entry: ShumDirectoryEntry) -> Bool {
         guard let card = entry.card else { return false }
         return runtime.permanent?.isPinned(card, in: folder.pinKey) == true
+    }
+
+    private var publicUnread: Int { runtime.permanent?.publicUnread ?? 0 }
+
+    /// Opens the open chat; no haptic, as with any other navigation.
+    private func publicChatButton(drawsBadge: Bool) -> some View {
+        Button {
+            open(.publicChat)
+        } label: {
+            // The count stays inside the button's frame so nothing clips it.
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .padding(drawsBadge && publicUnread > 0 ? EdgeInsets(top: 7, leading: 0, bottom: 0, trailing: 10) : EdgeInsets())
+                if drawsBadge, publicUnread > 0 {
+                    Text(publicUnread > 99 ? "99+" : "\(publicUnread)")
+                        .font(.system(size: 11, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .frame(minWidth: 18, minHeight: 18)
+                        .background(Capsule().fill(Color(.systemRed)))
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .tint(.primary)
+        .accessibilityLabel("Общий чат".localized)
+        .accessibilityValue(publicUnread > 0 ? "\(publicUnread)" : "")
+        .accessibilityIdentifier("shum.publicChat")
+        .disabled(runtime.isLoadingHistory)
     }
 
     var body: some View {
@@ -97,6 +128,15 @@ struct ShumChatsUI: View {
         .navigationTitle("Чаты".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // iOS 26 badges toolbar items itself, outside the glass button
+            // that would clip a drawn one.
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    publicChatButton(drawsBadge: false).badge(publicUnread)
+                }
+            } else {
+                ToolbarItem(placement: .navigationBarLeading) { publicChatButton(drawsBadge: true) }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()

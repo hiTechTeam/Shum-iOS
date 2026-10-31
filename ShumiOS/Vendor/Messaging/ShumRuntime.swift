@@ -29,6 +29,22 @@ struct ShumMessage: Identifiable {
     var reply: ShumReplyReference? = nil
     var myReaction: ShumReaction? = nil
     var theirReaction: ShumReaction? = nil
+    /// Reactions from many people, as in the open chat. When present they
+    /// replace the two-person chips above.
+    var groupReactions: [ShumGroupReaction] = []
+}
+
+struct ShumReactionPerson: Hashable {
+    let name: String
+    let avatar: Data?
+}
+
+/// One reaction and everyone who left it.
+struct ShumGroupReaction: Hashable {
+    let reaction: ShumReaction
+    let people: [ShumReactionPerson]
+    /// The user is among them; tapping takes it back.
+    let mine: Bool
 }
 
 /// Shum on this iPhone: Shum-Core runs the profile, its Bluetooth mesh and
@@ -69,6 +85,8 @@ final class ShumRuntime: ObservableObject {
     private(set) var activePeer: PeerID?
     private var appActive = true
     private var bluetoothEnabled = true
+    /// The open chat can go out: Bluetooth is allowed here and powered on.
+    var bluetoothReady: Bool { bluetoothEnabled && bluetoothState == .poweredOn }
     private var connectedPeerIDs: Set<PeerID> = []
     var isReady: Bool { !setupFailed && !retired && !isLoadingHistory }
     private let defaults: UserDefaults
@@ -425,7 +443,9 @@ final class ShumRuntime: ObservableObject {
         guard let permanent else { return }
         internetConnected = permanent.internetConnected
         showCoreNearby(permanent)
-        ShumTypingPixels.shared.update(typing: Set(permanent.typingCards.map { $0.peerID.id }))
+        var typingSeeds = Set(permanent.typingCards.map { $0.peerID.id })
+        if !permanent.publicTypers.isEmpty { typingSeeds.insert(ShumPublicChatView.pixelSeed) }
+        ShumTypingPixels.shared.update(typing: typingSeeds)
         let state = permanent.state
         let snapshot = PermanentMessageSnapshot(
             messages: state.messages,

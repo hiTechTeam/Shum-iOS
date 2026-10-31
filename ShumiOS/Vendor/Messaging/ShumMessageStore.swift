@@ -3,6 +3,26 @@ import Combine
 import Foundation
 import ShumCore
 
+/// A note in the open chat with everyone nearby, as Shum-Core keeps it for a day.
+struct ShumPublicNote: Identifiable, Equatable {
+    /// The author and the note's own ID: two people may pick the same one.
+    var id: String { "\(card.id):\(noteID)" }
+    let noteID: String
+    let card: ShumContactCard
+    let text: String
+    let date: Date
+    let outgoing: Bool
+    var reply: ShumReplyReference?
+    var reactions: [ShumPublicReaction] = []
+}
+
+/// One person's reaction on an open-chat note.
+struct ShumPublicReaction: Equatable {
+    let personID: String
+    let reaction: ShumReaction
+    let card: ShumContactCard?
+}
+
 /// The profile as Shum-Core runs it, the core every Shum client shares.
 /// Screens read Shum-Core's stored state and snapshot from here; every change
 /// becomes a request to Shum-Core, which alone writes the database.
@@ -23,6 +43,16 @@ final class ShumMessageStore: ObservableObject {
     /// People as Shum-Core's snapshot shows them, for typing, "in chat" and distance.
     private var people: [String: [String: Any]] = [:]
     private(set) var internetConnected = false
+    /// The day's open chat, oldest first.
+    private(set) var publicNotes: [ShumPublicNote] = []
+    /// Everyone on the Bluetooth mesh, near or relayed, by card.
+    private(set) var meshPeople: [ShumContactCard] = []
+    /// Who is typing in the open chat right now.
+    private(set) var publicTypers: [ShumContactCard] = []
+    /// Who has the open chat on screen right now.
+    private(set) var publicPeople: [ShumContactCard] = []
+    /// The last own typing signal in the open chat, as for a contact.
+    private var publicTypingSent: (active: Bool, at: Date)?
     /// What screens last showed of people nearby, typing and "in chat".
     private var shownPeople = ""
     /// The last typing signal per contact, so it goes out on a start or a
@@ -216,6 +246,52 @@ final class ShumMessageStore: ObservableObject {
         request(["command": "delete_encounters", "contact": NSNull()])
     }
 
+    private var publicSeenKey: String { "shum.publicChat.seen.\(ownCard.id)" }
+    /// Notes from others since the open chat was last on screen here.
+    var publicUnread: Int {
+        let seen = UserDefaults.standard.double(forKey: publicSeenKey)
+        return publicNotes.filter { !$0.outgoing && $0.date.timeIntervalSince1970 > seen }.count
+    }
+    /// The open chat is on screen: everything in it counts as read.
+    func markPublicChatRead() {
+        guard let last = publicNotes.last?.date.timeIntervalSince1970,
+              last > UserDefaults.standard.double(forKey: publicSeenKey) else { return }
+        UserDefaults.standard.set(last, forKey: publicSeenKey)
+        revision &+= 1
+    }
+
+    /// Writes to the open chat; everyone on the Bluetooth mesh reads it.
+    func broadcast(_ text: String, reply: ShumReplyReference? = nil) {
+        var request: [String: Any] = ["command": "broadcast", "text": text]
+        if let reply {
+            request["reply"] = ["messageID": reply.messageID, "senderID": reply.senderID, "text": reply.text]
+        }
+        self.request(request)
+    }
+    /// Sets the user's reaction on an open-chat note; nil takes it back.
+    func publicReaction(_ reaction: ShumReaction?, on note: ShumPublicNote) {
+        var request: [String: Any] = ["command": "public_reaction", "note": note.noteID, "author": note.card.id]
+        if let reaction { request["reaction"] = reaction.rawValue }
+        self.request(request)
+    }
+    /// Tells everyone nearby that the user types in the open chat, on a
+    /// start or a stop and while typing at most every four seconds.
+    func setPublicTyping(_ active: Bool) {
+        let last = publicTypingSent
+        if last.map({ $0.active == active && (!active || now().timeIntervalSince($0.at) < 4) }) ?? !active { return }
+        publicTypingSent = (active, now())
+        request(["command": "public_typing", "active": active])
+    }
+    /// The open chat came on screen or left it; Shum-Core tells everyone
+    /// nearby and repeats it while the chat stays open.
+    func setPublicPresence(_ online: Bool) {
+        request(["command": "public_presence", "online": online])
+    }
+    /// Withdraws the user's own note from everyone in the open chat.
+    func publicRetract(_ note: ShumPublicNote) {
+        request(["command": "public_retract", "note": note.noteID])
+    }
+
     func send(_ text: String, to card: ShumContactCard, reply: ShumReplyReference? = nil) -> Bool {
         var request: [String: Any] = ["command": "send", "contact": card.id, "text": text]
         if let reply {
@@ -295,23 +371,57 @@ final class ShumMessageStore: ObservableObject {
         }
         var people: [String: [String: Any]] = [:]
         var found: [PeerID: ShumContactCard] = [:]
+        var mesh: [ShumContactCard] = []
         for contact in snapshot["contacts"] as? [[String: Any]] ?? [] {
             guard let id = contact["id"] as? String else { continue }
             people[id] = contact
-            guard contact["nearby"] as? Bool == true,
-                  let json = contact["card"].flatMap({ try? JSONSerialization.data(withJSONObject: $0) }),
-                  let card = try? JSONDecoder().decode(ShumContactCard.self, from: json) else { continue }
-            found[card.peerID] = card
+            guard contact["nearby"] as? Bool == true || contact["mesh"] as? Bool == true,
+                  let card = Self.card(contact["card"]) else { continue }
+            mesh.append(card)
+            if contact["nearby"] as? Bool == true { found[card.peerID] = card }
         }
+        let notes: [ShumPublicNote] = (snapshot["publicChat"] as? [[String: Any]] ?? []).compactMap { note in
+            guard let noteID = note["id"] as? String, let text = note["text"] as? String,
+                  let card = Self.card(note["card"]),
+                  let timestamp = (note["timestamp"] as? NSNumber)?.doubleValue else { return nil }
+            let reply = (note["reply"] as? [String: Any]).flatMap { reply -> ShumReplyReference? in
+                guard let messageID = reply["messageID"] as? String, let senderID = reply["senderID"] as? String,
+                      let text = reply["text"] as? String else { return nil }
+                return ShumReplyReference(messageID: messageID, senderID: senderID, text: text)
+            }
+            let reactions = (note["reactions"] as? [[String: Any]] ?? []).compactMap { mark -> ShumPublicReaction? in
+                guard let person = mark["personID"] as? String,
+                      let reaction = (mark["reaction"] as? String).flatMap(ShumReaction.init(rawValue:)) else { return nil }
+                return ShumPublicReaction(personID: person, reaction: reaction, card: Self.card(mark["card"]))
+            }
+            return ShumPublicNote(noteID: noteID, card: card, text: text,
+                                  date: Date(timeIntervalSince1970: timestamp / 1000),
+                                  outgoing: note["outgoing"] as? Bool == true,
+                                  reply: reply, reactions: reactions)
+        }
+        var noteHash = Hasher()
+        for note in notes {
+            noteHash.combine(note.id)
+            for mark in note.reactions {
+                noteHash.combine(mark.personID)
+                noteHash.combine(mark.reaction.rawValue)
+            }
+        }
+        let typers = (snapshot["publicTyping"] as? [Any] ?? []).compactMap(Self.card)
+        let present = (snapshot["publicPresent"] as? [Any] ?? []).compactMap(Self.card)
         let internet = !(snapshot["relays"] as? [Any] ?? []).isEmpty
         let shown = people.keys.sorted().map { id -> String in
             let person = people[id] ?? [:]
             return "\(id):\(person["nearby"] ?? ""):\(person["distance"] ?? ""):\(person["typing"] ?? ""):\(person["online"] ?? "")"
-        }.joined(separator: ",") + "|\(internet)"
+        }.joined(separator: ",") + "|\(internet)|\(notes.count):\(noteHash.finalize())|\(mesh.map(\.id).sorted())|\(typers.map(\.id).sorted())|\(present.map(\.id).sorted())"
         guard state != nil || shown != shownPeople else { return }
         shownPeople = shown
         self.people = people
         nearby = found
+        meshPeople = mesh
+        publicTypers = typers
+        publicPeople = present
+        publicNotes = notes
         internetConnected = internet
         revision &+= 1
     }
@@ -325,4 +435,9 @@ final class ShumMessageStore: ObservableObject {
     }
 
     private func fail(_ error: Error) { onError?(error.localizedDescription) }
+
+    private static func card(_ value: Any?) -> ShumContactCard? {
+        value.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+            .flatMap { try? JSONDecoder().decode(ShumContactCard.self, from: $0) }
+    }
 }

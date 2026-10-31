@@ -37,8 +37,8 @@ struct MainContentView: View {
             }
             .modifier(ShumPeerPhotoPresentationHost())
             .toolbar(chatsPath.isEmpty ? .visible : .hidden, for: .tabBar)
-            .tabItem { tabLabel("Чаты".localized, image: "PixelChats", tab: 1) }
-                .badge(chat.directoryEntries.badgeCount).tag(1)
+            .tabItem { tabLabel("Чаты".localized, image: "PixelChats", tab: 1,
+                                badge: chat.directoryEntries.badgeCount) }.tag(1)
             NavigationStack(path: $profilePath) {
                 ProfileOverviewView(
                     chat: chat,
@@ -122,21 +122,56 @@ struct MainContentView: View {
         #endif
     }
 
-    private func tabLabel(_ title: String, image name: String, tab: Int) -> some View {
+    private func tabLabel(_ title: String, image name: String, tab: Int, badge: Int = 0) -> some View {
         Label {
             Text(title)
         } icon: {
             if let image = UIImage(named: name) {
                 // A visibility change refreshes the tab bar. Bake the theme
                 // color into the pixel art so UIKit cannot flash its gray tint.
-                Image(uiImage: image.withTintColor(
-                    tabIconColor(isSelected: selectedTab == tab),
-                    renderingMode: .alwaysOriginal
+                Image(uiImage: Self.tabIcon(
+                    image.withTintColor(tabIconColor(isSelected: selectedTab == tab),
+                                        renderingMode: .alwaysOriginal),
+                    badge: badge
                 ))
             } else {
                 Image(name)
             }
         }
+        .accessibilityValue(badge > 0 ? "\(badge)" : "")
+    }
+
+    /// The icon with its unread count drawn in. A system badge is a separate
+    /// layer that slips under the icon when the tab bar swaps the recolored
+    /// icon on a tab change or a press; drawn in, it stays on top.
+    private static func tabIcon(_ icon: UIImage, badge: Int) -> UIImage {
+        guard badge > 0 else { return icon }
+        let text = badge > 99 ? "99+" : "\(badge)"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 11, weight: .bold),
+            .foregroundColor: UIColor.white,
+        ]
+        let textSize = (text as NSString).size(withAttributes: attributes)
+        let height: CGFloat = 16
+        let width = max(height, ceil(textSize.width) + 8)
+        // Equal room on every side keeps the icon where it was, centered
+        // under its title; the badge sits up in the top-right corner of it.
+        let side: CGFloat = 9
+        let lift: CGFloat = 7
+        let size = CGSize(width: icon.size.width + side * 2, height: icon.size.height + lift * 2)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = icon.scale
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            icon.draw(at: CGPoint(x: side, y: lift))
+            let frame = CGRect(x: size.width - width, y: 0, width: width, height: height)
+            UIColor.systemRed.setFill()
+            UIBezierPath(roundedRect: frame, cornerRadius: height / 2).fill()
+            (text as NSString).draw(
+                at: CGPoint(x: frame.midX - textSize.width / 2, y: frame.midY - textSize.height / 2),
+                withAttributes: attributes
+            )
+        }
+        return image.withRenderingMode(.alwaysOriginal)
     }
 
     private func tabIconColor(isSelected: Bool) -> UIColor {

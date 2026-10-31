@@ -762,3 +762,24 @@
 "Восстановить из копии" = "Restaurar do backup";
 "Этот профиль уже есть на устройстве." = "Este perfil já está neste dispositivo.";
 "Профиль и переписка восстановлены." = "Perfil e conversas restaurados.";
+
+/* Public chat */
+"Общий чат" = "Chat público";
+"Рядом: %@" = "Por perto: %@";
+"Пишут: %@" = "Escrevendo: %@";
+"Видят все, кто рядом · Bluetooth" = "Todos por perto veem · Bluetooth";
+"Здесь пока тихо. Напишите первым: сообщение увидят все, у кого рядом открыт Shum." = "Está tranquilo por aqui. Escreva primeiro: todos por perto com o Shum aberto vão ver.";
+"Написать всем рядом" = "Escrever para todos por perto";
+"Включите Bluetooth, чтобы писать" = "Ative o Bluetooth para escrever";
+"Отправить" = "Enviar";
+"В общем чате пока никого. Люди появятся, когда откроют его у себя рядом с вами." = "Ainda não há ninguém no chat público. As pessoas aparecem quando o abrem perto de você.";
+"пишет" = "escrevendo";
+"в контактах" = "nos contatos";
+"Рядом · %@" = "Por perto · %@";
+"Видят все, кто рядом" = "Todos por perto veem";
+"Сообщения получают все, у кого поблизости открыт Shum и включён Bluetooth. Телефоны передают их друг другу, поэтому чат охватывает всех вокруг. Кто ушёл далеко, новых сообщений уже не увидит." = "Todos por perto com o Shum aberto e o Bluetooth ativado recebem as mensagens. Os celulares repassam umas às outras, então o chat alcança todos ao redor. Quem se afastou não vê mais as novas mensagens.";
+"Работает без интернета" = "Funciona sem internet";
+"Сообщения идут по Bluetooth с телефона на телефон. Сервера нет, поэтому чат работает даже там, где нет сети." = "As mensagens vão por Bluetooth de celular em celular. Não há servidor, então o chat funciona mesmo onde não há rede.";
+"Не для секретов" = "Não é para segredos";
+"Общий чат открыт всем вокруг. Личное лучше написать человеку в обычный чат: там сообщения видите только вы двое." = "O chat público é aberto a todos ao redor. Algo pessoal é melhor escrever para a pessoa em um chat normal: lá só vocês dois veem as mensagens.";
+"Удалить у всех" = "Apagar para todos";

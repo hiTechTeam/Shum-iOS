@@ -141,7 +141,9 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         if #available(iOS 26.0, *) {
             // Fade under the bars as on iOS 26; iOS 27 drew a hard plate there.
             table.topEdgeEffect.style = .soft
-            table.bottomEdgeEffect.style = .soft
+            // The composer is its own glass capsule; a second fade under it
+            // reads as a double background.
+            table.bottomEdgeEffect.isHidden = true
         }
         table.delaysContentTouches = false
         table.dataSource = self

@@ -762,3 +762,24 @@
 "Восстановить из копии" = "Restaurer depuis une sauvegarde";
 "Этот профиль уже есть на устройстве." = "Ce profil est déjà sur cet appareil.";
 "Профиль и переписка восстановлены." = "Profil et conversations restaurés.";
+
+/* Public chat */
+"Общий чат" = "Chat public";
+"Рядом: %@" = "À proximité : %@";
+"Пишут: %@" = "Écrivent : %@";
+"Видят все, кто рядом · Bluetooth" = "Visible par tous à proximité · Bluetooth";
+"Здесь пока тихо. Напишите первым: сообщение увидят все, у кого рядом открыт Shum." = "C'est calme ici. Écrivez en premier : tous ceux qui ont Shum ouvert à proximité le verront.";
+"Написать всем рядом" = "Écrire à tous à proximité";
+"Включите Bluetooth, чтобы писать" = "Activez le Bluetooth pour écrire";
+"Отправить" = "Envoyer";
+"В общем чате пока никого. Люди появятся, когда откроют его у себя рядом с вами." = "Personne dans le chat public pour l’instant. Les gens apparaîtront quand ils l’ouvriront près de vous.";
+"пишет" = "écrit";
+"в контактах" = "dans les contacts";
+"Рядом · %@" = "À proximité · %@";
+"Видят все, кто рядом" = "Visible par tous à proximité";
+"Сообщения получают все, у кого поблизости открыт Shum и включён Bluetooth. Телефоны передают их друг другу, поэтому чат охватывает всех вокруг. Кто ушёл далеко, новых сообщений уже не увидит." = "Tous ceux qui ont Shum ouvert à proximité et le Bluetooth activé reçoivent les messages. Les téléphones se les transmettent, donc le chat atteint tout le monde autour. Ceux qui se sont éloignés ne voient plus les nouveaux messages.";
+"Работает без интернета" = "Fonctionne sans internet";
+"Сообщения идут по Bluetooth с телефона на телефон. Сервера нет, поэтому чат работает даже там, где нет сети." = "Les messages passent par Bluetooth de téléphone en téléphone. Il n'y a pas de serveur, donc le chat fonctionne même là où il n'y a pas de réseau.";
+"Не для секретов" = "Pas pour les secrets";
+"Общий чат открыт всем вокруг. Личное лучше написать человеку в обычный чат: там сообщения видите только вы двое." = "Le chat public est ouvert à tous autour. Pour quelque chose de personnel, écrivez à la personne dans un chat normal : là, vous seuls voyez les messages.";
+"Удалить у всех" = "Supprimer pour tous";
