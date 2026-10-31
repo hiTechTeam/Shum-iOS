@@ -32,7 +32,8 @@ struct ShumMessageBubble: View {
     var replyAuthor: String?
     var retry: () -> Void = {}
     var reply: () -> Void = {}
-    var cancelSending: () -> Void = {}
+    /// Where an own message can be deleted from; the menu offers them.
+    var deleteChoices: [ShumMenuChoice] = []
     /// Withdraws an own message from everyone, as in the open chat.
     var withdraw: (() -> Void)?
     /// The author's avatar column and name in a group chat. They sit inside
@@ -82,8 +83,11 @@ struct ShumMessageBubble: View {
             .accessibilityAction(named: "Ответить".localized, reply)
             .accessibilityAction(named: "Скопировать".localized) { UIPasteboard.general.string = message.text }
             .accessibilityActions {
-                if canCancelSending {
-                    Button("Отменить отправку".localized, action: cancelSending)
+                if let withdraw {
+                    Button("Удалить у всех".localized, action: withdraw)
+                }
+                ForEach(deleteChoices.indices, id: \.self) { index in
+                    Button(deleteChoices[index].title, action: deleteChoices[index].action)
                 }
                 if let react, let mine = message.myReaction {
                     Button("Убрать реакцию".localized) { react(mine) }
@@ -137,7 +141,9 @@ struct ShumMessageBubble: View {
 
     @ViewBuilder
     private var bubbleContent: some View {
-        if let photo = message.photo {
+        if let sticker = message.sticker {
+            stickerContent(sticker)
+        } else if let photo = message.photo {
             photoContent(photo)
         } else {
             textContent
@@ -159,18 +165,18 @@ struct ShumMessageBubble: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                ShumMessagePhotoView(messageID: message.id, photo: photo, width: width - 8, radius: 15,
+                // Edge to edge: the bubble's own corners round the photo.
+                ShumMessagePhotoView(messageID: message.id, photo: photo, width: width, radius: 0,
                                      cached: cachedPhoto, load: loadPhoto, open: openPhoto) { EmptyView() }
-                    .padding(.horizontal, 4)
                 Group {
                     if hasReactions {
-                        ShumReactedBubbleLayout {
+                        ShumReactedBubbleLayout(fills: true) {
                             Text(message.text).font(.body).foregroundStyle(.primary)
                             reactionChips
                             metadata
                         }
                     } else {
-                        ShumBubbleLayout(inline: !message.text.contains("\n")) {
+                        ShumBubbleLayout(inline: !message.text.contains("\n"), fills: true) {
                             Text(message.text).font(.body).foregroundStyle(.primary)
                             metadata
                         }
@@ -179,7 +185,8 @@ struct ShumMessageBubble: View {
                 .padding(.horizontal, 12)
             }
             .frame(width: width, alignment: .leading)
-            .padding(.top, 4).padding(.bottom, 8)
+            .padding(.bottom, 8)
+            .clipShape(bubbleShape)
             .modifier(
                 ShumMessageBubbleSurface(
                     shape: bubbleShape,
@@ -187,6 +194,21 @@ struct ShumMessageBubble: View {
                     highlight: themePalette.accent.opacity(quoteHighlightOpacity)
                 )
             )
+        }
+    }
+
+    /// A sticker stands alone, large and without a bubble, with its time
+    /// and reactions under it.
+    private func stickerContent(_ sticker: String) -> some View {
+        VStack(alignment: message.outgoing ? .trailing : .leading, spacing: 4) {
+            Image(uiImage: ShumReactionArt.image(sticker: sticker, size: 150))
+                .interpolation(.none)
+                .frame(width: 150, height: 150)
+                .accessibilityLabel(message.text)
+            HStack(spacing: 6) {
+                if hasReactions { reactionChips }
+                metadataPill
+            }
         }
     }
 
@@ -257,8 +279,9 @@ struct ShumMessageBubble: View {
     private var bubble: some View {
         ShumMessageContextMenu(shape: bubbleShape, maximumWidth: maximumWidth,
             reply: reply, copy: { UIPasteboard.general.string = message.text },
-            cancelSending: withdraw ?? (canCancelSending ? cancelSending : nil),
-            cancelTitle: withdraw == nil ? "Отменить отправку".localized : "Удалить у всех".localized,
+            cancelSending: withdraw ?? (deleteChoices.isEmpty ? nil : {}),
+            cancelTitle: withdraw == nil ? "Удалить".localized : "Удалить у всех".localized,
+            deleteChoices: deleteChoices,
             reaction: message.myReaction, react: react,
             dragChanged: updateReplyDrag, dragEnded: finishReplyDrag) {
                 if leading == nil && header == nil {
@@ -368,10 +391,6 @@ struct ShumMessageBubble: View {
     }
 
     /// Offered exactly while the clock icon shows the message is in transit.
-    private var canCancelSending: Bool {
-        message.outgoing && ShumDeliveryReceipt.symbol(for: message.status) == .clock
-    }
-
     private var bubbleShape: ShumBubbleShape {
         ShumBubbleShape(outgoing: message.outgoing, tail: showsTail)
     }
@@ -442,6 +461,9 @@ struct ShumMessageBubble: View {
 /// Wrapped text gets a trailing metadata line, which never overlaps the message.
 struct ShumBubbleLayout: Layout {
     var inline: Bool
+    /// Takes the whole width offered, so the time sits at the trailing edge
+    /// under a photo wider than the caption.
+    var fills = false
     private func metrics(_ proposal: ProposedViewSize, _ subviews: Subviews) -> (CGSize, CGSize, Bool) {
         let limit = max(1, proposal.width ?? 300)
         let meta = roundedUp(subviews[1].sizeThatFits(.unspecified))
@@ -457,8 +479,10 @@ struct ShumBubbleLayout: Layout {
     }
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let (text, meta, fits) = metrics(proposal, subviews)
-        return fits ? CGSize(width: text.width + meta.width + 8, height: max(text.height, meta.height))
+        let size = fits ? CGSize(width: text.width + meta.width + 8, height: max(text.height, meta.height))
             : CGSize(width: max(text.width, meta.width), height: text.height + meta.height + 2)
+        guard fills, let width = proposal.width else { return size }
+        return CGSize(width: max(size.width, width), height: size.height)
     }
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let (text, meta, _) = metrics(ProposedViewSize(width: bounds.width, height: bounds.height), subviews)
@@ -470,6 +494,8 @@ struct ShumBubbleLayout: Layout {
 /// Text on top; below it the reaction chips on the leading side and the time
 /// on the trailing side. The bubble is only as wide as its widest row.
 struct ShumReactedBubbleLayout: Layout {
+    /// Takes the whole width offered, as `ShumBubbleLayout.fills`.
+    var fills = false
     private let spacing: CGFloat = 6
     private func metrics(_ proposal: ProposedViewSize, _ subviews: Subviews) -> (text: CGSize, chips: CGSize, meta: CGSize, width: CGFloat) {
         let limit = max(1, proposal.width ?? 300)
@@ -484,7 +510,8 @@ struct ShumReactedBubbleLayout: Layout {
     }
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let m = metrics(proposal, subviews)
-        return CGSize(width: m.width, height: m.text.height + spacing + max(m.chips.height, m.meta.height))
+        let width = fills ? max(m.width, proposal.width ?? m.width) : m.width
+        return CGSize(width: width, height: m.text.height + spacing + max(m.chips.height, m.meta.height))
     }
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let m = metrics(ProposedViewSize(width: bounds.width, height: bounds.height), subviews)

@@ -32,6 +32,7 @@ struct ShumMessage: Identifiable {
     /// Reactions from many people, as in the open chat. When present they
     /// replace the two-person chips above.
     var groupReactions: [ShumGroupReaction] = []
+    var sticker: String? = nil
     var photo: ShumMessagePhoto? = nil
     /// How many saw it, in the open chat; shown by an eye instead of a name.
     var views: Int? = nil
@@ -536,6 +537,7 @@ final class ShumRuntime: ObservableObject {
                 myReaction: permanent.reaction(of: ownID, on: stored.id),
                 theirReaction: permanent.reaction(of: cardID, on: stored.id))
             message.photo = photo
+            message.sticker = stored.sticker
             projectedPermanentMessages[stored.id] = (stored, message)
             return message
         }
@@ -586,6 +588,13 @@ final class ShumRuntime: ObservableObject {
 
     func conversation(_ peer: PeerID) -> [ShumMessage] {
         messages.filter { $0.peerID == peer }
+    }
+
+    /// Unread messages waiting in other chats than `peer`'s, the open chat
+    /// among them; without a peer, in every personal chat.
+    func unreadElsewhere(than peer: PeerID?) -> Int {
+        guard let peer else { return unreadMessageIDs.count }
+        return unreadMessageIDs.filter { !$0.hasPrefix("\(peer.id):") }.count + publicUnread
     }
 
     func unreadCount(for peer: PeerID) -> Int {
@@ -675,6 +684,11 @@ final class ShumRuntime: ObservableObject {
                                    caption: caption, standIn: "Фото".localized, to: card)
     }
 
+    func sendSticker(_ sticker: String, to peer: PeerID) {
+        guard isReady, let permanent, let card = permanent.card(for: peer) else { return }
+        permanent.sendSticker(sticker, to: card)
+    }
+
     private let photoCache = NSCache<NSString, UIImage>()
     /// The photo, if it was already read: a row drawn again shows it at once.
     func cachedPhoto(for messageID: String) -> UIImage? {
@@ -694,10 +708,11 @@ final class ShumRuntime: ObservableObject {
         permanent?.toggleReaction(reaction, on: message.id)
     }
 
-    /// Withdraws a message that has not reached the contact yet.
-    func cancelSending(_ message: ShumMessage) {
+    /// Deletes an own message here and on the user's other devices; with
+    /// `everyone`, at the contact too.
+    func delete(_ message: ShumMessage, everyone: Bool) {
         guard message.outgoing, let permanent else { return }
-        permanent.cancelSending(message.id)
+        permanent.delete(message.id, everyone: everyone)
     }
 
     func retry(_ message: ShumMessage) {

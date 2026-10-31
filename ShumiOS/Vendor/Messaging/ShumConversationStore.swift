@@ -252,9 +252,24 @@ struct ShumStoredRetract: Codable, Equatable, Identifiable, ShumQueuedControl {
     var expiresAt: Int64 { control.expiresAt }
     var packet: ShumPacket { ShumPacket(retract: control) }
 }
-/// The pixel reactions a person can leave on a message.
-enum ShumReaction: String, Codable, CaseIterable {
-    case heart, like, dislike, laugh, fire, coffin, hundred, horror
+/// A reaction a person can leave on a message: the name of a sticker from
+/// one of Shum-Core's sets that are reactions too. A name this version does
+/// not know does not decode.
+struct ShumReaction: RawRepresentable, Codable, Hashable {
+    let rawValue: String
+
+    init?(rawValue: String) {
+        guard ShumStickerCatalog.shared.reactionIDs.contains(rawValue) else { return nil }
+        self.rawValue = rawValue
+    }
+
+    /// For the catalog itself, which knows its names while it is being made.
+    init(catalogName: String) {
+        rawValue = catalogName
+    }
+
+    /// Every reaction in Shum-Core's order.
+    static var allCases: [ShumReaction] { ShumStickerCatalog.shared.reactions }
 }
 /// One person's reaction to a message; `nil` takes it back. Each person has
 /// at most one reaction per message and the newest signal wins.
@@ -299,6 +314,15 @@ struct ShumReactionMark: Codable, Equatable {
     var reaction: ShumReaction?
     var timestamp: Int64
     var eventID: String
+
+    /// A reaction this version does not know reads as none, so the rest of
+    /// the state still loads.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        reaction = try? container.decodeIfPresent(ShumReaction.self, forKey: .reaction)
+        timestamp = try container.decode(Int64.self, forKey: .timestamp)
+        eventID = try container.decode(String.self, forKey: .eventID)
+    }
 }
 struct ShumStoredReaction: Codable, Equatable, Identifiable, ShumQueuedControl {
     var control: ShumReactionControl
@@ -388,6 +412,9 @@ struct ShumStoredMessage: Codable, Equatable, Identifiable {
     var reply: ShumReplyReference? = nil
     /// The photo Shum-Core stored with the message, without its key here.
     var photo: ShumPhotoInfo? = nil
+    /// A sticker from Shum's sets, by its name; Shum-Core gives only names
+    /// it can draw.
+    var sticker: String? = nil
     /// Its parts have not all come yet.
     var photoMissing: Bool? = nil
     var id: String { envelope.id }

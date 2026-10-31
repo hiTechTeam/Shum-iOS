@@ -101,9 +101,18 @@ struct ShumConversationView: View {
     /// A chosen photo waiting in the capsule until the send arrow.
     @State private var pendingPhoto: ShumPreparedPhoto?
     @State private var pendingPreview: UIImage?
+    /// A photo is being read and made small; the capsule shows it is coming.
+    @State private var preparingPhoto: UUID?
+    /// The photo fades out first; then the capsule settles.
+    @State private var photoLeaving = false
     /// The messages there were when the chat left its end; those that came
     /// since count over the scroll-down button.
     @State private var idsWhenScrolledUp: Set<String>?
+    /// Stickers in the keyboard's place, and a finger pulling them.
+    @State private var stickerMode: ShumBottomPanel = .hidden
+    @State private var stickerDrag: CGFloat = 0
+    @Environment(\.dismiss) private var dismiss
+    private var stickersOpen: Bool { stickerMode != .hidden }
     private var messages: [ShumMessage] { runtime.conversation(peer.id) }
     private var name: String { runtime.displayName(peer) }
     private var invitationPhase: ShumInvitationPhase {
@@ -132,6 +141,9 @@ struct ShumConversationView: View {
                     composer: AnyView(composer),
                     accessory: showsScrollToBottom ? AnyView(scrollToBottomButton) : nil,
                     accessoryInset: capsuleInset,
+                    panel: invitationPhase == .accepted ? AnyView(stickerPanel) : nil,
+                    panelMode: stickerMode,
+                    panelDrag: stickerDrag,
                     bottomChanged: { bottom in
                         #if DEBUG && targetEnvironment(simulator)
                         if ProcessInfo.processInfo.arguments.contains("-ShumPreviewScrollButton") {
@@ -141,7 +153,10 @@ struct ShumConversationView: View {
                         #endif
                         atBottom = bottom
                     },
-                    tapped: { inputFocused = false }
+                    tapped: {
+                        inputFocused = false
+                        stickerMode = .hidden
+                    }
                 ) { index, width in
                     if index < conversation.count {
                         messageRow(
@@ -193,6 +208,9 @@ struct ShumConversationView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        // Our back button carries the unread count; the swipe back stays.
+        .navigationBarBackButtonHidden(true)
+        .background(ShumSwipeBack().frame(width: 0, height: 0))
         .shumOnChange(of: atBottom) { _, bottom in
             idsWhenScrolledUp = bottom ? nil : Set(messages.map(\.id))
         }
@@ -201,6 +219,10 @@ struct ShumConversationView: View {
             if typing, atBottom { scrollCommand = ShumTimelineCommand(target: .bottom) }
         }
         .toolbar {
+            // Messages waiting in other chats, next to the back button.
+            ToolbarItem(placement: .navigationBarLeading) {
+                ShumBackButton(count: runtime.unreadElsewhere(than: peer.id)) { dismiss() }
+            }
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 2) {
                     Text(name).font(.system(size: 17, weight: .semibold)).lineLimit(1)
@@ -273,23 +295,64 @@ struct ShumConversationView: View {
 
     @ViewBuilder
     private var composer: some View {
-        VStack(spacing: 8) {
-            if offersAddContact {
-                addContactShortcut
-            }
-            composerControl
-                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.composerSpace)).minY } action: {
-                    capsuleInset = $0
+        VStack(spacing: 0) {
+            VStack(spacing: 8) {
+                if offersAddContact {
+                    addContactShortcut
                 }
+                composerControl
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.composerSpace)).minY } action: {
+                        capsuleInset = $0
+                    }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            // The timeline pins the composer to the keyboard layout guide.
+            // A fixed gap avoids a second, mismatched animation of the composer.
+            .padding(.bottom, 8)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-        // The timeline pins the composer to the keyboard layout guide.
-        // A fixed gap avoids a second, mismatched animation of the composer.
-        .padding(.bottom, 8)
         .coordinateSpace(name: Self.composerSpace)
         .animation(.easeOut(duration: 0.2), value: invitationPhase)
+        .shumOnChange(of: inputFocused) { _, focused in
+            if focused { stickerMode = .hidden }
+        }
+    }
+
+    private var stickerPanel: some View {
+        ShumStickerPanel(
+            expanded: stickerMode == .full,
+            toggleExpanded: { stickerMode = stickerMode == .full ? .compact : .full },
+            dragChanged: { stickerDrag = $0 },
+            dragEnded: finishStickerDrag
+        ) { sticker in
+            runtime.sendSticker(sticker, to: peer.id)
+            scrollCommand = ShumTimelineCommand(target: .bottom)
+        }
+    }
+
+    /// Up past a little opens the stickers to the top; down puts them a step
+    /// lower, or away.
+    private func finishStickerDrag(_ predicted: CGFloat) {
+        switch stickerMode {
+        case .compact: stickerMode = predicted < -80 ? .full : predicted > 140 ? .hidden : .compact
+        case .full: stickerMode = predicted > 420 ? .hidden : predicted > 100 ? .compact : .full
+        case .hidden: break
+        }
+        stickerDrag = 0
+    }
+
+    /// Stickers in place of the keyboard, or back to the keyboard.
+    private var stickersButton: some View {
+        ShumStickersButton(open: stickersOpen, accent: palette.accent) {
+            if stickersOpen {
+                stickerMode = .hidden
+                inputFocused = true
+            } else {
+                inputFocused = false
+                stickerMode = .compact
+            }
+        }
     }
 
     @ViewBuilder
@@ -401,19 +464,23 @@ struct ShumConversationView: View {
 
     private var messageComposer: some View {
         VStack(spacing: 0) {
-            if let pendingPreview {
-                HStack(spacing: 10) {
-                    Image(uiImage: pendingPreview)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 56, height: 56)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .accessibilityLabel("Фото".localized)
+            if pendingPreview != nil || preparingPhoto != nil {
+                // The remove button sits up in the capsule's corner.
+                HStack(alignment: .top, spacing: 10) {
+                    Group {
+                        if let pendingPreview {
+                            Image(uiImage: pendingPreview)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Color(.tertiarySystemFill).overlay { ProgressView() }
+                        }
+                    }
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .accessibilityLabel(pendingPreview == nil ? "Фото загружается".localized : "Фото".localized)
                     Spacer(minLength: 0)
-                    Button {
-                        self.pendingPhoto = nil
-                        self.pendingPreview = nil
-                    } label: {
+                    Button(action: removePendingPhoto) {
                         Image(systemName: "xmark")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.secondary)
@@ -424,8 +491,11 @@ struct ShumConversationView: View {
                     .accessibilityLabel("Убрать фото".localized)
                 }
                 .padding(.leading, 12)
-                .padding(.trailing, 8)
-                .padding(.top, 10)
+                .padding(.trailing, 6)
+                .padding(.top, 6)
+                .opacity(photoLeaving ? 0 : 1)
+                .scaleEffect(photoLeaving ? 0.92 : 1, anchor: .topLeading)
+                .transition(.opacity)
             }
             if let replyingTo {
                 HStack(spacing: 10) {
@@ -470,6 +540,7 @@ struct ShumConversationView: View {
                     .simultaneousGesture(TapGesture().onEnded { inputFocused = true })
                     .accessibilityIdentifier("shum.messageInput")
                     .onChange(of: draft.text) { value in updateTyping(for: value) }
+                stickersButton
                 Button {
                     guard canSend else { return }
                     if let pendingPhoto {
@@ -509,13 +580,17 @@ struct ShumConversationView: View {
         .onChange(of: pickedPhoto) { item in
             guard let item else { return }
             pickedPhoto = nil
+            // The capsule shows the photo coming at once; it may still be
+            // on its way from iCloud.
+            let token = UUID()
+            withoutAnimation { preparingPhoto = token }
+            inputFocused = true
             Task {
-                guard let data = try? await item.loadTransferable(type: Data.self),
-                      let image = UIImage(data: data) else {
-                    runtime.error = "Не получилось открыть фото".localized
-                    return
-                }
-                attachPhoto(image)
+                let data = try? await item.loadTransferable(type: Data.self)
+                let prepared = await Task.detached(priority: .userInitiated) {
+                    data.flatMap(ShumPhotoPreparation.prepare(data:))
+                }.value
+                finishPhoto(prepared, token: token)
             }
         }
         .fullScreenCover(isPresented: $takingPhoto) {
@@ -546,25 +621,59 @@ struct ShumConversationView: View {
     /// Prepares a chosen or taken photo off the main thread and puts it in
     /// the capsule; it leaves only with the send arrow.
     private func attachPhoto(_ image: UIImage) {
+        let token = UUID()
+        withoutAnimation { preparingPhoto = token }
+        inputFocused = true
         Task {
             let prepared = await Task.detached(priority: .userInitiated) {
                 ShumPhotoPreparation.prepare(image)
             }.value
-            guard let prepared else {
-                runtime.error = "Не получилось подготовить фото".localized
-                return
-            }
-            pendingPhoto = prepared
-            pendingPreview = UIImage(data: prepared.jpeg)
-            inputFocused = true
+            finishPhoto(prepared, token: token)
         }
+    }
+
+    /// Puts the prepared photo in the capsule, unless it was removed meanwhile.
+    private func finishPhoto(_ prepared: ShumPreparedPhoto?, token: UUID) {
+        guard preparingPhoto == token else { return }
+        withoutAnimation {
+            preparingPhoto = nil
+            if let prepared {
+                pendingPhoto = prepared
+                pendingPreview = UIImage(data: prepared.jpeg)
+            }
+        }
+        if prepared == nil { runtime.error = "Не получилось открыть фото".localized }
+    }
+
+    /// The photo fades where it is, then the capsule shrinks back smoothly
+    /// on its bottom edge.
+    private func removePendingPhoto() {
+        withAnimation(.easeOut(duration: 0.16)) { photoLeaving = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.17) {
+            withAnimation(.easeInOut(duration: 0.26)) {
+                pendingPhoto = nil
+                pendingPreview = nil
+                preparingPhoto = nil
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.27) { photoLeaving = false }
+        }
+    }
+
+    /// The capsule's own height changes at once; an animation inside it
+    /// would make the capsule jump while its row of the photo comes or goes.
+    private func withoutAnimation(_ change: () -> Void) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction, change)
     }
 
     /// Sends the photo in the capsule; text in the field is its caption.
     private func sendPending(_ photo: ShumPreparedPhoto) {
         guard runtime.sendPhoto(photo, caption: draft.text, to: peer.id) else { return }
-        pendingPhoto = nil
-        pendingPreview = nil
+        withoutAnimation {
+            pendingPhoto = nil
+            pendingPreview = nil
+        }
         typingPauseTask?.cancel()
         runtime.setTyping(false, for: peer.id)
         var transaction = Transaction()
@@ -742,7 +851,13 @@ struct ShumConversationView: View {
                 replyAuthor: message.reply.map(replyAuthor),
                 retry: { runtime.retry(message) },
                 reply: { beginReply(to: message) },
-                cancelSending: { runtime.cancelSending(message) },
+                // As in Telegram: from the contact's chat too, or only here.
+                deleteChoices: message.outgoing && !message.id.hasPrefix("legacy-") ? [
+                    ShumMenuChoice(title: String.localizedFormat("Удалить у меня и у %@".localized, name)) {
+                        runtime.delete(message, everyone: true)
+                    },
+                    ShumMenuChoice(title: "Удалить у меня".localized) { runtime.delete(message, everyone: false) },
+                ] : [],
                 react: runtime.isLegacyOnly(message.peerID) ? nil : { runtime.toggleReaction($0, on: message) },
                 reactionPeople: message.myReaction == nil && message.theirReaction == nil ? ShumReactionPeople()
                     : ShumReactionPeople(myName: runtime.nickname, myAvatar: runtime.profiles.own.avatar,

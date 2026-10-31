@@ -16,6 +16,8 @@ struct ShumPublicNote: Identifiable, Equatable {
     var reactions: [ShumPublicReaction] = []
     /// How many people had the open chat on screen since it was sent.
     var views = 0
+    /// A sticker from Shum's sets in place of the text.
+    var sticker: String?
 }
 
 /// One person's reaction on an open-chat note.
@@ -270,6 +272,10 @@ final class ShumMessageStore: ObservableObject {
         }
         self.request(request)
     }
+    /// Sends a sticker from Shum's sets to the open chat.
+    func broadcastSticker(_ sticker: String) {
+        request(["command": "broadcast", "sticker": sticker])
+    }
     /// Sets the user's reaction on an open-chat note; nil takes it back.
     func publicReaction(_ reaction: ShumReaction?, on note: ShumPublicNote) {
         var request: [String: Any] = ["command": "public_reaction", "note": note.noteID, "author": note.card.id]
@@ -326,6 +332,10 @@ final class ShumMessageStore: ObservableObject {
         ])
         return true
     }
+    /// Sends a sticker from Shum's sets by its name.
+    func sendSticker(_ sticker: String, to card: ShumContactCard) {
+        request(["command": "send_sticker", "contact": card.id, "sticker": sticker])
+    }
     /// The JPEG of message `id`'s photo, once every part of it is here.
     func photo(_ id: String) async throws -> Data {
         let answer = try await core.request(["command": "photo", "message": id])
@@ -350,11 +360,9 @@ final class ShumMessageStore: ObservableObject {
         request(["command": "reaction", "message": messageID, "reaction": reaction.rawValue])
         return true
     }
-    /// Withdraws a message that has not reached the contact yet.
-    @discardableResult
-    func cancelSending(_ messageID: String) -> Bool {
-        request(["command": "cancel", "message": messageID])
-        return true
+    /// Deletes an own sent message; with `everyone`, at the contact too.
+    func delete(_ messageID: String, everyone: Bool) {
+        request(["command": "delete", "message": messageID, "everyone": everyone])
     }
 
     func isBlocked(_ card: ShumContactCard) -> Bool { state.blocked?[card.id] != nil }
@@ -431,7 +439,8 @@ final class ShumMessageStore: ObservableObject {
                                   date: Date(timeIntervalSince1970: timestamp / 1000),
                                   outgoing: note["outgoing"] as? Bool == true,
                                   reply: reply, reactions: reactions,
-                                  views: note["views"] as? Int ?? 0)
+                                  views: note["views"] as? Int ?? 0,
+                                  sticker: note["sticker"] as? String)
         }
         var noteHash = Hasher()
         for note in notes {

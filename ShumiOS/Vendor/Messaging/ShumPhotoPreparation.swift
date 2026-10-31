@@ -22,13 +22,43 @@ enum ShumPhotoPreparation {
         var side = longSide
         while side >= 320 {
             guard let pixels = draw(image, longSide: side) else { return nil }
-            for quality in [0.8, 0.7, 0.6, 0.5, 0.42] {
-                guard let jpeg = encode(pixels, quality: quality) else { return nil }
-                if jpeg.count <= target {
-                    return ShumPreparedPhoto(jpeg: jpeg, width: pixels.width, height: pixels.height)
-                }
-            }
+            if let photo = fit(pixels) { return photo }
             side = (side * 0.8).rounded()
+        }
+        return nil
+    }
+
+    /// A picked file read already small: ImageIO decodes it straight at the
+    /// size a message carries, never at the camera's full size, so a large
+    /// photo is ready at once.
+    static func prepare(data: Data) -> ShumPreparedPhoto? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else {
+            return nil
+        }
+        var side = longSide
+        while side >= 320 {
+            let options: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: Int(side),
+            ]
+            guard let small = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary),
+                  // Drawn anew, opaque, so nothing of the original file travels on.
+                  let pixels = draw(UIImage(cgImage: small), longSide: side) else { return nil }
+            if let photo = fit(pixels) { return photo }
+            side = (side * 0.8).rounded()
+        }
+        return nil
+    }
+
+    /// The best quality within the target size, if any.
+    private static func fit(_ pixels: CGImage) -> ShumPreparedPhoto? {
+        for quality in [0.8, 0.7, 0.6, 0.5, 0.42] {
+            guard let jpeg = encode(pixels, quality: quality) else { return nil }
+            if jpeg.count <= target {
+                return ShumPreparedPhoto(jpeg: jpeg, width: pixels.width, height: pixels.height)
+            }
         }
         return nil
     }

@@ -22,6 +22,10 @@ struct ShumPublicChatView: View {
     /// The notes there were when the chat left its end; those that came
     /// since count over the scroll-down button.
     @State private var idsWhenScrolledUp: Set<String>?
+    /// Stickers in the keyboard's place, and a finger pulling them.
+    @State private var stickerMode: ShumBottomPanel = .hidden
+    @State private var stickerDrag: CGFloat = 0
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     /// The header pixels; they stir while anyone nearby types here.
     static let pixelSeed = "public-chat"
@@ -56,8 +60,14 @@ struct ShumPublicChatView: View {
                     composer: AnyView(composer),
                     accessory: !atBottom && !notes.isEmpty ? AnyView(scrollToBottomButton) : nil,
                     accessoryInset: capsuleInset,
+                    panel: AnyView(stickerPanel),
+                    panelMode: stickerMode,
+                    panelDrag: stickerDrag,
                     bottomChanged: { atBottom = $0 },
-                    tapped: { focused = false }
+                    tapped: {
+                        focused = false
+                        stickerMode = .hidden
+                    }
                 ) { index, width in
                     if index < notes.count {
                         row(at: index, in: notes, width: width)
@@ -75,6 +85,10 @@ struct ShumPublicChatView: View {
         }
         .shumOnChange(of: atBottom) { _, bottom in
             idsWhenScrolledUp = bottom ? nil : Set(notes.map(\.id))
+        }
+        // Typing takes the keyboard back from the stickers.
+        .shumOnChange(of: focused) { _, isFocused in
+            if isFocused { stickerMode = .hidden }
         }
         // Someone starts typing: their bubble joins the end of the chat, so
         // a chat already at its end follows it out from behind the capsule.
@@ -94,7 +108,14 @@ struct ShumPublicChatView: View {
         // Stays put like the encryption line under the chat list.
         .safeAreaInset(edge: .top, spacing: 0) { aboutLine }
         .navigationBarTitleDisplayMode(.inline)
+        // Our back button carries the unread count; the swipe back stays.
+        .navigationBarBackButtonHidden(true)
+        .background(ShumSwipeBack().frame(width: 0, height: 0))
         .toolbar {
+            // Messages waiting in personal chats, next to the back button.
+            ToolbarItem(placement: .navigationBarLeading) {
+                ShumBackButton(count: runtime.unreadElsewhere(than: nil)) { dismiss() }
+            }
             ToolbarItem(placement: .principal) { header }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button { showsPeople = true } label: {
@@ -231,12 +252,34 @@ struct ShumPublicChatView: View {
             .allowsHitTesting(false)
     }
 
+    private var stickerPanel: some View {
+        ShumStickerPanel(
+            expanded: stickerMode == .full,
+            toggleExpanded: { stickerMode = stickerMode == .full ? .compact : .full },
+            dragChanged: { stickerDrag = $0 },
+            dragEnded: { predicted in
+                switch stickerMode {
+                case .compact: stickerMode = predicted < -80 ? .full : predicted > 140 ? .hidden : .compact
+                case .full: stickerMode = predicted > 420 ? .hidden : predicted > 100 ? .compact : .full
+                case .hidden: break
+                }
+                stickerDrag = 0
+            }
+        ) { sticker in
+            store?.broadcastSticker(sticker)
+            scrollCommand = ShumTimelineCommand(target: .bottom)
+        }
+    }
+
     // MARK: Timeline
 
     private func message(for note: ShumPublicNote) -> ShumMessage {
         let mine = note.reactions.first { $0.personID == ownID }?.reaction
         var groups: [ShumGroupReaction] = []
-        for reaction in ShumReaction.allCases {
+        // Each reaction once, in the order people left them.
+        var kinds: [ShumReaction] = []
+        for mark in note.reactions where !kinds.contains(mark.reaction) { kinds.append(mark.reaction) }
+        for reaction in kinds {
             let marks = note.reactions.filter { $0.reaction == reaction }
             guard !marks.isEmpty else { continue }
             groups.append(ShumGroupReaction(
@@ -254,6 +297,7 @@ struct ShumPublicChatView: View {
                                   status: note.views > 0 ? .read(by: "", at: note.date) : .delivered(to: "", at: note.date),
                                   reply: note.reply, myReaction: mine, groupReactions: groups)
         message.views = note.outgoing ? note.views : nil
+        message.sticker = note.sticker
         return message
     }
 
@@ -442,6 +486,16 @@ struct ShumPublicChatView: View {
                 .disabled(!runtime.bluetoothReady)
                 .accessibilityIdentifier("shum.publicInput")
                 .onChange(of: draft.text) { value in updateTyping(for: value) }
+                ShumStickersButton(open: stickerMode != .hidden, accent: palette.accent) {
+                    if stickerMode != .hidden {
+                        stickerMode = .hidden
+                        focused = true
+                    } else {
+                        focused = false
+                        stickerMode = .compact
+                    }
+                }
+                .disabled(!runtime.bluetoothReady)
                 Button(action: send) {
                     ShumSendButtonLabel(enabled: canSend)
                 }

@@ -33,6 +33,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     private var notifiedIncomingMessageIDs: Set<String> = []
     private var notifiedPublicNoteIDs: Set<String> = []
     private var notifiedPublicReactions: Set<String> = []
+    private var notifiedReactions: Set<String> = []
     private var notifiedInvitationIDs: Set<String> = []
     private var notifiedOutgoingInvitationIDs: Set<String> = []
     private var notifiedNearbyPeerIDs: Set<String> = []
@@ -490,6 +491,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         notifiedIncomingMessageIDs.removeAll()
         notifiedPublicNoteIDs.removeAll()
         notifiedPublicReactions.removeAll()
+        notifiedReactions.removeAll()
         notifiedInvitationIDs.removeAll()
         notifiedOutgoingInvitationIDs.removeAll()
         notifiedNearbyPeerIDs.removeAll()
@@ -526,6 +528,13 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         let outgoingInvitationIDs = Set(
             invitationStates.filter { $0.value.phase == .outgoingPending }.keys
         )
+        // Contacts' reactions on the user's own messages, one key per reaction.
+        let reactions = permanent.state.messages.filter(\.outgoing).flatMap { message in
+            (permanent.state.reactions?[message.id] ?? [:]).compactMap { person, mark in
+                mark.reaction.flatMap { person == permanent.ownCard.id ? nil : (message, person, $0) }
+            }
+        }
+        let reactionKeys = Set(reactions.map { "\($0.0.id)|\($0.1)|\($0.2.rawValue)" })
         let publicNotes = permanent.publicNotes.filter { !$0.outgoing }
         let publicNoteIDs = Set(publicNotes.map(\.id))
         // Reactions of others on the user's own notes, one key per reaction.
@@ -549,8 +558,19 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
                     id: message.id,
                     peerID: message.envelope.sender.peerID.id,
                     senderName: message.envelope.sender.name,
-                    text: message.text
+                    text: message.text,
+                    answering: message.reply?.text
                 )
+            }
+            for (message, person, reaction) in reactions {
+                let key = "\(message.id)|\(person)|\(reaction.rawValue)"
+                guard !notifiedReactions.contains(key),
+                      !ShumPushService.shared.consumeRemoteEvent(message.id),
+                      let card = permanent.state.contacts.first(where: { $0.id == person })?.card
+                else { continue }
+                AppNotificationRouter.shared.scheduleReaction(
+                    id: key, peerID: card.peerID.id, senderName: card.name,
+                    reaction: ShumReactionArt.name(for: reaction), message: message.text)
             }
             for invitation in invitations where
                 !notifiedInvitationIDs.contains(invitation.id) {
@@ -596,6 +616,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         }
         notifiedPublicNoteIDs = publicNoteIDs
         notifiedPublicReactions = publicReactionKeys
+        notifiedReactions = reactionKeys
         notifiedIncomingMessageIDs = incomingMessageIDs
         notifiedInvitationIDs = invitationIDs
         notifiedOutgoingInvitationIDs = outgoingInvitationIDs
@@ -628,6 +649,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         notifiedIncomingMessageIDs.removeAll()
         notifiedPublicNoteIDs.removeAll()
         notifiedPublicReactions.removeAll()
+        notifiedReactions.removeAll()
         notifiedInvitationIDs.removeAll()
         notifiedOutgoingInvitationIDs.removeAll()
         notifiedNearbyPeerIDs.removeAll()

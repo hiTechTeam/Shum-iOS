@@ -39,6 +39,11 @@ struct ShumTimelinePosition: Codable {
 
 /// UIKit owns scrolling and navigation geometry. The existing SwiftUI bubbles,
 /// including their long-press and reply gestures, are hosted unchanged in rows.
+/// A panel in the keyboard's place under the composer, such as stickers.
+enum ShumBottomPanel: Equatable {
+    case hidden, compact, full
+}
+
 struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     @Environment(\.self) private var environment
     let items: [ShumTimelineItem]
@@ -52,6 +57,11 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
     /// Distance from the composer's top to its capsule. Lines shown above the
     /// capsule, such as "add to contacts", must not lift the accessory.
     var accessoryInset: CGFloat = 8
+    /// Shown in the keyboard's place, as tall as the keyboard was, or up to
+    /// the top; `panelDrag` follows a finger pulling it.
+    var panel: AnyView? = nil
+    var panelMode: ShumBottomPanel = .hidden
+    var panelDrag: CGFloat = 0
     let bottomChanged: (Bool) -> Void
     let tapped: () -> Void
     @ViewBuilder let row: (Int, CGFloat) -> Row
@@ -65,6 +75,7 @@ struct ShumConversationTimeline<Row: View>: UIViewControllerRepresentable {
         controller.tapped = tapped
         controller.updateComposer(composer.map { AnyView($0.environment(\.self, environment)) })
         controller.updateAccessory(accessory.map { AnyView($0.environment(\.self, environment)) }, inset: accessoryInset)
+        controller.updatePanel(panel.map { AnyView($0.environment(\.self, environment)) }, mode: panelMode, drag: panelDrag)
         controller.viewportInsets = UIEdgeInsets(top: contentInsets.top, left: 0, bottom: contentInsets.bottom + 10, right: 0)
         controller.update(items: items, appearanceKey: "\(appearanceKey)-\(environment.dynamicTypeSize)-\(environment.locale.identifier)", command: command) { index, width in
             AnyView(row(index, width).environment(\.self, environment))
@@ -94,6 +105,13 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     private var composerBottom: NSLayoutConstraint?
     private var keyboardOverlap: CGFloat = 0
     private var keyboardObserver: NSObjectProtocol?
+    private var panelHost: UIHostingController<AnyView>?
+    private var panelHeight: NSLayoutConstraint?
+    private var panelMode: ShumBottomPanel = .hidden
+    private var panelDrag: CGFloat = 0
+    /// The keyboard's last height, so the panel takes its place exactly.
+    private var lastKeyboardHeight: CGFloat = 0
+    private var hidePanelWork: DispatchWorkItem?
     private var accessoryHost: UIHostingController<AnyView>?
     private var accessoryBottom: NSLayoutConstraint?
     static let accessoryGap: CGFloat = 8
@@ -183,6 +201,8 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         let bottom = followsKeyboardNotifications
             ? host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -keyboardBottomInset)
             : host.view.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+        // A panel in the keyboard's place may hold the composer higher.
+        bottom.priority = .defaultHigh
         NSLayoutConstraint.activate([
             host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -190,11 +210,85 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         ])
         host.didMove(toParent: self)
         composerHost = host
-        if followsKeyboardNotifications {
-            composerBottom = bottom
-            keyboardObserver = NotificationCenter.default.addObserver(
-                forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main
-            ) { [weak self] note in self?.keyboardWillChangeFrame(note) }
+        if followsKeyboardNotifications { composerBottom = bottom }
+        keyboardObserver = NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main
+        ) { [weak self] note in self?.keyboardWillChangeFrame(note) }
+    }
+
+    /// The panel sits on the screen's bottom edge under the composer, which
+    /// stands on whichever is higher, the keyboard or the panel. Opened in
+    /// the keyboard's place it is as tall as the keyboard, so nothing moves.
+    func updatePanel(_ content: AnyView?, mode: ShumBottomPanel, drag: CGFloat) {
+        guard let content, let composerHost else { return }
+        if let panelHost {
+            panelHost.rootView = content
+        } else {
+            let host = UIHostingController(rootView: content)
+            host.view.backgroundColor = .clear
+            host.view.translatesAutoresizingMaskIntoConstraints = false
+            host.view.clipsToBounds = true
+            addChild(host)
+            view.insertSubview(host.view, belowSubview: composerHost.view)
+            let height = host.view.heightAnchor.constraint(equalToConstant: 0)
+            NSLayoutConstraint.activate([
+                host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                height,
+                composerHost.view.bottomAnchor.constraint(lessThanOrEqualTo: host.view.topAnchor)
+            ])
+            host.didMove(toParent: self)
+            panelHost = host
+            panelHeight = height
+        }
+        guard mode != panelMode || drag != panelDrag else { return }
+        let previous = panelMode
+        panelMode = mode
+        panelDrag = drag
+        hidePanelWork?.cancel()
+        hidePanelWork = nil
+        if mode == .hidden {
+            guard previous != .hidden else { return }
+            // The keyboard may be coming back: the panel waits for it, and
+            // otherwise goes down by itself.
+            let work = DispatchWorkItem { [weak self] in self?.setPanel(0, animated: true) }
+            hidePanelWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+            return
+        }
+        // In the keyboard's place, or following a finger: at once.
+        let replacesKeyboard = previous == .hidden && keyboardOverlap > view.safeAreaInsets.bottom + 40
+        setPanel(targetPanelHeight, animated: !replacesKeyboard && drag == 0)
+    }
+
+    private var targetPanelHeight: CGFloat {
+        // Up to the top of the history: below the bar and any line under it,
+        // such as the chat's protection.
+        let top = max(view.safeAreaInsets.top, viewportInsets.top)
+        let full = max(0, view.bounds.height - top - composerMeasured - 8)
+        let base: CGFloat
+        switch panelMode {
+        case .hidden: base = 0
+        case .compact: base = min(full, max(lastKeyboardHeight, 300 + view.safeAreaInsets.bottom))
+        case .full: base = full
+        }
+        return min(full, max(0, base - panelDrag))
+    }
+
+    private func setPanel(_ height: CGFloat, animated: Bool) {
+        guard let panelHeight else { return }
+        guard animated else {
+            UIView.performWithoutAnimation {
+                panelHeight.constant = height
+                view.layoutIfNeeded()
+            }
+            return
+        }
+        UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0,
+                       options: [.allowUserInteraction, .beginFromCurrentState]) {
+            panelHeight.constant = height
+            self.view.layoutIfNeeded()
         }
     }
 
@@ -205,12 +299,25 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
     }
 
     private func keyboardWillChangeFrame(_ note: Notification) {
-        guard let composerBottom, let window = view.window,
+        guard let window = view.window,
               let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
         let frame = view.convert(end, from: window.screen.coordinateSpace)
         keyboardOverlap = max(0, view.bounds.maxY - frame.minY)
         let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
         let curve = note.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt ?? 7
+        if keyboardOverlap > view.safeAreaInsets.bottom + 40 {
+            lastKeyboardHeight = keyboardOverlap
+            // The keyboard comes back over the panel, which leaves once covered.
+            if let work = hidePanelWork {
+                work.cancel()
+                hidePanelWork = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+                    guard self?.panelMode == .hidden else { return }
+                    self?.setPanel(0, animated: false)
+                }
+            }
+        }
+        guard let composerBottom else { return }
         UIView.animate(withDuration: duration, delay: 0, options: UIView.AnimationOptions(rawValue: curve << 16)) {
             composerBottom.constant = -self.keyboardBottomInset
             self.view.layoutIfNeeded()
@@ -235,6 +342,9 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
                     composerMeasured = height
                     if let composerHeight { composerHeight.constant = height } else { view.setNeedsLayout() }
                 }
+                // Until the hosting view takes a shorter composer's height, the
+                // composer stays on its bottom edge instead of centred in it.
+                .frame(maxHeight: .infinity, alignment: .bottom)
         )
     }
 

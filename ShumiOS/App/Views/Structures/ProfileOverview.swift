@@ -933,8 +933,15 @@ private struct ShumAppIconChoice: View {
                 .fill(icon.backgroundColor)
                 .frame(width: 60, height: 60)
                 .overlay {
-                    ShumLogoMark(color: icon.markColor)
-                        .frame(width: 39, height: 39)
+                    if let preview = icon.preview {
+                        Image(preview)
+                            .resizable()
+                            .interpolation(.none)
+                            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    } else {
+                        ShumLogoMark(color: icon.markColor)
+                            .frame(width: 39, height: 39)
+                    }
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 15, style: .continuous)

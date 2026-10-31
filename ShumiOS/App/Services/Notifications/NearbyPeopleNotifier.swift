@@ -525,17 +525,29 @@ final class AppNotificationRouter: NSObject,
         UNUserNotificationCenter.current().delegate = self
     }
 
+    /// A message from a contact; an answer says so and what it answers.
     func scheduleMessage(
         id: String,
         peerID: String,
         senderName: String,
-        text: String
+        text: String,
+        answering quote: String? = nil
     ) {
         scheduleChatNotification(
             identifier: "shum.message.\(id)",
             peerID: peerID,
-            title: senderName,
-            body: text
+            title: quote == nil ? senderName : String.localizedFormat("%@ · ответ".localized, senderName),
+            body: quote.map { text + "\n" + String.localizedFormat("в ответ на «%@»".localized, Self.excerpt($0)) } ?? text
+        )
+    }
+
+    /// A contact reacted to the user's own message.
+    func scheduleReaction(id: String, peerID: String, senderName: String, reaction: String, message: String) {
+        scheduleChatNotification(
+            identifier: "shum.reaction.\(id)",
+            peerID: peerID,
+            title: String.localizedFormat("%@ · реакция".localized, senderName),
+            body: String.localizedFormat("%@ на «%@»".localized, reaction, Self.excerpt(message))
         )
     }
 

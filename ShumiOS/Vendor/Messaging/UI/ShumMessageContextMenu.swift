@@ -14,6 +14,8 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
     let cancelSending: (() -> Void)?
     /// What the withdrawing action says.
     var cancelTitle = "Отменить отправку".localized
+    /// Where to delete the message; the withdrawing action then offers them.
+    var deleteChoices: [ShumMenuChoice] = []
     /// The user's current reaction; `react` is nil where reactions are not offered.
     let reaction: ShumReaction?
     let react: ((ShumReaction) -> Void)?
@@ -26,6 +28,7 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
     func updateUIView(_ view: MessageMenuView, context: Context) {
         view.update(content: AnyView(content().environment(\.self, environment)),
                     shape: shape, reply: reply, copy: copy, cancelSending: cancelSending, cancelTitle: cancelTitle,
+                    deleteChoices: deleteChoices,
                     reaction: reaction, react: react, dragChanged: dragChanged, dragEnded: dragEnded)
     }
 
@@ -48,6 +51,7 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
         private var copy: () -> Void = {}
         private var cancelSending: (() -> Void)?
         private var cancelTitle = ""
+        private var deleteChoices: [ShumMenuChoice] = []
         private var reaction: ShumReaction?
         private var react: ((ShumReaction) -> Void)?
         private var dragChanged: (CGFloat) -> Void = { _ in }
@@ -90,7 +94,8 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
         }
 
         func update(content: AnyView, shape: ShumBubbleShape, reply: @escaping () -> Void, copy: @escaping () -> Void,
-                    cancelSending: (() -> Void)?, cancelTitle: String, reaction: ShumReaction?,
+                    cancelSending: (() -> Void)?, cancelTitle: String, deleteChoices: [ShumMenuChoice],
+                    reaction: ShumReaction?,
                     react: ((ShumReaction) -> Void)?,
                     dragChanged: @escaping (CGFloat) -> Void, dragEnded: @escaping (CGFloat, Bool) -> Void) {
             self.shape = shape
@@ -98,6 +103,7 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
             self.copy = copy
             self.cancelSending = cancelSending
             self.cancelTitle = cancelTitle
+            self.deleteChoices = deleteChoices
             self.reaction = reaction
             self.react = react
             self.dragChanged = dragChanged
@@ -236,6 +242,7 @@ struct ShumMessageContextMenu<Content: View>: UIViewRepresentable {
             finishPressAnimation()
             let menu = ShumExtractedMessageMenu(source: self, bubble: bubbleView, outgoing: shape.outgoing,
                 reply: reply, copy: copy, cancelSending: cancelSending, cancelTitle: cancelTitle,
+                deleteChoices: deleteChoices,
                 reaction: reaction, react: react) { [weak self] in
                     guard let self else { return }
                     if #available(iOS 26.0, *) {

@@ -10,6 +10,19 @@ final class ShumAppIconStore: ObservableObject {
         case lightPink
         case monochromeLight
         case monochromeDark
+        // Shum's cloud in pixels, from the design: on a mosaic or a rainbow,
+        // or the cloud made of them.
+        case pixelMosaicWhite
+        case pixelMosaicGreen
+        case pixelWhiteMosaic
+        case pixelBlackMosaic
+        case pixelGreenMosaic
+        case pixelRainbowWhite
+        case pixelRainbowGreen
+        case pixelRainbowBlack
+        case pixelWhiteRainbow
+        case pixelBlackRainbow
+        case pixelGreenRainbow
 
         var id: String { rawValue }
 
@@ -21,6 +34,7 @@ final class ShumAppIconStore: ObservableObject {
             case .lightPink: "appIconLightPink".localized
             case .monochromeLight: "appIconMonoLight".localized
             case .monochromeDark: "appIconMonoDark".localized
+            default: "appIcon\(rawValue.prefix(1).uppercased())\(rawValue.dropFirst())".localized
             }
         }
 
@@ -32,7 +46,14 @@ final class ShumAppIconStore: ObservableObject {
             case .lightPink: "AppIconLightPink"
             case .monochromeLight: "AppIconMonoLight"
             case .monochromeDark: "AppIconMono"
+            default: "AppIcon\(rawValue.prefix(1).uppercased())\(rawValue.dropFirst())"
             }
+        }
+
+        /// A picture of the pixel icons for the picker; the others are drawn.
+        var preview: String? {
+            guard let name = alternateName, name.hasPrefix("AppIconPixel") else { return nil }
+            return "AppIconPreview" + name.dropFirst("AppIcon".count)
         }
 
         var backgroundColor: Color {
@@ -57,6 +78,7 @@ final class ShumAppIconStore: ObservableObject {
                 Color(uiColor: UIColor(red: 22 / 255, green: 23 / 255, blue: 22 / 255, alpha: 1))
             case .monochromeDark:
                 Color(uiColor: UIColor(white: 245 / 255, alpha: 1))
+            default: .clear
             }
         }
     }

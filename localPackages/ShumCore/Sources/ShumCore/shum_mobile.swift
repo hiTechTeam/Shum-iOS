@@ -1575,9 +1575,6 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         return seq
     }
 }
-/**
- * The v1 pixel avatar as 36x36 RGBA bytes.
- */
 public func avatarPixels(seed: UInt64) -> Data {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_shum_mobile_fn_func_avatar_pixels(
@@ -1616,6 +1613,40 @@ public func openBackup(file: Data, password: String)throws  -> MobileBackup {
 })
 }
 /**
+ * The v1 pixel avatar as 36x36 RGBA bytes.
+ * A sticker's or reaction's picture as RGBA bytes, row by row; its side
+ * is the square root of a quarter of the length. Empty for a name no set
+ * has.
+ */
+public func reactionPixels(kind: String) -> Data {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_shum_mobile_fn_func_reaction_pixels(
+        FfiConverterString.lower(kind),$0
+    )
+})
+}
+/**
+ * The sets as JSON, reactions first: `[{"section", "title", "reactions",
+ * "kinds": [{"id", "emoji", "word"}]}]`; titles are Russian, for clients
+ * to translate.
+ */
+public func reactionPool() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_shum_mobile_fn_func_reaction_pool($0
+    )
+})
+}
+/**
+ * A set's picture for a list of sets, as RGBA bytes.
+ */
+public func stickerSetPixels(set: String) -> Data {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_shum_mobile_fn_func_sticker_set_pixels(
+        FfiConverterString.lower(set),$0
+    )
+})
+}
+/**
  * Writes a restored profile state into a new database file, sealed with
  * the restored storage key. An existing database is refused.
  */
@@ -1644,7 +1675,7 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_shum_mobile_checksum_func_avatar_pixels() != 34386) {
+    if (uniffi_shum_mobile_checksum_func_avatar_pixels() != 42969) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_func_backup_summary() != 5331) {
@@ -1654,6 +1685,15 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_func_open_backup() != 55062) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_func_reaction_pixels() != 30131) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_func_reaction_pool() != 56278) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_func_sticker_set_pixels() != 48603) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_func_write_database() != 46585) {
