@@ -386,7 +386,20 @@ struct ShumStoredMessage: Codable, Equatable, Identifiable {
     var deliveredAt: Date?
     var readAt: Date?
     var reply: ShumReplyReference? = nil
+    /// The photo Shum-Core stored with the message, without its key here.
+    var photo: ShumPhotoInfo? = nil
+    /// Its parts have not all come yet.
+    var photoMissing: Bool? = nil
     var id: String { envelope.id }
+}
+/// A message's photo as Shum-Core keeps it (protocol section 04.9). The
+/// JPEG itself is read through the core only when shown.
+struct ShumPhotoInfo: Codable, Equatable {
+    var size: Int
+    var width: Int
+    var height: Int
+    /// Whether the message text is a caption rather than a stand-in.
+    var caption: Bool
 }
 struct ShumRelayCopy: Equatable, Codable {
     var envelope: ShumEnvelope

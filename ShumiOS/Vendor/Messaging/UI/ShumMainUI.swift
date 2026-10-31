@@ -23,7 +23,7 @@ struct ShumDestinationUI: View {
             case .conversation(let peer):
                 ShumConversationView(runtime: runtime, peer: peer)
             case .newChat: ShumContactsView(runtime: runtime) { open(.conversation($0)) }
-            case .publicChat: ShumPublicChatView(runtime: runtime)
+            case .publicChat: ShumPublicChatView(runtime: runtime, open: open)
             case .requests: ShumContactRequestsView(runtime: runtime) { open(.conversation($0)) }
             case .ownQR:
                 if let card = runtime.permanent?.ownCard {
@@ -58,17 +58,18 @@ struct ShumChatsUI: View {
         return runtime.permanent?.isPinned(card, in: folder.pinKey) == true
     }
 
-    private var publicUnread: Int { runtime.permanent?.publicUnread ?? 0 }
+    private var publicUnread: Int { runtime.publicUnread }
 
     /// Opens the open chat; no haptic, as with any other navigation.
     private func publicChatButton(drawsBadge: Bool) -> some View {
         Button {
             open(.publicChat)
         } label: {
-            // The count stays inside the button's frame so nothing clips it.
+            // A fixed frame: the icon stays centred whether or not the count
+            // shows, and the count stays inside it so nothing clips it.
             ZStack(alignment: .topTrailing) {
                 Image(systemName: "bubble.left.and.bubble.right.fill")
-                    .padding(drawsBadge && publicUnread > 0 ? EdgeInsets(top: 7, leading: 0, bottom: 0, trailing: 10) : EdgeInsets())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if drawsBadge, publicUnread > 0 {
                     Text(publicUnread > 99 ? "99+" : "\(publicUnread)")
                         .font(.system(size: 11, weight: .bold))
@@ -80,6 +81,7 @@ struct ShumChatsUI: View {
                         .accessibilityHidden(true)
                 }
             }
+            .frame(width: drawsBadge ? 44 : nil, height: drawsBadge ? 34 : nil)
         }
         .tint(.primary)
         .accessibilityLabel("Общий чат".localized)
@@ -132,7 +134,8 @@ struct ShumChatsUI: View {
             // that would clip a drawn one.
             if #available(iOS 26.0, *) {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    publicChatButton(drawsBadge: false).badge(publicUnread)
+                    // The toolbar keeps its badge until the item is made anew.
+                    publicChatButton(drawsBadge: false).badge(publicUnread).id(publicUnread)
                 }
             } else {
                 ToolbarItem(placement: .navigationBarLeading) { publicChatButton(drawsBadge: true) }

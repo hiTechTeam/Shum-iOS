@@ -1,4 +1,5 @@
 "UTTypeDescription" = "Shum 备份";
 "NSBluetoothAlwaysUsageDescription" = "蓝牙让 Shum 能够发现附近的用户，并在扫描开启时让其他人发现你的个人资料。";
-"NSCameraUsageDescription" = "相机用于扫描 Shum 二维码。";
 "NSFaceIDUsageDescription" = "面容 ID 用于保护你的对话和 Shum 设置。";
+"NSCameraUsageDescription" = "使用相机扫描 Shum 二维码，并为聊天拍摄照片。";
+"NSPhotoLibraryAddUsageDescription" = "Shum 只会把你选择保存的聊天照片存入“照片”。";

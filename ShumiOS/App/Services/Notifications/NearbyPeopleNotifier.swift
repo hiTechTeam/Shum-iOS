@@ -539,6 +539,61 @@ final class AppNotificationRouter: NSObject,
         )
     }
 
+    /// Notifications of the open chat are on unless turned off in settings.
+    nonisolated static let publicChatNotificationsKey = "shum.publicChat.notifications"
+    static var publicChatNotificationsEnabled: Bool {
+        UserDefaults.standard.object(forKey: publicChatNotificationsKey) as? Bool ?? true
+    }
+    private var lastPublicChatSound = Date.distantPast
+
+    /// A note in the open chat while it is not on screen; an answer says so
+    /// and what it answers.
+    func schedulePublicNote(id: String, authorName: String, text: String, answering quote: String?) {
+        guard let quote else {
+            schedulePublic(id: id, subtitle: authorName, body: text)
+            return
+        }
+        schedulePublic(
+            id: id,
+            subtitle: String.localizedFormat("%@ · ответ".localized, authorName),
+            body: text + "\n" + String.localizedFormat("в ответ на «%@»".localized, Self.excerpt(quote)))
+    }
+
+    /// Someone reacted to the user's own note in the open chat.
+    func schedulePublicReaction(id: String, authorName: String, reaction: String, note: String) {
+        schedulePublic(
+            id: id,
+            subtitle: String.localizedFormat("%@ · реакция".localized, authorName),
+            body: String.localizedFormat("%@ на «%@»".localized, reaction, Self.excerpt(note)))
+    }
+
+    private static func excerpt(_ text: String) -> String {
+        let line = text.replacingOccurrences(of: "\n", with: " ")
+        return line.count > 60 ? String(line.prefix(60)) + "…" : line
+    }
+
+    /// Open chat notifications gather in one group; within a minute of one,
+    /// the next comes without a sound.
+    private func schedulePublic(id: String, subtitle: String, body: String) {
+        let center = UNUserNotificationCenter.current()
+        let sounds = Date().timeIntervalSince(lastPublicChatSound) > 60
+        if sounds { lastPublicChatSound = Date() }
+        Task {
+            let settings = await center.notificationSettings()
+            guard NearbyPeopleNotifier.canDeliverNotifications(settings.authorizationStatus) else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "Общий чат".localized
+            content.subtitle = subtitle
+            content.body = body
+            content.threadIdentifier = "shum.publicChat"
+            content.userInfo = [Self.routeKey: Self.chatRoute, Self.peerKey: ShumPublicChatView.pixelSeed]
+            if sounds, settings.soundSetting == .enabled {
+                content.sound = .default
+            }
+            try? await center.add(UNNotificationRequest(identifier: "shum.public.\(id)", content: content, trigger: nil))
+        }
+    }
+
     func scheduleInvitation(peerID: String, senderName: String) {
         scheduleChatNotification(
             identifier: "shum.invitation.\(peerID)",

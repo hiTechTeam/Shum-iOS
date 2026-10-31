@@ -32,6 +32,26 @@ struct ShumMessage: Identifiable {
     /// Reactions from many people, as in the open chat. When present they
     /// replace the two-person chips above.
     var groupReactions: [ShumGroupReaction] = []
+    var photo: ShumMessagePhoto? = nil
+    /// How many saw it, in the open chat; shown by an eye instead of a name.
+    var views: Int? = nil
+}
+
+extension ShumMessage {
+    /// How the message reads in a list or a quote: a photo says so.
+    var preview: String {
+        guard photo != nil else { return text }
+        return text.isEmpty ? "Фото".localized : "Фото".localized + " · " + text
+    }
+}
+
+/// A photo in a message; its bytes come from Shum-Core when shown.
+struct ShumMessagePhoto: Hashable {
+    enum State: Hashable { case ready, loading, missing }
+    let width: Int
+    let height: Int
+    let caption: Bool
+    let state: State
 }
 
 struct ShumReactionPerson: Hashable {
@@ -57,6 +77,12 @@ final class ShumRuntime: ObservableObject {
     @Published private(set) var peers: [ShumPeer] = []
     @Published private var nearbyDistances: [PeerID: Int] = [:]
     @Published private(set) var messages: [ShumMessage] = []
+    /// New notes in the open chat, so its badge follows them at once.
+    @Published private(set) var publicUnread = 0
+    /// Grows whenever the open chat changes: who types, who is there, its
+    /// notes and their views. Its screen redraws on it at once.
+    @Published private(set) var publicChatChanges = 0
+    private var publicChatShown: [String] = []
     @Published private(set) var unreadMessageIDs: Set<String> = []
     @Published private(set) var nickname: String
     @Published private(set) var bluetoothState: CBManagerState = .unknown
@@ -442,6 +468,15 @@ final class ShumRuntime: ObservableObject {
     private func syncPermanentMessages() {
         guard let permanent else { return }
         internetConnected = permanent.internetConnected
+        if publicUnread != permanent.publicUnread { publicUnread = permanent.publicUnread }
+        let publicChat = permanent.publicTypers.map(\.id) + ["|"] + permanent.publicPeople.map(\.id) + ["|"]
+            + permanent.publicNotes.map { note in
+                "\(note.id):\(note.views):" + note.reactions.map { $0.personID + $0.reaction.rawValue }.joined(separator: ",")
+            }
+        if publicChat != publicChatShown {
+            publicChatShown = publicChat
+            publicChatChanges &+= 1
+        }
         showCoreNearby(permanent)
         var typingSeeds = Set(permanent.typingCards.map { $0.peerID.id })
         if !permanent.publicTypers.isEmpty { typingSeeds.insert(ShumPublicChatView.pixelSeed) }
@@ -485,13 +520,22 @@ final class ShumRuntime: ObservableObject {
             case .expired: status = .failed(reason: "Срок доставки истёк".localized)
             case .cancelled: status = .failed(reason: "Отменено после блокировки".localized)
             }
-            let message = ShumMessage(id: stored.id, peerID: card.peerID, text: stored.text,
+            let photo = stored.photo.map { info in
+                let expired = Double(stored.envelope.expiresAt) / 1000 <= Date().timeIntervalSince1970
+                return ShumMessagePhoto(
+                    width: info.width, height: info.height, caption: info.caption,
+                    state: stored.photoMissing == true ? (expired ? .missing : .loading) : .ready)
+            }
+            // Without a caption the text only stands in for the photo elsewhere.
+            let text = photo.map { $0.caption ? stored.text : "" } ?? stored.text
+            var message = ShumMessage(id: stored.id, peerID: card.peerID, text: text,
                 date: Date(timeIntervalSince1970: Double(stored.envelope.timestamp) / 1000), outgoing: stored.outgoing,
                 status: status, attempts: stored.attempts,
                 deliveryLabel: stored.status == .forwarding && stored.deliveryTransport == "mesh" ? "Передаётся через mesh".localized : stored.status.label,
                 reply: stored.reply,
                 myReaction: permanent.reaction(of: ownID, on: stored.id),
                 theirReaction: permanent.reaction(of: cardID, on: stored.id))
+            message.photo = photo
             projectedPermanentMessages[stored.id] = (stored, message)
             return message
         }
@@ -560,6 +604,7 @@ final class ShumRuntime: ObservableObject {
         if arguments.contains("-ShumPreviewInvitationReceived") { return .incomingPending }
         if arguments.contains("-ShumPreviewInvitationDeclined") { return .declinedByPeer }
         if arguments.contains("-ShumPreviewInvitationRecover") { return .declinedLocally }
+        if arguments.contains("-ShumPreviewInvitationAccepted") { return .accepted }
         #endif
         guard let permanent else { return .accepted }
         guard let card = permanent.card(for: peer) else { return .ready }
@@ -616,9 +661,32 @@ final class ShumRuntime: ObservableObject {
         let reply = original.map {
             ShumReplyReference(messageID: $0.id,
                 senderID: $0.outgoing ? permanent.ownCard.id : card.id,
-                text: $0.text)
+                text: $0.preview)
         }
         return permanent.send(text, to: card, reply: reply)
+    }
+
+    /// Sends a prepared photo (see ShumPhotoPreparation) with an optional caption.
+    func sendPhoto(_ photo: ShumPreparedPhoto, caption: String?, to peer: PeerID) -> Bool {
+        guard isReady, let permanent else { return false }
+        guard let card = permanent.card(for: peer) else { error = "Дождитесь проверки профиля собеседника.".localized; return false }
+        let caption = caption.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
+        return permanent.sendPhoto(photo.jpeg, width: photo.width, height: photo.height,
+                                   caption: caption, standIn: "Фото".localized, to: card)
+    }
+
+    private let photoCache = NSCache<NSString, UIImage>()
+    /// The photo, if it was already read: a row drawn again shows it at once.
+    func cachedPhoto(for messageID: String) -> UIImage? {
+        photoCache.object(forKey: messageID as NSString)
+    }
+    /// The photo of `message`, read from Shum-Core once and then kept in memory.
+    func photo(for messageID: String) async -> UIImage? {
+        if let image = photoCache.object(forKey: messageID as NSString) { return image }
+        guard let permanent, let data = try? await permanent.photo(messageID),
+              let image = UIImage(data: data) else { return nil }
+        photoCache.setObject(image, forKey: messageID as NSString)
+        return image
     }
 
     /// Sets the user's one reaction on a message; the same reaction again takes it back.

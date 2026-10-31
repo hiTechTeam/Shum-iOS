@@ -7,6 +7,8 @@ import BitFoundation
 /// quotes, reactions and withdrawing own notes, on the same timeline.
 struct ShumPublicChatView: View {
     @ObservedObject var runtime: ShumRuntime
+    /// Opens a chat with someone from the list of people here.
+    var open: (ShumUIRoute) -> Void = { _ in }
     @Environment(\.shumThemePalette) private var palette
     @State private var draft = ShumComposerDraft()
     @FocusState private var focused: Bool
@@ -17,6 +19,9 @@ struct ShumPublicChatView: View {
     @State private var atBottom = true
     @State private var scrollCommand: ShumTimelineCommand?
     @State private var typingPauseTask: Task<Void, Never>?
+    /// The notes there were when the chat left its end; those that came
+    /// since count over the scroll-down button.
+    @State private var idsWhenScrolledUp: Set<String>?
     @Environment(\.scenePhase) private var scenePhase
     /// The header pixels; they stir while anyone nearby types here.
     static let pixelSeed = "public-chat"
@@ -43,7 +48,7 @@ struct ShumPublicChatView: View {
         GeometryReader { geometry in
             ZStack {
                 ShumConversationTimeline(
-                    items: notes.indices.map { item(at: $0, in: notes) },
+                    items: notes.indices.map { item(at: $0, in: notes) } + typingItem,
                     storageKey: "shum.publicChat.position.\(ownID ?? "local")",
                     appearanceKey: "\(palette.accentUIColor)-\(palette.colorScheme)",
                     command: scrollCommand,
@@ -54,7 +59,11 @@ struct ShumPublicChatView: View {
                     bottomChanged: { atBottom = $0 },
                     tapped: { focused = false }
                 ) { index, width in
-                    row(at: index, in: notes, width: width)
+                    if index < notes.count {
+                        row(at: index, in: notes, width: width)
+                    } else {
+                        typingRow
+                    }
                 }
                 .ignoresSafeArea(.all, edges: .vertical)
                 if notes.isEmpty { emptyState }
@@ -63,6 +72,15 @@ struct ShumPublicChatView: View {
         .onAppear {
             store?.markPublicChatRead()
             store?.setPublicPresence(scenePhase == .active)
+        }
+        .shumOnChange(of: atBottom) { _, bottom in
+            idsWhenScrolledUp = bottom ? nil : Set(notes.map(\.id))
+        }
+        // Someone starts typing: their bubble joins the end of the chat, so
+        // a chat already at its end follows it out from behind the capsule.
+        .shumOnChange(of: writers.map(\.id)) { old, new in
+            guard atBottom, !new.isEmpty, old != new else { return }
+            scrollCommand = ShumTimelineCommand(target: .bottom)
         }
         .onDisappear {
             typingPauseTask?.cancel()
@@ -97,8 +115,14 @@ struct ShumPublicChatView: View {
                 people: people,
                 writers: Set(writers.map(\.id)),
                 contacts: Set(store?.state.contacts.map(\.id) ?? []),
-                avatar: avatar(for:)
-            )
+                avatar: avatar(for:),
+                distance: distance
+            ) { card in
+                // Added if new, then their chat, as when adding by a link.
+                guard let peer = runtime.addContact(card, source: "publicChat") else { return }
+                showsPeople = false
+                open(.conversation(peer))
+            }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
@@ -112,23 +136,70 @@ struct ShumPublicChatView: View {
     private var header: some View {
         VStack(spacing: 2) {
             Text("Общий чат".localized).font(.system(size: 17, weight: .semibold))
-            if !writers.isEmpty {
+            // Typing shows as the chat's last row; with the chat scrolled up
+            // that row is out of sight, so here.
+            if !atBottom && !writers.isEmpty {
                 HStack(spacing: 4) {
                     ShumPresencePixels(seed: Self.pixelSeed, offColor: Color.secondary.opacity(0.3))
-                    HStack(spacing: -6) {
-                        ForEach(writers.prefix(3), id: \.id) { card in
-                            ShumAvatar(name: card.name, size: 16, imageData: avatar(for: card))
-                                .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1))
-                        }
-                    }
-                    if writers.count > 3 {
-                        Text("+\(writers.count - 3)").font(.system(size: 11)).foregroundStyle(.secondary)
-                    }
+                    Text(writerNames)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
+                .transition(.opacity)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(String.localizedFormat("Пишут: %@".localized, "\(writers.count)"))
+                .accessibilityLabel(String.localizedFormat("Пишут: %@".localized, writerNames))
             }
         }
+        .animation(.easeInOut(duration: 0.18), value: !atBottom && !writers.isEmpty)
+    }
+
+    /// The first two who type and how many more.
+    private var writerNames: String {
+        let names = writers.prefix(2).map(\.name).joined(separator: ", ")
+        let more = writers.count - 2
+        return more > 0 ? "\(names) +\(more)" : names
+    }
+
+    /// Who is typing shows as the last row of the chat while it lasts.
+    private var typingItem: [ShumTimelineItem] {
+        guard !writers.isEmpty else { return [] }
+        var revision = Hasher()
+        for card in writers { revision.combine(card.id) }
+        return [ShumTimelineItem(id: "public-typing", revision: revision.finalize())]
+    }
+
+    /// Names on top, the first two and how many more; below them a bubble
+    /// with their avatars and Shum's pixels, as an incoming note would sit.
+    private var typingRow: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(writerNames)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .padding(.leading, 12)
+            HStack(spacing: 8) {
+                HStack(spacing: -8) {
+                    ForEach(writers.prefix(3), id: \.id) { card in
+                        ShumAvatar(name: card.name, size: 26, imageData: avatar(for: card))
+                            .overlay(Circle().stroke(Color(.secondarySystemBackground), lineWidth: 2))
+                    }
+                }
+                if writers.count > 3 {
+                    Text("+\(writers.count - 3)")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                ShumPresencePixels(seed: Self.pixelSeed, offColor: Color.secondary.opacity(0.3))
+            }
+            .padding(.leading, 6).padding(.trailing, 12).padding(.vertical, 6)
+            .background(Color(.secondarySystemBackground), in: Capsule())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.top, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String.localizedFormat("Пишут: %@".localized, writerNames))
     }
 
     private var aboutLine: some View {
@@ -177,9 +248,13 @@ struct ShumPublicChatView: View {
                 mine: marks.contains { $0.personID == ownID }
             ))
         }
-        return ShumMessage(id: note.id, peerID: note.card.peerID, text: note.text, date: note.date,
-                           outgoing: note.outgoing, status: .delivered(to: "", at: note.date), reply: note.reply,
-                           myReaction: mine, groupReactions: groups)
+        // Seen by someone: two ticks; the eye says how many.
+        var message = ShumMessage(id: note.id, peerID: note.card.peerID, text: note.text, date: note.date,
+                                  outgoing: note.outgoing,
+                                  status: note.views > 0 ? .read(by: "", at: note.date) : .delivered(to: "", at: note.date),
+                                  reply: note.reply, myReaction: mine, groupReactions: groups)
+        message.views = note.outgoing ? note.views : nil
+        return message
     }
 
     private func item(at index: Int, in notes: [ShumPublicNote]) -> ShumTimelineItem {
@@ -188,12 +263,11 @@ struct ShumPublicChatView: View {
         revision.combine(note.text)
         revision.combine(note.date)
         revision.combine(note.reply)
+        revision.combine(note.views)
         for mark in note.reactions {
             revision.combine(mark.personID)
             revision.combine(mark.reaction)
         }
-        // The distance by the author's name changes as people move.
-        if !note.outgoing { revision.combine(distance(note.card)) }
         for neighbour in [index - 1, index + 1] where notes.indices.contains(neighbour) {
             revision.combine(notes[neighbour].card.id)
             revision.combine(notes[neighbour].date)
@@ -239,6 +313,8 @@ struct ShumPublicChatView: View {
         }
         .padding(.top, first && sameDay ? 8 : 3)
         .padding(.horizontal, 10)
+        // A note counts as seen once it is on screen here.
+        .onAppear { if incoming { store?.markPublicSeen(note) } }
     }
 
     /// The avatar ends a run of one person's notes; earlier ones keep its place.
@@ -257,11 +333,6 @@ struct ShumPublicChatView: View {
             Text(note.card.name)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(nameColor(note.card.id))
-            if let meters = distance(note.card) {
-                Text(String(format: "distanceMetersFormat".localized, meters))
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
         }
         .padding(.leading, 12)
     }
@@ -289,7 +360,20 @@ struct ShumPublicChatView: View {
             ?? "Сообщение".localized
     }
 
+    /// Notes from others that came since the chat left its end.
+    private var newBelow: Int {
+        guard let ids = idsWhenScrolledUp else { return 0 }
+        return notes.filter { !$0.outgoing && !ids.contains($0.id) }.count
+    }
+
     private var scrollToBottomButton: some View {
+        VStack(spacing: 6) {
+            if newBelow > 0 { ShumNewBelowBadge(count: newBelow) }
+            scrollButton
+        }
+    }
+
+    private var scrollButton: some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             scrollCommand = ShumTimelineCommand(target: .bottom)
@@ -456,14 +540,17 @@ private struct ShumPublicComposerSurface: ViewModifier {
     }
 }
 
-/// Everyone on the mesh, without distances: who it is, whether they wrote
-/// lately and whether they are a contact.
+/// Everyone with the open chat on screen: who it is, how far, whether they
+/// write now and whether they are a contact.
 private struct ShumPublicPeopleSheet: View {
     @Environment(\.dismiss) private var dismiss
     let people: [ShumContactCard]
     let writers: Set<String>
     let contacts: Set<String>
     let avatar: (ShumContactCard) -> Data?
+    let distance: (ShumContactCard) -> Int?
+    let write: (ShumContactCard) -> Void
+    @State private var shown: ShumContactCard?
 
     var body: some View {
         NavigationStack {
@@ -474,19 +561,8 @@ private struct ShumPublicPeopleSheet: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(people.sorted { writers.contains($0.id) && !writers.contains($1.id) }, id: \.id) { card in
-                    HStack(spacing: 12) {
-                        ShumAvatar(name: card.name, size: 40, imageData: avatar(card))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(card.name)
-                            if writers.contains(card.id) {
-                                Text("пишет".localized).font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        if contacts.contains(card.id) {
-                            Text("в контактах".localized).font(.caption2).foregroundStyle(.secondary)
-                        }
-                    }
+                    Button { shown = card } label: { row(card) }
+                        .buttonStyle(.plain)
                 }
             }
             // As in the concept: a plain list with dividers, no card behind it.
@@ -499,7 +575,35 @@ private struct ShumPublicPeopleSheet: View {
                     Button("Готово".localized) { dismiss() }
                 }
             }
+            .shumSheet(isPresented: Binding(get: { shown != nil }, set: { if !$0 { shown = nil } })) {
+                if let card = shown {
+                    ShumContactConfirmation(card: card, isExistingContact: contacts.contains(card.id)) {
+                        write(card)
+                    }
+                }
+            }
         }
+    }
+
+    private func row(_ card: ShumContactCard) -> some View {
+        HStack(spacing: 12) {
+            ShumAvatar(name: card.name, size: 40, imageData: avatar(card))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card.name)
+                let details = [
+                    distance(card).map { String(format: "distanceMetersFormat".localized, $0) },
+                    writers.contains(card.id) ? "пишет".localized : nil,
+                ].compactMap { $0 }
+                if !details.isEmpty {
+                    Text(details.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if contacts.contains(card.id) {
+                Text("в контактах".localized).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .contentShape(Rectangle())
     }
 }
 

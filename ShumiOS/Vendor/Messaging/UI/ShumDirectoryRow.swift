@@ -119,7 +119,7 @@ struct ShumDirectoryRow: View {
                             .font(.system(size: 11, weight: .medium))
                             .accessibilityLabel(ShumDeliveryReceipt.description(for: last.status))
                     }
-                    let preview = invitationSummary ?? last?.text ?? "Начать чат".localized
+                    let preview = invitationSummary ?? last?.preview ?? "Начать чат".localized
                     Text(preview)
                         .font(.system(size: 15))
                         .foregroundStyle(Color.secondary)

@@ -43,6 +43,10 @@ struct ShumMessageBubble: View {
     var react: ((ShumReaction) -> Void)?
     var reactionPeople = ShumReactionPeople()
     var openReply: (String) -> Void = { _ in }
+    /// Reads a photo's bytes when its row is shown, and opens it full screen.
+    var loadPhoto: ((String) async -> UIImage?)?
+    var cachedPhoto: ((String) -> UIImage?)?
+    var openPhoto: ((UIImage) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.shumThemePalette) private var themePalette
     @State private var horizontalOffset: CGFloat = 0
@@ -85,6 +89,18 @@ struct ShumMessageBubble: View {
                     Button("Убрать реакцию".localized) { react(mine) }
                 }
             }
+            // In the open chat: how many saw it, under the ticks. The eye
+            // stays put at the trailing edge while the count grows leftwards.
+            if let views = message.views, views > 0 {
+                HStack(spacing: 3) {
+                    Text("\(views)").monospacedDigit()
+                    Image(systemName: "eye").font(.system(size: 10, weight: .semibold))
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .padding(.trailing, 6)
+                .accessibilityLabel(String.localizedFormat("Просмотров: %@".localized, "\(views)"))
+            }
             if message.outgoing, let label = message.deliveryLabel, label == "В очереди".localized || label.hasPrefix("Передаётся".localized) {
                 Text(label).font(.caption).foregroundStyle(.secondary).padding(.top, 2)
             }
@@ -119,7 +135,77 @@ struct ShumMessageBubble: View {
             }
     }
 
+    @ViewBuilder
     private var bubbleContent: some View {
+        if let photo = message.photo {
+            photoContent(photo)
+        } else {
+            textContent
+        }
+    }
+
+    /// Without a caption the photo stands alone with the time on it; with
+    /// one, the bubble holds the photo and the caption under it.
+    @ViewBuilder
+    private func photoContent(_ photo: ShumMessagePhoto) -> some View {
+        let width = min(maximumWidth, 260)
+        if message.text.isEmpty {
+            VStack(alignment: message.outgoing ? .trailing : .leading, spacing: 4) {
+                ShumMessagePhotoView(messageID: message.id, photo: photo, width: width,
+                                     cached: cachedPhoto, load: loadPhoto, open: openPhoto) {
+                    metadataPill
+                }
+                if hasReactions { reactionChips }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                ShumMessagePhotoView(messageID: message.id, photo: photo, width: width - 8, radius: 15,
+                                     cached: cachedPhoto, load: loadPhoto, open: openPhoto) { EmptyView() }
+                    .padding(.horizontal, 4)
+                Group {
+                    if hasReactions {
+                        ShumReactedBubbleLayout {
+                            Text(message.text).font(.body).foregroundStyle(.primary)
+                            reactionChips
+                            metadata
+                        }
+                    } else {
+                        ShumBubbleLayout(inline: !message.text.contains("\n")) {
+                            Text(message.text).font(.body).foregroundStyle(.primary)
+                            metadata
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
+            .frame(width: width, alignment: .leading)
+            .padding(.top, 4).padding(.bottom, 8)
+            .modifier(
+                ShumMessageBubbleSurface(
+                    shape: bubbleShape,
+                    tint: bubbleColor,
+                    highlight: themePalette.accent.opacity(quoteHighlightOpacity)
+                )
+            )
+        }
+    }
+
+    /// The time, and for own messages their receipt, on top of a photo.
+    private var metadataPill: some View {
+        HStack(spacing: 4) {
+            Text(message.date, style: .time).monospacedDigit()
+            if message.outgoing {
+                ShumDeliveryReceipt(status: message.status, color: .white, readColor: .white)
+                    .font(.system(size: 10, weight: .semibold))
+            }
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 7).padding(.vertical, 2)
+        .background(Color.black.opacity(0.45), in: Capsule())
+    }
+
+    private var textContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let reference = message.reply {
                 Button {

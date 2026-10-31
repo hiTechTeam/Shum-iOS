@@ -31,6 +31,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     private var notificationRefreshTask: Task<Void, Never>?
     private var notificationSnapshotInitialized = false
     private var notifiedIncomingMessageIDs: Set<String> = []
+    private var notifiedPublicNoteIDs: Set<String> = []
+    private var notifiedPublicReactions: Set<String> = []
     private var notifiedInvitationIDs: Set<String> = []
     private var notifiedOutgoingInvitationIDs: Set<String> = []
     private var notifiedNearbyPeerIDs: Set<String> = []
@@ -486,6 +488,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         notificationRefreshTask = nil
         notificationSnapshotInitialized = false
         notifiedIncomingMessageIDs.removeAll()
+        notifiedPublicNoteIDs.removeAll()
+        notifiedPublicReactions.removeAll()
         notifiedInvitationIDs.removeAll()
         notifiedOutgoingInvitationIDs.removeAll()
         notifiedNearbyPeerIDs.removeAll()
@@ -522,6 +526,13 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         let outgoingInvitationIDs = Set(
             invitationStates.filter { $0.value.phase == .outgoingPending }.keys
         )
+        let publicNotes = permanent.publicNotes.filter { !$0.outgoing }
+        let publicNoteIDs = Set(publicNotes.map(\.id))
+        // Reactions of others on the user's own notes, one key per reaction.
+        let publicReactions = permanent.publicNotes.filter(\.outgoing).flatMap { note in
+            note.reactions.filter { $0.personID != permanent.ownCard.id }.map { (note, $0) }
+        }
+        let publicReactionKeys = Set(publicReactions.map { "\($0.0.id)|\($0.1.personID)|\($0.1.reaction.rawValue)" })
         let entries = runtime.directoryEntries
         let nearbyIDs = Set(
             entries.filter(\.isNearby).map { $0.peer.id.id }
@@ -567,6 +578,24 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             }
         }
 
+        // The open chat: new notes from others while it is not on screen.
+        if notificationSnapshotInitialized,
+           AppNotificationRouter.publicChatNotificationsEnabled,
+           !active || ShumAppLock.shared.isLocked || !permanent.publicChatOnScreen {
+            for note in publicNotes where !notifiedPublicNoteIDs.contains(note.id) {
+                AppNotificationRouter.shared.schedulePublicNote(
+                    id: note.id, authorName: note.card.name, text: note.text, answering: note.reply?.text)
+            }
+            for (note, mark) in publicReactions {
+                let key = "\(note.id)|\(mark.personID)|\(mark.reaction.rawValue)"
+                guard !notifiedPublicReactions.contains(key) else { continue }
+                AppNotificationRouter.shared.schedulePublicReaction(
+                    id: key, authorName: mark.card?.name ?? "Кто-то".localized,
+                    reaction: ShumReactionArt.name(for: mark.reaction), note: note.text)
+            }
+        }
+        notifiedPublicNoteIDs = publicNoteIDs
+        notifiedPublicReactions = publicReactionKeys
         notifiedIncomingMessageIDs = incomingMessageIDs
         notifiedInvitationIDs = invitationIDs
         notifiedOutgoingInvitationIDs = outgoingInvitationIDs
@@ -597,6 +626,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         chatObserver = nil
         notificationSnapshotInitialized = false
         notifiedIncomingMessageIDs.removeAll()
+        notifiedPublicNoteIDs.removeAll()
+        notifiedPublicReactions.removeAll()
         notifiedInvitationIDs.removeAll()
         notifiedOutgoingInvitationIDs.removeAll()
         notifiedNearbyPeerIDs.removeAll()

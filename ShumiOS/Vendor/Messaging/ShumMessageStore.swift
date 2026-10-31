@@ -14,6 +14,8 @@ struct ShumPublicNote: Identifiable, Equatable {
     let outgoing: Bool
     var reply: ShumReplyReference?
     var reactions: [ShumPublicReaction] = []
+    /// How many people had the open chat on screen since it was sent.
+    var views = 0
 }
 
 /// One person's reaction on an open-chat note.
@@ -282,11 +284,26 @@ final class ShumMessageStore: ObservableObject {
         publicTypingSent = (active, now())
         request(["command": "public_typing", "active": active])
     }
+    /// A note from someone else came on screen. Notes are gathered for a
+    /// moment and told once, so scrolling sends one signal, not many.
+    func markPublicSeen(_ note: ShumPublicNote) {
+        guard !note.outgoing, publicSeenQueue.insert(note.id).inserted, publicSeenQueue.count == 1 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, !self.publicSeenQueue.isEmpty else { return }
+            let notes = Array(self.publicSeenQueue)
+            self.publicSeenQueue.removeAll()
+            self.request(["command": "public_seen", "notes": notes])
+        }
+    }
+    private var publicSeenQueue = Set<String>()
     /// The open chat came on screen or left it; Shum-Core tells everyone
     /// nearby and repeats it while the chat stays open.
     func setPublicPresence(_ online: Bool) {
+        publicChatOnScreen = online
         request(["command": "public_presence", "online": online])
     }
+    /// The open chat is on screen: its notes need no notification.
+    private(set) var publicChatOnScreen = false
     /// Withdraws the user's own note from everyone in the open chat.
     func publicRetract(_ note: ShumPublicNote) {
         request(["command": "public_retract", "note": note.noteID])
@@ -299,6 +316,22 @@ final class ShumMessageStore: ObservableObject {
         }
         self.request(request)
         return true
+    }
+    /// Sends a JPEG without metadata. `caption` is shown under it; without
+    /// one, `standIn` reaches clients that do not know photos.
+    func sendPhoto(_ jpeg: Data, width: Int, height: Int, caption: String?, standIn: String, to card: ShumContactCard) -> Bool {
+        request([
+            "command": "send_photo", "contact": card.id, "photo": jpeg.base64EncodedString(),
+            "width": width, "height": height, "text": caption ?? standIn, "caption": caption != nil,
+        ])
+        return true
+    }
+    /// The JPEG of message `id`'s photo, once every part of it is here.
+    func photo(_ id: String) async throws -> Data {
+        let answer = try await core.request(["command": "photo", "message": id])
+        guard let encoded = (answer as? [String: Any])?["photo"] as? String,
+              let data = Data(base64Encoded: encoded) else { throw ShumFailure.invalidMessage }
+        return data
     }
     /// Sends an expired message again.
     @discardableResult
@@ -397,11 +430,13 @@ final class ShumMessageStore: ObservableObject {
             return ShumPublicNote(noteID: noteID, card: card, text: text,
                                   date: Date(timeIntervalSince1970: timestamp / 1000),
                                   outgoing: note["outgoing"] as? Bool == true,
-                                  reply: reply, reactions: reactions)
+                                  reply: reply, reactions: reactions,
+                                  views: note["views"] as? Int ?? 0)
         }
         var noteHash = Hasher()
         for note in notes {
             noteHash.combine(note.id)
+            noteHash.combine(note.views)
             for mark in note.reactions {
                 noteHash.combine(mark.personID)
                 noteHash.combine(mark.reaction.rawValue)

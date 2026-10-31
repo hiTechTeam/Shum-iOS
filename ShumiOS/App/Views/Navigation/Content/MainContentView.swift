@@ -190,6 +190,12 @@ struct MainContentView: View {
     }
 
     private func openNotificationChat(_ peerID: String?) {
+        if peerID == ShumPublicChatView.pixelSeed {
+            selectedTab = 1
+            chatsPath = [.publicChat]
+            coordinator.clearChatNotificationPeerID()
+            return
+        }
         guard let peerID,
               let entry = chat.directoryEntries.first(where: {
                   $0.peer.id.id == peerID

@@ -121,6 +121,9 @@ struct PixelAvatarGeneratorSheet: View {
 struct FullScreenPhotoView<Content: View>: View {
     @Binding private var isPresented: Bool
     private let content: Content
+    /// A chat photo gets who sent it, when, and sharing and saving.
+    private let chat: ShumChatPhoto?
+    @State private var saved = false
 
     @State private var isVisible = false
     @State private var dismissOffset: CGFloat = 0
@@ -128,9 +131,11 @@ struct FullScreenPhotoView<Content: View>: View {
 
     init(
         isPresented: Binding<Bool>,
+        chat: ShumChatPhoto? = nil,
         @ViewBuilder content: () -> Content
     ) {
         _isPresented = isPresented
+        self.chat = chat
         self.content = content()
     }
 
@@ -201,6 +206,60 @@ struct FullScreenPhotoView<Content: View>: View {
         }
     }
 
+    /// Close, sender and time on top; share and save at the bottom.
+    private func chatChrome(_ chat: ShumChatPhoto) -> some View {
+        VStack {
+            ZStack {
+                VStack(spacing: 2) {
+                    Text(chat.title)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text(chat.subtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                .padding(.horizontal, 64)
+                HStack {
+                    chromeButton("xmark", label: Inc.Common.close.localized) { dismissPhoto() }
+                    Spacer()
+                }
+            }
+            Spacer()
+            HStack {
+                ShareLink(item: Image(uiImage: chat.image),
+                          preview: SharePreview("Фото".localized, image: Image(uiImage: chat.image))) {
+                    chromeIcon("square.and.arrow.up")
+                }
+                .accessibilityLabel("Поделиться".localized)
+                Spacer()
+                chromeButton(saved ? "checkmark" : "arrow.down.to.line", label: "Сохранить".localized) {
+                    UIImageWriteToSavedPhotosAlbum(chat.image, nil, nil, nil)
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    saved = true
+                }
+                .disabled(saved)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+    }
+
+    private func chromeButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { chromeIcon(symbol) }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+    }
+
+    private func chromeIcon(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 44, height: 44)
+            .background(.ultraThinMaterial, in: Circle())
+            .environment(\.colorScheme, .dark)
+    }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Color.black
@@ -217,18 +276,24 @@ struct FullScreenPhotoView<Content: View>: View {
                 .opacity(isVisible ? 1 : 0)
                 .simultaneousGesture(dismissGesture)
 
-            Button {
-                dismissPhoto()
-            } label: {
-                Text(Inc.Common.close.localized)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .frame(height: 40)
-                    .background(.ultraThinMaterial, in: Capsule())
+            Group {
+                if let chat {
+                    chatChrome(chat)
+                } else {
+                    Button {
+                        dismissPhoto()
+                    } label: {
+                        Text(Inc.Common.close.localized)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .frame(height: 40)
+                            .background(.ultraThinMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(16)
+                }
             }
-            .buttonStyle(.plain)
-            .padding(16)
             .opacity(
                 isVisible
                     ? max(0.0, 1.0 - Double(dismissProgress * 2))

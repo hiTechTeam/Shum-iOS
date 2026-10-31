@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import PhotosUI
 import BitFoundation
 
 private struct ShumAvatarToolbar<Content: View>: ToolbarContent {
@@ -30,7 +31,10 @@ private struct ShumComposerSurface: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *), glass {
-            content.glassEffect(.regular, in: shape)
+            // The glass lies behind the controls, not around them: a menu
+            // grows out of the glass holding its button, and would take the
+            // whole capsule with it.
+            content.background { Color.clear.glassEffect(.regular, in: shape) }
         } else {
             content
                 .background(.ultraThinMaterial, in: shape)
@@ -41,6 +45,23 @@ private struct ShumComposerSurface: ViewModifier {
     }
 }
 
+
+/// How many new messages wait below, over the scroll-down button.
+struct ShumNewBelowBadge: View {
+    let count: Int
+    @Environment(\.shumThemePalette) private var palette
+
+    var body: some View {
+        Text(count > 99 ? "99+" : "\(count)")
+            .font(.system(size: 12, weight: .semibold))
+            .monospacedDigit()
+            .foregroundStyle(palette.accentForeground)
+            .padding(.horizontal, 6)
+            .frame(minWidth: 22, minHeight: 22)
+            .background(palette.accent, in: Capsule())
+            .accessibilityLabel(String.localizedFormat("Новых сообщений: %@".localized, "\(count)"))
+    }
+}
 
 /// The send arrow every chat shares: a light arrow in a small circle,
 /// dimmed while there is nothing to send.
@@ -62,6 +83,7 @@ struct ShumSendButtonLabel: View {
 struct ShumConversationView: View {
     @Environment(\.shumThemePalette) private var palette
     @Environment(\.shumPresentPeerPhoto) private var presentPeerPhoto
+    @Environment(\.shumPresentChatPhoto) private var presentChatPhoto
     @ObservedObject var runtime: ShumRuntime
     let peer: ShumPeer
     @State private var draft = ShumComposerDraft()
@@ -73,6 +95,15 @@ struct ShumConversationView: View {
     @FocusState private var inputFocused: Bool
     @State private var atBottom = true
     @State private var scrollCommand: ShumTimelineCommand?
+    @State private var choosingPhoto = false
+    @State private var takingPhoto = false
+    @State private var pickedPhoto: PhotosPickerItem?
+    /// A chosen photo waiting in the capsule until the send arrow.
+    @State private var pendingPhoto: ShumPreparedPhoto?
+    @State private var pendingPreview: UIImage?
+    /// The messages there were when the chat left its end; those that came
+    /// since count over the scroll-down button.
+    @State private var idsWhenScrolledUp: Set<String>?
     private var messages: [ShumMessage] { runtime.conversation(peer.id) }
     private var name: String { runtime.displayName(peer) }
     private var invitationPhase: ShumInvitationPhase {
@@ -93,7 +124,7 @@ struct ShumConversationView: View {
         GeometryReader { geometry in
             ZStack {
                 ShumConversationTimeline(
-                    items: conversation.indices.map { timelineItem(at: $0, in: conversation) },
+                    items: conversation.indices.map { timelineItem(at: $0, in: conversation) } + typingItem,
                     storageKey: "shum.chat.position.\(runtime.permanent?.ownCard.id ?? "local").\(peer.id.id)",
                     appearanceKey: "\(palette.accentUIColor)-\(palette.colorScheme)",
                     command: scrollCommand,
@@ -112,11 +143,15 @@ struct ShumConversationView: View {
                     },
                     tapped: { inputFocused = false }
                 ) { index, width in
-                    messageRow(
-                        at: index,
-                        in: conversation,
-                        width: width
-                    )
+                    if index < conversation.count {
+                        messageRow(
+                            at: index,
+                            in: conversation,
+                            width: width
+                        )
+                    } else {
+                        typingRow
+                    }
                 }
                 // Keep one stable viewport; keyboard avoidance is represented
                 // only by the timeline's insets, not a simultaneous frame resize.
@@ -158,24 +193,30 @@ struct ShumConversationView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .shumOnChange(of: atBottom) { _, bottom in
+            idsWhenScrolledUp = bottom ? nil : Set(messages.map(\.id))
+        }
+        // The contact starts typing: a chat at its end follows the bubble.
+        .shumOnChange(of: runtime.isTyping(peer.id)) { _, typing in
+            if typing, atBottom { scrollCommand = ShumTimelineCommand(target: .bottom) }
+        }
         .toolbar {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 2) {
                     Text(name).font(.system(size: 17, weight: .semibold)).lineLimit(1)
-                    // Typing is shown only by the pulsing pixels.
+                    // Typing shows in the chat itself, as its last row; with
+                    // the chat scrolled up that row is out of sight, so here.
                     HStack(spacing: 4) {
-                        if runtime.isTyping(peer.id) || runtime.isInChat(peer.id) {
+                        if typingOutOfSight {
                             ShumPresencePixels(seed: peer.id.id, offColor: Color.secondary.opacity(0.3))
                         }
-                        Text(presenceText)
+                        Text(typingOutOfSight ? "печатает".localized : presenceText)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
-                            // VoiceOver cannot see the pixels, so it hears the state.
-                            .accessibilityLabel(runtime.isTyping(peer.id) ? "печатает".localized : presenceText)
                     }
                     .transition(.opacity)
                 }.accessibilityElement(children: .combine)
-                    .animation(.easeInOut(duration: 0.18), value: runtime.isTyping(peer.id))
+                    .animation(.easeInOut(duration: 0.18), value: typingOutOfSight)
             }
             ShumAvatarToolbar {
                 Button(action: openPhotoPreview) {
@@ -208,15 +249,23 @@ struct ShumConversationView: View {
         presentPeerPhoto?(image)
     }
 
+    private var typingOutOfSight: Bool {
+        !atBottom && runtime.isTyping(peer.id)
+    }
+
     /// "In chat" means the contact has this conversation open right now.
     private var presenceText: String {
         if runtime.isBlocked(peer.id) { return "Заблокирован".localized }
         // Someone typing has this chat open even before the presence mark arrives.
         let inChat = runtime.isInChat(peer.id) || runtime.isTyping(peer.id)
         let nearby = runtime.isNearby(peer.id)
-        if inChat && nearby { return "в чате · рядом".localized }
+        // How far, next to "nearby", once Bluetooth measures it.
+        let near = runtime.distanceMeters(for: peer.id).map {
+            "рядом".localized + " · " + String(format: "distanceMetersFormat".localized, $0)
+        } ?? "рядом".localized
+        if inChat && nearby { return "в чате".localized + " · " + near }
         if inChat { return "в чате".localized }
-        if nearby { return "рядом".localized }
+        if nearby { return near }
         return "не в чате".localized
     }
 
@@ -276,7 +325,40 @@ struct ShumConversationView: View {
         }
     }
 
+    /// Messages from the contact that came since the chat left its end.
+    private var newBelow: Int {
+        guard let ids = idsWhenScrolledUp else { return 0 }
+        return messages.filter { !$0.outgoing && !ids.contains($0.id) }.count
+    }
+
+    /// While the contact types, the chat ends in a bubble with their avatar
+    /// and Shum's pixels, as in the open chat.
+    private var typingItem: [ShumTimelineItem] {
+        runtime.isTyping(peer.id) ? [ShumTimelineItem(id: "typing", revision: 0)] : []
+    }
+
+    private var typingRow: some View {
+        HStack(spacing: 8) {
+            ShumAvatar(name: name, size: 26, imageData: runtime.profile(for: peer.id)?.avatar)
+            ShumPresencePixels(seed: peer.id.id, offColor: Color.secondary.opacity(0.3))
+        }
+        .padding(.leading, 6).padding(.trailing, 12).padding(.vertical, 6)
+        .background(Color(.secondarySystemBackground), in: Capsule())
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.top, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String.localizedFormat("%@ печатает".localized, name))
+    }
+
     private var scrollToBottomButton: some View {
+        VStack(spacing: 6) {
+            if newBelow > 0 { ShumNewBelowBadge(count: newBelow) }
+            scrollButton
+        }
+    }
+
+    private var scrollButton: some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             scrollCommand = ShumTimelineCommand(target: .bottom)
@@ -319,6 +401,32 @@ struct ShumConversationView: View {
 
     private var messageComposer: some View {
         VStack(spacing: 0) {
+            if let pendingPreview {
+                HStack(spacing: 10) {
+                    Image(uiImage: pendingPreview)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 56, height: 56)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .accessibilityLabel("Фото".localized)
+                    Spacer(minLength: 0)
+                    Button {
+                        self.pendingPhoto = nil
+                        self.pendingPreview = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 30, height: 30)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Убрать фото".localized)
+                }
+                .padding(.leading, 12)
+                .padding(.trailing, 8)
+                .padding(.top, 10)
+            }
             if let replyingTo {
                 HStack(spacing: 10) {
                     Capsule()
@@ -328,7 +436,7 @@ struct ShumConversationView: View {
                         Text(replyingTo.outgoing ? "Ответ себе".localized : String.localizedFormat("Ответ пользователю %@".localized, name))
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(Color.accentColor)
-                        Text(replyingTo.text)
+                        Text(replyingTo.preview)
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -352,18 +460,21 @@ struct ShumConversationView: View {
                 .padding(.bottom, 5)
             }
 
-            HStack(alignment: .bottom, spacing: 4) {
+            HStack(alignment: .bottom, spacing: 0) {
+                attachButton
                 TextField("Сообщение".localized, text: draftBinding, prompt: Text("Сообщение".localized).foregroundColor(Color(.secondaryLabel)), axis: .vertical)
                     .font(.body).lineLimit(1...5).focused($inputFocused)
                     .textFieldStyle(.plain)
-                    .padding(.leading, 16).padding(.vertical, 12)
+                    .padding(.trailing, 4).padding(.vertical, 12)
                     .contentShape(Rectangle())
                     .simultaneousGesture(TapGesture().onEnded { inputFocused = true })
                     .accessibilityIdentifier("shum.messageInput")
                     .onChange(of: draft.text) { value in updateTyping(for: value) }
                 Button {
                     guard canSend else { return }
-                    if runtime.send(draft.text, to: peer.id, replyingTo: replyingTo) {
+                    if let pendingPhoto {
+                        sendPending(pendingPhoto)
+                    } else if runtime.send(draft.text, to: peer.id, replyingTo: replyingTo) {
                         typingPauseTask?.cancel()
                         runtime.setTyping(false, for: peer.id)
                         var transaction = Transaction()
@@ -394,6 +505,23 @@ struct ShumConversationView: View {
         }
         .modifier(ShumComposerSurface())
         .animation(.easeOut(duration: 0.15), value: canSend)
+        .photosPicker(isPresented: $choosingPhoto, selection: $pickedPhoto, matching: .images)
+        .onChange(of: pickedPhoto) { item in
+            guard let item else { return }
+            pickedPhoto = nil
+            Task {
+                guard let data = try? await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else {
+                    runtime.error = "Не получилось открыть фото".localized
+                    return
+                }
+                attachPhoto(image)
+            }
+        }
+        .fullScreenCover(isPresented: $takingPhoto) {
+            ShumCameraPicker { attachPhoto($0) }
+                .ignoresSafeArea()
+        }
         #if DEBUG && targetEnvironment(simulator)
         .task {
             if ProcessInfo.processInfo.arguments.contains("-ShumPreviewKeyboard") {
@@ -402,6 +530,48 @@ struct ShumConversationView: View {
             }
         }
         #endif
+    }
+
+    /// "+" with the system menu: Photo, and Camera where there is one.
+    private var attachButton: some View {
+        ShumAttachButton(
+            accent: palette.accentUIColor,
+            accentForeground: UIColor(palette.accentForeground),
+            choosePhoto: { choosingPhoto = true },
+            takePhoto: ShumCameraPicker.isAvailable ? { takingPhoto = true } : nil
+        )
+        .frame(width: 46, height: 46)
+    }
+
+    /// Prepares a chosen or taken photo off the main thread and puts it in
+    /// the capsule; it leaves only with the send arrow.
+    private func attachPhoto(_ image: UIImage) {
+        Task {
+            let prepared = await Task.detached(priority: .userInitiated) {
+                ShumPhotoPreparation.prepare(image)
+            }.value
+            guard let prepared else {
+                runtime.error = "Не получилось подготовить фото".localized
+                return
+            }
+            pendingPhoto = prepared
+            pendingPreview = UIImage(data: prepared.jpeg)
+            inputFocused = true
+        }
+    }
+
+    /// Sends the photo in the capsule; text in the field is its caption.
+    private func sendPending(_ photo: ShumPreparedPhoto) {
+        guard runtime.sendPhoto(photo, caption: draft.text, to: peer.id) else { return }
+        pendingPhoto = nil
+        pendingPreview = nil
+        typingPauseTask?.cancel()
+        runtime.setTyping(false, for: peer.id)
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { draft.clearAfterSending() }
+        scrollCommand = ShumTimelineCommand(target: .bottom)
+        replyingTo = nil
     }
 
     private var invitationDecisionControls: some View {
@@ -463,7 +633,7 @@ struct ShumConversationView: View {
 
     private var canSend: Bool {
         invitationPhase == .accepted
-            && !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (pendingPhoto != nil || !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             && (runtime.permanent != nil || runtime.isNearby(peer.id))
     }
 
@@ -537,6 +707,8 @@ struct ShumConversationView: View {
         revision.combine(message.deliveryLabel)
         revision.combine(message.waitingForConnection)
         revision.combine(message.reply)
+        // A photo coming in turns its placeholder into the picture.
+        revision.combine(message.photo)
         // A reaction changes the row height, so the table must re-measure it.
         revision.combine(message.myReaction)
         revision.combine(message.theirReaction)
@@ -575,7 +747,16 @@ struct ShumConversationView: View {
                 reactionPeople: message.myReaction == nil && message.theirReaction == nil ? ShumReactionPeople()
                     : ShumReactionPeople(myName: runtime.nickname, myAvatar: runtime.profiles.own.avatar,
                                          peerName: name, peerAvatar: runtime.profile(for: peer.id)?.avatar),
-                openReply: { scrollCommand = ShumTimelineCommand(target: .message($0)) })
+                openReply: { scrollCommand = ShumTimelineCommand(target: .message($0)) },
+                loadPhoto: { await runtime.photo(for: $0) },
+                cachedPhoto: { runtime.cachedPhoto(for: $0) },
+                openPhoto: { image in
+                    inputFocused = false
+                    presentChatPhoto?(ShumChatPhoto(
+                        image: image,
+                        title: message.outgoing ? "Вы".localized : name,
+                        subtitle: message.date.formatted(date: .abbreviated, time: .shortened)))
+                })
                 .padding(.top, sameDay && previous?.outgoing != message.outgoing ? 10 : 3)
         }
         .padding(.horizontal, 10)

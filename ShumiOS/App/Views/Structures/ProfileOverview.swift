@@ -499,6 +499,7 @@ struct ShumSettingsView: View {
     @State private var showInfoSheet = false
     @State private var showAppearance = false
     @State private var showLanguage = false
+    @State private var showNotifications = false
     @State private var notificationAuthorizationStatus:
         UNAuthorizationStatus = .notDetermined
 
@@ -552,6 +553,9 @@ struct ShumSettingsView: View {
         .navigationDestination(isPresented: $showLanguage) {
             ShumLanguageSettingsView()
         }
+        .navigationDestination(isPresented: $showNotifications) {
+            ShumNotificationSettingsView()
+        }
     }
 
     private func section<Content: View>(
@@ -585,9 +589,10 @@ struct ShumSettingsView: View {
                 title: Inc.NearbyNotifications.settingsTitle.localized,
                 systemImage: "bell",
                 value: notificationStatusTitle,
-                position: .bottom,
-                action: manageNotificationAuthorization
-            )
+                position: .bottom
+            ) {
+                showNotifications = true
+            }
         }
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
     }
@@ -645,31 +650,76 @@ struct ShumSettingsView: View {
         }
     }
 
-    private func manageNotificationAuthorization() {
-        Task {
-            let center = UNUserNotificationCenter.current()
-            let settings = await center.notificationSettings()
-
-            if settings.authorizationStatus == .notDetermined {
-                _ = try? await center.requestAuthorization(
-                    options: [.alert, .sound, .badge]
-                )
-                await refreshNotificationAuthorizationStatus()
-                coordinator.refreshNotificationState()
-                return
-            }
-
-            guard let url = URL(
-                string: UIApplication.openNotificationSettingsURLString
-            ) else { return }
-            await UIApplication.shared.open(url)
-        }
-    }
-
     private func refreshNotificationAuthorizationStatus() async {
         let settings = await UNUserNotificationCenter.current()
             .notificationSettings()
         notificationAuthorizationStatus = settings.authorizationStatus
+    }
+}
+
+/// What Shum notifies about, and the way to the system's own settings.
+private struct ShumNotificationSettingsView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @AppStorage(AppNotificationRouter.publicChatNotificationsKey) private var publicChat = true
+    @State private var status: UNAuthorizationStatus = .notDetermined
+
+    private var allowed: Bool {
+        [.authorized, .provisional, .ephemeral].contains(status)
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Toggle("Общий чат".localized, isOn: $publicChat)
+            } footer: {
+                Text("Новые сообщения в общем чате приходят уведомлением, когда он не открыт. Пока Shum работает, даже свёрнутый; если закрыть его в списке приложений, iOS его не разбудит.".localized)
+            }
+            Section {
+                Button(action: manageAuthorization) {
+                    HStack {
+                        Text("Уведомления в iOS".localized).foregroundStyle(.primary)
+                        Spacer()
+                        Text(allowed ? Inc.Settings.statusOn.localized : Inc.Settings.statusOff.localized)
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "arrow.up.forward")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } footer: {
+                Text("Звук, баннеры и экран блокировки настраиваются в iOS.".localized)
+            }
+        }
+        .shumGroupedScreenBackground()
+        .navigationTitle(Inc.NearbyNotifications.settingsTitle.localized)
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await refresh() }
+        .shumOnChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await refresh() }
+        }
+    }
+
+    private func refresh() async {
+        status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+    }
+
+    /// Asks the first time; afterwards only iOS can change it.
+    private func manageAuthorization() {
+        Task {
+            let center = UNUserNotificationCenter.current()
+            if await center.notificationSettings().authorizationStatus == .notDetermined {
+                _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+                await refresh()
+                coordinator.refreshNotificationState()
+                return
+            }
+            guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+            await UIApplication.shared.open(url)
+        }
     }
 }
 
