@@ -238,6 +238,10 @@ final class ShumRuntime: ObservableObject {
         projectedPermanentMessages.removeAll()
         permanent = store
         store.onError = { [weak self] in self?.error = $0 }
+        // The profile's name as Shum-Core has it, also when another device of
+        // this profile changed it: the screen never shows a name contacts do
+        // not have.
+        store.core.renamed = { [weak self] name in self?.followCoreName(name) }
         store.onPresenceFlushFinished = { [weak self] in self?.endPresenceFlushTime() }
         permanentChanges = store.$revision.sink { [weak self] _ in self?.syncPermanentMessages() }
         syncPermanentMessages()
@@ -358,6 +362,17 @@ final class ShumRuntime: ObservableObject {
             ?? permanent?.ownCard.avatarSeed
             ?? ShumPixelAvatarGenerator.seed(for: Data(valid.utf8))
         return saveProfile(name: valid, bio: profiles.own.bio, avatarSeed: seed)
+    }
+
+    /// Takes Shum-Core's name for the profile without sending it back.
+    private func followCoreName(_ name: String) {
+        guard name != profiles.own.name, let valid = InputValidator.validateNickname(name) else { return }
+        var profile = profiles.own
+        profile.name = valid
+        profile = profile.rendered()
+        guard profile.valid, (try? profiles.save(profile)) != nil else { return }
+        nickname = valid
+        defaults.set(valid, forKey: Self.nicknameKey)
     }
 
     func saveProfile(name: String, bio: String, avatarSeed: UInt64) -> Bool {
