@@ -35,7 +35,7 @@ Shum also runs on the computer and in the browser: [desktop app and Shum Web](ht
 ## Features
 
 - **Without internet.** Text messages travel over Bluetooth between phones nearby.
-- **Near and far.** With internet, messages go through independent Nostr relays.
+- **Near and far.** With internet, messages go through Shum's relay `relay.getshum.tech` and independent Nostr relays. "How Shum connects" lists each relay and its status.
 - **End-to-end encryption.** Keys stay on your devices; history is encrypted on the device.
 - **Met.** People you crossed paths with during the last 24 hours, ready to add.
 - **No phone number.** A name is enough. Add people from a QR card, a link or their network ID.
