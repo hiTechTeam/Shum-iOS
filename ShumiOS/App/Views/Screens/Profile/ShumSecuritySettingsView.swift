@@ -61,7 +61,8 @@ struct ShumSecuritySettingsView: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-                .buttonStyle(.plain)
+                // The list's own style highlights the whole row on a tap.
+                .tint(.primary)
             } header: {
                 Text("Способ входа".localized)
             } footer: {
@@ -113,7 +114,7 @@ struct ShumSecuritySettingsView: View {
                     }
                     .foregroundStyle(.primary)
                 }
-                .buttonStyle(.plain)
+                .tint(.primary)
             } header: {
                 Text("Восстановление".localized)
             } footer: {
@@ -137,7 +138,7 @@ struct ShumSecuritySettingsView: View {
                     }
                     .foregroundStyle(.primary)
                 }
-                .buttonStyle(.plain)
+                .tint(.primary)
             }
 
             Section {

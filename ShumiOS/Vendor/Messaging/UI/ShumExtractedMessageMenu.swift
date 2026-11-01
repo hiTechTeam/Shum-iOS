@@ -178,12 +178,23 @@ final class ShumExtractedMessageMenu: UIView {
         button.configurationUpdateHandler = { button in
             button.configuration?.baseForegroundColor = color
             button.backgroundColor = button.isHighlighted ? .tertiarySystemFill : .clear
+            Self.squareCorners(button)
         }
         button.addAction(UIAction { [weak self] _ in
             if dismisses { self?.dismiss(animated: true) }
             action()
         }, for: .touchUpInside)
         return button
+    }
+
+    /// A row is highlighted edge to edge: iOS 26 rounds a button into a
+    /// capsule, and the menu's own corners already shape the first and last
+    /// rows.
+    private static func squareCorners(_ button: UIButton) {
+        button.layer.cornerRadius = 0
+        if #available(iOS 26.0, *) {
+            button.cornerConfiguration = .corners(radius: .fixed(0))
+        }
     }
 
     /// As in Telegram: the actions give way to where to delete the message,
@@ -216,6 +227,7 @@ final class ShumExtractedMessageMenu: UIView {
             button.titleLabel?.numberOfLines = 0
             button.configurationUpdateHandler = { button in
                 button.backgroundColor = button.isHighlighted ? .tertiarySystemFill : .clear
+                Self.squareCorners(button)
             }
             button.addAction(UIAction { [weak self] _ in
                 self?.dismiss(animated: true)

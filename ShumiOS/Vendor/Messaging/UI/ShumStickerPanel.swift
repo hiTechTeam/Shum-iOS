@@ -13,6 +13,9 @@ struct ShumStickerPanel: View {
     let dragEnded: (CGFloat) -> Void
     let send: (String) -> Void
     @Environment(\.shumThemePalette) private var palette
+    /// Whether the drag on the top moves the panel, decided once at its
+    /// start: a swipe along the sets never opens or closes it.
+    @State private var pullsPanel: Bool?
     @State private var selected: String = ShumRecentStickers.ids.isEmpty
         ? (ShumStickerCatalog.shared.sets.first?.section ?? "") : Self.recentTab
 
@@ -44,10 +47,17 @@ struct ShumStickerPanel: View {
             .simultaneousGesture(
                 DragGesture(minimumDistance: 10, coordinateSpace: .global)
                     .onChanged { value in
-                        guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                        if pullsPanel == nil {
+                            pullsPanel = abs(value.translation.height) > abs(value.translation.width)
+                        }
+                        guard pullsPanel == true else { return }
                         dragChanged(value.translation.height)
                     }
-                    .onEnded { value in dragEnded(value.predictedEndTranslation.height) }
+                    .onEnded { value in
+                        defer { pullsPanel = nil }
+                        guard pullsPanel == true else { return }
+                        dragEnded(value.predictedEndTranslation.height)
+                    }
             )
             ScrollView {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 8) {
