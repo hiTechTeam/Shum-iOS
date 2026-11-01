@@ -1602,6 +1602,15 @@ public func commandSchemaVersion() -> UInt64 {
 })
 }
 /**
+ * The relays every client uses unless the person chooses others.
+ */
+public func defaultRelays() -> [String] {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_shum_mobile_fn_func_default_relays($0
+    )
+})
+}
+/**
  * Opens and checks a backup file.
  */
 public func openBackup(file: Data, password: String)throws  -> MobileBackup {
@@ -1682,6 +1691,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_func_command_schema_version() != 8287) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_func_default_relays() != 47324) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_func_open_backup() != 55062) {

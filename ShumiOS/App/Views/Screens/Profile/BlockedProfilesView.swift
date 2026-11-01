@@ -18,7 +18,9 @@ struct BlockedProfilesView: View {
         NavigationStack {
             Group {
                 if blockedCards.isEmpty {
+                    // Fills the sheet so the theme canvas is not a box around it.
                     ShumBlockedProfilesEmptyState()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(blockedCards) { card in
                         HStack(spacing: 12) {

@@ -179,6 +179,9 @@ struct ShumNetworkInfoSheet: View {
                     ShumInfoRow(title: "На расстоянии через Nostr".localized, text:
                         "Через интернет сообщения передаются через независимые ретрансляторы открытой сети Nostr. У неё нет единого владельца, а ретрансляторы получают только зашифрованные пакеты.".localized,
                         symbol: "network")
+                    if !runtime.relays.isEmpty {
+                        ShumRelayList(relays: runtime.relays)
+                    }
                 }
                 .padding(24)
             }
@@ -193,5 +196,67 @@ struct ShumNetworkInfoSheet: View {
         }
         .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+}
+
+/// The relays Shum-Core uses, in its order, with their status and a word on
+/// what relays are.
+private struct ShumRelayList: View {
+    let relays: [ShumRelayStatus]
+    @Environment(\.shumThemePalette) private var palette
+
+    private var connected: Int { relays.filter(\.connected).count }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Реле".localized).font(.headline)
+                Spacer()
+                Text(String(format: "%d из %d".localized, connected, relays.count))
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            Text("Реле, или ретрансляторы, это серверы сети Nostr, через которые телефоны обмениваются зашифрованными сообщениями, когда собеседник далеко. Shum подключается сразу к нескольким: если одно недоступно, сообщения идут через другие.".localized)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: 0) {
+                ForEach(relays) { relay in
+                    row(relay)
+                    if relay.id != relays.last?.id {
+                        Divider().padding(.leading, 44)
+                    }
+                }
+            }
+            .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .padding(.top, 4)
+        }
+    }
+
+    private func row(_ relay: ShumRelayStatus) -> some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(relay.connected ? palette.accent : Color.secondary.opacity(0.35))
+                .frame(width: 9, height: 9)
+                .frame(width: 18)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(relay.host)
+                    .font(.body)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(relay.isShums ? "Реле Shum".localized : "Независимое реле".localized)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Text(relay.connected ? "Подключено".localized : "Нет связи".localized)
+                .font(.subheadline)
+                .foregroundStyle(relay.connected ? palette.accent : Color.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .accessibilityElement(children: .combine)
     }
 }

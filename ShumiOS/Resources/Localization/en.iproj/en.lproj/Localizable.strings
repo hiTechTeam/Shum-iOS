@@ -882,3 +882,12 @@
 "appIconPixelBlackRainbow" = "Black, rainbow cloud";
 "appIconPixelGreenRainbow" = "Green, rainbow cloud";
 "Непрочитанных в других чатах: %@" = "Unread in other chats: %@";
+
+/* Relay list on "How Shum connects" */
+"Реле" = "Relays";
+"%d из %d" = "%d of %d";
+"Реле, или ретрансляторы, это серверы сети Nostr, через которые телефоны обмениваются зашифрованными сообщениями, когда собеседник далеко. Shum подключается сразу к нескольким: если одно недоступно, сообщения идут через другие." = "Relays are Nostr network servers that phones use to exchange encrypted messages when the other person is far away. Shum connects to several at once: if one is down, messages go through the others.";
+"Реле Shum" = "Shum relay";
+"Независимое реле" = "Independent relay";
+"Подключено" = "Connected";
+"Нет связи" = "Offline";

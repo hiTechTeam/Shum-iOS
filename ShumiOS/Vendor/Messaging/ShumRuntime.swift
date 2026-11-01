@@ -89,6 +89,7 @@ final class ShumRuntime: ObservableObject {
     @Published private(set) var bluetoothState: CBManagerState = .unknown
     @Published var error: String?
     @Published private(set) var internetConnected = false
+    @Published private(set) var relays: [ShumRelayStatus] = []
     let profiles: ShumProfiles
     private(set) var permanent: ShumMessageStore?
     private var permanentChanges: AnyCancellable?
@@ -159,12 +160,8 @@ final class ShumRuntime: ObservableObject {
         return model
     }
 
-    nonisolated static let sharedCoreRelays = [
-        "wss://nostr.oxtr.dev",
-        "wss://soloco.nl",
-        "wss://relay.snort.social",
-        "wss://nostr.bitcoiner.social",
-    ]
+    /// The relays of every Shum client, Shum's own first, from Shum-Core.
+    nonisolated static let sharedCoreRelays = defaultRelays()
 
     /// Shum-Core's session for this profile. A new profile first gets its
     /// database with the signed card, the way a restored backup does.
@@ -484,6 +481,7 @@ final class ShumRuntime: ObservableObject {
     private func syncPermanentMessages() {
         guard let permanent else { return }
         internetConnected = permanent.internetConnected
+        if relays != permanent.relays { relays = permanent.relays }
         if publicUnread != permanent.publicUnread { publicUnread = permanent.publicUnread }
         let publicChat = permanent.publicTypers.map(\.id) + ["|"] + permanent.publicPeople.map(\.id) + ["|"]
             + permanent.publicNotes.map { note in
@@ -739,6 +737,7 @@ final class ShumRuntime: ObservableObject {
     func tick() {
         guard !isLoadingHistory, !retired, let permanent else { return }
         internetConnected = permanent.internetConnected
+        if relays != permanent.relays { relays = permanent.relays }
         showCoreNearby(permanent)
     }
 

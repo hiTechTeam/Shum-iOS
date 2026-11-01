@@ -47,6 +47,8 @@ final class ShumMessageStore: ObservableObject {
     /// People as Shum-Core's snapshot shows them, for typing, "in chat" and distance.
     private var people: [String: [String: Any]] = [:]
     private(set) var internetConnected = false
+    /// Every relay Shum-Core uses, in its order, with whether it is connected.
+    private(set) var relays: [ShumRelayStatus] = []
     /// The day's open chat, oldest first.
     private(set) var publicNotes: [ShumPublicNote] = []
     /// Everyone on the Bluetooth mesh, near or relayed, by card.
@@ -453,11 +455,14 @@ final class ShumMessageStore: ObservableObject {
         }
         let typers = (snapshot["publicTyping"] as? [Any] ?? []).compactMap(Self.card)
         let present = (snapshot["publicPresent"] as? [Any] ?? []).compactMap(Self.card)
-        let internet = !(snapshot["relays"] as? [Any] ?? []).isEmpty
+        let connected = snapshot["relays"] as? [String] ?? []
+        let internet = !connected.isEmpty
+        let relays = ((snapshot["relayList"] as? [String]) ?? connected)
+            .map { ShumRelayStatus(url: $0, connected: connected.contains($0)) }
         let shown = people.keys.sorted().map { id -> String in
             let person = people[id] ?? [:]
             return "\(id):\(person["nearby"] ?? ""):\(person["distance"] ?? ""):\(person["typing"] ?? ""):\(person["online"] ?? "")"
-        }.joined(separator: ",") + "|\(internet)|\(notes.count):\(noteHash.finalize())|\(mesh.map(\.id).sorted())|\(typers.map(\.id).sorted())|\(present.map(\.id).sorted())"
+        }.joined(separator: ",") + "|\(relays.map { "\($0.url)\($0.connected)" })|\(notes.count):\(noteHash.finalize())|\(mesh.map(\.id).sorted())|\(typers.map(\.id).sorted())|\(present.map(\.id).sorted())"
         guard state != nil || shown != shownPeople else { return }
         shownPeople = shown
         self.people = people
@@ -467,6 +472,7 @@ final class ShumMessageStore: ObservableObject {
         publicPeople = present
         publicNotes = notes
         internetConnected = internet
+        self.relays = relays
         revision &+= 1
     }
 
@@ -484,4 +490,19 @@ final class ShumMessageStore: ObservableObject {
         value.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
             .flatMap { try? JSONDecoder().decode(ShumContactCard.self, from: $0) }
     }
+}
+
+/// One relay in the list on "How Shum connects".
+struct ShumRelayStatus: Equatable, Identifiable {
+    let url: String
+    let connected: Bool
+    var id: String { url }
+    /// The address without "wss://" and a trailing slash.
+    var host: String {
+        var host = url.replacingOccurrences(of: "wss://", with: "")
+        if host.hasSuffix("/") { host.removeLast() }
+        return host
+    }
+    /// Shum's own relay, beside the push service.
+    var isShums: Bool { host == "relay.getshum.tech" }
 }
