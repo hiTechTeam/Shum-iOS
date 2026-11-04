@@ -86,6 +86,24 @@ extension ShumRuntime {
 
 @MainActor
 enum ShumChatDirectory {
+    /// When each chat last moved: its last message, or when it began.
+    private static func activityTimes(_ state: ShumDatabase) -> [PeerID: Int64] {
+        var last: [String: Int64] = [:]
+        for message in state.messages {
+            let id = message.envelope.conversationID
+            last[id] = max(last[id] ?? .min, message.envelope.timestamp)
+        }
+        var peers: [String: PeerID] = [:]
+        for contact in state.contacts where peers[contact.id] == nil { peers[contact.id] = contact.card.peerID }
+        var times: [PeerID: Int64] = [:]
+        for conversation in state.conversations {
+            guard let peer = peers[conversation.contactID] else { continue }
+            let time = last[conversation.id] ?? Int64(conversation.createdAt.timeIntervalSince1970 * 1000)
+            times[peer] = max(times[peer] ?? .min, time)
+        }
+        return times
+    }
+
     static func entries(chats: [ShumPeer], peers: [ShumPeer], permanent: ShumMessageStore?,
                         isNearby: (PeerID) -> Bool, unreadCount: (PeerID) -> Int) -> [ShumDirectoryEntry] {
         var rows: [PeerID: ShumDirectoryEntry] = [:]
@@ -104,12 +122,36 @@ enum ShumChatDirectory {
             if let verifiedCard { rows[canonical.id]?.card = verifiedCard }
             update(&rows[canonical.id]!)
         }
-        for peer in chats { include(peer) { $0.hasChat = true } }
-        for card in permanent?.state.requests ?? [] {
-            include(ShumPeer(id: card.peerID, name: card.name, lastConnected: .distantPast), card: card) {
-                $0.isInvitation = true
-                $0.invitationPhase = permanent?.invitationPhase(for: card)
-                $0.invitationAwaitingResponse = permanent?.invitationPhase(for: card) == .incomingPending
+        // Chats and invitations form one queue, the latest first: a chat by
+        // its last message, an invitation by when it came or changed.
+        enum Lead {
+            case chat(ShumPeer)
+            case invitation(ShumContactCard)
+        }
+        let times = permanent.map { activityTimes($0.state) } ?? [:]
+        func time(_ lead: Lead) -> Int64 {
+            switch lead {
+            case .chat(let peer): times[peer.id] ?? .min
+            case .invitation(let card): permanent?.state.invitationStates?[card.id]?.updatedAt ?? .min
+            }
+        }
+        let leads = (chats.map(Lead.chat) + (permanent?.state.requests ?? []).map(Lead.invitation))
+            .enumerated()
+            .sorted { lhs, rhs in
+                let (left, right) = (time(lhs.element), time(rhs.element))
+                return left != right ? left > right : lhs.offset < rhs.offset
+            }
+            .map(\.element)
+        for lead in leads {
+            switch lead {
+            case .chat(let peer):
+                include(peer) { $0.hasChat = true }
+            case .invitation(let card):
+                include(ShumPeer(id: card.peerID, name: card.name, lastConnected: .distantPast), card: card) {
+                    $0.isInvitation = true
+                    $0.invitationPhase = permanent?.invitationPhase(for: card)
+                    $0.invitationAwaitingResponse = permanent?.invitationPhase(for: card) == .incomingPending
+                }
             }
         }
         for peer in peers {

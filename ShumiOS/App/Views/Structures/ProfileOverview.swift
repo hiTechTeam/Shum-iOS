@@ -24,6 +24,7 @@ struct ProfileOverviewView: View {
     @ObservedObject private var photoVM: ProfilePhotoViewModel
     let open: (ShumProfileRoute) -> Void
     @ObservedObject private var appearance = ShumAppearanceStore.shared
+    @ObservedObject private var profileList = ShumProfileList.shared
 
     @Binding var showSecurity: Bool
     @State private var showSettings = false
@@ -75,6 +76,8 @@ struct ProfileOverviewView: View {
                 ProfileAvatarMenu(
                     name: displayName,
                     seed: LocalCardStore.shared.ownManifest?.body.avatarSeed,
+                    others: profileList.entries.filter { $0.id != profileList.active }.prefix(2).map(\.avatarSeed),
+                    waiting: profileList.entries.filter { $0.id != profileList.active }.reduce(0) { $0 + $1.waiting },
                     editAvatar: { editingAvatar = true },
                     chooseProfile: { choosingProfile = true },
                     createProfile: { creatingProfile = true }
@@ -1005,16 +1008,59 @@ private struct ShumAppIconChoice: View {
 
 /// The own avatar and its menu. The profile screen redraws whenever
 /// anything in Shum changes; rebuilding an open menu with it makes the menu
-/// flicker, so this redraws only for a new name or avatar.
+/// flicker, so this redraws only for a new name, avatar or count.
+///
+/// With more profiles on the iPhone, theirs lie behind the open one like
+/// chips, edges showing, and the badge at the right counts what waits in
+/// them.
 private struct ProfileAvatarMenu: View, Equatable {
+    @Environment(\.shumThemePalette) private var palette
     let name: String
     let seed: UInt64?
+    /// Avatars of up to two other profiles.
+    let others: [UInt64?]
+    /// Unread messages and invitations in the other profiles.
+    let waiting: Int
     let editAvatar: () -> Void
     let chooseProfile: () -> Void
     let createProfile: () -> Void
 
     static func == (a: Self, b: Self) -> Bool {
-        a.name == b.name && a.seed == b.seed
+        a.name == b.name && a.seed == b.seed && a.others == b.others && a.waiting == b.waiting
+    }
+
+    private static let size: CGFloat = 34
+    private static let step: CGFloat = 11
+
+    private var chips: some View {
+        ZStack(alignment: .leading) {
+            ForEach(Array(others.enumerated().reversed()), id: \.offset) { index, other in
+                ShumAvatar(name: "", size: Self.size,
+                           imageData: other.flatMap(ShumPixelAvatarGenerator.data(seed:)))
+                    .frame(width: Self.size, height: Self.size)
+                    .overlay(Circle().stroke(palette.canvas, lineWidth: 2))
+                    .scaleEffect(1 - 0.1 * CGFloat(index + 1))
+                    .offset(x: Self.step * CGFloat(index + 1))
+            }
+            ShumAvatar(name: name, size: Self.size, imageData: seed.flatMap(ShumPixelAvatarGenerator.data(seed:)))
+                .frame(width: Self.size, height: Self.size)
+                .overlay(Circle().stroke(palette.canvas, lineWidth: others.isEmpty ? 0 : 2))
+        }
+        .frame(width: Self.size + Self.step * CGFloat(others.count), height: Self.size, alignment: .leading)
+        // The badge stays inside the button: iOS 27 clips a toolbar button
+        // to its bounds once it is pressed.
+        .padding(.trailing, waiting > 0 ? 10 : 0)
+        .padding(.vertical, waiting > 0 ? 4 : 0)
+        .overlay(alignment: .topTrailing) {
+            if waiting > 0 {
+                Text(waiting > 99 ? "99+" : String(waiting))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(palette.accentForeground)
+                    .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
+                    .background(Color.accentColor, in: Capsule())
+                    .overlay(Capsule().stroke(palette.canvas, lineWidth: 2))
+            }
+        }
     }
 
     var body: some View {
@@ -1029,9 +1075,7 @@ private struct ProfileAvatarMenu: View, Equatable {
                 Label("Создать новый профиль".localized, systemImage: "plus")
             }
         } label: {
-            ShumAvatar(name: name, size: 34, imageData: seed.flatMap(ShumPixelAvatarGenerator.data(seed:)))
-                .frame(width: 34, height: 34)
-                .contentShape(Circle())
+            chips.contentShape(Rectangle())
         }
         // A plain label: no padding of its own, on every iOS.
         .menuStyle(.button)
@@ -1039,6 +1083,7 @@ private struct ProfileAvatarMenu: View, Equatable {
         // Menu icons stay monochrome in every theme.
         .tint(.primary)
         .accessibilityLabel("Изменить аватар".localized)
+        .accessibilityValue(waiting > 0 ? String.localizedFormat("Непрочитанных: %@".localized, String(waiting)) : "")
     }
 }
 
