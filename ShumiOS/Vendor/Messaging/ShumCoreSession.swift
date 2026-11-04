@@ -230,6 +230,7 @@ final class ShumCoreSession {
                 switch event {
                 case .opened: self.step { $0.opened(relay: relay, attempt: attempt, now: Self.now()) }
                 case .text(let text): self.step(news: true) { $0.received(relay: relay, attempt: attempt, text: text, now: Self.now()) }
+                case .alive: self.step { $0.alive(relay: relay, attempt: attempt, now: Self.now()) }
                 case .closed:
                     self.sockets[relay] = nil
                     self.step { $0.closed(relay: relay, attempt: attempt, now: Self.now()) }
@@ -290,9 +291,10 @@ private struct Unchecked<Value>: @unchecked Sendable {
     init(_ value: Value) { self.value = value }
 }
 
-/// One relay WebSocket. It reports opening, text messages and closing.
+/// One relay WebSocket. It reports opening, text messages, answered pings
+/// and closing.
 final class ShumRelaySocket: NSObject, URLSessionWebSocketDelegate {
-    enum Event { case opened, text(String), closed }
+    enum Event { case opened, text(String), alive, closed }
 
     private var task: URLSessionWebSocketTask?
     private var session: URLSession?
@@ -302,7 +304,14 @@ final class ShumRelaySocket: NSObject, URLSessionWebSocketDelegate {
     init(url: URL, report: @escaping @MainActor (Event) -> Void) {
         self.report = report
         super.init()
-        let session = URLSession(configuration: .default, delegate: self, delegateQueue: .main)
+        // The default 60-second request timeout ends a WebSocket that only
+        // exchanges pings: a relay with nothing new for us stays quiet, and
+        // iOS dropped the connection every minute. Shum-Core notices a dead
+        // relay by its pings instead.
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 24 * 60 * 60
+        configuration.timeoutIntervalForResource = 7 * 24 * 60 * 60
+        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
         let task = session.webSocketTask(with: url)
         task.maximumMessageSize = 256 * 1024
         self.session = session
@@ -316,9 +325,19 @@ final class ShumRelaySocket: NSObject, URLSessionWebSocketDelegate {
         }
     }
 
+    /// An answered ping tells Shum-Core the connection is alive: a relay
+    /// with nothing new sends no text, and the link would close as silent.
     func ping() {
         task?.sendPing { [weak self] error in
-            if error != nil { self?.finish() }
+            guard let self else { return }
+            if error != nil {
+                self.finish()
+                return
+            }
+            DispatchQueue.main.async {
+                guard !self.finished else { return }
+                MainActor.assumeIsolated { self.report(.alive) }
+            }
         }
     }
 

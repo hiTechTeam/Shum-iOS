@@ -76,8 +76,11 @@ final class ShumMessageStore: ObservableObject {
         ownCard = card
         core.changed = { [weak self] stored in self?.coreChanged(stored: stored) }
         show(state: .success(state), snapshot: core.snapshot())
-        ShumPushService.shared.configure(card: ownCard) { [weak identity] data in
-            identity?.sign(data)
+        // Held strongly: on Shum-Core nothing else keeps the identity, and a
+        // weak one is gone before the device token arrives, so the device
+        // would never register for pushes. clearIdentity releases it.
+        ShumPushService.shared.configure(card: ownCard) { data in
+            identity.sign(data)
         }
     }
 

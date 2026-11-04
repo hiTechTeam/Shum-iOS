@@ -536,6 +536,11 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 public protocol MobileSessionProtocol : AnyObject {
     
     /**
+     * The relay answered a ping: keeps a quiet connection open.
+     */
+    func alive(relay: UInt32, attempt: UInt64, now: UInt64) 
+    
+    /**
      * A link opened. `budget` is the largest write in bytes; `rssi` the
      * signal strength when known.
      */
@@ -718,6 +723,18 @@ public static func `open`(profile: MobileProfile, keys: MobileKeys, now: UInt64)
 }
     
 
+    
+    /**
+     * The relay answered a ping: keeps a quiet connection open.
+     */
+open func alive(relay: UInt32, attempt: UInt64, now: UInt64) {try! rustCall() {
+    uniffi_shum_mobile_fn_method_mobilesession_alive(self.uniffiClonePointer(),
+        FfiConverterUInt32.lower(relay),
+        FfiConverterUInt64.lower(attempt),
+        FfiConverterUInt64.lower(now),$0
+    )
+}
+}
     
     /**
      * A link opened. `budget` is the largest write in bytes; `rssi` the
@@ -1709,6 +1726,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_func_write_database() != 46585) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_shum_mobile_checksum_method_mobilesession_alive() != 40418) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_shum_mobile_checksum_method_mobilesession_ble_connected() != 8206) {
