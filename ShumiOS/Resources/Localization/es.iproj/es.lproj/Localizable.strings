@@ -880,6 +880,10 @@
 "appIconPixelBlackRainbow" = "Negro, nube arcoíris";
 "appIconPixelGreenRainbow" = "Verde, nube arcoíris";
 "Непрочитанных в других чатах: %@" = "Sin leer en otros chats: %@";
+"Непрочитанных: %@" = "Sin leer: %@";
+"Открыт" = "Abierto";
+"Неактивные профили" = "Perfiles inactivos";
+"Сообщения и приглашения для профилей, которые сейчас не открыты, приходят уведомлением. Если выключить, они только отметятся в списке профилей." = "Los mensajes e invitaciones para perfiles que no están abiertos llegan como notificaciones. Si se desactiva, solo se marcan en la lista de perfiles.";
 
 /* Relay list on "How Shum connects" */
 "Реле" = "Relés";

@@ -570,3 +570,12 @@ final class ShumContactsService {
         return try candidates.reduce(card) { try $0.preferred(over: $1) }
     }
 }
+
+extension ShumDatabase {
+    /// What waits for the person in a profile, for the list of profiles:
+    /// unread messages and invitations not yet answered.
+    var awaitingCount: Int {
+        messages.filter { !$0.outgoing && $0.unread }.count
+            + requests.filter { (invitationStates?[$0.id]?.phase ?? .incomingPending) == .incomingPending }.count
+    }
+}

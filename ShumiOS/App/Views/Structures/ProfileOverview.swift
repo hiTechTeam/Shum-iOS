@@ -258,8 +258,17 @@ private struct ShumNameSheet: View {
 /// The profiles on this iPhone: tap one to open it.
 private struct ShumProfilePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.shumThemePalette) private var palette
     @EnvironmentObject private var coordinator: AppCoordinator
     @ObservedObject private var profiles = ShumProfileList.shared
+
+    /// Unread messages and unanswered invitations: live for the open
+    /// profile, from their pushes and fetches for the others.
+    private func unread(_ entry: ShumProfileList.Entry) -> Int {
+        entry.id == profiles.active
+            ? coordinator.chat?.permanent?.state.awaitingCount ?? 0
+            : entry.waiting
+    }
     let create: () -> Void
     let restore: () -> Void
 
@@ -275,15 +284,31 @@ private struct ShumProfilePickerSheet: View {
                             HStack(spacing: 14) {
                                 ShumAvatar(name: entry.name, size: 40,
                                            imageData: entry.avatarSeed.flatMap(ShumPixelAvatarGenerator.data(seed:)))
+                                    .overlay(alignment: .bottomTrailing) {
+                                        if entry.id == profiles.active {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 9, weight: .bold))
+                                                .foregroundStyle(palette.accentForeground)
+                                                .frame(width: 17, height: 17)
+                                                .background(Color.accentColor, in: Circle())
+                                                .overlay(Circle().stroke(Color(uiColor: .secondarySystemGroupedBackground), lineWidth: 2))
+                                                .offset(x: 3, y: 3)
+                                                .accessibilityLabel("Открыт".localized)
+                                        }
+                                    }
                                 Text(entry.name)
                                     .font(.system(size: 17, weight: entry.id == profiles.active ? .semibold : .regular))
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
                                 Spacer()
-                                if entry.id == profiles.active {
-                                    Image(systemName: "checkmark")
-                                        .fontWeight(.semibold)
-                                        .foregroundStyle(.primary)
+                                let count = unread(entry)
+                                if count > 0 {
+                                    Text(count > 99 ? "99+" : String(count))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(palette.accentForeground)
+                                        .padding(.horizontal, 6).frame(minWidth: 21, minHeight: 21)
+                                        .background(Color.accentColor, in: Capsule())
+                                        .accessibilityLabel(String.localizedFormat("Непрочитанных: %@".localized, String(count)))
                                 }
                             }
                             .contentShape(Rectangle())
@@ -662,6 +687,8 @@ private struct ShumNotificationSettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var coordinator: AppCoordinator
     @AppStorage(AppNotificationRouter.publicChatNotificationsKey) private var publicChat = true
+    @AppStorage(ShumPushService.inactiveProfilesKey) private var inactiveProfiles = true
+    @ObservedObject private var profiles = ShumProfileList.shared
     @State private var status: UNAuthorizationStatus = .notDetermined
 
     private var allowed: Bool {
@@ -674,6 +701,13 @@ private struct ShumNotificationSettingsView: View {
                 Toggle("Общий чат".localized, isOn: $publicChat)
             } footer: {
                 Text("Новые сообщения в общем чате приходят уведомлением, когда он не открыт. Пока Shum работает, даже свёрнутый; если закрыть его в списке приложений, iOS его не разбудит.".localized)
+            }
+            if profiles.entries.count > 1 {
+                Section {
+                    Toggle("Неактивные профили".localized, isOn: $inactiveProfiles)
+                } footer: {
+                    Text("Сообщения и приглашения для профилей, которые сейчас не открыты, приходят уведомлением. Если выключить, они только отметятся в списке профилей.".localized)
+                }
             }
             Section {
                 Button(action: manageAuthorization) {
@@ -697,6 +731,9 @@ private struct ShumNotificationSettingsView: View {
         .navigationTitle(Inc.NearbyNotifications.settingsTitle.localized)
         .navigationBarTitleDisplayMode(.inline)
         .task { await refresh() }
+        .shumOnChange(of: inactiveProfiles) { _, _ in
+            ShumProfileMailbox.shared.registerClosedProfiles()
+        }
         .shumOnChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task { await refresh() }

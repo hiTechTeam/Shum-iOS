@@ -37,6 +37,16 @@ final class ShumProfileList: ObservableObject {
         let id: String
         var name: String
         var avatarSeed: UInt64?
+        /// The profile's ID on the network, which pushes are addressed to.
+        var identityID: String? = nil
+        /// Unread messages and unanswered invitations when it was left,
+        /// plus pushes and fetches since; the open profile shows its live
+        /// count instead.
+        var unread: Int? = nil
+        /// Invitations accepted by others since it was left.
+        var accepted: Int? = nil
+        /// What its badge in the list of profiles shows while it is closed.
+        var waiting: Int { (unread ?? 0) + (accepted ?? 0) }
     }
 
     static let shared = ShumProfileList()
@@ -57,9 +67,13 @@ final class ShumProfileList: ObservableObject {
 
     var activeSpace: ShumProfileSpace { ShumProfileSpace(id: active) }
 
-    /// Keeps the open profile's name and avatar for the list.
-    func update(name: String, avatarSeed: UInt64?) {
-        let entry = Entry(id: active, name: name, avatarSeed: avatarSeed)
+    /// Keeps the open profile's name, avatar and network ID for the list.
+    func update(name: String, avatarSeed: UInt64?, identityID: String? = nil) {
+        var entry = entries.first(where: { $0.id == active })
+            ?? Entry(id: active, name: name, avatarSeed: avatarSeed)
+        entry.name = name
+        entry.avatarSeed = avatarSeed
+        if let identityID { entry.identityID = identityID }
         if let index = entries.firstIndex(where: { $0.id == active }) {
             guard entries[index] != entry else { return }
             entries[index] = entry
@@ -83,6 +97,34 @@ final class ShumProfileList: ObservableObject {
     func remove(_ id: String) {
         entries.removeAll { $0.id == id }
         save()
+    }
+
+    /// Remembers a profile's unread count as it is left; `nil` once open,
+    /// which also clears the accepted invitations it has now seen.
+    func setUnread(_ count: Int?, profile id: String) {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
+        let accepted = count == nil ? nil : entries[index].accepted
+        guard entries[index].unread != count || entries[index].accepted != accepted else { return }
+        entries[index].unread = count
+        entries[index].accepted = accepted
+        save()
+    }
+
+    /// A push with a message, an invitation or an accepted invitation for
+    /// a profile that is not open counts one more there. Returns whether the
+    /// push was for such a profile.
+    @discardableResult
+    func addUnread(identityID: String, kind: String) -> Bool {
+        guard let index = entries.firstIndex(where: { $0.identityID == identityID }),
+              entries[index].id != active else { return false }
+        if kind == "invitation_accepted" {
+            entries[index].accepted = (entries[index].accepted ?? 0) + 1
+            save()
+        } else if kind == "message" || kind == "invitation" {
+            entries[index].unread = (entries[index].unread ?? 0) + 1
+            save()
+        }
+        return true
     }
 
     /// Makes `id` the open profile; the app then reopens on it.

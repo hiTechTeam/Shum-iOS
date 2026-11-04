@@ -60,7 +60,7 @@ struct MainContentView: View {
         }
         .tint(palette.accent)
         .safeAreaInset(edge: .top, spacing: 0) {
-            if !chat.isReady {
+            if chat.openingFailed {
                 Button { coordinator.retryMessaging() } label: {
                     Label("Не удалось открыть сообщения. Повторить".localized, systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
                         .font(.footnote).padding(12).frame(maxWidth: .infinity).background(.thinMaterial)

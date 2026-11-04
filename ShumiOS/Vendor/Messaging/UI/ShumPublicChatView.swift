@@ -51,6 +51,11 @@ struct ShumPublicChatView: View {
         let notes = notes
         GeometryReader { geometry in
             ZStack {
+                // Under the timeline, so the capsule and the stickers cover
+                // it; it fades out while the first message is being written.
+                if notes.isEmpty, stickerMode == .hidden, !focused {
+                    emptyState.transition(.opacity)
+                }
                 ShumConversationTimeline(
                     items: notes.indices.map { item(at: $0, in: notes) } + typingItem,
                     storageKey: "shum.publicChat.position.\(ownID ?? "local")",
@@ -76,8 +81,8 @@ struct ShumPublicChatView: View {
                     }
                 }
                 .ignoresSafeArea(.all, edges: .vertical)
-                if notes.isEmpty { emptyState }
             }
+            .animation(.easeInOut(duration: 0.25), value: notes.isEmpty && stickerMode == .hidden && !focused)
         }
         .onAppear {
             store?.markPublicChatRead()

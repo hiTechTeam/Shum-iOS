@@ -50,6 +50,10 @@ final class ShumCoreSession {
     private var radio: ShumCoreRadio?
     /// Whether Bluetooth is on, while Shum-Core's radio runs.
     var radioPower: ((CBManagerState) -> Void)?
+    /// A relay has sent everything it stored for this profile.
+    var caughtUp: (() -> Void)?
+    /// Closed: nothing reaches Shum-Core or the network any more.
+    private var closed = false
 
     nonisolated static func now() -> UInt64 { UInt64(Date().timeIntervalSince1970 * 1000) }
 
@@ -68,10 +72,24 @@ final class ShumCoreSession {
 
     func close() {
         stopRadio()
+        closed = true
+        let waiters = waiting.values
+        waiting.removeAll()
+        waiters.forEach { $0(.failure(Failure.core("closed"))) }
         timer?.invalidate()
         timer = nil
         sockets.values.forEach { $0.close() }
         sockets.removeAll()
+    }
+
+    /// Closes, then waits until Shum-Core has stored what it was already
+    /// given, so another session may open the same database.
+    func closeAndSettle() async {
+        close()
+        let queue = queue
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            queue.async { done.resume() }
+        }
     }
 
     /// The whole profile as Shum-Core shows it to every client.
@@ -169,6 +187,10 @@ final class ShumCoreSession {
     /// about anything else at most twice a second, and not about Bluetooth
     /// frames, which come many times a second.
     private func run(news: Bool = false, answering id: UInt64? = nil, _ input: @escaping (MobileSession) -> String?) {
+        guard !closed else {
+            if let id { waiting.removeValue(forKey: id)?(.failure(Failure.core("closed"))) }
+            return
+        }
         let handle = CoreHandle(session: core)
         let work = Unchecked(input)
         queue.async { [weak self] in
@@ -198,6 +220,7 @@ final class ShumCoreSession {
         if let id, let answer, let waiter = waiting.removeValue(forKey: id) {
             waiter(Result { try Self.answer(answer) })
         }
+        guard !closed else { return }
         for effect in effects { carry(effect) }
         if revision != shownRevision {
             shownRevision = revision
@@ -251,6 +274,8 @@ final class ShumCoreSession {
             if let name = effect["name"] as? String { renamed?(name) }
         case "push":
             send(push: effect)
+        case "eose":
+            caughtUp?()
         case "ble-frames":
             if let link = effect["link"] as? String {
                 let frames = (effect["frames"] as? [String] ?? []).compactMap { Data(base64Encoded: $0) }

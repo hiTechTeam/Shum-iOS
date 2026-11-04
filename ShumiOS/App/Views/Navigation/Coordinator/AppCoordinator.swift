@@ -197,15 +197,30 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             }
             .joined(separator: " ")
     }
-    /// Opens another profile: the open one stops, with its pushes, and the
-    /// app reopens on `id` with that profile's keys, contacts and chats.
+    /// Opens another profile: the open one stops, keeping its pushes, and
+    /// the app reopens on `id` with that profile's keys, contacts and chats.
     func switchProfile(to id: String) {
         let profiles = ShumProfileList.shared
         guard id != profiles.active, !deletingProfile, isRegistered,
               profiles.entries.contains(where: { $0.id == id }) else { return }
+        pendingProfile = nil
         closeProfile()
-        openProfile(id)
+        // A profile being fetched for a push opens once that session has
+        // stored everything and let go of its database.
+        guard ShumProfileMailbox.shared.isRunning(id) else {
+            openProfile(id)
+            return
+        }
+        pendingProfile = id
+        Task { @MainActor in
+            await ShumProfileMailbox.shared.stop(profile: id)
+            guard pendingProfile == id else { return }
+            pendingProfile = nil
+            openProfile(id)
+        }
     }
+    /// The profile that opens once its push fetch has ended.
+    private var pendingProfile: String?
 
     /// Makes a new profile's keys, card and database while the open profile
     /// keeps running, and lists it. Returns its ID; `switchProfile` opens it.
@@ -247,8 +262,14 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
     }
 
     /// Stops the open profile without deleting anything.
-    private func closeProfile() {
-        ShumPushService.shared.unregisterCurrentDevice()
+    /// The device stays registered for pushes of a profile it leaves, so
+    /// the list of profiles can count what arrives there.
+    /// Stops the open profile. Unless it is being deleted, it keeps its
+    /// pushes: with a banner, or quietly as the owner chose.
+    private func closeProfile(deleting: Bool = false) {
+        let profiles = ShumProfileList.shared
+        if !deleting { ShumPushService.shared.leaveProfile() }
+        profiles.setUnread(chat?.permanent?.state.awaitingCount, profile: profiles.active)
         pendingInvitationURL = nil
         chatObserver?.cancel()
         chat?.retireForDeletion()
@@ -260,6 +281,7 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         deletedProfileName = nil
         let profiles = ShumProfileList.shared
         profiles.activate(id)
+        profiles.setUnread(nil, profile: id)
         LocalCardStore.shared.open(profiles.activeSpace)
         authCodeViewModel.restoreLocalProfile()
         profilePhotoViewModel.resetAccountScopedState()
@@ -284,7 +306,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
             profilePhotoViewModel.loadPhotoIfNeeded()
         }
         guard let seed = own.body.avatarSeed else { return }
-        ShumProfileList.shared.update(name: own.body.name, avatarSeed: seed)
+        ShumProfileList.shared.update(name: own.body.name, avatarSeed: seed,
+                                      identityID: chat.permanent?.ownCard.id)
         let profile = ShumProfile(name: own.body.name, bio: own.body.bio ?? "",
             avatarSeed: seed).rendered()
         if chat.profiles.own != profile {
@@ -408,7 +431,8 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
         let name = profiles.entries.first(where: { $0.id == space.id })?.name
             ?? authCodeViewModel.localName ?? ""
         let retiring = chat
-        closeProfile()
+        ShumPushService.shared.unregisterCurrentDevice()
+        closeProfile(deleting: true)
         // The profile may still be opening; nothing may write it after this.
         await retiring?.waitForStoragePreparation()
         do {
@@ -428,7 +452,14 @@ final class AppCoordinator: ObservableObject, AppCoordinatorProtocol {
 
     /// Opens a remaining profile after another one was deleted.
     func openAfterDeletion(_ id: String) {
-        openProfile(id)
+        guard ShumProfileMailbox.shared.isRunning(id) else {
+            openProfile(id)
+            return
+        }
+        Task { @MainActor in
+            await ShumProfileMailbox.shared.stop(profile: id)
+            openProfile(id)
+        }
     }
 
     func finishDeletion() {

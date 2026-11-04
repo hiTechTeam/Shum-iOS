@@ -51,12 +51,15 @@ final class ShumPushService {
         let deviceToken: String
         let environment: String
         let appVersion: String
+        /// Pushes without a banner, for a profile that is not open.
+        var quiet: Bool? = nil
 
         enum CodingKeys: String, CodingKey {
             case card
             case deviceToken = "device_token"
             case environment
             case appVersion = "app_version"
+            case quiet
         }
     }
 
@@ -143,6 +146,17 @@ final class ShumPushService {
             completion(.noData)
             return
         }
+        // For another profile on this iPhone: count it in the list of
+        // profiles at once, then fetch that profile for a few seconds so its
+        // receipts go back and the count becomes exact.
+        if let recipient = payload["recipient_id"] as? String, recipient != card?.id,
+           ShumProfileList.shared.addUnread(identityID: recipient, kind: payload["kind"] as? String ?? "") {
+            Task { @MainActor in
+                _ = await ShumProfileMailbox.shared.fetch(identityID: recipient)
+                completion(.newData)
+            }
+            return
+        }
         remoteEvents.insert(eventID)
         if remoteEvents.count > 1_000 {
             remoteEvents.removeAll(keepingCapacity: true)
@@ -169,8 +183,47 @@ final class ShumPushService {
         }
     }
 
+    /// The open profile's network ID, to tell its pushes from other profiles'.
+    var activeIdentityID: String? { card?.id }
+
     func consumeRemoteEvent(_ eventID: String) -> Bool {
         remoteEvents.remove(eventID) != nil
+    }
+
+    /// Whether profiles that are not open notify with a banner; otherwise
+    /// their pushes only wake the app.
+    static let inactiveProfilesKey = "notifications.inactiveProfiles"
+    static var inactiveProfilesNotify: Bool {
+        UserDefaults.standard.object(forKey: inactiveProfilesKey) as? Bool ?? true
+    }
+
+    /// Registers a profile that is not open, signed with its own key, with a
+    /// banner or quietly as the owner chose.
+    func registerProfile(card: ShumContactCard, signer: @escaping (Data) -> Data?, quiet: Bool) {
+        guard let deviceToken,
+              let request = signedRequest(
+                path: "/v1/devices",
+                method: "POST",
+                body: DeviceRequest(
+                    card: APICard(card),
+                    deviceToken: deviceToken,
+                    environment: environment,
+                    appVersion: appVersion,
+                    quiet: quiet ? true : nil
+                ),
+                card: card,
+                signer: signer
+              ) else { return }
+        Task {
+            _ = try? await session.data(for: request)
+        }
+    }
+
+    /// The open profile is being left. It keeps its pushes, quietly when
+    /// the owner turned notifications for profiles not open off.
+    func leaveProfile() {
+        guard !Self.inactiveProfilesNotify, let card, let signer else { return }
+        registerProfile(card: card, signer: signer, quiet: true)
     }
 
     func updateDeviceToken(_ data: Data) {
@@ -322,9 +375,12 @@ final class ShumPushService {
     private func signedRequest<Body: Encodable>(
         path: String,
         method: String,
-        body: Body
+        body: Body,
+        card: ShumContactCard? = nil,
+        signer: Signer? = nil
     ) -> URLRequest? {
-        guard let baseURL, let signer,
+        let card = card ?? self.card
+        guard let baseURL, let signer = signer ?? self.signer,
               let url = URL(string: path, relativeTo: baseURL)?.absoluteURL,
               let bodyData = try? encoder.encode(body) else { return nil }
         let timestamp = String(Int(Date().timeIntervalSince1970))

@@ -117,6 +117,9 @@ final class ShumRuntime: ObservableObject {
     var bluetoothReady: Bool { bluetoothEnabled && bluetoothState == .poweredOn }
     private var connectedPeerIDs: Set<PeerID> = []
     var isReady: Bool { !setupFailed && !retired && !isLoadingHistory }
+    /// The profile's messages could not be opened: not while they still load,
+    /// as right after switching profiles.
+    var openingFailed: Bool { setupFailed && !retired && !isLoadingHistory }
     private let defaults: UserDefaults
     private let now: () -> Date
     private var timer: AnyCancellable?

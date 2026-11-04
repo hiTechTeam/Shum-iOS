@@ -286,7 +286,12 @@ final class ShumChatTableController: UIViewController, UITableViewDelegate {
         // SwiftUI owns the navigation controller; give its bar the real list so
         // it shows its background once chats scroll under it, as on iOS 18.
         setContentScrollView(tableView, for: .top)
-        navigationController?.topViewController?.setContentScrollView(tableView, for: .top)
+        shumLinkToNavigationBar(tableView)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        shumLinkToNavigationBar(tableView)
     }
 
     override func viewDidLayoutSubviews() {

@@ -401,8 +401,14 @@ final class ShumTimelineController: UIViewController, UITableViewDataSource, UIT
         leaving = false
         // SwiftUI owns the navigation controller; explicitly give its bar the
         // real scroll view so native background blur tracks the history too.
-        navigationController?.topViewController?.setContentScrollView(table, for: .top)
+        shumLinkToNavigationBar(table)
         view.setNeedsLayout()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Once the push has finished, in case the bar asked before it did.
+        shumLinkToNavigationBar(table)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -748,3 +754,24 @@ private final class ShumTimelineCell: UITableViewCell {
     }
 }
 #endif
+
+extension UIViewController {
+    /// This controller's screen in the navigation stack: SwiftUI hosts it in a
+    /// controller of its own, and the navigation bar asks that one for its
+    /// scroll view. Found by nesting, not as the top view controller, which
+    /// during a push is the previous screen on some iOS versions.
+    var shumNavigationScreen: UIViewController? {
+        var current: UIViewController = self
+        while let parent = current.parent {
+            if parent is UINavigationController { return current }
+            current = parent
+        }
+        return nil
+    }
+
+    /// Gives the navigation bar the real scroll view, so the soft edge under
+    /// the bar covers the whole bar and not only the status bar.
+    func shumLinkToNavigationBar(_ scrollView: UIScrollView) {
+        shumNavigationScreen?.setContentScrollView(scrollView, for: .top)
+    }
+}

@@ -682,8 +682,17 @@ final class AppNotificationRouter: NSObject,
         withCompletionHandler completionHandler:
             @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        // People are already visible while the app is active.
-        completionHandler([])
+        // People and the open profile's chats are already visible while the
+        // app is active; a message for another profile is not.
+        let routing = notification.request.content.userInfo["shum"] as? [String: Any]
+        guard let recipient = routing?["recipient_id"] as? String else {
+            completionHandler([])
+            return
+        }
+        Task { @MainActor in
+            let other = recipient != ShumPushService.shared.activeIdentityID
+            completionHandler(other ? [.banner, .list, .sound] : [])
+        }
     }
 
     nonisolated func userNotificationCenter(
