@@ -30,7 +30,7 @@
 
 [Shum on the App Store](https://apps.apple.com/app/id6816236820), for iPhone with iOS 16 or later. The badge above shows the version on sale now.
 
-Shum also runs on the computer and in the browser: [desktop app and Shum Web](https://github.com/hiTechTeam/Shum-App), [terminal client](https://github.com/hiTechTeam/Shum-CLI). One profile works on all of them.
+Shum also runs on the computer and in the browser: [desktop app and Shum Web](https://github.com/hiTechTeam/Shum-App), [terminal client](https://github.com/hiTechTeam/Shum-CLI). A profile moves between them through a backup.
 
 ## Features
 
@@ -41,7 +41,6 @@ Shum also runs on the computer and in the browser: [desktop app and Shum Web](ht
 - **Photos, stickers and reactions.** Photos with a caption are encrypted like messages; 17 pixel sticker sets and 180 reactions.
 - **Met.** People you crossed paths with during the last 24 hours, ready to add.
 - **No phone number.** A name is enough. Add people from a QR card, a link or their network ID.
-- **Your devices.** Link Shum on the computer, the browser or the terminal to the same profile.
 - **Backups.** Save a profile to a password-protected file or restore it as another profile.
 - **Several profiles.** Switch between them from the avatar. Each shows its unread count, and notifications name the profile.
 - **Privacy.** App passcode, Face ID or Touch ID, hidden chats in the app switcher.
