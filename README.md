@@ -35,12 +35,15 @@ Shum also runs on the computer and in the browser: [desktop app and Shum Web](ht
 ## Features
 
 - **Without internet.** Text messages travel over Bluetooth between phones nearby.
+- **Open chat.** Talk with everyone nearby who uses Shum. It works over Bluetooth without internet; messages are kept for 24 hours.
 - **Near and far.** With internet, messages go through Shum's relay `relay.getshum.tech` and independent Nostr relays. "How Shum connects" lists each relay and its status.
 - **End-to-end encryption.** Keys stay on your devices; history is encrypted on the device.
+- **Photos, stickers and reactions.** Photos with a caption are encrypted like messages; 17 pixel sticker sets and 180 reactions.
 - **Met.** People you crossed paths with during the last 24 hours, ready to add.
 - **No phone number.** A name is enough. Add people from a QR card, a link or their network ID.
 - **Your devices.** Link Shum on the computer, the browser or the terminal to the same profile.
 - **Backups.** Save a profile to a password-protected file or restore it as another profile.
+- **Several profiles.** Switch between them from the avatar. Each shows its unread count, and notifications name the profile.
 - **Privacy.** App passcode, Face ID or Touch ID, hidden chats in the app switcher.
 - **Pixel avatars** made on the device, or your own photo.
 
